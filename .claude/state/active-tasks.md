@@ -4,7 +4,7 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 
 | WO | Title | Wave | Status | Track / session | Branch | Blocked by | Notes |
 |---|---|---|---|---|---|---|---|
-| WO-00 | Contracts and repo skeleton | 0 | todo | – | wo-00-contracts | – | Blocks everything |
+| WO-00 | Contracts and repo skeleton | 0 | in-progress | local_b7f83517 (wo-00-contracts) | wo-00-contracts | – | Blocks everything |
 | WO-01 | Local dev environment (k3d) | 1 | todo | – | – | WO-00 | |
 | WO-02 | Synthetic metrics and backfill | 1 | todo | – | – | WO-00 | |
 | WO-03 | Pricing service | 1 | todo | – | – | WO-00 | |

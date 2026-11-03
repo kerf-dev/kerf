@@ -9,7 +9,7 @@ Recommendations, savings estimates and dashboards for every workload in every cl
 | Wave | Work-order | Depends on |
 |---|---|---|
 | 0 | WO-00 Contracts and repo skeleton | – |
-| 1 | WO-01 Local dev environment (k3d) | WO-00 |
+| 0 | WO-01 Local dev environment (k3d) | – |
 | 1 | WO-02 Synthetic metrics and backfill | WO-00 |
 | 1 | WO-03 Pricing service | WO-00 |
 | 1 | WO-04 Hub and recommender | WO-00 |

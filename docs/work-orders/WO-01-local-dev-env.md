@@ -1,7 +1,7 @@
 # WO-01 Local dev environment (k3d)
 
 - **Phase / wave:** 1 / 1
-- **Depends on:** WO-00
+- **Depends on:** – (standard Kubernetes metric names only; runs in parallel with WO-00)
 - **Owns:** `dev/`, `Tiltfile`, `make/dev.mk`
 - **Decisions:** D-003, D-010
 
