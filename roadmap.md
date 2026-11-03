@@ -1,7 +1,7 @@
 # Roadmap
 
 Work-orders live in `docs/work-orders/`. Live status is in `.claude/state/active-tasks.md`.
-Each work-order ships on branch `wo-XX-<slug>` and merges to `main` by PR (D-013).
+Each work-order ships on branch `wo-XX-<slug>`; the orchestrator verifies and merges it to `main` (D-013, D-015).
 
 ## Phase 1 – Visibility (audit only)
 Recommendations, savings estimates and dashboards for every workload in every cluster. Nothing is changed.
@@ -14,6 +14,7 @@ Recommendations, savings estimates and dashboards for every workload in every cl
 | 1 | WO-03 Pricing service | WO-00 |
 | 1 | WO-04 Hub and recommender | WO-00 |
 | 1 | WO-05 Grafana dashboards | WO-00 |
+| 1 | WO-14 Web UI (pulled forward, D-014) | WO-00 |
 
 ## Phase 2 – Safe automation
 Agent, policies, `auto-patch` with `in-place` and `rollout`, guardrails, rollback, audit log, Argo CD integration.
@@ -34,7 +35,7 @@ Exit criterion: one non-prod EKS namespace on `auto-patch` for 2 weeks with no u
 - WO-13 Single-replica zero-downtime handling, StatefulSet `OnDelete`
 
 ## Phase 4 – Product (work-orders not written yet)
-- WO-14 UI with explainability graphs and one-click apply
+- WO-14b UI actions: one-click apply, mode changes from the UI
 - WO-15 Notifications (Slack/Teams)
 - WO-16 CUR-based price adjustment (Savings Plans, RIs, spot)
 - WO-17 Realized savings (node cost trend vs. released requests)

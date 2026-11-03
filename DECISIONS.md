@@ -67,3 +67,14 @@ Workloads with a CPU/memory-utilization HPA are flagged `hpa-coupled` and never 
 ## D-013 Source hosting and CI — Accepted (2026-11-04)
 Code lives in `github.com/tomer1983/resource-optimizer`, default branch `main`. CI runs on GitHub Actions.
 Each work-order is delivered on its own branch `wo-XX-<slug>` and merged to `main` by PR after its verification passes.
+
+## D-014 Web UI in phase 1 — Accepted (2026-11-04)
+A custom web UI (WO-14) replaces Grafana as the primary interface and moves from phase 4 to phase 1; Grafana dashboards
+(WO-05) stay for operators. Stack: React 19 + TypeScript, Vite, Tailwind v4, shadcn/ui, TanStack Query/Table, ECharts,
+client generated from `api/openapi/hub.yaml`. Served as static files by nginx, `/api` proxied to the hub.
+The hub API gains read endpoints for the UI (summary, workloads, usage series, history, clusters, savings trend) under a
+separate `ui` token scope.
+
+## D-015 Autonomous delivery — Accepted (2026-11-04)
+The orchestrator owns delivery end to end: it starts tracks, verifies them, and merges verified branches into `main`
+itself (no PRs while `gh` is unavailable). Each merge is recorded in the integration log of `.claude/state/active-tasks.md`.
