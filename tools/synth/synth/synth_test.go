@@ -519,9 +519,15 @@ func TestTimelineAligned(t *testing.T) {
 func TestClip(t *testing.T) {
 	var got []*Series
 	emit := Clip(func(s *Series) error { got = append(got, s); return nil }, 10, 20)
-	emit(&Series{Start: 5, Len: 10, Values: []float64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}})
-	emit(&Series{Start: 18, Len: 5, Const: 1})
-	emit(&Series{Start: 25, Len: 5, Const: 1})
+	for _, s := range []*Series{
+		{Start: 5, Len: 10, Values: []float64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}},
+		{Start: 18, Len: 5, Const: 1},
+		{Start: 25, Len: 5, Const: 1},
+	} {
+		if err := emit(s); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if len(got) != 2 || got[0].Start != 10 || got[0].Len != 5 || got[0].Values[0] != 5 || got[1].Start != 18 || got[1].Len != 2 {
 		t.Fatalf("clip: %+v %+v", got[0], got[1])
 	}
@@ -666,7 +672,7 @@ func TestFleetProfilesBehave(t *testing.T) {
 	var mu sync.Mutex
 	ooms := map[string]int{}
 	throttled := map[string][]float64{}
-	g.Each(4, func(wt *WorkloadTrace) error {
+	err = g.Each(4, func(wt *WorkloadTrace) error {
 		n := 0
 		var thr []float64
 		for _, p := range wt.Pods {
@@ -687,6 +693,9 @@ func TestFleetProfilesBehave(t *testing.T) {
 		}
 		return nil
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for p, n := range ooms {
 		if p != ProfileOOMProne && n > 0 {
 			t.Errorf("%d OOM kills in profile %s", n, p)
@@ -788,6 +797,6 @@ func TestExtendIsSeamless(t *testing.T) {
 
 func clipSeries(s *Series, from, to int) *Series {
 	var out *Series
-	Clip(func(c *Series) error { out = c; return nil }, from, to)(s)
+	_ = Clip(func(c *Series) error { out = c; return nil }, from, to)(s) // the callback never fails
 	return out
 }
