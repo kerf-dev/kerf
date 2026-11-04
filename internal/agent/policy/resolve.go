@@ -26,6 +26,11 @@ const (
 	DefaultMinConfidence    = 0.7
 	DefaultMaxChangePercent = 50
 	DefaultCooldown         = 24 * time.Hour
+
+	DefaultWatchDuration   = 30 * time.Minute
+	DefaultRollbackOOMs    = 1
+	DefaultRollbackRestart = 3
+	DefaultThrottlingRatio = 0.25
 )
 
 var (
@@ -66,6 +71,12 @@ type Effective struct {
 	MinCPU           resource.Quantity
 	MinMemory        resource.Quantity
 	Cooldown         time.Duration
+
+	// Rollback (health watch, WO-08).
+	WatchDuration    time.Duration
+	RollbackOOMKills int32
+	RollbackRestarts int32
+	ThrottlingRatio  float64
 
 	JVMDetect bool
 
@@ -223,6 +234,10 @@ func Resolve(w Workload, policies []v1alpha1.RightsizingPolicy, cluster *v1alpha
 		MinCPU:                   DefaultMinCPU.DeepCopy(),
 		MinMemory:                DefaultMinMemory.DeepCopy(),
 		Cooldown:                 DefaultCooldown,
+		WatchDuration:            DefaultWatchDuration,
+		RollbackOOMKills:         DefaultRollbackOOMs,
+		RollbackRestarts:         DefaultRollbackRestart,
+		ThrottlingRatio:          DefaultThrottlingRatio,
 		JVMDetect:                true,
 	}
 	if cluster != nil {
@@ -324,6 +339,24 @@ func (e *Effective) layer(s *v1alpha1.RightsizingPolicySpec, src v1alpha1.ModeSo
 		}
 		if g.Cooldown != nil {
 			e.Cooldown = g.Cooldown.Duration
+		}
+		if rb := g.Rollback; rb != nil {
+			if rb.WatchDuration != nil {
+				e.WatchDuration = rb.WatchDuration.Duration
+			}
+			if rb.OOMKills != nil {
+				e.RollbackOOMKills = *rb.OOMKills
+			}
+			if rb.Restarts != nil {
+				e.RollbackRestarts = *rb.Restarts
+			}
+			if rb.ThrottlingRatio != "" {
+				if f, err := strconv.ParseFloat(rb.ThrottlingRatio, 64); err == nil && f >= 0 && f <= 1 {
+					e.ThrottlingRatio = f
+				} else {
+					e.warnf("%s: invalid rollback.throttlingRatio %q ignored", what, rb.ThrottlingRatio)
+				}
+			}
 		}
 	}
 	if s.JVM != nil && s.JVM.Detect != nil {

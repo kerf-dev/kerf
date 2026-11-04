@@ -73,6 +73,11 @@ spec:
             - --log-level={{ .Values.logLevel }}
             - --metrics-bind-address=:{{ .Values.metrics.port }}
             - --health-probe-bind-address=:8081
+            - --health-watch={{ .Values.health.enabled }}
+            - --health-check-interval={{ .Values.health.checkInterval }}
+            - --metrics-url={{ .Values.health.metricsURL }}
+            - --health-min-throttling-window={{ .Values.health.minThrottlingWindow }}
+            - --health-cadvisor-fallback={{ .Values.health.cadvisorFallback }}
             {{- range .Values.unsupportedNodeSelectors }}
             - --unsupported-node-selector={{ . }}
             {{- end }}

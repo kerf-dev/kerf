@@ -32,9 +32,10 @@ re-read on every request. The Secret is optional: without it the hub answers 401
 |---|---|---|
 | apps deployments, statefulsets, daemonsets; batch cronjobs | get list watch (+ patch) | policy resolution; rollout = SSA under field manager `resource-optimizer`, release = managedFields patch |
 | apps replicasets, batch jobs | get list | owner chain to find a workload's pods |
-| pods | get list (+ patch) | in-place status; patch only for the `previous-resources` / `recommendation-id` annotations |
+| pods | get list watch (+ patch) | in-place status, health watch (restarts, OOM kills); patch only for the `previous-resources` / `recommendation-id` annotations |
 | pods/resize | patch | in-place resize (D-007) |
 | nodes | get list watch | swap / unsupported-node detection |
+| nodes/proxy | get (only with `health.cadvisorFallback`) | throttling from kubelet cAdvisor when the hub metrics are unreachable; reaches every kubelet API, hence off by default |
 | autoscaling horizontalpodautoscalers | get list watch | HPA coupling (D-011) |
 | rightsizingpolicies | get list watch | policy resolution |
 | rightsizingrecommendations (+ /status) | get list watch create update patch delete | the agent's record per workload |

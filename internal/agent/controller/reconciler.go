@@ -32,6 +32,7 @@ import (
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 	"github.com/tomer1983/resource-optimizer/internal/agent/policy"
 	"github.com/tomer1983/resource-optimizer/internal/agent/workload"
+	"github.com/tomer1983/resource-optimizer/internal/health"
 )
 
 // Condition reasons used only on RightsizingRecommendation conditions for states that are not
@@ -71,8 +72,9 @@ type Reconciler struct {
 	Log      *slog.Logger
 	Now      func() time.Time
 
-	mu      sync.Mutex
-	emitted map[string]bool
+	mu sync.Mutex
+	// last holds, per workload and dedup slot, the signature of the last event emitted there (D-017).
+	last map[string]string
 }
 
 func requestName(kind v1alpha1.WorkloadKind, name string) string { return string(kind) + "/" + name }
@@ -225,7 +227,7 @@ func (w *run) release() error {
 	if drop && !r.Cfg.ReadOnly {
 		if _, err := apply.Release(w.ctx, r.Client, w.obj); err != nil {
 			w.emit(hubclient.Event{Type: hubclient.EventFailed, Reason: v1alpha1.ReasonReleaseError,
-				Message: err.Error(), Details: map[string]string{"error": err.Error()}}, true)
+				Message: err.Error(), Details: map[string]string{"error": err.Error()}}, "failed/"+v1alpha1.ReasonReleaseError, nil)
 			return fmt.Errorf("release: %w", err)
 		}
 		w.log.Info("released field ownership", "owned", keys(owned), "keep", keys(want))
@@ -274,7 +276,7 @@ func (w *run) release() error {
 	w.emit(hubclient.Event{Type: hubclient.EventReleased, Reason: v1alpha1.ReasonModeChanged,
 		Strategy: string(w.rsr.Spec.Strategy), Resources: left, Details: details,
 		RecommendationID: w.rsr.Status.AppliedRecommendationID,
-		Message:          fmt.Sprintf("%s left auto-patch; field ownership released", strings.Join(left, " and "))}, false)
+		Message:          fmt.Sprintf("%s left auto-patch; field ownership released", strings.Join(left, " and "))}, "", nil)
 	if len(auto) == 0 {
 		w.rsr.Status.Phase = v1alpha1.PhaseReleased
 		w.reason, w.message = v1alpha1.ReasonModeChanged, "workload left auto-patch; field ownership released"
@@ -374,6 +376,7 @@ func (w *run) decide() (ctrl.Result, error) {
 		Now: w.now, Effective: w.eff, Strategy: w.strategy, Rec: w.rec, HubFresh: w.fresh,
 		Containers: w.containersForEval(), HPACoupled: hpa,
 		LastAppliedAt: lastApplied, RolledBackAt: rolledBack, Tolerance: r.Cfg.Tolerance,
+		RolledBackResources: w.rolledBackResources(),
 	})
 
 	// Values of the current recommendation are live: keep them live (drift repair, silently).
@@ -403,7 +406,7 @@ func (w *run) decide() (ctrl.Result, error) {
 			// Without a recommendation only "hub unreachable" is worth an event (once); there is
 			// nothing to record in a CR.
 			if dec.Outcome == guardrails.Blocked {
-				w.emit(hubclient.Event{Type: evType, Reason: dec.Reason, Message: dec.Message}, true)
+				w.emit(hubclient.Event{Type: evType, Reason: dec.Reason, Message: dec.Message}, slotDecision, nil)
 			}
 			return ctrl.Result{}, nil
 		}
@@ -417,23 +420,26 @@ func (w *run) decide() (ctrl.Result, error) {
 				return ctrl.Result{}, err
 			}
 			switch {
+			case w.rsr.Status.Phase == v1alpha1.PhaseRolledBack:
+				// The previous values are live again; RolledBack describes that until a new change
+				// is applied (WO-08).
 			case dec.Outcome == guardrails.Blocked:
 				w.rsr.Status.Phase = v1alpha1.PhaseBlocked
-			case w.rsr.Status.Phase == v1alpha1.PhaseReleased || (w.rsr.Status.Phase == v1alpha1.PhaseRolledBack):
+			case w.rsr.Status.Phase == v1alpha1.PhaseReleased:
 				// keep
 			default:
 				w.rsr.Status.Phase = v1alpha1.PhasePending
 			}
 		}
 		w.emit(hubclient.Event{Type: evType, Reason: dec.Reason, Message: dec.Message,
-			RecommendationID: w.rec.ID, Resources: refusedResources(dec)}, true)
+			RecommendationID: w.rec.ID, Resources: refusedResources(dec)}, slotDecision, dec.Proposed)
 		return ctrl.Result{}, nil
 	}
 
 	// Apply.
 	for _, ref := range dec.Refusals {
 		w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: ref.Reason, Message: ref.Message,
-			RecommendationID: w.rec.ID, Resources: []string{ref.Resource}}, true)
+			RecommendationID: w.rec.ID, Resources: []string{ref.Resource}}, "refusal/"+ref.Resource, dec.Proposed)
 	}
 	if w.strategy == v1alpha1.StrategyInPlace {
 		res, err := w.startInPlace(dec)
@@ -443,6 +449,18 @@ func (w *run) decide() (ctrl.Result, error) {
 		return requeue, nil
 	}
 	return ctrl.Result{}, w.applyRollout(dec.Targets, w.liveValues(), w.strategy, "")
+}
+
+// rolledBackResources are the resources the last rollback restored, from the HealthWatch
+// condition reason (OOMKills -> memory, Throttling -> cpu, otherwise all).
+func (w *run) rolledBackResources() []string {
+	if w.rsr == nil || w.rsr.Status.RolledBackAt == nil {
+		return nil
+	}
+	if c := meta.FindStatusCondition(w.rsr.Status.Conditions, v1alpha1.ConditionHealthWatch); c != nil && c.Status == metav1.ConditionFalse {
+		return health.ResourcesForReason(c.Reason)
+	}
+	return nil
 }
 
 func refusedResources(dec guardrails.Decision) []string {
@@ -480,6 +498,15 @@ func (w *run) keepLive() (ctrl.Result, error) {
 	own := w.ownedTargets()
 	if len(own) == 0 || r.Cfg.ReadOnly {
 		return ctrl.Result{}, nil
+	}
+	// The health watch (WO-08) may have rolled this change back a moment ago and the cached RSR
+	// not show it yet: confirm the phase uncached before re-asserting anything.
+	var fresh v1alpha1.RightsizingRecommendation
+	if err := r.Reader.Get(w.ctx, client.ObjectKeyFromObject(w.rsr), &fresh); err != nil {
+		return ctrl.Result{}, err
+	}
+	if fresh.Status.Phase != v1alpha1.PhaseApplied || fresh.Status.AppliedRecommendationID != w.rsr.Status.AppliedRecommendationID {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	targets := w.rsr.Spec.Containers
 	if w.rsr.Spec.Strategy != v1alpha1.StrategyInPlace {
@@ -604,7 +631,7 @@ func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous 
 	if err := apply.ApplyTemplate(w.ctx, r.Client, w.obj, w.kind, targets, own, w.ownAnnotations(recID, previous)); err != nil {
 		w.reason, w.message = v1alpha1.ReasonApplyError, err.Error()
 		w.emit(hubclient.Event{Type: hubclient.EventFailed, Reason: v1alpha1.ReasonApplyError, RecommendationID: recID,
-			Strategy: string(strategy), Message: err.Error(), Details: map[string]string{"error": err.Error()}}, true)
+			Strategy: string(strategy), Message: err.Error(), Details: map[string]string{"error": err.Error()}}, "failed/"+v1alpha1.ReasonApplyError, recID)
 		return fmt.Errorf("apply %s: %w", w.k, err)
 	}
 	changes := diff(previous, targets, own)
@@ -616,7 +643,7 @@ func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous 
 	w.message = "pod template patched, rollout started: " + guardrails.Summary(changes)
 	w.emit(hubclient.Event{Type: hubclient.EventApplied, Reason: v1alpha1.ReasonRecommendationApplied,
 		RecommendationID: recID, Strategy: string(v1alpha1.StrategyRollout), Resources: resourcesOf(changes),
-		Containers: changes, Message: w.message}, false)
+		Containers: changes, Message: w.message}, "", nil)
 	w.log.Info("applied (rollout)", "recommendation", recID, "changes", guardrails.Summary(changes))
 	return nil
 }
@@ -657,7 +684,7 @@ func (w *run) startInPlace(dec guardrails.Decision) (ctrl.Result, error) {
 		}
 		w.reason, w.message = v1alpha1.ReasonUnsupportedNode, why
 		w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: v1alpha1.ReasonUnsupportedNode,
-			RecommendationID: w.rec.ID, Message: why}, true)
+			RecommendationID: w.rec.ID, Message: why}, slotDecision, dec.Targets)
 		return ctrl.Result{}, nil
 	}
 	previous := w.liveValues()
@@ -703,7 +730,7 @@ func (w *run) progressInPlace() (ctrl.Result, error) {
 					continue
 				}
 				w.emit(hubclient.Event{Type: hubclient.EventFailed, Reason: v1alpha1.ReasonResizeError, RecommendationID: recID,
-					Strategy: string(v1alpha1.StrategyInPlace), Message: err.Error(), Details: map[string]string{"error": err.Error()}}, true)
+					Strategy: string(v1alpha1.StrategyInPlace), Message: err.Error(), Details: map[string]string{"error": err.Error()}}, "failed/"+v1alpha1.ReasonResizeError, recID)
 				return ctrl.Result{}, fmt.Errorf("resize pod %s: %w", pods[i].Name, err)
 			}
 			done = false
@@ -740,7 +767,7 @@ func (w *run) progressInPlace() (ctrl.Result, error) {
 	w.message = fmt.Sprintf("%d pod(s) resized in place: %s", len(pods), guardrails.Summary(changes))
 	w.emit(hubclient.Event{Type: hubclient.EventApplied, Reason: v1alpha1.ReasonRecommendationApplied,
 		RecommendationID: recID, Strategy: string(v1alpha1.StrategyInPlace), Resources: resourcesOf(changes),
-		Containers: changes, Message: w.message}, false)
+		Containers: changes, Message: w.message}, "", nil)
 	w.log.Info("applied (in-place)", "recommendation", recID, "pods", len(pods))
 	return ctrl.Result{}, nil
 }
@@ -750,7 +777,7 @@ func (w *run) fallback(reason, msg, resizeStatus string) (ctrl.Result, error) {
 	recID := w.rsr.Spec.Source.RecommendationID
 	w.emit(hubclient.Event{Type: hubclient.EventFallback, Reason: reason, RecommendationID: recID,
 		Strategy: string(v1alpha1.StrategyRollout), Resources: keys(w.ownedTargets()), Message: msg,
-		Details: map[string]string{"resizeStatus": resizeStatus}}, false)
+		Details: map[string]string{"resizeStatus": resizeStatus}}, "", nil)
 	w.log.Warn("in-place resize fell back to rollout", "reason", reason, "message", msg)
 	w.strategy = v1alpha1.StrategyRollout
 	if w.rec == nil || w.rec.ID != recID {
@@ -1041,47 +1068,100 @@ func setCond(st *v1alpha1.RightsizingRecommendationStatus, typ string, status me
 	meta.SetStatusCondition(&st.Conditions, metav1.Condition{Type: typ, Status: status, Reason: reason, Message: msg})
 }
 
+// slotDecision is the dedup slot of workload-level skipped/blocked events.
+const slotDecision = "decision"
+
 // emit sends an event to the hub buffer and records it as a Kubernetes Event on the RSR.
-// With once, it is emitted only once per (workload, recommendation, type, reason, resources).
-func (w *run) emit(e hubclient.Event, once bool) {
+//
+// With a non-empty slot the event is de-duplicated (D-017): it is emitted only when its type,
+// reason, resources or the values it is about (proposed values for skipped/blocked) differ from
+// the last event emitted in that slot for the workload. A new recommendation id alone does not
+// re-emit. An applied, rolled_back or released event resets the workload's slots.
+func (w *run) emit(e hubclient.Event, slot string, values any) {
 	r := w.r
 	e.Workload = hubclient.WorkloadRef{Namespace: w.k.Namespace, Kind: w.k.Kind, Name: w.k.Name}
-	if once {
-		key := strings.Join([]string{w.k.String(), e.RecommendationID, e.Type, e.Reason, strings.Join(e.Resources, ",")}, "|")
+	if slot != "" {
+		vb, _ := json.Marshal(values)
+		sig := strings.Join([]string{e.Type, e.Reason, strings.Join(e.Resources, ","), string(vb)}, "|")
+		key := w.k.String() + "|" + slot
 		r.mu.Lock()
-		if r.emitted == nil || len(r.emitted) > 100000 {
-			r.emitted = map[string]bool{}
+		if r.last == nil {
+			r.last = map[string]string{}
 		}
-		seen := r.emitted[key]
-		r.emitted[key] = true
+		last, known := r.last[key]
+		r.last[key] = sig
 		r.mu.Unlock()
-		if seen || w.alreadyRecorded(e) {
+		if last == sig || (!known && slot == slotDecision && w.alreadyRecorded(e, vb)) {
 			return
 		}
+	}
+	switch e.Type {
+	case hubclient.EventApplied, hubclient.EventRolledBack, hubclient.EventReleased:
+		r.resetSlots(w.k)
 	}
 	e.Time = w.now.UTC()
 	r.Reporter.Event(e)
 	if r.Recorder != nil && w.rsr != nil {
-		typ := corev1.EventTypeNormal
-		if e.Type == hubclient.EventFailed || e.Type == hubclient.EventRolledBack || e.Type == hubclient.EventFallback {
-			typ = corev1.EventTypeWarning
-		}
-		note := e.Message
-		if note == "" {
-			note = e.Type
-		}
-		if len(note) > 1000 {
-			note = note[:1000]
-		}
-		r.Recorder.Eventf(w.rsr, w.obj, typ, e.Reason, e.Type, "%s", note)
+		r.record(w.rsr, w.obj, e)
 	}
 }
 
-// alreadyRecorded makes skipped/blocked de-duplication survive agent restarts: the previous
-// status already carries this reason for this recommendation.
-func (w *run) alreadyRecorded(e hubclient.Event) bool {
-	if w.rsr == nil || e.RecommendationID == "" || w.prevSpec.Source.RecommendationID != e.RecommendationID {
+func (r *Reconciler) resetSlots(k wkey) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	prefix := k.String() + "|"
+	for key := range r.last {
+		if strings.HasPrefix(key, prefix) {
+			delete(r.last, key)
+		}
+	}
+}
+
+// record writes a Kubernetes Event on the RSR (docs/contracts/events.md).
+func (r *Reconciler) record(rsr *v1alpha1.RightsizingRecommendation, obj client.Object, e hubclient.Event) {
+	typ := corev1.EventTypeNormal
+	if e.Type == hubclient.EventFailed || e.Type == hubclient.EventRolledBack || e.Type == hubclient.EventFallback {
+		typ = corev1.EventTypeWarning
+	}
+	note := e.Message
+	if note == "" {
+		note = e.Type
+	}
+	if len(note) > 1000 {
+		note = note[:1000]
+	}
+	r.Recorder.Eventf(rsr, obj, typ, e.Reason, e.Type, "%s", note)
+}
+
+// Emit delivers an event raised outside a reconcile (the health watch, WO-08): to the hub
+// buffer (asynchronously) and as a Kubernetes Event on the RSR.
+func (r *Reconciler) Emit(rsr *v1alpha1.RightsizingRecommendation, obj client.Object, e hubclient.Event) {
+	if kind, ok := workload.KindOf(obj); ok {
+		e.Workload = hubclient.WorkloadRef{Namespace: obj.GetNamespace(), Kind: string(kind), Name: obj.GetName()}
+		if e.Type == hubclient.EventRolledBack {
+			r.resetSlots(wkey{obj.GetNamespace(), string(kind), obj.GetName()})
+		}
+	}
+	if e.Time.IsZero() {
+		e.Time = r.now().UTC()
+	}
+	r.Reporter.Event(e)
+	if r.Recorder != nil && rsr != nil {
+		r.record(rsr, obj, e)
+	}
+}
+
+// alreadyRecorded makes the decision slot survive agent restarts: the previous status already
+// carries this reason and the spec already holds these values.
+func (w *run) alreadyRecorded(e hubclient.Event, values []byte) bool {
+	if w.rsr == nil {
 		return false
+	}
+	if w.prev.Phase != v1alpha1.PhaseApplied {
+		spec, _ := json.Marshal(w.prevSpec.Containers)
+		if string(spec) != string(values) {
+			return false
+		}
 	}
 	switch e.Type {
 	case hubclient.EventBlocked:
