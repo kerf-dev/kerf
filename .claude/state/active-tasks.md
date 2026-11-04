@@ -29,6 +29,11 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-10 | Deferred strategy and windows | 3 | done | local_11de0a00 | wo-10-windows | – | |
 | WO-11 | HPA coordination | 3 | done | local_9125207c | wo-11-hpa | – | |
 | WO-14d | UI: recommendation history series, recompute, D-019 | 2 | done | local_9fadb724 | wo-14d-web | – | |
+| WO-19 | Admin: contract | 4 | in-progress | (new session) | wo-19-admin-contract | – | Migrations 0007–0009 assigned |
+| WO-20 | Admin: hub | 4 | todo | – | wo-20-admin-hub | WO-19 | |
+| WO-21 | Admin: agent | 4 | todo | – | wo-21-admin-agent | WO-19 | |
+| WO-22 | Admin: web | 4 | todo | – | wo-22-admin-web | WO-19 | |
+| WO-24 | Admin: e2e | 4 | todo | – | wo-24-admin-e2e | WO-20/21/22 | |
 
 ## Open questions for the user
 - Token with GitHub `workflow` scope needed to activate `ci/github-workflows/` (user, morning).
