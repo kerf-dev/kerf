@@ -19,9 +19,9 @@ sidecar:
 resources:
   requests:
     cpu: 50m
-    memory: 96Mi
+    memory: 256Mi
   limits:
-    memory: 384Mi
+    memory: 1Gi  # 384Mi OOMKilled under ~30 dashboard queries (WO-05)
 
 service:
   type: NodePort

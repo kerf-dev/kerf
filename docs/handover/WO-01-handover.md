@@ -10,7 +10,7 @@ Full docs: `dev/README.md`. Until WO-00's root Makefile lands: `make -f make/dev
 - Argo CD (spoke-1) http://localhost:18090 admin/admin123; git server git://localhost:19418/workloads.git
 - Registry: push localhost:5005/<repo>:<tag>, pull k3d-ro-registry:5005/<repo>:<tag>
 - Contexts k3d-ro-hub :16443, k3d-ro-spoke-1 :16444, k3d-ro-spoke-2 :16445 (current context is NOT switched)
-- Reserved hub NodePorts: 30080 → localhost:18080 (hub API, WO-04), 30090 → localhost:19090 (pricing, WO-03)
+- Reserved hub NodePorts: 30080 → localhost:18080 (hub API, WO-04), 30090 → localhost:19090 (web UI, WO-14; pricing is ClusterIP only)
 
 ## Conventions other tracks should follow
 - Spokes reach the hub via selector-less Services: `http://victoria-metrics.hub.svc:8428`, `http://hub-api.hub.svc:8080` (→ hub NodePort 30080). WO-04: expose the hub API as NodePort 30080 on ro-hub.

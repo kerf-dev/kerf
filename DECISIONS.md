@@ -78,3 +78,20 @@ separate `ui` token scope.
 ## D-015 Autonomous delivery — Accepted (2026-11-04)
 The orchestrator owns delivery end to end: it starts tracks, verifies them, and merges verified branches into `main`
 itself (no PRs while `gh` is unavailable). Each merge is recorded in the integration log of `.claude/state/active-tasks.md`.
+
+## D-016 Hub API additions for the UI — Accepted (2026-11-04)
+Additive, optional changes to `api/openapi/hub.yaml` (WO-04b): `GET /v1/workloads/facets` (role `ui`, counts per
+cluster/namespace/kind/mode/risk flag under the same filters as `/v1/workloads`), `WorkloadRecommendation.pricing`
+(`source`, `cpuCoreHourUSD`, `memoryGiBHourUSD`; `source=default` when no pricing series exist) and
+`confidenceFactors` (coverage, samples, variance with weights) in the detail explanation. Agents ignore them.
+
+## D-017 Event de-duplication — Accepted (2026-11-04)
+The hub mints a new recommendation id on every run, so per-id de-duplication floods the audit log with identical
+`skipped`/`blocked` events. The agent emits a `skipped`/`blocked` event once per (workload, type, reason) and again
+only when the reason or the proposed values change. `applied`, `fallback`, `rolled-back`, `released`, `failed` are
+unchanged (one per action).
+
+## D-018 Dev tokens — Accepted (2026-11-04)
+Local k3d only: the hub's dev tokens live in `deploy/charts/hub/values-dev.yaml`; each spoke's agent gets the
+matching one from `deploy/charts/agent/values-<cluster>.yaml` with `tokenSecret.create: true`, so `make deploy-agent`
+and Tilt connect agents without manual Secret handling. Real clusters use an externally managed Secret (create: false).
