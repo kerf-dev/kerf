@@ -280,6 +280,35 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/admin/recompute': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Run the recommender now
+     * @description Queues a recommender run (D-019) for one cluster (`cluster`) or for all registered
+     *     clusters, and returns at once with the run id. The run starts as soon as no other run is
+     *     in progress; it uses usage data up to the last full recommender step (5 minutes by
+     *     default) before it starts, like a scheduled run. A request for the same scope that
+     *     arrives while an earlier one is still queued gets that run's id (`coalesced: true`)
+     *     instead of queuing another.
+     *
+     *     Completion is visible through the existing endpoints: `lastRecommenderRunAt` of the
+     *     cluster in `GET /v1/clusters` moves past `requestedAt`, and the agent endpoint returns
+     *     the new recommendations.
+     */
+    post: operations['recompute']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -746,6 +775,22 @@ export interface components {
         cluster?: components['schemas']['ClusterName']
         points: components['schemas']['SavingsPoint'][]
       }[]
+    }
+    RecomputeAccepted: {
+      /**
+       * Format: uuid
+       * @description Id of the queued run (UUIDv7).
+       */
+      runId: string
+      /** @description The requested cluster; absent for a run over all clusters. */
+      cluster?: components['schemas']['ClusterName']
+      /**
+       * Format: date-time
+       * @description When the run was first requested (for a coalesced request, the earlier one).
+       */
+      requestedAt: string
+      /** @description True when an already queued run for the same scope was returned. */
+      coalesced: boolean
     }
     /**
      * @description RFC 9457 problem details; the single error schema for every endpoint. `code` is a stable
@@ -1236,6 +1281,33 @@ export interface operations {
       400: components['responses']['BadRequest']
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
+    }
+  }
+  recompute: {
+    parameters: {
+      query?: {
+        /** @description Only this cluster. Default all clusters. */
+        cluster?: components['schemas']['ClusterName']
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Run queued. */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RecomputeAccepted']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
     }
   }
 }

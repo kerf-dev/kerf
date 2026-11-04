@@ -88,8 +88,9 @@ type RecommenderConfig struct {
 	RunOnStart *bool `json:"runOnStart"`
 	// Strategy name (default "percentile").
 	Strategy string `json:"strategy"`
-	// Backfill: when no run ever succeeded, first compute Runs recommendations as of
-	// now-Runs*Every ... now-Every, so history and the savings trend have data (dev).
+	// Backfill (dev): compute history from the metrics already stored, one run as of each
+	// multiple of Every (UTC) in the Runs intervals before the first regular run, so history and
+	// the savings trend have data. Missing ones are filled at every start, between regular runs.
 	Backfill struct {
 		Runs  int      `json:"runs"`
 		Every Duration `json:"every"`

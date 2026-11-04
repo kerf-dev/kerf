@@ -343,6 +343,7 @@ func newEnv(t *testing.T) *testEnv {
 		Store: st, Metrics: metrics, Cfg: cfg, Log: discardLog(), Now: clock,
 		Engine: &recommender.Engine{Loader: loader, Cfg: recCfg, Strategy: recommender.PercentileStrategy{}},
 	}
+	srv.Job = job
 	e.srv, e.job, e.loader, e.prom = srv, job, loader, prom
 	for i := 2; i >= 1; i-- {
 		asOf := now.Add(-time.Duration(i) * 24 * time.Hour)

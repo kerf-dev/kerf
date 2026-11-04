@@ -62,11 +62,22 @@ the table above.
 | `config` | see values.yaml | the hub config file (`internal/hub/config.go`): `prometheusURL`, `corsOrigins`, `agentStaleAfter`, `recommender.*`, `history.*` |
 
 Recommender settings under `config.recommender` (all optional; defaults in `internal/recommender/config.go`):
-`interval` (production 24h, dev 5m), `backfill.runs`/`every` (dev: 7 × 24h of history on an empty
-database), `step`, `rateWindow`, `riskWindow`, `inventoryLookback`, `throttleThreshold`,
+`interval` (production 24h, dev 5m), `backfill.runs`/`every` (dev: 29 × 24h of history before the
+first regular run, computed from the stored metrics and filled in between regular runs), `step`, `rateWindow`, `riskWindow`, `inventoryLookback`, `throttleThreshold`,
 `restartThreshold`, `throttleIncrease`, `oomIncrease`, `minCPU`, `minMemory`, `lowConfidence`,
 `defaultProfile`, `defaultCPUCoreHourUSD`, `defaultMemoryGiBHourUSD` (fallback when the cluster has no
 `ro_*_hourly_cost_usd` series) and `profiles.<dev|production|high-availability>.{window, cpuPercentile,
 memoryPercentile, memoryPeakWindow, cpuHeadroom, memoryBuffer}`.
 History: `history.fullResolution` keeps every run, older recommendations are thinned to one per
 workload and day, `history.retention` deletes the rest (the latest per workload is always kept).
+
+## Recompute now
+
+`POST /v1/admin/recompute[?cluster=<name>]` (admin token) queues a recommender run and returns `202`
+with its `runId`; completion shows as `lastRecommenderRunAt` in `GET /v1/clusters`. The run uses data
+up to the last full 5-minute step.
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $(kubectl --context k3d-ro-hub -n resource-optimizer get secret hub-dev-tokens -o jsonpath='{.data.admin}' | base64 -d)" \
+  'http://localhost:18080/v1/admin/recompute?cluster=ro-spoke-1'
+```
