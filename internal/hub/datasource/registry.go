@@ -69,7 +69,9 @@ var (
 // ValidationError lists invalid fields (400).
 type ValidationError struct{ Problems []string }
 
-func (e *ValidationError) Error() string { return "invalid datasource: " + strings.Join(e.Problems, "; ") }
+func (e *ValidationError) Error() string {
+	return "invalid datasource: " + strings.Join(e.Problems, "; ")
+}
 
 // Registry manages datasources and hands out their HTTP clients (cached per id and version).
 type Registry struct {
