@@ -41,10 +41,10 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-21c | Drift repair survives new recommendation ids | 4 | done | local_11de0a00 | wo-21c-drift-repair | – | found by WO-24 |
 | WO-24 | Admin: e2e (+ onboarding/readiness scenarios) | 4 | done | local_7697cfde | wo-24-admin-e2e | – | KSM scenario run with user OK: PASS |
 | WO-18 | EKS packaging (plan, D-028) | 5 | in-progress | orchestrator | – | – | tracks 18a–18e |
-| WO-18a | Hub HA (leader lock, migrate lock, recompute in DB) | 5 | in-progress | – | wo-18a-hub-ha | – | migration 0012 |
-| WO-18b | Production-grade component charts | 5 | in-progress | – | wo-18b-chart-hardening | – | |
-| WO-18c | Multi-arch images and release | 5 | in-progress | – | wo-18c-release | – | |
-| WO-18d | Umbrella chart + EKS guide | 5 | todo | – | wo-18d-umbrella | WO-18b | |
+| WO-18a | Hub HA (leader lock, migrate lock, recompute in DB) | 5 | done | local_2deafb65 | wo-18a-hub-ha | – | migration 0012 |
+| WO-18b | Production-grade component charts | 5 | done | local_5dc2f372 | wo-18b-chart-hardening | – | |
+| WO-18c | Multi-arch images and release | 5 | done | local_04939a0e | wo-18c-release | – | |
+| WO-18d | Umbrella chart + EKS guide | 5 | in-progress | – | wo-18d-umbrella | – | |
 | WO-18e | Staging install verification (ro-staging) | 5 | todo | – | wo-18e-staging | WO-18a/c/d | |
 
 ## Open questions for the user
@@ -76,3 +76,4 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-04 WO-24b merged: TestWebhook forces a new recommendation id before the drift check (no hold-off). Final `make e2e && make e2e` on main (agents main-6237bfc, hub/web main-1e72c9e): PASS 14m30s + 14m08s, 31 tests each. Skips: TestInPlaceJVMMemory (k3d swap, by design), TestReadinessKSMDown (needs user OK, RO_E2E_DISRUPTIVE=1). Phase-4 admin area + onboarding complete.
 - 2026-11-04 User approved the KSM scale-to-0 scenario. `TestReadinessKSMDown` (RO_E2E_DISRUPTIVE=1) alone on main: PASS 6m02s, but ro-spoke-2 stayed below AutomationReady ~9.5 min after it returned (hub metrics checks rerun only every checkInterval, 10m dev; the restore-time recheck came before KSM was scraped). Fixed in the test: it now restores KSM itself and rechecks every minute until AutomationReady. Rerun: PASS 8m37s (freshness fail after 6m22s, AutomationReady 2m15s after restore). KSM 1/1, no e2e field ownership left. Still opt-in.
 - 2026-11-04 User approved the WO-18 plan (D-028): audit in docs/work-orders/WO-18-eks-packaging.md. Migration 0012 assigned to WO-18a (recompute requests). Web nginx port 80→8080: WO-18c changes the image, WO-18b adds the chart value; orchestrator sets it at merge. Started 18a, 18b, 18c.
+- 2026-11-04 WO-18a (308415b), WO-18b (0713ebe, 59c5293) and WO-18c (cfd2d2d, bcf397b) merged; no file overlap. Integration fix-ups e2ccb9c: hub chart 2 replicas + RollingUpdate + POD_NAME + grace 30s; web chart 8080 non-root read-only by default; agent-sync-crds → charts-sync; selfcheck CRD text. `make ci`, `make charts-lint` green; `charts-diff-dev` shows only those intended changes. Deployed hub/web/pricing/agent/webhook at main-e2ccb9c: migration 0012 applied once (one pod), one leader. Live failover: leader force-deleted, follower acquired in <1 s; recompute via API ran once on the new leader (succeeded, 14.7 s). Full `make e2e` on main: PASS 16m (usual skips). Both spokes AutomationReady. Started WO-18d.
