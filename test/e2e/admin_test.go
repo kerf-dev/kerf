@@ -288,8 +288,7 @@ func TestApproveOnce(t *testing.T) {
 	waitHubRecommendation(t, cl, ns, deployment, "web", cpuBelow(smallCPU))
 	waitReason(t, cl, ns, deployment, "web", v1alpha1.ReasonModeAudit, 3*time.Minute)
 
-	a := approve(t, operator, cl, ns, "web")
-	ev := waitEvent(t, cl, ns, "web", "applied", func(e auditEvent) bool { return e.Reason == v1alpha1.ReasonApprovedOnce })
+	a, ev := approveApplied(t, operator, cl, ns, "web")
 	t.Logf("applied event: %s", ev.Message)
 	if ev.RecommendationID != "" && ev.RecommendationID != a.RecommendationID {
 		t.Errorf("applied recommendation %s, approved %s", ev.RecommendationID, a.RecommendationID)
@@ -472,10 +471,9 @@ func TestApproveOnceArgoCD(t *testing.T) {
 	waitHubRecommendation(t, cl, ns, deployment, "web", cpuBelow(smallCPU))
 	waitReason(t, cl, ns, deployment, "web", v1alpha1.ReasonModeAudit, 3*time.Minute)
 
-	approve(t, operator, cl, ns, "web")
-	waitEvent(t, cl, ns, "web", "applied", func(e auditEvent) bool {
-		return e.Reason == v1alpha1.ReasonApprovedOnce && e.Strategy == string(v1alpha1.StrategyRollout)
-	})
+	if _, ev := approveApplied(t, operator, cl, ns, "web"); ev.Strategy != string(v1alpha1.StrategyRollout) {
+		t.Errorf("approved change applied with strategy %q, want rollout", ev.Strategy)
+	}
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	approved := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
 	eventually(t, 2*time.Minute, 3*time.Second, "template carries the approved value", func() (bool, string) {
