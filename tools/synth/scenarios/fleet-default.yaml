@@ -1,0 +1,45 @@
+# Default synthetic fleet: what the shared VictoriaMetrics holds for hub/dashboard/UI development.
+# Refresh with `make synth-backfill` (deletes synth-a/synth-b series, backfills 30 days up to now).
+#
+# No convenience `workload` label here: like real cAdvisor data, workloads are only reachable
+# through the kube-state-metrics owner chain (docs/contracts/metrics.md section 4).
+name: fleet-default
+seed: 20261104
+days: 30
+step: 60s
+workloadLabel: false
+groundTruth: true
+
+clusters:
+  - name: synth-a
+    region: eu-west-1
+    requestPacking: 0.85
+    nodePools:
+      - {instanceType: m6i.xlarge, capacityType: on-demand, weight: 2, zones: [eu-west-1a, eu-west-1b, eu-west-1c]}
+      - {instanceType: c6a.2xlarge, capacityType: spot, weight: 1, zones: [eu-west-1a, eu-west-1b, eu-west-1c]}
+    fleet: &fleet
+      workloads: 200
+      namespaces: [payments, cards, ledger, onboarding, notifications, risk, platform]
+      profiles:
+        over-provisioned: 50
+        right-sized: 14
+        throttled: 8
+        oom-prone: 5
+        hpa-coupled: 8
+        jvm: 8
+        batch: 7
+      newWorkloads: 0.04
+      sidecars: 0.2
+      stepChanges: 0.06
+      restarting: 0.02
+      statefulSets: 0.08
+      daemonSets: 3
+      rolloutEveryDays: 14
+
+  - name: synth-b
+    region: eu-west-1
+    requestPacking: 0.85
+    nodePools:
+      - {instanceType: c6a.2xlarge, capacityType: on-demand, weight: 1, zones: [eu-west-1a, eu-west-1b, eu-west-1c]}
+      - {instanceType: m6i.xlarge, capacityType: spot, weight: 1, zones: [eu-west-1a, eu-west-1b, eu-west-1c]}
+    fleet: *fleet
