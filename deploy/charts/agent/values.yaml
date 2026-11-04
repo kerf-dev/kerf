@@ -1,0 +1,83 @@
+# resource-optimizer agent. One release per cluster, namespace resource-optimizer.
+
+# Cluster name as known to the hub (required). Tilt / dev scripts set it per cluster.
+clusterName: ""
+
+image:
+  repository: localhost:5005/resource-optimizer/agent
+  tag: dev
+  pullPolicy: IfNotPresent
+
+hub:
+  # Hub base URL. Spokes reach the hub through a selector-less Service (WO-01).
+  url: http://hub-api.hub.svc:8080
+  # Bearer token for the agent role of this cluster (D-012), read from a Secret key and
+  # re-read on every request (rotation needs no restart). The Secret is optional: without it
+  # the hub answers 401 and the agent behaves as offline (nothing new is applied).
+  tokenSecret:
+    name: resource-optimizer-agent-token
+    key: token
+    # create: true makes the chart create the Secret from `token` (local development only).
+    create: false
+    token: ""
+
+# Cluster default policy (D-005): a RightsizingPolicy spec without selector/priority. Unset
+# fields inherit the global defaults (mode audit, strategy in-place, profile production, ...).
+clusterDefaults: {}
+#  cpu:
+#    mode: audit
+#  memory:
+#    mode: audit
+#  apply:
+#    strategy: in-place
+#    fallbackAfter: 10m
+#  guardrails:
+#    learningPeriod: 168h
+#    minConfidence: "0.7"
+#    maxChangePercent: 50
+#    cooldown: 24h
+
+# readOnly caps every mode at audit and drops every write verb on workloads and pods from the
+# ClusterRole. Use it for clusters where every policy is audit.
+readOnly: false
+
+pullInterval: 1m
+hubStaleAfter: 5m
+reportInterval: 10s
+eventBuffer: 10000
+tolerance: "0.05"
+logLevel: info
+
+# Label selectors of nodes where in-place resize must not be used (static CPU/Memory Manager
+# policy, which the API does not expose). Nodes with swap are detected automatically.
+# Example: ["resource-optimizer.oz.io/no-in-place=true", "node.kubernetes.io/cpu-manager-static"]
+unsupportedNodeSelectors: []
+
+replicas: 1
+leaderElection: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+podLabels: {}
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+metrics:
+  port: 8080
+  # Adds prometheus.io/* scrape annotations to the metrics Service (WO-01 vmagent convention).
+  scrape: true
+
+# In-process stub of the hub's agent endpoints, for local development before the real hub
+# exists. When enabled the agent talks to it instead of hub.url.
+stubHub:
+  enabled: false
+  # cluster name -> list of WorkloadRecommendation (api/openapi/hub.yaml). id, generatedAt,
+  # dataCoverage and riskFlags are filled in when missing.
+  recommendations: {}

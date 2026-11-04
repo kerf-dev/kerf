@@ -1,0 +1,142 @@
+{{- if not .Values.clusterName }}{{ fail "clusterName is required" }}{{ end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+data:
+  cluster-defaults.yaml: |
+{{- if .Values.clusterDefaults }}
+{{ toYaml .Values.clusterDefaults | indent 4 }}
+{{- else }}
+    {}
+{{- end }}
+{{- if .Values.hub.tokenSecret.create }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.hub.tokenSecret.name }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{ .Values.hub.tokenSecret.key }}: {{ required "hub.tokenSecret.token is required with create: true" .Values.hub.tokenSecret.token | quote }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  {{- if and (gt (int .Values.replicas) 1) (not .Values.leaderElection) }}
+  {{ fail "replicas > 1 needs leaderElection: true" }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agent.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
+        # The agent must never be mutated by the webhook (WO-07).
+        resource-optimizer.oz.io/skip-webhook: "true"
+      annotations:
+        checksum/config: {{ toYaml .Values.clusterDefaults | sha256sum }}
+        {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{ end }}
+    spec:
+      serviceAccountName: {{ include "agent.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --cluster-name={{ .Values.clusterName }}
+            - --hub-url={{ include "agent.hubURL" . }}
+            - --hub-token-file=/var/run/secrets/resource-optimizer/hub/{{ .Values.hub.tokenSecret.key }}
+            - --cluster-defaults=/etc/resource-optimizer/cluster-defaults.yaml
+            - --pull-interval={{ .Values.pullInterval }}
+            - --hub-stale-after={{ .Values.hubStaleAfter }}
+            - --report-interval={{ .Values.reportInterval }}
+            - --event-buffer={{ .Values.eventBuffer }}
+            - --tolerance={{ .Values.tolerance }}
+            - --read-only={{ .Values.readOnly }}
+            - --leader-elect={{ .Values.leaderElection }}
+            - --log-level={{ .Values.logLevel }}
+            - --metrics-bind-address=:{{ .Values.metrics.port }}
+            - --health-probe-bind-address=:8081
+            {{- range .Values.unsupportedNodeSelectors }}
+            - --unsupported-node-selector={{ . }}
+            {{- end }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+            - name: probes
+              containerPort: 8081
+          livenessProbe:
+            httpGet: {path: /healthz, port: probes}
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet: {path: /readyz, port: probes}
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/resource-optimizer
+              readOnly: true
+            - name: hub-token
+              mountPath: /var/run/secrets/resource-optimizer/hub
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "agent.fullname" . }}-config
+        - name: hub-token
+          secret:
+            secretName: {{ .Values.hub.tokenSecret.name }}
+            optional: true
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agent.fullname" . }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+  {{- if .Values.metrics.scrape }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.metrics.port }}"
+    prometheus.io/path: /metrics
+  {{- end }}
+spec:
+  selector: {{- include "agent.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics

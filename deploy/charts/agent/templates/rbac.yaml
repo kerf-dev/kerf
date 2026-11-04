@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "agent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+---
+# Minimal cluster-wide permissions. Write verbs on workloads and pods exist only when the agent
+# may apply changes (readOnly: false). The agent always writes its own RightsizingRecommendations.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "agent.fullname" . }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+rules:
+  # Workloads: watched for policy resolution; patched (server-side apply under field manager
+  # resource-optimizer, and the managedFields release) by the rollout strategy.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"{{ if not .Values.readOnly }}, "patch"{{ end }}]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get", "list", "watch"{{ if not .Values.readOnly }}, "patch"{{ end }}]
+  # Owner chain to find a workload's pods (uncached reads).
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list"]
+  # Pods: read for in-place status; patch only for the previous-resources annotation, resize
+  # through the pods/resize subresource (D-007).
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"{{ if not .Values.readOnly }}, "patch"{{ end }}]
+  {{- if not .Values.readOnly }}
+  - apiGroups: [""]
+    resources: ["pods/resize"]
+    verbs: ["patch"]
+  {{- end }}
+  # Nodes: swap / unsupported-node detection for in-place.
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  # HPA detection (D-011).
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  # Our CRDs.
+  - apiGroups: ["resource-optimizer.oz.io"]
+    resources: ["rightsizingpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["resource-optimizer.oz.io"]
+    resources: ["rightsizingrecommendations"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["resource-optimizer.oz.io"]
+    resources: ["rightsizingrecommendations/status"]
+    verbs: ["get", "update", "patch"]
+  # Kubernetes Events on RightsizingRecommendations (docs/contracts/events.md).
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "agent.fullname" . }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "agent.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "agent.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- if .Values.leaderElection }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "agent.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "agent.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "agent.fullname" . }}-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "agent.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
