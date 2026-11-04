@@ -13,6 +13,8 @@ import (
 type statusSettingsColumn struct {
 	hubapi.ValueSettings
 	JVM []hubapi.JVMContainer `json:"jvm,omitempty"`
+	// Override is WorkloadStatus.override (WO-20), stored the same way.
+	Override string `json:"override,omitempty"`
 }
 
 // statusSettings returns the workload_status.settings value of a reported status.
@@ -22,6 +24,7 @@ func statusSettings(it hubapi.WorkloadStatus) []byte {
 		col.ValueSettings = *it.Settings
 	}
 	col.JVM = it.JVM
+	col.Override = it.Override
 	b, _ := json.Marshal(col)
 	return b
 }
@@ -33,6 +36,15 @@ func statusJVM(b []byte) []hubapi.JVMContainer {
 		return nil
 	}
 	return col.JVM
+}
+
+// statusOverride returns the override name stored in a workload_status.settings value.
+func statusOverride(b []byte) string {
+	var col statusSettingsColumn
+	if json.Unmarshal(b, &col) != nil {
+		return ""
+	}
+	return col.Override
 }
 
 // ReportedJVM returns the JVM containers per workload the agent reported a status for. A workload

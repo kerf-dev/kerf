@@ -21,6 +21,15 @@ devSeed:
     synth-b: ro-dev-synthb-a06443f1dbc00f61be2e0900
     ui: ro-dev-ui-97446cd3a095035d6290abc5
     admin: ro-dev-admin-1b71e51dc42ec5deb56e7f06
+  # Local users for the admin area (WO-20). Development only — the passwords are in Git.
+  users:
+    - {username: viewer, displayName: Viewer, role: viewer, password: ro-dev-viewer-pass}
+    - {username: operator, displayName: Operator, role: operator, password: ro-dev-operator-pass}
+    - {username: admin, displayName: Admin, role: admin, password: ro-dev-admin-pass}
+
+# Plain HTTP on localhost:18080 / the web's nginx: the cookie cannot be Secure.
+auth:
+  cookieSecure: false
 
 config:
   prometheusURL: http://victoria-metrics.monitoring.svc:8428

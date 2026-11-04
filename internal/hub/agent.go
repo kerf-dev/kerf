@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
 	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
 	"github.com/tomer1983/resource-optimizer/internal/hub/store"
 )
@@ -143,9 +144,22 @@ func (s *Server) reportWorkloadStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	for i, it := range batch.PolicyInventory {
+		if err := validateInventoryItem(it); err != nil {
+			badRequest(w, r, "invalid_item", fmt.Sprintf("policyInventory[%d]: %v", i, err))
+			return
+		}
+	}
 	if err := s.Store.UpsertStatuses(r.Context(), cluster, batch.Items, s.now()); err != nil {
 		s.internal(w, r, err)
 		return
+	}
+	// The config the agent materialised and its policy inventory (D-022); absent = unchanged.
+	if batch.ConfigVersion != "" || batch.PolicyInventory != nil {
+		if err := s.Store.RecordAgentConfig(r.Context(), cluster, batch.ConfigVersion, batch.PolicyInventory, s.now()); err != nil {
+			s.internal(w, r, err)
+			return
+		}
 	}
 	if batch.AgentVersion != "" {
 		s.heartbeat(r.Context(), cluster, batch.AgentVersion)
@@ -178,6 +192,14 @@ func (s *Server) reportEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, e := range stored {
 		s.Metrics.countAction(cluster, e)
+		// An applied approve-once grant is consumed (D-024).
+		if e.Type == "applied" && e.Reason == v1alpha1.ReasonApprovedOnce && e.Details["approvalId"] != "" {
+			if ok, err := s.Store.ConsumeApproval(r.Context(), cluster, e.Details["approvalId"], e.ID, e.Time); err != nil {
+				s.Log.WarnContext(r.Context(), "consume approval", "cluster", cluster, "approval", e.Details["approvalId"], "err", err)
+			} else if ok {
+				s.Log.InfoContext(r.Context(), "approval consumed", "cluster", cluster, "approval", e.Details["approvalId"], "workload", e.Workload)
+			}
+		}
 	}
 	writeJSON(w, hubapi.BatchResult{Accepted: len(batch.Items) - dups, Duplicates: &dups})
 }
@@ -331,6 +353,17 @@ func validateEvent(e hubapi.Event) error {
 	}
 	if len(e.Message) > 1024 {
 		return errors.New("message longer than 1024 characters")
+	}
+	return nil
+}
+
+// validateInventoryItem checks one PolicyInventoryItem of a status batch.
+func validateInventoryItem(it hubapi.PolicyInventoryItem) error {
+	if it.Name == "" || len(it.Name) > 253 {
+		return fmt.Errorf("invalid name %q", it.Name)
+	}
+	if it.Source != hubapi.PolicySourceHub && it.Source != hubapi.PolicySourceGit {
+		return fmt.Errorf("source must be hub or git, got %q", it.Source)
 	}
 	return nil
 }

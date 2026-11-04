@@ -28,6 +28,25 @@ devSeed:
   clusters: []
   # key = cluster name (agent token for that cluster), "ui" or "admin".
   tokens: {}
+  # Local users created when missing ({username, role, password, displayName}); stored in Secret
+  # hub-dev-users. Development only.
+  users: []
+
+# Local users and browser sessions (D-023, WO-20).
+auth:
+  # Secure attribute of the session cookie; false only for plain-HTTP development.
+  cookieSecure: true
+  sessionTTL: 12h
+  maxFailedLogins: 5
+  lockoutDuration: 15m
+  # The initial admin, created when the database has no users. The password comes from
+  # existingSecret/existingSecretKey or, if empty, from password (rendered into Secret
+  # <release>-bootstrap-admin). Leave both empty to skip.
+  bootstrapAdmin:
+    username: admin
+    password: ""
+    existingSecret: ""
+    existingSecretKey: password
 
 logLevel: info
 
