@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Segmented } from '@/components/ui/segmented'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatBytes, formatCores, parseGoDuration, parseQuantity, type Resource } from '@/lib/format'
+import { stepChanges } from '@/lib/series'
 import { cn } from '@/lib/utils'
 
 /** Breaks the line where samples are missing (e.g. between CronJob runs) instead of bridging gaps. */
@@ -67,12 +68,13 @@ export function UsageChartCard({ id, containers }: { id: string; containers: Con
     const recStart = rec[0] ? Math.max(rec[0][0]!, firstUsage ?? rec[0][0]!) : undefined
     const recLine = rec.length > 0 && span > 0 && recStart != null && (endT! - recStart) / span >= 0.1
     const recLevel = !recLine && rec.length ? rec[rec.length - 1]![1] : undefined
+    const changes = recLine ? stepChanges(rec) : []
     const usageColor = resource === 'cpu' ? c['chart-5'] : c['chart-2']
     const mark = (
       v: number | undefined,
       label: string,
       color: string,
-      position: 'insideStartTop' | 'insideEndTop',
+      position: 'insideStartBottom' | 'insideEndBottom',
     ) =>
       v == null
         ? []
@@ -96,7 +98,8 @@ export function UsageChartCard({ id, containers }: { id: string; containers: Con
         valueFormatter: (v: number | null) => (v == null ? '—' : fmt(v)),
       },
       legend: { show: false },
-      grid: { ...base.grid, top: 24, bottom: 36 },
+      // Room on the right for the recommendation's end label.
+      grid: { ...base.grid, top: 24, bottom: 36, right: recLine ? 64 : base.grid.right },
       dataZoom: [
         { type: 'inside', throttle: 50 },
         {
@@ -152,8 +155,8 @@ export function UsageChartCard({ id, containers }: { id: string; containers: Con
             symbol: 'none',
             silent: true,
             data: [
-              ...mark(p95, 'P95', c.warning, 'insideStartTop'),
-              ...mark(p99, 'P99', c['chart-4'], 'insideEndTop'),
+              ...mark(p95, 'P95', c.warning, 'insideStartBottom'),
+              ...mark(p99, 'P99', c['chart-4'], 'insideEndBottom'),
             ],
           },
           z: 2,
@@ -196,6 +199,14 @@ export function UsageChartCard({ id, containers }: { id: string; containers: Con
           showSymbol: false,
           lineStyle: { width: 2.25, color: c.success, type: [8, 4] },
           itemStyle: { color: c.success },
+          endLabel: {
+            show: recLine,
+            formatter: (p: { value: [number, number] }) => fmt(p.value[1]),
+            color: c.success,
+            fontSize: 11,
+            fontWeight: 600,
+            distance: 6,
+          },
           // A single recommendation point (only the latest run in range) has no line to draw:
           // show it as a labelled level across the chart instead.
           markLine: recLevel
@@ -219,9 +230,28 @@ export function UsageChartCard({ id, containers }: { id: string; containers: Con
             : undefined,
           z: 4,
         },
+        {
+          // One dot per recommender run that changed the value, so the step series reads as history.
+          name: 'Recommendation changed',
+          type: 'scatter',
+          data: changes.map((x) => ({ value: [x.t * 1000, x.to], from: x.from })),
+          symbolSize: 9,
+          itemStyle: { color: c.success, borderColor: c.card, borderWidth: 2 },
+          tooltip: {
+            trigger: 'item',
+            formatter: (p: { value: [number, number]; data: { from: number } }) =>
+              `<div style="font-size:12px"><b>Recommendation changed</b><br/>${fmt(p.data.from)} → ${fmt(p.value[1])}<br/><span style="opacity:.7">${new Date(p.value[0]).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span></div>`,
+          },
+          z: 5,
+        },
       ],
     }
   }, [series, c, explanation, resource, step, fmt])
+
+  const recChangeCount = useMemo(
+    () => (series?.recommendation.length ? stepChanges(series.recommendation).length : 0),
+    [series],
+  )
 
   const legend = [
     {
@@ -245,7 +275,10 @@ export function UsageChartCard({ id, containers }: { id: string; containers: Con
     },
     { label: 'Request', swatch: <span className="w-3 border-t-2 border-muted-foreground" /> },
     { label: 'Limit', swatch: <span className="w-3 border-t-2 border-dashed border-destructive" /> },
-    { label: 'Recommendation', swatch: <span className="w-3 border-t-[3px] border-dashed border-success" /> },
+    {
+      label: recChangeCount ? `Recommendation (changed ${recChangeCount}× in range)` : 'Recommendation',
+      swatch: <span className="w-3 border-t-[3px] border-dashed border-success" />,
+    },
     { label: 'P95 / P99', swatch: <span className="w-3 border-t border-dotted border-warning" /> },
   ]
 

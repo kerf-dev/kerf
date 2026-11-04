@@ -13,6 +13,8 @@ test.describe('smoke', () => {
     await expect(page.getByText('Top 10 opportunities')).toBeVisible()
     await expect(page.locator('[data-testid=chart] canvas').first()).toBeVisible()
     expect(await page.locator('[data-testid=chart] canvas').count()).toBeGreaterThanOrEqual(2)
+    // fleet savings stay visible in the top bar on every page
+    await expect(page.getByTestId('fleet-savings')).toContainText(/\$[\d,]+\/mo/)
   })
 
   test('opportunities: filter by kind and sort by name', async ({ page }) => {
@@ -82,6 +84,20 @@ test.describe('smoke', () => {
     await expect(page.getByTestId('history-timeline')).toBeVisible()
   })
 
+  test('workload detail: usage chart shows the recommendation history', async ({ page }) => {
+    await open(page, '/workloads/prod-eu-west-1/payments/Deployment/checkout-api')
+    await expect(page.locator('[data-testid=chart] canvas').first()).toBeVisible()
+    await expect(page.getByText(/^Recommendation \(changed \d+× in range\)$/)).toBeVisible()
+  })
+
+  test('opportunities: tablet width keeps the request columns in view', async ({ page }) => {
+    await page.setViewportSize({ width: 820, height: 1180 })
+    await open(page, '/opportunities')
+    await expect(page.getByTestId('opportunity-row').first()).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: /CPU request/i })).toBeInViewport()
+    await expect(page.getByRole('columnheader', { name: /Confidence/i })).toHaveCount(0)
+  })
+
   test('workload detail: unknown workload shows not-found state', async ({ page }) => {
     await open(page, '/workloads/prod-eu-west-1/nope/Deployment/missing')
     await expect(page.getByText('Workload not found')).toBeVisible()
@@ -92,6 +108,7 @@ test.describe('smoke', () => {
     await expect(page.getByTestId('cluster-cards')).toBeVisible()
     await expect(page.getByText('Connected').first()).toBeVisible()
     await expect(page.getByText('Never connected').first()).toBeVisible()
+    await expect(page.getByTestId('cluster-cards')).toContainText('Estimated savings')
   })
 
   test('activity page lists audit events and filters by type', async ({ page }) => {

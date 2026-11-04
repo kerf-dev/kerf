@@ -263,26 +263,29 @@ export default function ActivityPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Volume</CardTitle>
-            <CardDescription>
-              Events per {range === '24h' ? 'hour' : 'day'}
-              {volume.data?.continue ? ' · based on the latest 1,000 events' : ''}
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-2 pb-3">
-          {volume.isError ? (
-            <ErrorState compact error={volume.error} />
-          ) : !volume.data && !noTypes ? (
-            <Skeleton className="h-36 w-full" />
-          ) : (
-            <Chart option={chartOption} className="h-36" ariaLabel="Audit events over time" />
-          )}
-        </CardContent>
-      </Card>
+      {/* An empty volume chart adds nothing to the empty state below. */}
+      {volume.data && !volume.data.items.length ? null : (
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Volume</CardTitle>
+              <CardDescription>
+                Events per {range === '24h' ? 'hour' : 'day'}
+                {volume.data?.continue ? ' · based on the latest 1,000 events' : ''}
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2 pb-3">
+            {volume.isError ? (
+              <ErrorState compact error={volume.error} />
+            ) : !volume.data && !noTypes ? (
+              <Skeleton className="h-36 w-full" />
+            ) : (
+              <Chart option={chartOption} className="h-36" ariaLabel="Audit events over time" />
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="overflow-clip">
         {audit.isError ? (
