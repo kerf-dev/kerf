@@ -31,7 +31,16 @@ type Job struct {
 	pmu     sync.Mutex
 	pending map[string]queuedRun // runs requested through Trigger that have not started, by cluster ("" = all)
 	wg      sync.WaitGroup       // triggered runs (tests wait for them)
+
+	// Per cluster, guarded by mu: the last accepted regular run and since when runs look incomplete.
+	baseline   map[string]clusterBaseline
+	incomplete map[string]time.Time
 }
+
+type clusterBaseline struct{ inventory, withRequests int }
+
+// minGuardedInventory: smaller clusters are not checked for incomplete metrics (a var for tests).
+var minGuardedInventory = 10
 
 type queuedRun struct {
 	id uuid.UUID
@@ -124,7 +133,7 @@ func (j *Job) PlanBackfill(ctx context.Context) (*BackfillPlan, error) {
 	have := map[int64]bool{}
 	plan := &BackfillPlan{}
 	for _, r := range runs {
-		if r.AsOf.Unix()%int64(every/time.Second) == 0 && (r.Status == "succeeded" || r.Status == "partial") {
+		if r.AsOf.Unix()%int64(every/time.Second) == 0 && (r.Status == "succeeded" || r.Status == "partial") && !r.RepricingNeeded {
 			have[r.AsOf.Unix()] = true
 			continue
 		}
@@ -319,9 +328,15 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 		return err
 	}
 	eng.JVM = func(k hubapi.WorkloadKey) ([]hubapi.JVMContainer, bool) { c, ok := jvm[k]; return c, ok }
+	eng.PricingFallback = j.pricingFallback
 	res, err := eng.RunCluster(ctx, cluster, asOf, func(k hubapi.WorkloadKey) *hubapi.ValueSettings { return reported[k] })
 	if err != nil {
 		return err
+	}
+	if !backfill {
+		if err := j.checkComplete(ctx, cluster, res); err != nil {
+			return err
+		}
 	}
 	seenAt := j.now()
 	if backfill {
@@ -373,4 +388,76 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 	j.Log.InfoContext(ctx, "recommender cluster done", "cluster", cluster, "asOf", res.End, "workloads", len(res.Inventory),
 		"recommendations", len(res.Results), "pricing", res.Pricing.Source, "savingsUSD", math.Round(savings.Total*100)/100)
 	return nil
+}
+
+// pricingFallback supplies rates for a cluster without pricing series at the end of a run's
+// window (WO-04d): a backfill before the series existed uses today's series; otherwise (a gap in
+// the series) the rates of the cluster's last run that had them, if not older than a day. Both
+// keep source "metrics".
+func (j *Job) pricingFallback(ctx context.Context, cluster string, end time.Time) (recommender.Pricing, bool) {
+	now := j.now()
+	if pl, ok := j.Engine.Loader.(interface {
+		PricingAt(ctx context.Context, cluster string, t time.Time) (recommender.Pricing, bool, error)
+	}); ok && now.Sub(end) > time.Hour {
+		if p, found, err := pl.PricingAt(ctx, cluster, now); err == nil && found {
+			j.Log.InfoContext(ctx, "no pricing series at the run's time; using the current rates", "cluster", cluster, "asOf", end)
+			return p, true
+		}
+	}
+	p, found, err := j.Store.LastMetricsPricing(ctx, cluster, now.Add(-24*time.Hour))
+	if err != nil || !found {
+		return recommender.Pricing{}, false
+	}
+	j.Log.WarnContext(ctx, "no pricing series; using the rates of the cluster's last run", "cluster", cluster)
+	return p, true
+}
+
+// checkComplete refuses a regular run whose inventory, or number of workloads with request series,
+// fell below half of the last accepted one: that is incomplete metrics (a scrape gap, a backend
+// reload, regenerated data) far more often than half a cluster disappearing within minutes.
+// Refused, the cluster's run fails and the previous results stay current. A drop that lasts
+// longer than recommender.incompleteMetricsGrace is accepted as real.
+func (j *Job) checkComplete(ctx context.Context, cluster string, res *recommender.ClusterResult) error {
+	grace := j.Cfg.Recommender.IncompleteMetricsGrace.D()
+	if grace == 0 {
+		grace = 30 * time.Minute
+	}
+	if j.baseline == nil {
+		j.baseline, j.incomplete = map[string]clusterBaseline{}, map[string]time.Time{}
+	}
+	cur := clusterBaseline{inventory: len(res.Inventory), withRequests: res.WithRequests}
+	accept := func() error {
+		j.baseline[cluster] = cur
+		delete(j.incomplete, cluster)
+		return nil
+	}
+	if grace < 0 {
+		return accept()
+	}
+	base, ok := j.baseline[cluster]
+	if !ok {
+		// After a restart: the stored live inventory; request counts are unknown.
+		n, err := j.Store.LiveInventory(ctx, cluster)
+		if err != nil {
+			return err
+		}
+		base = clusterBaseline{inventory: n, withRequests: cur.withRequests}
+	}
+	dropped := base.inventory >= minGuardedInventory &&
+		(2*cur.inventory < base.inventory || 2*cur.withRequests < base.withRequests)
+	if !dropped {
+		return accept()
+	}
+	since, seen := j.incomplete[cluster]
+	if !seen {
+		since = j.now()
+		j.incomplete[cluster] = since
+	}
+	if j.now().Sub(since) >= grace {
+		j.Log.WarnContext(ctx, "inventory drop persisted; accepting it", "cluster", cluster,
+			"workloads", cur.inventory, "previous", base.inventory, "since", since)
+		return accept()
+	}
+	return fmt.Errorf("metrics look incomplete: %d workloads (%d with requests), previously %d (%d); keeping the previous results (accepted after %s)",
+		cur.inventory, cur.withRequests, base.inventory, base.withRequests, grace)
 }

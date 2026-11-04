@@ -100,7 +100,12 @@ type fakeLoader struct {
 	workloads map[string][]wlSpec
 	hidden    map[string]bool // workload ids missing from the inventory
 	empty     map[string]bool // clusters returning no workloads at all
-	calls     int
+	noReqs    map[string]bool // workload ids without request series (HasRequests false)
+	// noPricing: no pricing series at the window end; pricingNow (if set) is what PricingAt returns.
+	noPricing  bool
+	pricingNow *recommender.Pricing
+	pricingAt  []time.Time
+	calls      int
 }
 
 func (l *fakeLoader) hide(id string, v bool) {
@@ -110,6 +115,17 @@ func (l *fakeLoader) hide(id string, v bool) {
 		l.hidden = map[string]bool{}
 	}
 	l.hidden[id] = v
+}
+
+// PricingAt implements the job's pricing fallback for backfills.
+func (l *fakeLoader) PricingAt(_ context.Context, _ string, t time.Time) (recommender.Pricing, bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.pricingAt = append(l.pricingAt, t)
+	if l.pricingNow == nil {
+		return recommender.Pricing{}, false, nil
+	}
+	return *l.pricingNow, true, nil
 }
 
 func (l *fakeLoader) setEmpty(cluster string, v bool) {
@@ -132,6 +148,9 @@ func (l *fakeLoader) Load(_ context.Context, cluster string, end time.Time, wind
 		Cluster: cluster, End: end, Window: window, Workloads: map[hubapi.WorkloadKey]*recommender.RawWorkload{},
 		Pricing: recommender.Pricing{CPUCoreHour: 0.03, MemoryGiBHour: 0.004, Source: recommender.PricingSourceMetrics, Nodes: 3},
 	}
+	if l.noPricing {
+		d.Pricing = recommender.Pricing{CPUCoreHour: 0.02, MemoryGiBHour: 0.002, Source: recommender.PricingSourceDefault}
+	}
 	if l.empty[cluster] {
 		return d, nil
 	}
@@ -141,7 +160,7 @@ func (l *fakeLoader) Load(_ context.Context, cluster string, end time.Time, wind
 			continue
 		}
 		n := int(w.days * 24 * float64(time.Hour/fakeStep))
-		rw := &recommender.RawWorkload{Key: w.key, Containers: map[string]*recommender.RawContainer{}, HasRequests: true, HPA: w.hpa}
+		rw := &recommender.RawWorkload{Key: w.key, Containers: map[string]*recommender.RawContainer{}, HasRequests: !l.noReqs[w.key.ID()], HPA: w.hpa}
 		for i := 0; i < n; i++ {
 			rw.Pods = append(rw.Pods, recommender.Sample{T: end.Add(-time.Duration(n-1-i) * fakeStep), V: w.replicas})
 		}
