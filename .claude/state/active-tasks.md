@@ -29,11 +29,11 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-10 | Deferred strategy and windows | 3 | done | local_11de0a00 | wo-10-windows | – | |
 | WO-11 | HPA coordination | 3 | done | local_9125207c | wo-11-hpa | – | |
 | WO-14d | UI: recommendation history series, recompute, D-019 | 2 | done | local_9fadb724 | wo-14d-web | – | |
-| WO-19 | Admin: contract (+ onboarding/readiness contract) | 4 | in-progress | local_7697cfde | wo-19-admin-contract | – | Migrations 0007–0010 assigned |
-| WO-20 | Admin: hub | 4 | todo | – | wo-20-admin-hub | WO-19 | |
-| WO-21 | Admin: agent | 4 | todo | – | wo-21-admin-agent | WO-19 | |
-| WO-22 | Admin: web | 4 | todo | – | wo-22-admin-web | WO-19 | |
-| WO-25 | Onboarding, metrics sources, readiness | 4 | todo | – | wo-25-onboarding | WO-19 (+WO-20/21) | plan docs/plans/cluster-onboarding.md |
+| WO-19 | Admin: contract (+ onboarding/readiness contract) | 4 | done | local_7697cfde | wo-19-admin-contract | – | Migrations 0007–0010 assigned |
+| WO-20 | Admin: hub | 4 | in-progress | local_9125207c | wo-20-admin-hub | – | |
+| WO-21 | Admin: agent | 4 | in-progress | local_11de0a00 | wo-21-admin-agent | – | |
+| WO-22 | Admin: web (+ onboarding wizard, readiness UI) | 4 | in-progress | local_9fadb724 | wo-22-admin-web | – | MSW first |
+| WO-25 | Onboarding, metrics sources, readiness | 4 | in-progress | local_14a53b46 | wo-25-onboarding | wiring waits for WO-20/21 | plan docs/plans/cluster-onboarding.md |
 | WO-24 | Admin: e2e | 4 | todo | – | wo-24-admin-e2e | WO-20/21/22/25 | |
 
 ## Open questions for the user
@@ -53,3 +53,4 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-04 WO-10 live check passed (deferred applied at window open 05:57:01, freeze blocked in-place); WO-10b fixes (skip reason persisted, dedup signature includes effective-policy digest → fixes TestHPACoordination). WO-11 live check passed on both spokes (100m→70m + HPA target 60→86 %, replicas stayed 2). WO-13 live check passed (no zero-Ready window). WO-04d (trend partial bucket, pricing fallback) merged. `make ci` with Postgres exit 0 on 6fbfeda. All components deployed from main-6fbfeda on ro-hub/ro-spoke-1/ro-spoke-2 (pricing unchanged since WO-03); endpoints 200. make/*.mk image tags now expand once (agent/web/pricing).
 - 2026-11-04 Final e2e on main 6fbfeda: 1 test-side failure (WO-13 guard blocks 1-replica RestartContainer) fixed in WO-09c; with it g1/g2 PASS back to back (16 tests). WO-09c and WO-13b merged (93695ad), make ci exit 0, agent redeployed main-93695ad, pricing redeployed from main. UI checked in browser: overview, opportunities, workload detail render with live data ($10,015/mo fleet savings, 693 workloads incl. ~60 deleted test workloads → WO-04e).
 - 2026-11-04 WO-04e merged (4dc9320), make ci exit 0, hub deployed main-4dc9320 (migration 0006 applied); deleted test workloads pruned after one agent pull (693 → 451 workloads, 0 ghosts). Morning report: docs/STATUS.md.
+- 2026-11-04 WO-19 merged (59539ee): hub.yaml 19 → 90 operations, purely additive (no removed ops/props, no new required fields on existing schemas); migrations 0007–0010; shared validator api/v1alpha1/validate. `make ci` exit 0, web gen:api:check + typecheck pass. WO-20/21/22/25 started in parallel.
