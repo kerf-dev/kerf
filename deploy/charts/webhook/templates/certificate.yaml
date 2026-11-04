@@ -1,0 +1,36 @@
+{{- if not .Values.certManager.issuerRef.name }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "webhook.fullname" . }}-selfsigned
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "webhook.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "webhook.certificate" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "webhook.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "webhook.tlsSecret" . }}
+  commonName: {{ include "webhook.fullname" . }}.{{ .Release.Namespace }}.svc
+  dnsNames:
+    - {{ include "webhook.fullname" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "webhook.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  duration: {{ .Values.certManager.duration }}
+  renewBefore: {{ .Values.certManager.renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    {{- if .Values.certManager.issuerRef.name }}
+    {{- toYaml .Values.certManager.issuerRef | nindent 4 }}
+    {{- else }}
+    kind: Issuer
+    name: {{ include "webhook.fullname" . }}-selfsigned
+    {{- end }}
