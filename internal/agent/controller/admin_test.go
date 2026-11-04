@@ -6,10 +6,14 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/tomer1983/resource-optimizer/internal/agent/apply"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubstub"
 )
@@ -254,4 +258,148 @@ func TestApproveOncePaused(t *testing.T) {
 	}
 	setConfig(t, hubclient.ClusterConfig{Approvals: []hubclient.ConfigApproval{approval}})
 	eventually(t, 20*time.Second, "approved after resume", wantEvent(name, hubclient.EventApplied, v1alpha1.ReasonApprovedOnce))
+}
+
+// approveAndApply approves the current recommendation of an audit rollout workload and waits for
+// the approved apply.
+func approveAndApply(t *testing.T, name, approvalID string) hubclient.WorkloadRecommendation {
+	t.Helper()
+	u := deploymentApply(name, map[string]string{v1alpha1.AnnotationStrategy: "rollout"}, "500m", "256Mi")
+	if err := argoApply(t, u, false); err != nil {
+		t.Fatal(err)
+	}
+	r1 := recFor(name, "250m", "200Mi")
+	setRec(r1)
+	eventually(t, 10*time.Second, "skipped in audit", wantEvent(name, hubclient.EventSkipped, v1alpha1.ReasonModeAudit))
+	stub.SetConfig(testCluster, &hubclient.ClusterConfig{Approvals: []hubclient.ConfigApproval{{ID: approvalID, RecommendationID: recID(r1),
+		Workload: hubclient.WorkloadRef{Namespace: "default", Kind: "Deployment", Name: name}, ExpiresAt: time.Now().Add(time.Hour), ApprovedBy: "bob"}}})
+	eventually(t, 20*time.Second, "approved once", wantEvent(name, hubclient.EventApplied, v1alpha1.ReasonApprovedOnce))
+	return hubstub.Normalize([]hubclient.WorkloadRecommendation{r1}, time.Now())[0]
+}
+
+func owns(t *testing.T, name string) map[corev1.ResourceName]bool {
+	t.Helper()
+	return apply.OwnedResources(getDeploy(t, name))
+}
+
+// TestApprovedOwnership (D-027): after an approve-once rollout the agent keeps the field manager on
+// the approved fields, so an Argo CD sync (here: a non-forced apply of the Git values) cannot revert
+// them; a new recommendation id with the same values keeps it; different values release it.
+func TestApprovedOwnership(t *testing.T) {
+	needEnv(t)
+	resetConfig(t)
+	const name = "approved-owned"
+	r1 := approveAndApply(t, name, "6c1d0000-0000-4000-8000-000000000011")
+	eventually(t, 10*time.Second, "Applied condition ApprovedOnce", func() error {
+		rsr, err := getRSR(name)
+		if err != nil {
+			return err
+		}
+		if c := meta.FindStatusCondition(rsr.Status.Conditions, v1alpha1.ConditionApplied); c == nil || c.Reason != v1alpha1.ReasonApprovedOnce {
+			return fmt.Errorf("applied condition %+v", c)
+		}
+		return nil
+	})
+	time.Sleep(1500 * time.Millisecond) // several reconciles in audit
+	if o := owns(t, name); !o[corev1.ResourceCPU] || !o[corev1.ResourceMemory] {
+		t.Fatalf("ownership dropped after the approved apply: %v", o)
+	}
+	git := deploymentApply(name, map[string]string{v1alpha1.AnnotationStrategy: "rollout"}, "500m", "256Mi")
+	if err := argoApply(t, git, false); !apierrors.IsConflict(err) {
+		t.Fatalf("a sync of the Git values must conflict with the approved fields, got %v", err)
+	}
+
+	// Same values, new id (the hub's next run): still held.
+	same := r1
+	same.ID = "0b9b5c1e-4f7c-4a52-9a43-1f1d3f6b7c11"
+	setRec(same)
+	time.Sleep(1500 * time.Millisecond)
+	if o := owns(t, name); !o[corev1.ResourceCPU] || !o[corev1.ResourceMemory] {
+		t.Fatalf("ownership dropped for a recommendation with the same values: %v", o)
+	}
+
+	// Different values: released, values stay, nothing applied, no released event.
+	setRec(recFor(name, "120m", "150Mi"))
+	eventually(t, 10*time.Second, "ownership released", func() error {
+		if o := owns(t, name); len(o) > 0 {
+			return fmt.Errorf("still owned: %v", o)
+		}
+		return nil
+	})
+	if d := getDeploy(t, name); cpuReq(d) != "250m" || memReq(d) != "200Mi" {
+		t.Fatalf("values changed on release: %s %s", cpuReq(d), memReq(d))
+	}
+	if n := countEvents(name, hubclient.EventReleased, v1alpha1.ReasonModeChanged); n != 0 {
+		t.Fatalf("released events: %d", n)
+	}
+	if err := argoApply(t, git, false); err != nil {
+		t.Fatalf("Git sync after the release: %v", err)
+	}
+	if d := getDeploy(t, name); cpuReq(d) != "500m" {
+		t.Fatalf("Git values not restored: %s", cpuReq(d))
+	}
+}
+
+// TestApprovedOwnershipModeOff (D-027): setting a resource to off releases that resource only.
+func TestApprovedOwnershipModeOff(t *testing.T) {
+	needEnv(t)
+	resetConfig(t)
+	const name = "approved-off"
+	approveAndApply(t, name, "6c1d0000-0000-4000-8000-000000000012")
+	time.Sleep(time.Second)
+	if o := owns(t, name); !o[corev1.ResourceCPU] || !o[corev1.ResourceMemory] {
+		t.Fatalf("not held: %v", o)
+	}
+	annotate(t, &appsv1.Deployment{}, name, map[string]any{v1alpha1.AnnotationCPUMode: "off"})
+	eventually(t, 10*time.Second, "cpu released", func() error {
+		if o := owns(t, name); o[corev1.ResourceCPU] || !o[corev1.ResourceMemory] {
+			return fmt.Errorf("owned %v, want memory only", o)
+		}
+		return nil
+	})
+	if d := getDeploy(t, name); cpuReq(d) != "250m" || memReq(d) != "200Mi" {
+		t.Fatalf("values changed: %s %s", cpuReq(d), memReq(d))
+	}
+	annotate(t, &appsv1.Deployment{}, name, map[string]any{v1alpha1.AnnotationMode: "off"})
+	eventually(t, 10*time.Second, "all released", func() error {
+		if o := owns(t, name); len(o) > 0 {
+			return fmt.Errorf("owned %v", o)
+		}
+		return nil
+	})
+}
+
+func TestSameAdvice(t *testing.T) {
+	q := resource.MustParse
+	tgt := []v1alpha1.ContainerRecommendation{{ContainerResources: v1alpha1.ContainerResources{Name: "app",
+		Requests: corev1.ResourceList{corev1.ResourceCPU: q("250m"), corev1.ResourceMemory: q("200Mi")},
+		Limits:   corev1.ResourceList{corev1.ResourceMemory: q("200Mi")}}}}
+	rec := func(cpu, mem string, memLimit string) []v1alpha1.ContainerRecommendation {
+		c := v1alpha1.ContainerRecommendation{ContainerResources: v1alpha1.ContainerResources{Name: "app",
+			Requests: corev1.ResourceList{corev1.ResourceCPU: q(cpu), corev1.ResourceMemory: q(mem)}}}
+		if memLimit != "" {
+			c.Limits = corev1.ResourceList{corev1.ResourceMemory: q(memLimit)}
+		}
+		return []v1alpha1.ContainerRecommendation{c}
+	}
+	both := map[corev1.ResourceName]bool{corev1.ResourceCPU: true, corev1.ResourceMemory: true}
+	cpuOnly := map[corev1.ResourceName]bool{corev1.ResourceCPU: true}
+	tests := []struct {
+		name string
+		rec  []v1alpha1.ContainerRecommendation
+		res  map[corev1.ResourceName]bool
+		want bool
+	}{
+		{"same", rec("250m", "200Mi", ""), both, true},
+		{"within tolerance", rec("260m", "205Mi", "205Mi"), both, true},
+		{"cpu differs", rec("120m", "200Mi", ""), both, false},
+		{"memory differs, cpu held only", rec("250m", "100Mi", ""), cpuOnly, true},
+		{"limit differs", rec("250m", "200Mi", "400Mi"), both, false},
+		{"container missing", []v1alpha1.ContainerRecommendation{{ContainerResources: v1alpha1.ContainerResources{Name: "other"}}}, both, false},
+	}
+	for _, tt := range tests {
+		if got := sameAdvice(tt.rec, tgt, tt.res, 0.05); got != tt.want {
+			t.Errorf("%s: got %v", tt.name, got)
+		}
+	}
 }
