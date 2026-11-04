@@ -471,7 +471,11 @@ func TestApproveOnceArgoCD(t *testing.T) {
 	waitHubRecommendation(t, cl, ns, deployment, "web", cpuBelow(smallCPU))
 	waitReason(t, cl, ns, deployment, "web", v1alpha1.ReasonModeAudit, 3*time.Minute)
 
-	if _, ev := approveApplied(t, operator, cl, ns, "web"); ev.Strategy != string(v1alpha1.StrategyRollout) {
+	// D-027: the agent holds the approved fields until a newer recommendation with other values
+	// arrives; the suite's recompute requests stay off for the rest of the test.
+	env.Hub.holdRecompute(t)
+	a, ev := approveApplied(t, operator, cl, ns, "web")
+	if ev.Strategy != string(v1alpha1.StrategyRollout) {
 		t.Errorf("approved change applied with strategy %q, want rollout", ev.Strategy)
 	}
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
@@ -495,13 +499,22 @@ func TestApproveOnceArgoCD(t *testing.T) {
 	if got := templateCPU(getDeployment(t, cl, ns, "web")); got.Cmp(approved) != 0 {
 		t.Fatalf("after a hard sync the template cpu is %s, want the approved %s", got.String(), approved.String())
 	}
-	consistently(t, 75*time.Second, 5*time.Second, "approved values survive self-heal", func() (bool, string) {
+	// 75 s of self-heal. The hub's periodic run may deliver a newer recommendation with other
+	// values meanwhile; then the hold ends by design (D-027) and the check stops there.
+	for end := time.Now().Add(75 * time.Second); time.Now().Before(end); time.Sleep(5 * time.Second) {
+		if rec, err := env.Hub.workload(ctx(t), cl.Name, ns, deployment, "web"); err == nil && rec != nil && rec.Recommendation != nil &&
+			rec.Recommendation.ID != a.RecommendationID && q(rec.Recommendation.Containers[0].Recommended.Requests.CPU).Cmp(approved) != 0 {
+			t.Logf("a newer recommendation %s (cpu %s) ends the approved hold (D-027); self-heal checked until now",
+				rec.Recommendation.ID, rec.Recommendation.Containers[0].Recommended.Requests.CPU)
+			return
+		}
 		d := getDeployment(t, cl, ns, "web")
 		got := templateCPU(d)
 		s, _ := getApp(t, cl, app)
-		return got.Cmp(approved) == 0 && s.Sync == "Synced" && ownsCPURequest(d.ManagedFields),
-			fmt.Sprintf("cpu %s, app %+v, %s", got.String(), s, managers(d.ManagedFields))
-	})
+		if got.Cmp(approved) != 0 || s.Sync != "Synced" || !ownsCPURequest(d.ManagedFields) {
+			t.Fatalf("approved values did not survive self-heal: cpu %s, app %+v, %s", got.String(), s, managers(d.ManagedFields))
+		}
+	}
 }
 
 // Scenario 8 (D-025): onboarding. A new cluster bound to datasource local with an existing spoke's
