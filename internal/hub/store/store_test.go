@@ -569,3 +569,33 @@ func TestStatusesEventsAudit(t *testing.T) {
 		t.Errorf("from is inclusive, events before excluded: %+v", wevs)
 	}
 }
+
+// TestRecordPull (WO-04e): the last two pulls are kept; pages and retries within minGap are not
+// pulls of their own.
+func TestRecordPull(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	if err := st.EnsureCluster(ctx, "c1", ""); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Date(2026, 11, 4, 8, 0, 0, 0, time.UTC)
+	check := func(at time.Time, wantRecorded bool, wantLast, wantPrev *time.Time) {
+		t.Helper()
+		last, prev, rec, err := st.RecordPull(ctx, "c1", at, 10*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		eq := func(a, b *time.Time) bool { return (a == nil) == (b == nil) && (a == nil || a.Equal(*b)) }
+		if rec != wantRecorded || !eq(last, wantLast) || !eq(prev, wantPrev) {
+			t.Errorf("pull at %s: recorded %v last %v prev %v", at.Format(time.TimeOnly), rec, last, prev)
+		}
+	}
+	p := func(d time.Duration) *time.Time { v := t0.Add(d); return &v }
+	check(t0, true, nil, nil)
+	check(t0.Add(3*time.Second), false, nil, nil) // a page of the same pull
+	check(t0.Add(30*time.Second), true, p(0), nil)
+	check(t0.Add(60*time.Second), true, p(30*time.Second), p(0))
+	if _, _, rec, err := st.RecordPull(ctx, "nope", t0, time.Second); rec || err != nil {
+		t.Errorf("unknown cluster: %v %v", rec, err)
+	}
+}

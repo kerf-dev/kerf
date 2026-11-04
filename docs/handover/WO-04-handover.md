@@ -125,3 +125,38 @@ go test ./internal/recommender -run TestLive -v` runs the engine against live Vi
   COMMIT;
   ```
   (18 run-cluster rows of 26 in that window.)
+
+## WO-04e: pruning workloads deleted on agent-backed clusters
+The inventory spans the whole profile window (days), so a workload deleted on a real cluster
+stayed in `/v1/workloads`, the facets and the summary until it left the window. Now:
+
+- **Pulls are recorded.** An agent's `GET /v1/clusters/{c}/recommendations` (first page only;
+  requests within 10 s of the last recorded pull don't count) stores the pull time. Migration
+  `0006_workload_prune.sql` keeps the last two pulls in `clusters.agent_pull_at` and
+  `clusters.agent_prev_pull_at`.
+- **The full batch is not flagged.** The agent sends a full status batch 2 s after every successful
+  pull, but `WorkloadStatusBatch` doesn't mark it, so the hub infers it from the pull times.
+  `workload_status.updated_at` is now the hub clock of the last report.
+- **When a workload is deleted.** At each pull, a live workload of that cluster is soft-deleted
+  (`deleted_at`, `deleted_by = 'agent'`) when all of these hold:
+  - it wasn't reported since the pull before the previous one, so it is missing from two full batches;
+  - some workload of the cluster was reported since the previous pull, so that batch arrived;
+  - it existed before those pulls;
+  - it has no pods in the latest regular run, where `attributes.live` is true when the workload had
+    request series at the window end. Attributes written before WO-04e count as live.
+- **Expected timing.** Ghosts go at the third pull after the hub deploy, about 1 minute with the
+  dev 30 s pull and about 2–3 minutes in prod.
+- **What stays.** History, status, `/v1/workloads/{id}` and `/v1/audit` are unchanged.
+- **Revival.** A status report revives a workload with `deleted_by = 'agent'`. A regular run revives
+  it only when it has pods again: it is still in the inventory window but no longer counts there.
+- **Other deletions.** Runs set `deleted_by = 'metrics'` for workloads that leave the inventory, as
+  before; existing deleted rows are back-filled as `metrics`.
+- **Clusters without an agent** never pull, so the synthetic clusters keep the metrics-only behaviour.
+- **Summary vs trend.** The summary drops a ghost at once. The trend drops it from the next regular
+  run, because the stored run total comes from the live workloads.
+- **Safeguards.** A workload with pods is never pruned, even when the agent doesn't report it, and
+  pulls with no status batch since the previous pull prune nothing.
+- **Tests.** `internal/hub/prune_test.go` (TestPruneAbsent) and `store_test.go` (TestRecordPull).
+- **Open point.** A `full: true` flag on `WorkloadStatusBatch`, set by the agent on full flushes
+  and on every chunk, would make the inference exact. That is an additive contract change plus
+  ~5 agent lines (WO-06).

@@ -40,6 +40,9 @@ type RawWorkload struct {
 	HPA  *HPA
 	// HasRequests is true when the workload was found by the inventory (KSM) queries.
 	HasRequests bool
+	// Live is true when the workload has request/limit series at the window end (default lookback):
+	// it has pods right now (WO-04e).
+	Live bool
 }
 
 // ClusterData is the raw data of one cluster as of End.
@@ -218,7 +221,9 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 		case k.resource == "memory" && limit:
 			c.Current.MemoryLimit = v
 		}
-		workload(r.Labels).HasRequests = true
+		w := workload(r.Labels)
+		w.HasRequests = true
+		w.Live = w.Live || isLive
 	}
 	var inv []func()
 	for _, init := range []bool{false, true} {
