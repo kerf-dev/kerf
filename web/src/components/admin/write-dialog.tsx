@@ -226,6 +226,21 @@ export function WriteDialog({
   )
 }
 
+/** Titles for hub problem codes (hub.yaml / internal/hub) that need no special handling beyond words. */
+const CODE_TITLE: Record<string, string> = {
+  builtin: 'The built-in datasource is managed by the hub',
+  datasource_in_use: 'The datasource is still in use',
+  unknown_datasource: 'Unknown datasource',
+  invalid_metrics: 'The metrics binding is invalid',
+  invalid_datasource: 'The datasource settings are invalid',
+  invalid_cluster: 'The cluster settings are invalid',
+  already_exists: 'It already exists',
+  last_admin: 'At least one enabled admin must remain',
+  recommendation_stale: 'A newer recommendation exists',
+  not_in_audit: 'Nothing to approve',
+  not_found: 'It no longer exists',
+}
+
 /** Explains a failed write in terms of what the user can do about it. */
 export function WriteError({ error, onReload }: { error: unknown; onReload?: () => void }) {
   if (!error) return null
@@ -279,7 +294,10 @@ export function WriteError({ error, onReload }: { error: unknown; onReload?: () 
     <Callout
       tone="destructive"
       icon={AlertTriangleIcon}
-      title={e?.status === 400 ? 'The hub rejected the change' : 'Could not save'}
+      title={
+        (e?.code && CODE_TITLE[e.code]) ??
+        (e?.status === 400 ? 'The hub rejected the change' : 'Could not save')
+      }
     >
       {e ? e.message : String(error)}
       {e?.code ? <span className="ml-1 font-mono text-[11px]">({e.code})</span> : null}
