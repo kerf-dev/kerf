@@ -81,6 +81,8 @@ spec:
             - --metrics-url={{ .Values.health.metricsURL }}
             - --health-min-throttling-window={{ .Values.health.minThrottlingWindow }}
             - --health-cadvisor-fallback={{ .Values.health.cadvisorFallback }}
+            - --max-pod-deletes-per-run={{ .Values.onDelete.maxPodDeletesPerRun }}
+            - --ondelete-settle={{ .Values.onDelete.settle }}
             {{- range .Values.unsupportedNodeSelectors }}
             - --unsupported-node-selector={{ . }}
             {{- end }}

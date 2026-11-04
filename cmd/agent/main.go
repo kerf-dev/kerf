@@ -92,6 +92,8 @@ func run(args []string) error {
 		readOnly       = fs.Bool("read-only", false, "cap every mode at audit; never write workloads or pods")
 		tolerance      = fs.Float64("tolerance", 0.05, "relative change below which values are left alone")
 		applyingCheck  = fs.Duration("applying-requeue", 5*time.Second, "how often in-progress in-place resizes are checked")
+		maxPodDeletes  = fs.Int("max-pod-deletes-per-run", controller.DefaultMaxPodDeletesPerRun, "pods of an OnDelete StatefulSet evicted at once, after all its pods are Ready (WO-13)")
+		onDeleteSettle = fs.Duration("ondelete-settle", controller.DefaultOnDeleteSettle, "how long a replaced OnDelete StatefulSet pod must be Ready (health watch) before the next is evicted")
 		metricsAddr    = fs.String("metrics-bind-address", ":8080", "metrics endpoint")
 		probeAddr      = fs.String("health-probe-bind-address", ":8081", "health probe endpoint")
 		leaderElect    = fs.Bool("leader-elect", false, "enable leader election (for more than one replica)")
@@ -187,6 +189,8 @@ func run(args []string) error {
 			UnsupportedNodeSelectors: unsupported,
 			ApplyingRequeue:          *applyingCheck,
 			Freeze:                   freeze,
+			MaxPodDeletesPerRun:      *maxPodDeletes,
+			OnDeleteSettle:           *onDeleteSettle,
 		},
 	}
 	ctx := ctrl.SetupSignalHandler()

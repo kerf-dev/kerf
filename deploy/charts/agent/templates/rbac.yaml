@@ -38,7 +38,15 @@ rules:
   - apiGroups: [""]
     resources: ["pods/resize"]
     verbs: ["patch"]
+  # OnDelete StatefulSets: outdated pods are evicted (never deleted), so PDBs apply (WO-13).
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
   {{- end }}
+  # PodDisruptionBudgets: single-replica protection (WO-13).
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch"]
   # Nodes: swap / unsupported-node detection for in-place.
   - apiGroups: [""]
     resources: ["nodes"]
