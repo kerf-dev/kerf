@@ -16,7 +16,8 @@ import (
 	"github.com/tomer1983/resource-optimizer/internal/recommender"
 )
 
-// Job runs the recommender: once at startup, then every interval.
+// Job runs the recommender: once at startup, then every interval, plus runs queued through
+// POST /v1/admin/recompute and (dev) a history backfill.
 type Job struct {
 	Store   *store.Store
 	Engine  *recommender.Engine
@@ -25,7 +26,16 @@ type Job struct {
 	Log     *slog.Logger
 	Now     func() time.Time
 
-	mu sync.Mutex
+	mu sync.Mutex // one run at a time
+
+	pmu     sync.Mutex
+	pending map[string]queuedRun // runs requested through Trigger that have not started, by cluster ("" = all)
+	wg      sync.WaitGroup       // triggered runs (tests wait for them)
+}
+
+type queuedRun struct {
+	id uuid.UUID
+	at time.Time
 }
 
 func (j *Job) now() time.Time {
@@ -35,27 +45,37 @@ func (j *Job) now() time.Time {
 	return time.Now()
 }
 
-// Loop runs until ctx is done.
+// Loop runs until ctx is done. With a backfill configured, the backfill runs are spread between
+// the regular runs (one backfill run whenever no regular run is due), newest first.
 func (j *Job) Loop(ctx context.Context) {
 	rc := j.Cfg.Recommender
-	if rc.Backfill.Runs > 0 && rc.Backfill.Every.D() > 0 {
-		if ok, err := j.Store.HasSucceededRun(ctx); err == nil && !ok {
-			for i := rc.Backfill.Runs; i >= 1; i-- {
-				asOf := j.now().Add(-time.Duration(i) * rc.Backfill.Every.D())
-				if err := j.RunOnce(ctx, asOf, true); err != nil {
-					j.Log.WarnContext(ctx, "backfill run failed", "asOf", asOf, "err", err)
-				}
-			}
-		}
-	}
 	if rc.RunOnStart == nil || *rc.RunOnStart {
 		if err := j.RunOnce(ctx, j.now(), false); err != nil {
 			j.Log.ErrorContext(ctx, "recommender run failed", "err", err)
 		}
 	}
+	plan, err := j.PlanBackfill(ctx)
+	if err != nil {
+		j.Log.WarnContext(ctx, "backfill plan", "err", err)
+	} else if len(plan.Missing) > 0 || len(plan.Stale) > 0 {
+		j.Log.InfoContext(ctx, "backfill planned", "runs", len(plan.Missing), "replacing", len(plan.Stale))
+	}
 	t := time.NewTicker(rc.Interval.D())
 	defer t.Stop()
 	for {
+		if plan != nil && (len(plan.Missing) > 0 || len(plan.Stale) > 0) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := j.RunOnce(ctx, j.now(), false); err != nil {
+					j.Log.ErrorContext(ctx, "recommender run failed", "err", err)
+				}
+			default:
+				j.backfillStep(ctx, plan)
+			}
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -67,20 +87,170 @@ func (j *Job) Loop(ctx context.Context) {
 	}
 }
 
+// BackfillPlan is the backfill work left: the as-of times to compute (newest first) and the
+// backfill runs to delete once they are done.
+type BackfillPlan struct {
+	Missing []time.Time
+	Stale   []uuid.UUID
+}
+
+// PlanBackfill computes the dev history backfill: one run as of each multiple of backfill.every
+// (UTC) in the backfill.runs intervals before the first regular run (or now), within the history
+// retention. Times that already have a successful backfill run are skipped. Backfill runs off
+// that grid (a changed interval, or older hub versions that backfilled as of the start time) or
+// failed ones are stale: they are deleted after the new runs are stored, so the history is
+// recomputed from the metrics as they are now.
+func (j *Job) PlanBackfill(ctx context.Context) (*BackfillPlan, error) {
+	b := j.Cfg.Recommender.Backfill
+	every := b.Every.D()
+	if b.Runs <= 0 || every <= 0 {
+		return &BackfillPlan{}, nil
+	}
+	now := j.now()
+	limit := now
+	if first, ok, err := j.Store.FirstRegularRun(ctx); err != nil {
+		return nil, err
+	} else if ok && first.Before(limit) {
+		limit = first
+	}
+	oldest := time.Time{}
+	if r := j.Cfg.History.Retention.D(); r > 0 {
+		oldest = now.Add(-r)
+	}
+	runs, err := j.Store.BackfillRuns(ctx)
+	if err != nil {
+		return nil, err
+	}
+	have := map[int64]bool{}
+	plan := &BackfillPlan{}
+	for _, r := range runs {
+		if r.AsOf.Unix()%int64(every/time.Second) == 0 && (r.Status == "succeeded" || r.Status == "partial") {
+			have[r.AsOf.Unix()] = true
+			continue
+		}
+		plan.Stale = append(plan.Stale, r.ID)
+	}
+	t := alignDown(limit, every)
+	if !t.Before(limit) {
+		t = t.Add(-every)
+	}
+	for i := 0; i < b.Runs && t.After(oldest); i, t = i+1, t.Add(-every) {
+		if !have[t.Unix()] {
+			plan.Missing = append(plan.Missing, t)
+		}
+	}
+	return plan, nil
+}
+
+// backfillStep does one unit of plan: the next backfill run, or (once all ran) deleting the stale runs.
+func (j *Job) backfillStep(ctx context.Context, plan *BackfillPlan) {
+	if len(plan.Missing) > 0 {
+		asOf := plan.Missing[0]
+		plan.Missing = plan.Missing[1:]
+		if err := j.RunOnce(ctx, asOf, true); err != nil {
+			j.Log.WarnContext(ctx, "backfill run failed", "asOf", asOf, "err", err)
+		}
+		return
+	}
+	n, err := j.Store.DeleteRuns(ctx, plan.Stale)
+	if err != nil {
+		j.Log.WarnContext(ctx, "delete stale backfill runs", "err", err)
+	} else {
+		j.Log.InfoContext(ctx, "backfill done; stale backfill runs deleted", "runs", len(plan.Stale), "recommendations", n)
+	}
+	plan.Stale = nil
+}
+
+// RunBackfill runs a whole backfill plan synchronously (tests and tools).
+func (j *Job) RunBackfill(ctx context.Context) error {
+	plan, err := j.PlanBackfill(ctx)
+	if err != nil {
+		return err
+	}
+	for len(plan.Missing) > 0 || len(plan.Stale) > 0 {
+		j.backfillStep(ctx, plan)
+	}
+	return nil
+}
+
+// alignDown rounds t down to a multiple of d since the Unix epoch.
+func alignDown(t time.Time, d time.Duration) time.Time {
+	sec := int64(d / time.Second)
+	if sec <= 0 {
+		return t
+	}
+	u := t.Unix()
+	return time.Unix(u-((u%sec)+sec)%sec, 0).UTC()
+}
+
+// Trigger queues a recommender run now (POST /v1/admin/recompute, D-019) for cluster, or for all
+// clusters when cluster is "". The run starts once no other run is in progress, as of that
+// moment. A request whose scope already has a queued run that has not started gets that run
+// (coalesced). ctx must outlive the request.
+func (j *Job) Trigger(ctx context.Context, cluster string) (id uuid.UUID, requestedAt time.Time, coalesced bool) {
+	j.pmu.Lock()
+	defer j.pmu.Unlock()
+	if q, ok := j.pending[cluster]; ok {
+		return q.id, q.at, true
+	}
+	id, _ = uuid.NewV7()
+	requestedAt = j.now()
+	if j.pending == nil {
+		j.pending = map[string]queuedRun{}
+	}
+	j.pending[cluster] = queuedRun{id: id, at: requestedAt}
+	j.wg.Add(1)
+	go func() {
+		defer j.wg.Done()
+		j.mu.Lock()
+		defer j.mu.Unlock()
+		j.pmu.Lock()
+		delete(j.pending, cluster)
+		j.pmu.Unlock()
+		j.Log.InfoContext(ctx, "recompute run started", "run", id, "cluster", cluster)
+		if err := j.runLocked(ctx, id, j.now(), false, cluster); err != nil {
+			j.Log.ErrorContext(ctx, "recompute run failed", "run", id, "cluster", cluster, "err", err)
+		}
+	}()
+	return id, requestedAt, false
+}
+
+// WaitTriggered waits for the runs queued through Trigger (tests).
+func (j *Job) WaitTriggered() { j.wg.Wait() }
+
 // RunOnce computes and stores recommendations for every registered cluster as of asOf.
 // Backfill runs (as of a past time) only add history: they never mark workloads deleted.
 func (j *Job) RunOnce(ctx context.Context, asOf time.Time, backfill bool) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	start := time.Now()
 	runID, _ := uuid.NewV7()
+	return j.runLocked(ctx, runID, asOf, backfill, "")
+}
+
+// runLocked is RunOnce with j.mu held, for one cluster (only) or all ("").
+func (j *Job) runLocked(ctx context.Context, runID uuid.UUID, asOf time.Time, backfill bool, only string) error {
+	start := time.Now()
 	if err := j.Store.StartRun(ctx, runID, asOf, backfill); err != nil {
 		return err
 	}
-	clusters, err := j.Store.Clusters(ctx)
+	all, err := j.Store.Clusters(ctx)
 	if err != nil {
 		_ = j.Store.FinishRun(ctx, runID, "failed", err.Error())
 		return err
+	}
+	clusters := all
+	if only != "" {
+		clusters = nil
+		for _, c := range all {
+			if c.Name == only {
+				clusters = append(clusters, c)
+			}
+		}
+		if len(clusters) == 0 {
+			err := fmt.Errorf("unknown cluster %s", only)
+			_ = j.Store.FinishRun(ctx, runID, "failed", err.Error())
+			return err
+		}
 	}
 	var errs []error
 	ok := 0

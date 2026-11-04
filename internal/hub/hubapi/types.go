@@ -566,3 +566,11 @@ func contains(list []string, v string) bool {
 
 // Contains reports whether list holds v.
 func Contains(list []string, v string) bool { return contains(list, v) }
+
+// RecomputeAccepted is the response of POST /v1/admin/recompute (D-019).
+type RecomputeAccepted struct {
+	RunID       string    `json:"runId"`
+	Cluster     string    `json:"cluster,omitempty"`
+	RequestedAt time.Time `json:"requestedAt"`
+	Coalesced   bool      `json:"coalesced"`
+}

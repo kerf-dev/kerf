@@ -41,7 +41,7 @@ func NewMetrics() *Metrics {
 	m := &Metrics{Registry: prometheus.NewRegistry()}
 	m.actions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "ro_actions_total", Help: "Events stored by the hub, one increment per resource listed in the event.",
-	}, []string{"cluster", "type", "strategy", "resource", "reason"})
+	}, []string{"cluster", "namespace", "workload_kind", "workload", "type", "strategy", "resource", "reason"})
 	m.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "ro_hub_http_requests_total", Help: "HTTP requests by route and status code.",
 	}, []string{"route", "code"})
@@ -75,14 +75,14 @@ func (m *Metrics) observeRequest(route string, code int, d time.Duration) {
 }
 
 // countAction increments ro_actions_total for a stored event. Like every hub series it carries
-// the cluster label itself (docs/contracts/metrics.md).
+// the workload labels cluster, namespace, workload_kind and workload (docs/contracts/metrics.md §3).
 func (m *Metrics) countAction(cluster string, e hubapi.Event) {
 	res := e.Resources
 	if len(res) == 0 {
 		res = []string{""}
 	}
 	for _, r := range res {
-		m.actions.WithLabelValues(cluster, e.Type, e.Strategy, r, e.Reason).Inc()
+		m.actions.WithLabelValues(cluster, e.Workload.Namespace, e.Workload.Kind, e.Workload.Name, e.Type, e.Strategy, r, e.Reason).Inc()
 	}
 }
 
