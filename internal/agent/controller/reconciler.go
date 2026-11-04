@@ -6,6 +6,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -1100,9 +1102,14 @@ func (w *run) writeStatus() error {
 		// already says Released, and the reason lets a restarted agent recognise events it emitted.
 		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionFalse, reason, message)
 	}
-	if blocked {
+	switch {
+	case blocked:
 		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionTrue, reason, message)
-	} else {
+	case st.Phase == v1alpha1.PhaseApplied && isSkipReason(reason):
+		// Values are live and a newer recommendation was skipped: keep the reason here (the
+		// Applied condition stays True), so a restarted agent knows it reported it (D-017).
+		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionFalse, reason, message)
+	default:
 		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionFalse, condReasonNotBlocked, "")
 	}
 
@@ -1233,7 +1240,7 @@ func (w *run) emit(e hubclient.Event, slot string, values []v1alpha1.ContainerRe
 	r := w.r
 	e.Workload = hubclient.WorkloadRef{Namespace: w.k.Namespace, Kind: w.k.Kind, Name: w.k.Name}
 	if slot != "" {
-		sig := signature{head: strings.Join([]string{e.Type, e.Reason, strings.Join(e.Resources, ",")}, "|"), values: values}
+		sig := signature{head: strings.Join([]string{e.Type, e.Reason, strings.Join(e.Resources, ","), w.policyDigest()}, "|"), values: values}
 		key := w.k.String() + "|" + slot
 		r.mu.Lock()
 		if r.last == nil {
@@ -1258,6 +1265,16 @@ func (w *run) emit(e hubclient.Event, slot string, values []v1alpha1.ContainerRe
 	if r.Recorder != nil && w.rsr != nil {
 		r.record(w.rsr, w.obj, e)
 	}
+}
+
+// policyDigest identifies the effective policy: editing it (e.g. turning HPA coordination on)
+// re-reports the current skip/block once, with the new reasoning (D-017).
+func (w *run) policyDigest() string {
+	e := w.eff
+	e.Warnings = nil
+	b, _ := json.Marshal(e)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:8])
 }
 
 func (r *Reconciler) resetSlots(k wkey) {
@@ -1320,8 +1337,20 @@ func (w *run) alreadyRecorded(e hubclient.Event) bool {
 		c := meta.FindStatusCondition(w.prev.Conditions, v1alpha1.ConditionBlocked)
 		return c != nil && c.Status == metav1.ConditionTrue && c.Reason == e.Reason
 	case hubclient.EventSkipped:
+		if w.prev.Phase == v1alpha1.PhaseApplied {
+			c := meta.FindStatusCondition(w.prev.Conditions, v1alpha1.ConditionBlocked)
+			return c != nil && c.Status == metav1.ConditionFalse && c.Reason == e.Reason
+		}
 		c := meta.FindStatusCondition(w.prev.Conditions, v1alpha1.ConditionApplied)
 		return c != nil && c.Status == metav1.ConditionFalse && c.Reason == e.Reason
+	}
+	return false
+}
+
+func isSkipReason(r string) bool {
+	switch r {
+	case v1alpha1.ReasonModeOff, v1alpha1.ReasonModeAudit, v1alpha1.ReasonNoSignificantChange, v1alpha1.ReasonRecommendationStale:
+		return true
 	}
 	return false
 }

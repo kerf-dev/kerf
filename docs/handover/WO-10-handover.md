@@ -47,8 +47,20 @@ main (migration 0005), then the agent is deployed and the live check below is ru
 - Hub: `TestDeferredStatus` (Deferred + nextWindow round trip, cleared on the next status).
 - Web: lint, vitest 39/39, `gen:api:check` up to date.
 
-## Live check (to run after the hub is deployed from main)
-On ro-spoke-1, own namespace: a workload with a RightsizingPolicy `strategy: deferred` and a one-off maintenance
-window starting ~2 min ahead → RSR `Deferred` with `nextWindow`, `blocked/OutsideMaintenanceWindow` in the hub
-audit log → `Applied` (`applied`, strategy deferred) right after the window opens. Then a policy freeze window on
-an in-place workload → `blocked/FreezeWindow` in the hub audit log, pod not resized.
+## Live check (ro-spoke-2, main-a18528f, namespace wo10-live, deleted afterwards)
+- Two busybox Deployments at 500m, RightsizingPolicies with learningPeriod 0s / minConfidence 0 /
+  maxChangePercent 100; hub recompute (`POST /v1/admin/recompute?cluster=ro-spoke-2`) → recommendations 10m/32Mi.
+- Deferred: `deferred-app` → `Deferred`, `nextWindow` 06:49Z, hub status `Deferred` + `nextWindow`, audit
+  `blocked/OutsideMaintenanceWindow (deferred)`. Window moved to 05:57:00–05:59:00Z: phase stayed `Deferred` at 500m
+  until 05:57:01, then `Applied` with the template at 10m (new ReplicaSet), `applied` strategy `deferred`,
+  `nextWindow` cleared in the RSR and at the hub.
+- Freeze: `freeze-app` (in-place, freeze window active) → `Blocked/FreezeWindow`, pod stayed at 500m, audit
+  `blocked/FreezeWindow`; freeze removed at 06:00:12 → resized in place to 10m at 06:00:25, 0 restarts, `applied`.
+
+## Follow-up fixes (branch wo-10b-dedup-restart)
+- The live run showed a second `skipped/NoSignificantChange` for the Applied `deferred-app` 7 s after the agent was
+  redeployed: for live (Applied) RSRs the skip reason was not persisted, so a restarted agent re-emitted it. It is now
+  kept in the `Blocked=False` condition and checked after a restart.
+- `TestHPACoordination` (WO-11) failed deterministically on main: with D-017 a policy edit (HPA coordination on)
+  produced no new `blocked/HPACoupled` with the new reasoning. The de-duplication signature now includes a digest of
+  the effective policy, so an edited policy re-reports the current skip/block once (events.md updated).
