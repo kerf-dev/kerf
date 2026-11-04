@@ -1,18 +1,26 @@
 {{- if not (has .Values.provider (list "static" "aws")) }}
 {{- fail "provider must be static or aws" }}
 {{- end }}
+{{- if gt (include "pricing.c.replicas" . | int) 1 }}
+{{- fail "pricing is a singleton (replicaCount 1): more replicas would publish every cost series twice" }}
+{{- end }}
+{{- $ca := include "pricing.caEnabled" . }}
+{{- $vols := or .Values.prices .Values.hub.url $ca .Values.extraVolumes }}
+{{- $mounts := or .Values.prices .Values.hub.url $ca .Values.extraVolumeMounts }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "pricing.fullname" . }}
   labels: {{- include "pricing.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicas }}
+  replicas: {{ include "pricing.c.replicas" . }}
   selector:
     matchLabels: {{- include "pricing.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      labels: {{- include "pricing.labels" . | nindent 8 }}
+      labels:
+        {{- include "pricing.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
       annotations:
         checksum/prices: {{ .Values.prices | sha256sum }}
         {{- with .Values.podAnnotations }}
@@ -21,15 +29,14 @@ spec:
     spec:
       serviceAccountName: {{ include "pricing.serviceAccountName" . }}
       automountServiceAccountToken: {{ eq .Values.provider "aws" }}
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 65532
-        runAsGroup: 65532
-        seccompProfile:
-          type: RuntimeDefault
+      {{- include "pricing.c.imagePullSecrets" (dict "ctx" . "indent" 6) }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: pricing
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "pricing.c.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --provider={{ .Values.provider }}
@@ -54,10 +61,22 @@ spec:
             - --hub-url={{ .Values.hub.url }}
             - --hub-token-file=/etc/resource-optimizer/hub-token/token
             {{- end }}
-          {{- if and (eq .Values.provider "aws") .Values.aws.region }}
+          {{- $awsRegion := and (eq .Values.provider "aws") .Values.aws.region }}
+          {{- if or $awsRegion $ca .Values.extraEnv }}
           env:
+            {{- if $awsRegion }}
             - name: AWS_REGION
               value: {{ .Values.aws.region | quote }}
+            {{- end }}
+            {{- if $ca }}
+            # Go reads the system roots plus every file of these directories (hub.caBundle).
+            - name: SSL_CERT_DIR
+              value: /etc/ssl/certs:/etc/resource-optimizer/hub-ca
+            {{- end }}
+            {{- with .Values.extraEnv }}{{ toYaml . | nindent 12 }}{{ end }}
+          {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
           {{- end }}
           ports:
             - name: http-metrics
@@ -70,12 +89,8 @@ spec:
             httpGet: {path: /readyz, port: http-metrics}
             periodSeconds: 10
           resources: {{- toYaml .Values.resources | nindent 12 }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-          {{- if or .Values.prices .Values.hub.url }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- if $mounts }}
           volumeMounts:
             {{- if .Values.prices }}
             - name: prices
@@ -88,8 +103,14 @@ spec:
               mountPath: /etc/resource-optimizer/hub-token
               readOnly: true
             {{- end }}
+            {{- if $ca }}
+            - name: hub-ca
+              mountPath: /etc/resource-optimizer/hub-ca
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}{{ toYaml . | nindent 12 }}{{ end }}
           {{- end }}
-      {{- if or .Values.prices .Values.hub.url }}
+      {{- if $vols }}
       volumes:
         {{- if .Values.prices }}
         - name: prices
@@ -104,6 +125,21 @@ spec:
               - key: {{ .Values.hub.tokenSecret.key }}
                 path: token
         {{- end }}
+        {{- if $ca }}
+        {{- $c := .Values.hub.caBundle }}
+        - name: hub-ca
+          {{- if $c.existingSecret }}
+          secret:
+            secretName: {{ $c.existingSecret }}
+          {{- else }}
+          configMap:
+            name: {{ $c.existingConfigMap | default (printf "%s-hub-ca" (include "pricing.fullname" .)) }}
+          {{- end }}
+            items:
+              - key: {{ $c.key }}
+                path: ca.crt
+        {{- end }}
+        {{- with .Values.extraVolumes }}{{ toYaml . | nindent 8 }}{{ end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}

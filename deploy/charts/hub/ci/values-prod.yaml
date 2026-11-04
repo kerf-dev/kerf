@@ -1,0 +1,110 @@
+# Every production feature on, with EKS-like settings (rendered by `make charts-lint`; not an
+# install example: WO-18d ships those). Needs leader election (WO-18a) for 2 replicas.
+global:
+  imageRegistry: 123456789012.dkr.ecr.eu-west-1.amazonaws.com
+  imagePullSecrets: [ecr-pull]
+  externalSecrets:
+    secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}
+
+image:
+  repository: resource-optimizer/hub
+  tag: 0.2.0
+  digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+replicaCount: 2
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 75
+priorityClassName: resource-optimizer-critical
+nodeSelector:
+  kubernetes.io/os: linux
+tolerations:
+  - {key: dedicated, operator: Equal, value: platform, effect: NoSchedule}
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/resource-optimizer-hub
+
+podLabels: {team: platform}
+podAnnotations: {example.com/owner: platform}
+extraEnv:
+  - {name: GOMEMLIMIT, value: 900MiB}
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
+    alb.ingress.kubernetes.io/healthcheck-path: /readyz
+    alb.ingress.kubernetes.io/group.name: resource-optimizer
+  hosts:
+    - host: hub.ro.example.internal
+      paths: [{path: /, pathType: Prefix}]
+  tls:
+    - hosts: [hub.ro.example.internal]
+
+database:
+  host: ro-hub.cluster-abc.eu-west-1.rds.amazonaws.com
+  params: {pool_max_conns: "20"}
+  caBundle:
+    existingConfigMap: rds-ca-bundle
+    key: global-bundle.pem
+  externalSecret:
+    enabled: true
+    source: rds
+    remoteRef: {key: "rds!db-0123abcd-4567-89ef-0123-456789abcdef"}
+
+auth:
+  bootstrapAdmin:
+    externalSecret:
+      enabled: true
+      remoteRef: {key: resource-optimizer/hub/bootstrap-admin, property: password}
+
+onboarding:
+  secretsKey:
+    externalSecret:
+      enabled: true
+      remoteRef: {key: resource-optimizer/hub/datasource-key}
+
+config:
+  prometheusURL: http://vmsingle-fleet.monitoring.svc:8428
+  onboarding:
+    hubURL: https://hub.ro.example.internal
+
+networkPolicy:
+  enabled: true
+  ingress:
+    from:
+      # ALB with target-type ip: the VPC CIDR.
+      - ipBlock: {cidr: 10.0.0.0/16}
+      # Agents of the workload clusters (their NAT gateways).
+      - ipBlock: {cidr: 10.1.0.0/16}
+    metricsFrom:
+      - namespaceSelector:
+          matchLabels: {kubernetes.io/metadata.name: monitoring}
+  egress:
+    to:
+      - to: [{ipBlock: {cidr: 10.0.64.0/20}}]
+        ports: [{protocol: TCP, port: 8429}]
+
+serviceMonitor:
+  enabled: true
+  kind: VMServiceScrape
+  labels: {release: vm}
+
+prometheusRule:
+  enabled: true
+  kind: VMRule
+  additionalLabels: {team: platform}
+
+dashboards:
+  enabled: true
+  namespace: monitoring

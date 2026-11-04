@@ -3,11 +3,14 @@ kind: Service
 metadata:
   name: {{ include "hub.fullname" . }}
   labels: {{- include "hub.labels" . | nindent 4 }}
-  {{- if .Values.service.scrape }}
+  {{- if or .Values.service.scrape .Values.service.annotations }}
   annotations:
+    {{- if .Values.service.scrape }}
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: /metrics
+    {{- end }}
+    {{- with .Values.service.annotations }}{{ toYaml . | nindent 4 }}{{ end }}
   {{- end }}
 spec:
   type: {{ .Values.service.type }}

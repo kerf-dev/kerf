@@ -1,13 +1,88 @@
-# Defaults for a real installation. Development overrides: values-dev.yaml.
+# Defaults for a real installation. Development overrides: values-dev.yaml. Every production
+# feature is shown switched on in ci/values-prod.yaml (rendered by `make charts-lint`).
+
+# Set by an umbrella chart; read by every resource-optimizer chart.
+global:
+  imageRegistry: ""         # prefixed to image.repository; image.registry wins over it
+  imagePullSecrets: []      # names or {name: ...}
+  externalSecrets:
+    secretStoreRef: {}      # fallback SecretStore for every ExternalSecret
+
 image:
+  registry: ""
   repository: localhost:5005/resource-optimizer/web
   tag: dev
+  digest: ""                # sha256:..., appended as @digest
   pullPolicy: IfNotPresent
+imagePullSecrets: []
 
 # Set by Tilt (unused: the UI reads every cluster through the hub).
 clusterName: ""
 
 replicaCount: 2
+
+# Created when more than one pod can run (replicaCount > 1 or autoscaling.minReplicas > 1).
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  maxUnavailable: null
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: null
+  behavior: {}
+
+# Default node and zone spread (ScheduleAnyway) when more than one pod can run;
+# topologySpreadConstraints replaces it.
+topologySpread:
+  enabled: true
+  whenUnsatisfiable: ScheduleAnyway
+topologySpreadConstraints: []
+priorityClassName: ""
+
+# The UI needs no Kubernetes or AWS access. create: false uses the namespace's default
+# ServiceAccount (the token is never mounted either way).
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+# Port nginx listens on. The image listens on 80 today (root, NET_BIND_SERVICE); a non-root
+# image (WO-18c) listens on 8080: set containerPort: 8080 together with the non-root
+# securityContext below.
+containerPort: 80
+
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+# Today's image starts nginx as root and drops to the nginx user. Non-root (production, with the
+# WO-18c image on 8080):
+#   podSecurityContext: {runAsNonRoot: true, runAsUser: 101, runAsGroup: 101, fsGroup: 101, seccompProfile: {type: RuntimeDefault}}
+#   securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+# readOnlyRootFilesystem: true mounts emptyDirs on nginx's writable paths (readOnlyPaths below).
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+    add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE, DAC_OVERRIDE]
+# emptyDirs mounted when securityContext.readOnlyRootFilesystem is true: temp and cache
+# (/var/cache/nginx), the pid file (/var/run), /tmp and the config rendered from templates at
+# start (/etc/nginx/conf.d).
+readOnlyPaths:
+  - /var/cache/nginx
+  - /var/run
+  - /tmp
+  - /etc/nginx/conf.d
+
+podLabels: {}
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
 
 hub:
   # host:port of the hub API Service (the WO-04 chart names it after its release, `hub`). nginx resolves
@@ -27,13 +102,59 @@ auth:
 token:
   existingSecret: ""
   existingSecretKey: token
-  # Only for development; prefer existingSecret (e.g. from External Secrets / sealed secrets).
+  # Only for development; prefer existingSecret or externalSecret.
   value: ""
+  # External Secrets Operator: Secret <release>-hub-token (key `token`) from Secrets Manager.
+  externalSecret:
+    enabled: false
+    remoteRef:
+      key: ""             # e.g. resource-optimizer/web/hub-token
+      property: ""        # e.g. token (JSON secret); empty = the whole secret string
+      version: ""
+    refreshInterval: ""
+    secretStoreRef: {}
+
+# External Secrets Operator settings shared by every externalSecret of this chart.
+externalSecrets:
+  apiVersion: external-secrets.io/v1
+  refreshInterval: 1h
+  secretStoreRef: {}        # e.g. {kind: ClusterSecretStore, name: aws-secrets-manager}
 
 service:
   type: ClusterIP
   port: 80
   nodePort: null        # e.g. 30090 with type NodePort
+  annotations: {}
+
+# The UI for browsers. AWS Load Balancer Controller example (D-028: scheme of your choice, ACM):
+#   className: alb
+#   annotations:
+#     alb.ingress.kubernetes.io/scheme: internal          # or internet-facing
+#     alb.ingress.kubernetes.io/target-type: ip
+#     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+#     alb.ingress.kubernetes.io/ssl-redirect: "443"
+#     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account>:certificate/<id>
+#     alb.ingress.kubernetes.io/healthcheck-path: /healthz
+#   hosts: [{host: ro.example.com, paths: [{path: /, pathType: Prefix}]}]
+#   tls: [{hosts: [ro.example.com]}]
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+# NetworkPolicy. Ingress to the nginx port from `ingress.from` (NetworkPolicyPeers; [] = any
+# source: the ALB or ingress controller). Egress: DNS and TCP `egress.ports` (the hub) to any
+# destination, plus the raw rules in `egress.to`.
+networkPolicy:
+  enabled: false
+  ingress:
+    from: []
+  egress:
+    enabled: true
+    ports: [8080, 443]
+    to: []
 
 resources:
   requests:

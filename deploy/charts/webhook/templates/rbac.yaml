@@ -1,10 +1,15 @@
+{{- if .Values.serviceAccount.create }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "webhook.fullname" . }}
+  name: {{ include "webhook.serviceAccountName" . }}
   namespace: {{ .Release.Namespace }}
   labels: {{- include "webhook.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
 ---
+{{- end }}
 # Read-only: recommendations (informer cache) and the owners between a pod and its workload
 # (ReplicaSet -> Deployment, Job -> CronJob; read as metadata only).
 apiVersion: rbac.authorization.k8s.io/v1
@@ -34,5 +39,5 @@ roleRef:
   name: {{ include "webhook.clusterName" . }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "webhook.fullname" . }}
+    name: {{ include "webhook.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}

@@ -1,0 +1,29 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "webhook.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "webhook.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "webhook.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress{{ if $np.egress.enabled }}, Egress{{ end }}]
+  ingress:
+    # Admission requests from the API server.
+    - ports:
+        - {protocol: TCP, port: https}
+      {{- with $np.ingress.apiServerFrom }}
+      from: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    - ports:
+        - {protocol: TCP, port: metrics}
+      {{- with $np.ingress.metricsFrom }}
+      from: {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if $np.egress.enabled }}
+  egress:
+    {{- include "webhook.c.egressRules" (dict "ctx" . "ports" $np.egress.ports) }}
+  {{- end }}
+{{- end }}
