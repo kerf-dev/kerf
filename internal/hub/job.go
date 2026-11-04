@@ -154,7 +154,7 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 	// An empty inventory usually means missing metrics, not a cluster without workloads: keep the
 	// previous inventory instead of marking everything deleted.
 	markDeleted := !backfill && len(res.Inventory) > 0
-	ids, err := j.Store.UpsertInventory(ctx, cluster, res.Inventory, seenAt, markDeleted)
+	ids, err := j.Store.UpsertInventoryAt(ctx, cluster, res.Inventory, seenAt, markDeleted, res.End)
 	if err != nil {
 		return err
 	}
@@ -167,9 +167,19 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 	if err := j.Store.InsertRecommendations(ctx, runID, ids, cluster, res.Results); err != nil {
 		return err
 	}
+	if !backfill {
+		// The stored total is what GET /v1/summary shows for the cluster from now on (live
+		// workloads, latest recommendation each, including ones this run had no data for), so the
+		// savings trend ends exactly at the summary.
+		views, err := j.Store.LoadWorkloads(ctx, store.WorkloadFilter{Cluster: cluster})
+		if err != nil {
+			return err
+		}
+		savings = clusterSavings(views)
+	}
 	if err := j.Store.RecordRunCluster(ctx, store.RunCluster{
 		RunID: runID, Cluster: cluster, AsOf: res.End, Status: "succeeded", Workloads: len(res.Inventory),
-		Recommendations: len(res.Results), Savings: savings, Pricing: res.Pricing,
+		Recommendations: len(res.Results), Savings: savings, Pricing: res.Pricing, FinishedAt: j.now(),
 	}); err != nil {
 		return err
 	}

@@ -384,6 +384,87 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/workloads/facets:
+    get:
+      tags: [ui]
+      operationId: getWorkloadFacets
+      security:
+        - bearerAuth: [ui]
+      summary: Filter values with workload counts (D-016)
+      description: |
+        Counts of live workloads per filter value, for building the filters of the workload list.
+        Takes the same filters as `GET /v1/workloads`. Each facet is counted with every filter
+        applied except its own (so a multi-select keeps showing the other values of that facet);
+        `total` applies all filters and equals `WorkloadList.total`. A workload counts once per
+        distinct value: in `modes` under both its CPU and its memory mode, in `riskFlags` under each
+        of its flags. Values with zero workloads are omitted. Items are sorted by value.
+      parameters:
+        - name: cluster
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ClusterName'
+        - name: namespace
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+        - name: kind
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/WorkloadKind'
+        - name: mode
+          in: query
+          description: Matches if the CPU or the memory mode is one of the values.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Mode'
+        - name: riskFlag
+          in: query
+          description: Matches if the workload has any of the flags.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/RiskFlag'
+        - name: minSavings
+          in: query
+          description: Minimum total estimated monthly savings in USD.
+          schema:
+            type: number
+        - name: q
+          in: query
+          description: Case-insensitive substring match on namespace and workload name.
+          schema:
+            type: string
+            maxLength: 253
+      responses:
+        '200':
+          description: Facets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadFacets'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/workloads/{id}:
     parameters:
       - $ref: '#/components/parameters/WorkloadID'
@@ -496,7 +577,9 @@ paths:
       description: |
         At each step: the sum of the estimated monthly savings of the recommendation that was
         latest at that time, over the workloads live at that time. Estimated, not realized
-        (realized savings are WO-17).
+        (realized savings are WO-17). Points are aligned to multiples of `step` (UTC); a point at
+        time `t` holds the value at the end of its bucket, `min(t + step, to)`, so with the default
+        `to` (now) the last point equals the current `GET /v1/summary` totals.
       parameters:
         - name: cluster
           in: query
@@ -823,6 +906,26 @@ components:
           $ref: '#/components/schemas/Savings'
         dataCoverage:
           $ref: '#/components/schemas/DataCoverage'
+        pricing:
+          $ref: '#/components/schemas/RecommendationPricing'
+    RecommendationPricing:
+      type: object
+      description: |
+        Rates used for `monthlySavingsUSD` (D-016). `source` is `metrics` when they come from the
+        pricing series (`ro_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when
+        the cluster had no pricing series and the hub's configured fallback rate was used.
+        Absent on recommendations computed before the field existed.
+      required: [source, cpuCoreHourUSD, memoryGiBHourUSD]
+      properties:
+        source:
+          type: string
+          enum: [metrics, default]
+        cpuCoreHourUSD:
+          type: number
+          minimum: 0
+        memoryGiBHourUSD:
+          type: number
+          minimum: 0
     RecommendationList:
       type: object
       required: [cluster, items]
@@ -1050,6 +1153,39 @@ components:
           $ref: '#/components/schemas/ResourceExplanation'
         memory:
           $ref: '#/components/schemas/ResourceExplanation'
+        confidenceFactors:
+          $ref: '#/components/schemas/ConfidenceFactors'
+    ConfidenceFactor:
+      type: object
+      required: [score, weight]
+      properties:
+        score:
+          description: Factor score, 0 (worst) to 1 (best).
+          allOf:
+            - $ref: '#/components/schemas/Decimal'
+        weight:
+          description: Weight of the factor; the weights sum to 1.
+          allOf:
+            - $ref: '#/components/schemas/Decimal'
+    ConfidenceFactors:
+      type: object
+      description: |
+        How this container's confidence was computed (D-016): `confidence` = sum of score x weight.
+        The workload's `confidence` is the minimum over its containers.
+        `coverage`: fraction of the window's steps with usage data. `samples`: number of samples
+        relative to the hub's full-confidence sample count. `variance`: stability of CPU usage,
+        1 / (1 + coefficient of variation); 1 means no variance.
+        Absent on recommendations computed before the field existed.
+      required: [coverage, samples, variance, confidence]
+      properties:
+        coverage:
+          $ref: '#/components/schemas/ConfidenceFactor'
+        samples:
+          $ref: '#/components/schemas/ConfidenceFactor'
+        variance:
+          $ref: '#/components/schemas/ConfidenceFactor'
+        confidence:
+          $ref: '#/components/schemas/Decimal'
     ModeCounts:
       type: object
       required: ['off', audit, auto-patch]
@@ -1235,6 +1371,44 @@ components:
         continue:
           type: string
           description: Present when more pages exist.
+    FacetCount:
+      type: object
+      required: [value, count]
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+          minimum: 1
+    WorkloadFacets:
+      type: object
+      required: [total, clusters, namespaces, kinds, modes, riskFlags]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          description: Workloads matching all filters (equals `WorkloadList.total`).
+        clusters:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        namespaces:
+          type: array
+          description: Namespace names across clusters (the `namespace` filter matches names in any cluster).
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        modes:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        riskFlags:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetCount'
     WorkloadDetail:
       type: object
       required: [id, cluster, namespace, kind, name, modes, phase]

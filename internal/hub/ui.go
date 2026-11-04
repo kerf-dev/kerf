@@ -55,8 +55,15 @@ func (s *Server) getSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	roundSummary(&out.Fleet)
+	// Fleet savings are the sum of the rounded cluster savings, so they add up exactly (and match
+	// the savings trend, which is stored per cluster).
+	var fleet hubapi.Savings
 	for i := range out.Clusters {
 		roundSummary(&out.Clusters[i].Summary)
+		fleet = fleet.Add(out.Clusters[i].MonthlySavingsUSD)
+	}
+	if len(out.Clusters) > 0 {
+		out.Fleet.MonthlySavingsUSD = roundSavings(fleet)
 	}
 	writeJSON(w, out)
 }
@@ -108,9 +115,25 @@ func roundSummary(s *hubapi.Summary) {
 	r3 := func(v float64) float64 { return math.Round(v*1000) / 1000 }
 	s.CPU = hubapi.ResourceTotals{Requested: r3(s.CPU.Requested), Used: r3(s.CPU.Used), Recommended: r3(s.CPU.Recommended)}
 	s.Memory = hubapi.ResourceTotals{Requested: math.Round(s.Memory.Requested), Used: math.Round(s.Memory.Used), Recommended: math.Round(s.Memory.Recommended)}
-	r2 := func(v float64) float64 { return math.Round(v*100) / 100 }
-	s.MonthlySavingsUSD = hubapi.Savings{CPU: r2(s.MonthlySavingsUSD.CPU), Memory: r2(s.MonthlySavingsUSD.Memory)}
-	s.MonthlySavingsUSD.Total = r2(s.MonthlySavingsUSD.CPU + s.MonthlySavingsUSD.Memory)
+	s.MonthlySavingsUSD = roundSavings(s.MonthlySavingsUSD)
+}
+
+func round2(v float64) float64 { return math.Round(v*100) / 100 }
+
+func roundSavings(s hubapi.Savings) hubapi.Savings {
+	out := hubapi.Savings{CPU: round2(s.CPU), Memory: round2(s.Memory)}
+	out.Total = round2(out.CPU + out.Memory)
+	return out
+}
+
+// clusterSavings is the savings total of a set of workloads exactly as GET /v1/summary computes it.
+func clusterSavings(views []*store.WorkloadView) hubapi.Savings {
+	sum := newSummary()
+	for _, v := range views {
+		addToSummary(&sum, v)
+	}
+	roundSummary(&sum)
+	return sum.MonthlySavingsUSD
 }
 
 // listClusters serves GET /v1/clusters.
@@ -167,42 +190,8 @@ func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
 // listWorkloads serves GET /v1/workloads.
 func (s *Server) listWorkloads(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	for _, c := range q["cluster"] {
-		if !hubapi.ClusterNameRE.MatchString(c) {
-			badRequest(w, r, "invalid_cluster", "Invalid cluster name "+c+".")
-			return
-		}
-	}
-	for _, k := range q["kind"] {
-		if !hubapi.ValidKind(k) {
-			badRequest(w, r, "invalid_kind", "Invalid workload kind "+k+".")
-			return
-		}
-	}
-	for _, m := range q["mode"] {
-		if !hubapi.Contains(hubapi.Modes, m) {
-			badRequest(w, r, "invalid_mode", "Invalid mode "+m+".")
-			return
-		}
-	}
-	for _, f := range q["riskFlag"] {
-		if !hubapi.ValidRiskFlag(f) {
-			badRequest(w, r, "invalid_risk_flag", "Invalid risk flag "+f+".")
-			return
-		}
-	}
-	minSavings := math.Inf(-1)
-	if v := q.Get("minSavings"); v != "" {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil || math.IsNaN(f) {
-			badRequest(w, r, "invalid_min_savings", "minSavings must be a number.")
-			return
-		}
-		minSavings = f
-	}
-	search := strings.ToLower(q.Get("q"))
-	if len(search) > 253 {
-		badRequest(w, r, "invalid_q", "q is longer than 253 characters.")
+	wf, ok := parseWorkloadFilters(w, r)
+	if !ok {
 		return
 	}
 	sortBy := cmp.Or(q.Get("sort"), "savings")
@@ -246,27 +235,9 @@ func (s *Server) listWorkloads(w http.ResponseWriter, r *http.Request) {
 	}
 	var rows []*store.WorkloadView
 	for _, v := range views {
-		if len(q["cluster"]) > 0 && !slices.Contains(q["cluster"], v.Key.Cluster) ||
-			len(q["namespace"]) > 0 && !slices.Contains(q["namespace"], v.Key.Namespace) ||
-			len(q["kind"]) > 0 && !slices.Contains(q["kind"], v.Key.Kind) {
-			continue
+		if wf.match(v, "") {
+			rows = append(rows, v)
 		}
-		if ms := q["mode"]; len(ms) > 0 {
-			m := v.Modes()
-			if !slices.Contains(ms, m.CPU) && !slices.Contains(ms, m.Memory) {
-				continue
-			}
-		}
-		if fs := q["riskFlag"]; len(fs) > 0 && (v.Rec == nil || !slices.ContainsFunc(fs, func(f string) bool { return slices.Contains(v.Rec.RiskFlags, f) })) {
-			continue
-		}
-		if !math.IsInf(minSavings, -1) && (v.Rec == nil || v.Rec.MonthlySavingsUSD.Total < minSavings) {
-			continue
-		}
-		if search != "" && !strings.Contains(strings.ToLower(v.Key.Namespace), search) && !strings.Contains(strings.ToLower(v.Key.Name), search) {
-			continue
-		}
-		rows = append(rows, v)
 	}
 	desc := order == "desc"
 	slices.SortStableFunc(rows, func(a, b *store.WorkloadView) int {
@@ -306,6 +277,157 @@ func (s *Server) listWorkloads(w http.ResponseWriter, r *http.Request) {
 	if end < len(rows) {
 		out.Continue = encodeCursor(cursor{Offset: end, Q: queryKey.Encode()})
 	}
+	writeJSON(w, out)
+}
+
+// workloadFilters are the filters of GET /v1/workloads and /v1/workloads/facets.
+type workloadFilters struct {
+	clusters, namespaces, kinds, modes, riskFlags []string
+	minSavings                                    float64 // -Inf when unset
+	search                                        string  // lower case
+}
+
+// parseWorkloadFilters validates the filters; on error it writes the 400 response.
+func parseWorkloadFilters(w http.ResponseWriter, r *http.Request) (workloadFilters, bool) {
+	q := r.URL.Query()
+	f := workloadFilters{
+		clusters: q["cluster"], namespaces: q["namespace"], kinds: q["kind"], modes: q["mode"], riskFlags: q["riskFlag"],
+		minSavings: math.Inf(-1), search: strings.ToLower(q.Get("q")),
+	}
+	for _, c := range f.clusters {
+		if !hubapi.ClusterNameRE.MatchString(c) {
+			badRequest(w, r, "invalid_cluster", "Invalid cluster name "+c+".")
+			return f, false
+		}
+	}
+	for _, k := range f.kinds {
+		if !hubapi.ValidKind(k) {
+			badRequest(w, r, "invalid_kind", "Invalid workload kind "+k+".")
+			return f, false
+		}
+	}
+	for _, m := range f.modes {
+		if !hubapi.Contains(hubapi.Modes, m) {
+			badRequest(w, r, "invalid_mode", "Invalid mode "+m+".")
+			return f, false
+		}
+	}
+	for _, fl := range f.riskFlags {
+		if !hubapi.ValidRiskFlag(fl) {
+			badRequest(w, r, "invalid_risk_flag", "Invalid risk flag "+fl+".")
+			return f, false
+		}
+	}
+	if v := q.Get("minSavings"); v != "" {
+		x, err := strconv.ParseFloat(v, 64)
+		if err != nil || math.IsNaN(x) {
+			badRequest(w, r, "invalid_min_savings", "minSavings must be a number.")
+			return f, false
+		}
+		f.minSavings = x
+	}
+	if len(f.search) > 253 {
+		badRequest(w, r, "invalid_q", "q is longer than 253 characters.")
+		return f, false
+	}
+	return f, true
+}
+
+// Facet names (the filter a facet ignores when it is counted).
+const (
+	facetCluster   = "cluster"
+	facetNamespace = "namespace"
+	facetKind      = "kind"
+	facetMode      = "mode"
+	facetRiskFlag  = "riskFlag"
+)
+
+// match applies all filters except the one named by skip ("" applies all).
+func (f workloadFilters) match(v *store.WorkloadView, skip string) bool {
+	if skip != facetCluster && len(f.clusters) > 0 && !slices.Contains(f.clusters, v.Key.Cluster) {
+		return false
+	}
+	if skip != facetNamespace && len(f.namespaces) > 0 && !slices.Contains(f.namespaces, v.Key.Namespace) {
+		return false
+	}
+	if skip != facetKind && len(f.kinds) > 0 && !slices.Contains(f.kinds, v.Key.Kind) {
+		return false
+	}
+	if skip != facetMode && len(f.modes) > 0 {
+		m := v.Modes()
+		if !slices.Contains(f.modes, m.CPU) && !slices.Contains(f.modes, m.Memory) {
+			return false
+		}
+	}
+	if skip != facetRiskFlag && len(f.riskFlags) > 0 &&
+		(v.Rec == nil || !slices.ContainsFunc(f.riskFlags, func(fl string) bool { return slices.Contains(v.Rec.RiskFlags, fl) })) {
+		return false
+	}
+	if !math.IsInf(f.minSavings, -1) && (v.Rec == nil || v.Rec.MonthlySavingsUSD.Total < f.minSavings) {
+		return false
+	}
+	if f.search != "" && !strings.Contains(strings.ToLower(v.Key.Namespace), f.search) && !strings.Contains(strings.ToLower(v.Key.Name), f.search) {
+		return false
+	}
+	return true
+}
+
+// getWorkloadFacets serves GET /v1/workloads/facets (D-016).
+func (s *Server) getWorkloadFacets(w http.ResponseWriter, r *http.Request) {
+	wf, ok := parseWorkloadFilters(w, r)
+	if !ok {
+		return
+	}
+	views, err := s.Store.LoadWorkloads(r.Context(), store.WorkloadFilter{})
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	counts := map[string]map[string]int{}
+	inc := func(facet string, values ...string) {
+		if counts[facet] == nil {
+			counts[facet] = map[string]int{}
+		}
+		seen := map[string]bool{}
+		for _, v := range values {
+			if !seen[v] {
+				seen[v] = true
+				counts[facet][v]++
+			}
+		}
+	}
+	out := hubapi.WorkloadFacets{}
+	for _, v := range views {
+		if wf.match(v, "") {
+			out.Total++
+		}
+		if wf.match(v, facetCluster) {
+			inc(facetCluster, v.Key.Cluster)
+		}
+		if wf.match(v, facetNamespace) {
+			inc(facetNamespace, v.Key.Namespace)
+		}
+		if wf.match(v, facetKind) {
+			inc(facetKind, v.Key.Kind)
+		}
+		if wf.match(v, facetMode) {
+			m := v.Modes()
+			inc(facetMode, m.CPU, m.Memory)
+		}
+		if wf.match(v, facetRiskFlag) && v.Rec != nil {
+			inc(facetRiskFlag, v.Rec.RiskFlags...)
+		}
+	}
+	list := func(facet string) []hubapi.FacetCount {
+		items := []hubapi.FacetCount{}
+		for val, n := range counts[facet] {
+			items = append(items, hubapi.FacetCount{Value: val, Count: n})
+		}
+		slices.SortFunc(items, func(a, b hubapi.FacetCount) int { return cmp.Compare(a.Value, b.Value) })
+		return items
+	}
+	out.Clusters, out.Namespaces, out.Kinds = list(facetCluster), list(facetNamespace), list(facetKind)
+	out.Modes, out.RiskFlags = list(facetMode), list(facetRiskFlag)
 	writeJSON(w, out)
 }
 
@@ -421,7 +543,8 @@ func (s *Server) getSavingsTrend(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, err)
 		return
 	}
-	// Step through time; at each step use the latest sample per cluster at or before it.
+	// Points are aligned to multiples of step; each holds the value at the end of its bucket,
+	// min(t+step, to), so the last point with the default to (now) equals the current summary.
 	byCluster := map[string][]store.SavingsSample{}
 	var names []string
 	for _, x := range samples {
@@ -431,23 +554,31 @@ func (s *Server) getSavingsTrend(w http.ResponseWriter, r *http.Request) {
 		byCluster[x.Cluster] = append(byCluster[x.Cluster], x)
 	}
 	slices.Sort(names)
+	first := from.Truncate(step)
+	if first.Before(from) {
+		first = first.Add(step)
+	}
 	pointsFor := func(clusters []string) []hubapi.SavingsPoint {
 		pts := []hubapi.SavingsPoint{}
 		idx := make([]int, len(clusters))
-		for t := from; t.Before(to); t = t.Add(step) {
+		for t := first; t.Before(to); t = t.Add(step) {
+			at := t.Add(step)
+			if at.After(to) {
+				at = to
+			}
 			p := hubapi.SavingsPoint{Time: t.UTC()}
 			for i, c := range clusters {
 				xs := byCluster[c]
-				for idx[i]+1 < len(xs) && !xs[idx[i]+1].AsOf.After(t) {
+				for idx[i]+1 < len(xs) && !xs[idx[i]+1].At.After(at) {
 					idx[i]++
 				}
-				if len(xs) > 0 && !xs[idx[i]].AsOf.After(t) {
+				if len(xs) > 0 && !xs[idx[i]].At.After(at) {
 					p.CPU += xs[idx[i]].CPU
 					p.Memory += xs[idx[i]].Memory
 				}
 			}
-			p.CPU, p.Memory = math.Round(p.CPU*100)/100, math.Round(p.Memory*100)/100
-			p.Total = math.Round((p.CPU+p.Memory)*100) / 100
+			p.CPU, p.Memory = round2(p.CPU), round2(p.Memory)
+			p.Total = round2(p.CPU + p.Memory)
 			pts = append(pts, p)
 		}
 		return pts

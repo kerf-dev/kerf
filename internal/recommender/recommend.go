@@ -77,6 +77,12 @@ func Recommend(req Request, strategy Strategy, cfg Config) (Result, bool) {
 	rec.RiskFlags = sortedFlags(workloadFlags)
 	rec.MonthlySavingsUSD = roundSavings(rec.MonthlySavingsUSD)
 	rec.DataCoverage = cov.result()
+	rec.Pricing = &hubapi.RecommendationPricing{
+		Source: req.Pricing.Source, CPUCoreHourUSD: req.Pricing.CPUCoreHour, MemoryGiBHourUSD: req.Pricing.MemoryGiBHour,
+	}
+	if rec.Pricing.Source == "" {
+		rec.Pricing.Source = PricingSourceDefault
+	}
 	return Result{Recommendation: rec, Pricing: req.Pricing}, true
 }
 
@@ -225,13 +231,22 @@ func recommendContainer(c ContainerData, w WorkloadData, req Request, strategy S
 		MonthlySavingsUSD: &sv,
 		Explanation:       expl,
 	}
-	return cr, containerConfidence(c, p, cfg)
+	f := confidenceFactors(c, p, cfg)
+	expl.ConfidenceFactors = &f
+	return cr, f.Confidence
 }
 
-// containerConfidence = 0.6 x coverage + 0.2 x sample score + 0.2 x stability, where coverage is
-// the fraction of the window's steps with data, the sample score saturates at
-// FullConfidenceSamples, and stability is 1/(1+cv) of CPU usage (cv = stddev/mean).
-func containerConfidence(c ContainerData, p Profile, cfg Config) float64 {
+// Confidence weights: coverage, samples, variance (sum to 1).
+const (
+	weightCoverage = 0.6
+	weightSamples  = 0.2
+	weightVariance = 0.2
+)
+
+// confidenceFactors: confidence = 0.6 x coverage + 0.2 x samples + 0.2 x variance, where coverage
+// is the fraction of the window's steps with data, samples saturates at FullConfidenceSamples, and
+// variance is the stability of CPU usage 1/(1+cv) (cv = stddev/mean).
+func confidenceFactors(c ContainerData, p Profile, cfg Config) hubapi.ConfidenceFactors {
 	st := c.CPU
 	if st.Empty() {
 		st = c.Memory
@@ -243,7 +258,12 @@ func containerConfidence(c ContainerData, p Profile, cfg Config) float64 {
 	if st.Mean > 0 {
 		stability = 1 / (1 + st.Stddev/st.Mean)
 	}
-	return clamp01(0.6*cov + 0.2*samples + 0.2*stability)
+	return hubapi.ConfidenceFactors{
+		Coverage:   hubapi.ConfidenceFactor{Score: round(cov, 4), Weight: weightCoverage},
+		Samples:    hubapi.ConfidenceFactor{Score: round(samples, 4), Weight: weightSamples},
+		Variance:   hubapi.ConfidenceFactor{Score: round(stability, 4), Weight: weightVariance},
+		Confidence: round(clamp01(weightCoverage*cov+weightSamples*samples+weightVariance*stability), 4),
+	}
 }
 
 // density is the fraction of steps with data between the first and the last sample.
