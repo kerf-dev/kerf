@@ -65,6 +65,46 @@ func blockHub(t *testing.T, cl cluster) func() {
 	return restore
 }
 
+// agentToken returns the token the agent's Secret holds now.
+func agentToken(t *testing.T, cl cluster) string {
+	t.Helper()
+	var sec corev1.Secret
+	if err := cl.C.Get(ctx(t), client.ObjectKey{Namespace: agentNamespace, Name: agentTokenSecret}, &sec); err != nil {
+		return "error: " + err.Error()
+	}
+	return string(sec.Data["token"])
+}
+
+// holdOutage keeps the agent cut off for d without interruption. Other tracks redeploy the
+// shared agent (helm upgrade rewrites the token Secret): when that happens the token is swapped
+// again and the wait starts over, up to three times.
+func holdOutage(t *testing.T, cl cluster, d time.Duration) {
+	t.Helper()
+	for attempt := 0; ; attempt++ {
+		start := time.Now()
+		intact := true
+		for time.Since(start) < d {
+			if agentToken(t, cl) != invalidToken {
+				intact = false
+				break
+			}
+			time.Sleep(10 * time.Second)
+		}
+		if intact {
+			return
+		}
+		if attempt == 2 {
+			t.Fatalf("the agent token on %s keeps being restored (agent redeployed?); cannot hold a hub outage", cl.Name)
+		}
+		t.Logf("the agent token on %s was restored by someone else after %s (agent redeployed?); swapping it again and restarting the wait",
+			cl.Name, time.Since(start).Round(time.Second))
+		var sec corev1.Secret
+		must(t, cl.C.Get(ctx(t), client.ObjectKey{Namespace: agentNamespace, Name: agentTokenSecret}, &sec))
+		sec.Data["token"] = []byte(invalidToken)
+		must(t, cl.C.Update(ctx(t), &sec))
+	}
+}
+
 // Scenario 11: hub unreachable. The agent applies nothing new and reverts nothing; once the
 // hub is back, the pending change goes through.
 func TestHubUnreachable(t *testing.T) {
@@ -100,7 +140,7 @@ func TestHubUnreachable(t *testing.T) {
 	// hubStaleAfter, plus up to ~1 min for the kubelet to refresh the mounted Secret.
 	wait := staleAfter + 90*time.Second
 	t.Logf("waiting %s for the agent to consider the hub unreachable (hubStaleAfter %s)", wait, staleAfter)
-	time.Sleep(wait)
+	holdOutage(t, cl, wait)
 
 	// A change that would apply now: switch "held" to auto-patch.
 	var p v1alpha1.RightsizingPolicy
@@ -109,6 +149,9 @@ func TestHubUnreachable(t *testing.T) {
 	must(t, cl.C.Update(ctx(t), &p))
 	waitReason(t, cl, ns, deployment, "held", v1alpha1.ReasonHubUnreachable, 3*time.Minute)
 	consistently(t, time.Minute, 5*time.Second, "nothing applied, nothing reverted", func() (bool, string) {
+		if agentToken(t, cl) != invalidToken {
+			return false, "the agent token was restored by someone else during the outage (agent redeployed?); result not meaningful"
+		}
 		if got := snapshot(t, cl, ns, "held"); fmt.Sprint(got) != fmt.Sprint(heldPods) {
 			return false, fmt.Sprintf("held workload changed while the hub is unreachable: %v -> %v", heldPods, got)
 		}
