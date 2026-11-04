@@ -1,13 +1,85 @@
-# Defaults for a real installation. Development overrides: values-dev.yaml.
+# Defaults for a real installation. Development overrides: values-dev.yaml. Every production
+# feature below is shown switched on in ci/values-prod.yaml (EKS example, rendered by
+# `make charts-lint`).
+
+# Set by an umbrella chart; read by every resource-optimizer chart.
+global:
+  # Registry prefixed to image.repository (e.g. 123456789012.dkr.ecr.eu-west-1.amazonaws.com);
+  # image.registry wins over it.
+  imageRegistry: ""
+  # Pull secrets added to every pod (names or {name: ...}).
+  imagePullSecrets: []
+  # Fallback SecretStore for every ExternalSecret: {kind: ClusterSecretStore, name: ...}.
+  externalSecrets:
+    secretStoreRef: {}
+
 image:
+  # Optional registry; empty = repository holds the full reference.
+  registry: ""
   repository: localhost:5005/resource-optimizer/hub
   tag: dev
+  # sha256:... appended as repository:tag@digest (pins the image).
+  digest: ""
   pullPolicy: IfNotPresent
+imagePullSecrets: []
 
 # Set by Tilt (unused by the hub, which serves every cluster).
 clusterName: ""
 
+# More than 1 needs the hub's leader election (WO-18a, D-028): only the leader runs the
+# recommender, readiness checks and sweeps; every replica serves the API. Then also set
+# updateStrategy to RollingUpdate.
 replicaCount: 1
+
+# Recreate: never two hub pods side by side during a rollout (single-replica hubs without leader
+# election would both run the recommender). With leader election (WO-18a) use
+#   {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+updateStrategy:
+  type: Recreate
+
+# Created only when more than one hub pod can run (replicaCount > 1 or autoscaling.minReplicas > 1).
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  maxUnavailable: null
+
+# CPU-based HPA. Needs leader election (WO-18a); replicaCount is then ignored.
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: null
+  behavior: {}
+
+# Default spread over nodes and zones (best effort: ScheduleAnyway), applied when more than one
+# pod can run. topologySpreadConstraints replaces it with your own list.
+topologySpread:
+  enabled: true
+  whenUnsatisfiable: ScheduleAnyway
+topologySpreadConstraints: []
+
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: true
+  # Default: the release name.
+  name: ""
+  # IRSA or Pod Identity, should the hub ever need AWS access (it does not today), e.g.
+  # eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role>
+  annotations: {}
+  # The hub never calls the Kubernetes API.
+  automountServiceAccountToken: false
+
+podLabels: {}
+podAnnotations: {}
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
 
 service:
   type: ClusterIP
@@ -15,12 +87,72 @@ service:
   nodePort: null        # e.g. 30080 with type NodePort
   # Hub vmagent scrapes Services with these annotations (docs/handover/WO-01-handover.md).
   scrape: true
+  annotations: {}
 
-# Postgres URL. Either inline (rendered into Secret <release>-db) or an existing Secret.
+# Hub API for agents in other clusters, the pricing service and browsers (through the web UI).
+# AWS Load Balancer Controller example (D-028: internal ALB, ACM certificate):
+#   className: alb
+#   annotations:
+#     alb.ingress.kubernetes.io/scheme: internal
+#     alb.ingress.kubernetes.io/target-type: ip
+#     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+#     alb.ingress.kubernetes.io/ssl-redirect: "443"
+#     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account>:certificate/<id>
+#     alb.ingress.kubernetes.io/healthcheck-path: /readyz
+#     alb.ingress.kubernetes.io/group.name: resource-optimizer   # share one ALB with the web UI
+#   hosts: [{host: hub.example.internal, paths: [{path: /, pathType: Prefix}]}]
+#   tls: [{hosts: [hub.example.internal]}]            # ALB: the certificate comes from ACM
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+# Postgres. One of:
+#   url                 inline URL (rendered into Secret <release>-db); development only
+#   existingSecret      your Secret with the full URL under existingSecretKey
+#   externalSecret      External Secrets Operator builds Secret <release>-db (see below)
 database:
   url: ""
   existingSecret: ""
   existingSecretKey: DATABASE_URL
+  # Used to build the URL when externalSecret.source is rds (D-028: RDS with verify-full).
+  host: ""
+  port: 5432
+  name: resource_optimizer
+  sslmode: verify-full
+  # sslrootcert path in the URL; default: the mounted caBundle (/etc/hub/db-ca/ca.pem) when set.
+  sslrootcert: ""
+  # Extra URL parameters, e.g. {pool_max_conns: "10", connect_timeout: "10"}.
+  params: {}
+  # CA bundle for sslmode=verify-full (RDS: https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem),
+  # mounted at /etc/hub/db-ca/ca.pem. One of existingConfigMap, existingSecret or pem (inline,
+  # rendered into ConfigMap <release>-db-ca).
+  caBundle:
+    existingConfigMap: ""
+    existingSecret: ""
+    key: ca.pem
+    pem: ""
+  externalSecret:
+    enabled: false
+    # rds: remoteRef.key is an RDS-managed secret (JSON with username and password); the URL is
+    #      postgres://<username>:<password>@host:port/name?sslmode=...&sslrootcert=...&params
+    # url: the property (or the whole secret) is the full URL.
+    source: rds
+    remoteRef:
+      key: ""             # e.g. rds!db-0123abcd-... or resource-optimizer/hub/database
+      property: ""
+      version: ""
+    refreshInterval: ""   # default externalSecrets.refreshInterval
+    secretStoreRef: {}    # default externalSecrets.secretStoreRef
+
+# External Secrets Operator settings shared by every externalSecret of this chart.
+externalSecrets:
+  apiVersion: external-secrets.io/v1
+  refreshInterval: 1h
+  # e.g. {kind: ClusterSecretStore, name: aws-secrets-manager}; falls back to global.externalSecrets.
+  secretStoreRef: {}
 
 # Development seed: registers clusters and tokens; the tokens are stored in Secret hub-dev-tokens.
 devSeed:
@@ -40,13 +172,22 @@ auth:
   maxFailedLogins: 5
   lockoutDuration: 15m
   # The initial admin, created when the database has no users. The password comes from
-  # existingSecret/existingSecretKey or, if empty, from password (rendered into Secret
-  # <release>-bootstrap-admin). Leave both empty to skip.
+  # existingSecret/existingSecretKey, externalSecret (Secret <release>-bootstrap-admin) or, if
+  # all are empty, from password (rendered into Secret <release>-bootstrap-admin). Leave all
+  # empty to skip.
   bootstrapAdmin:
     username: admin
     password: ""
     existingSecret: ""
     existingSecretKey: password
+    externalSecret:
+      enabled: false
+      remoteRef:
+        key: ""           # e.g. resource-optimizer/hub/bootstrap-admin
+        property: ""      # e.g. password (JSON secret); empty = the whole secret string
+        version: ""
+      refreshInterval: ""
+      secretStoreRef: {}
 
 logLevel: info
 
@@ -79,12 +220,21 @@ config:
 # Datasource secrets (bearer tokens, passwords, mTLS keys) are encrypted at rest with this key
 # (D-025). create: the chart generates a random key once and keeps it (helm.sh/resource-policy:
 # keep); back the Secret up. Or point existingSecret at your own Secret (32 bytes, base64 or hex,
-# one key per line; the first encrypts, the others still decrypt during a rotation).
+# one key per line; the first encrypts, the others still decrypt during a rotation), or let
+# externalSecret build Secret <release>-datasource-key from Secrets Manager (wins over create).
 onboarding:
   secretsKey:
     create: true
     existingSecret: ""
     existingSecretKey: key
+    externalSecret:
+      enabled: false
+      remoteRef:
+        key: ""           # e.g. resource-optimizer/hub/datasource-key
+        property: ""
+        version: ""
+      refreshInterval: ""
+      secretStoreRef: {}
 
 resources:
   requests:
@@ -102,3 +252,78 @@ securityContext:
   readOnlyRootFilesystem: true
   capabilities:
     drop: [ALL]
+
+# The hub applies the database migrations before it listens: the startup probe gives them
+# periodSeconds x failureThreshold (default 10 minutes) before liveness takes over.
+startupProbe:
+  enabled: true
+  periodSeconds: 5
+  failureThreshold: 120
+
+# NetworkPolicy (needs a CNI that enforces it; on EKS the VPC CNI network policy agent).
+# Ingress to the API port: web and pricing pods of this namespace, plus `ingress.from`
+# (NetworkPolicyPeers): the ingress controller or the ALB (target-type ip: the VPC CIDRs as
+# ipBlock), agents in other clusters (their NAT CIDRs) and `ingress.metricsFrom` (the scraper).
+# Egress: DNS, the database port, TCP `egress.ports` to any destination (datasources) and the
+# raw rules in `egress.to`.
+networkPolicy:
+  enabled: false
+  ingress:
+    from: []
+    metricsFrom: []
+  egress:
+    enabled: true
+    # Datasources (VictoriaMetrics 8428, Prometheus 9090, HTTPS 443). The database port is added.
+    ports: [443, 8428, 9090]
+    to: []
+
+# Prometheus Operator ServiceMonitor or VictoriaMetrics VMServiceScrape for /metrics. Keep
+# honorLabels: the hub sets `cluster` on its series itself (docs/contracts/metrics.md).
+serviceMonitor:
+  enabled: false
+  kind: ServiceMonitor        # or VMServiceScrape
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: ""
+  honorLabels: true
+  labels: {}                  # e.g. release: kube-prometheus-stack
+  relabelings: []
+  metricRelabelings: []
+
+# Alerting rules (PrometheusRule or VMRule). They need the fleet's series (every spoke's agent and
+# webhook metrics), so evaluate them where those land: the hub's VictoriaMetrics (vmalert,
+# VMRule) or a Prometheus that reads it.
+prometheusRule:
+  enabled: false
+  kind: PrometheusRule        # or VMRule
+  namespace: ""
+  labels: {}
+  # Extra labels on every alert (e.g. team: platform).
+  additionalLabels: {}
+  alerts:
+    # The hub has not heard from a cluster's agent (readiness check agent.connected).
+    agentOffline: {enabled: true, for: 10m, severity: warning}
+    # A blocking readiness check is failing (the cluster cannot reach Automation ready).
+    readinessBlocking: {enabled: true, for: 30m, severity: warning}
+    # Recommender runs failed (status failed or partial) within 2 recommender intervals.
+    recommenderFailing: {enabled: true, for: 0m, severity: warning}
+    # No successful recommender run for a cluster for 2 intervals. staleAfter: a Go duration;
+    # empty = 2 x config.recommender.interval (an interval set in the admin UI is not seen here).
+    recommenderStale: {enabled: true, for: 15m, severity: warning, staleAfter: ""}
+    # No hub replica holds the leader lock (ro_hub_leader, WO-18a).
+    noLeader: {enabled: true, for: 5m, severity: critical}
+    # Webhook admissions ending in error, as a share of all admissions of a cluster.
+    webhookErrors: {enabled: true, for: 15m, severity: warning, ratio: 0.05}
+    # The pricing service has not refreshed prices for staleAfter (cost series go stale).
+    pricingStale: {enabled: true, for: 5m, severity: warning, staleAfter: 30m}
+  additionalRules: []
+
+# Grafana dashboards (dashboards/*.json, WO-05) as ConfigMaps for the Grafana sidecar. They
+# query the datasource uid `victoriametrics` by default (dashboard variable `datasource`).
+dashboards:
+  enabled: false
+  namespace: ""               # default: the release namespace
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: resource-optimizer

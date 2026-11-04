@@ -12,3 +12,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- define "web.tokenSecret" -}}{{ default (printf "%s-hub-token" (include "web.fullname" .)) .Values.token.existingSecret }}{{- end -}}
 {{- define "web.tokenKey" -}}{{ if .Values.token.existingSecret }}{{ .Values.token.existingSecretKey }}{{ else }}token{{ end }}{{- end -}}
+{{- define "web.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}{{ .Values.serviceAccount.name | default (include "web.fullname" .) }}
+{{- else -}}{{ .Values.serviceAccount.name }}
+{{- end -}}
+{{- end -}}

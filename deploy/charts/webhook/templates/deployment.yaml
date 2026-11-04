@@ -5,7 +5,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels: {{- include "webhook.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicas }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ include "webhook.c.replicas" . }}
+  {{- end }}
   selector:
     matchLabels: {{- include "webhook.selectorLabels" . | nindent 6 }}
   strategy:
@@ -20,32 +22,36 @@ spec:
         app.kubernetes.io/part-of: resource-optimizer
         # Never mutate our own pods.
         resource-optimizer.oz.io/skip-webhook: "true"
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
       {{- with .Values.podAnnotations }}
       annotations: {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      serviceAccountName: {{ include "webhook.fullname" . }}
+      serviceAccountName: {{ include "webhook.serviceAccountName" . }}
+      {{- include "webhook.c.imagePullSecrets" (dict "ctx" . "indent" 6) }}
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 65532
-        seccompProfile:
-          type: RuntimeDefault
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: webhook
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: {{ include "webhook.c.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - --port=9443
+            - --port={{ .Values.containerPort }}
             - --cert-dir=/etc/resource-optimizer/webhook/certs
             - --metrics-bind-address=:8080
             - --health-probe-bind-address=:8081
             - --log-level={{ .Values.logLevel }}
+          {{- with .Values.extraEnv }}
+          env: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: https
-              containerPort: 9443
+              containerPort: {{ .Values.containerPort }}
             - name: metrics
               containerPort: 8080
             - name: probes
@@ -62,32 +68,18 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
           resources: {{- toYaml .Values.resources | nindent 12 }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
             - name: certs
               mountPath: /etc/resource-optimizer/webhook/certs
               readOnly: true
+            {{- with .Values.extraVolumeMounts }}{{ toYaml . | nindent 12 }}{{ end }}
       volumes:
         - name: certs
           secret:
             secretName: {{ include "webhook.tlsSecret" . }}
-      {{- if .Values.topologySpread.enabled }}
-      topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: {{ .Values.topologySpread.whenUnsatisfiable }}
-          labelSelector:
-            matchLabels: {{- include "webhook.selectorLabels" . | nindent 14 }}
-        - maxSkew: 1
-          topologyKey: topology.kubernetes.io/zone
-          whenUnsatisfiable: {{ .Values.topologySpread.whenUnsatisfiable }}
-          labelSelector:
-            matchLabels: {{- include "webhook.selectorLabels" . | nindent 14 }}
-      {{- end }}
+        {{- with .Values.extraVolumes }}{{ toYaml . | nindent 8 }}{{ end }}
+      {{- include "webhook.c.topologySpread" (dict "ctx" . "indent" 6) }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}

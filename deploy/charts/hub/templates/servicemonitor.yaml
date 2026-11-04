@@ -1,0 +1,1 @@
+{{- include "hub.c.serviceMonitor" (dict "ctx" . "port" "http") }}

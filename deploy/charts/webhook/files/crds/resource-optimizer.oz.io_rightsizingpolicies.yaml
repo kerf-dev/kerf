@@ -1,0 +1,491 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  name: rightsizingpolicies.resource-optimizer.oz.io
+spec:
+  group: resource-optimizer.oz.io
+  names:
+    categories:
+    - resource-optimizer
+    kind: RightsizingPolicy
+    listKind: RightsizingPolicyList
+    plural: rightsizingpolicies
+    shortNames:
+    - rsp
+    singular: rightsizingpolicy
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.priority
+      name: Priority
+      type: integer
+    - jsonPath: .spec.cpu.mode
+      name: CPU
+      type: string
+    - jsonPath: .spec.memory.mode
+      name: Memory
+      type: string
+    - jsonPath: .spec.apply.strategy
+      name: Strategy
+      type: string
+    - jsonPath: .status.matchedWorkloads
+      name: Matched
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: RightsizingPolicy configures rightsizing for the workloads it
+          selects. Cluster-scoped.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: RightsizingPolicySpec selects workloads and configures how
+              they are rightsized.
+            properties:
+              apply:
+                description: Apply configures how changes are applied.
+                properties:
+                  fallbackAfter:
+                    description: |-
+                      FallbackAfter is how long an in-place resize may stay Deferred before the agent falls back
+                      to rollout. Infeasible resizes fall back immediately. Global default: 10m.
+                    type: string
+                  freezeWindows:
+                    description: |-
+                      FreezeWindows are times in which no strategy may apply changes, and no field ownership is
+                      released. Rollbacks (health watch) are still allowed. A cluster-wide freeze configured on the
+                      agent applies in addition to these and cannot be overridden by a policy.
+                    items:
+                      description: TimeWindow is either recurring (schedule + duration)
+                        or one-off (start + end).
+                      properties:
+                        duration:
+                          description: Duration of a recurring window.
+                          type: string
+                        end:
+                          description: End of a one-off window.
+                          format: date-time
+                          type: string
+                        schedule:
+                          description: Schedule is a standard 5-field cron expression
+                            marking when a recurring window opens.
+                          maxLength: 128
+                          type: string
+                        start:
+                          description: Start of a one-off window.
+                          format: date-time
+                          type: string
+                        timeZone:
+                          description: 'TimeZone (IANA name) the schedule is evaluated
+                            in. Default: UTC.'
+                          maxLength: 64
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: set either schedule and duration, or start and end
+                        rule: 'has(self.schedule) ? (has(self.duration) && !has(self.start)
+                          && !has(self.end)) : (has(self.start) && has(self.end) &&
+                          !has(self.duration))'
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  maintenanceWindows:
+                    description: MaintenanceWindows are the only times the deferred
+                      strategy may apply changes (WO-10).
+                    items:
+                      description: TimeWindow is either recurring (schedule + duration)
+                        or one-off (start + end).
+                      properties:
+                        duration:
+                          description: Duration of a recurring window.
+                          type: string
+                        end:
+                          description: End of a one-off window.
+                          format: date-time
+                          type: string
+                        schedule:
+                          description: Schedule is a standard 5-field cron expression
+                            marking when a recurring window opens.
+                          maxLength: 128
+                          type: string
+                        start:
+                          description: Start of a one-off window.
+                          format: date-time
+                          type: string
+                        timeZone:
+                          description: 'TimeZone (IANA name) the schedule is evaluated
+                            in. Default: UTC.'
+                          maxLength: 64
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: set either schedule and duration, or start and end
+                        rule: 'has(self.schedule) ? (has(self.duration) && !has(self.start)
+                          && !has(self.end)) : (has(self.start) && has(self.end) &&
+                          !has(self.duration))'
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  strategy:
+                    description: 'Strategy used to apply changes. Global default:
+                      in-place.'
+                    enum:
+                    - in-place
+                    - rollout
+                    - deferred
+                    type: string
+                type: object
+              cpu:
+                description: CPU configures CPU handling.
+                properties:
+                  limitRatio:
+                    description: |-
+                      LimitRatio is the CPU limit as a multiple of the request, as a decimal string >= 1 (e.g. "2" or "1.5").
+                      Required when limits is ratio.
+                    pattern: ^([1-9][0-9]*)(\.[0-9]{1,3})?$
+                    type: string
+                  limits:
+                    description: 'Limits says how CPU limits are recommended. Global
+                      default: keep.'
+                    enum:
+                    - keep
+                    - remove
+                    - ratio
+                    type: string
+                  mode:
+                    description: 'Mode for CPU. Global default: audit.'
+                    enum:
+                    - "off"
+                    - audit
+                    - auto-patch
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: limitRatio is required when limits is ratio
+                  rule: '!has(self.limits) || self.limits != ''ratio'' || has(self.limitRatio)'
+                - message: limitRatio is only allowed when limits is ratio
+                  rule: '!has(self.limitRatio) || (has(self.limits) && self.limits
+                    == ''ratio'')'
+              guardrails:
+                description: Guardrails limit what the agent may change.
+                properties:
+                  cooldown:
+                    description: |-
+                      Cooldown is the minimum time between two changes, and after a rollback the time during which
+                      further decreases of the rolled-back resource are blocked. Global default: 24h.
+                    type: string
+                  learningPeriod:
+                    description: 'LearningPeriod is the minimum data coverage before
+                      a workload may be changed. Global default: 168h.'
+                    type: string
+                  maxChangePercent:
+                    description: |-
+                      MaxChangePercent caps a single decrease step, in percent of the current value. Increases are
+                      never capped. Global default: 50.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  minCPU:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: 'MinCPU is the lowest CPU request the agent will
+                      set. Global default: 10m.'
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  minConfidence:
+                    description: |-
+                      MinConfidence is the minimum recommendation confidence (0-1, decimal string) for a change.
+                      Global default: "0.7".
+                    pattern: ^(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$
+                    type: string
+                  minMemory:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: 'MinMemory is the lowest memory request the agent
+                      will set. Global default: 32Mi.'
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  rollback:
+                    description: Rollback configures the health watch after each change
+                      (WO-08).
+                    properties:
+                      oomKills:
+                        description: 'OOMKills is the number of OOM kills that triggers
+                          a rollback. Global default: 1.'
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      restarts:
+                        description: 'Restarts is the number of container restarts
+                          (any reason) that triggers a rollback. Global default: 3.'
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      throttlingRatio:
+                        description: |-
+                          ThrottlingRatio (0-1, decimal string) is the CFS throttled-periods ratio that triggers a CPU
+                          rollback. Global default: "0.25".
+                        pattern: ^(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$
+                        type: string
+                      watchDuration:
+                        description: 'WatchDuration is how long a workload is watched
+                          after a change. Global default: 30m.'
+                        type: string
+                    type: object
+                type: object
+              hpa:
+                description: |-
+                  HPA configures coordination with HorizontalPodAutoscalers (WO-11; until then, workloads with
+                  a CPU/memory-utilization HPA stay audit-only regardless of this field, D-011).
+                properties:
+                  coordinate:
+                    description: 'Coordinate changes requests and the HPA utilization
+                      target in one step. Global default: false.'
+                    type: boolean
+                  targetBounds:
+                    description: TargetBounds limits the HPA utilization target the
+                      agent may set.
+                    properties:
+                      maxUtilization:
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                      minUtilization:
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                    type: object
+                    x-kubernetes-validations:
+                    - message: minUtilization must be <= maxUtilization
+                      rule: '!has(self.minUtilization) || !has(self.maxUtilization)
+                        || self.minUtilization <= self.maxUtilization'
+                type: object
+              jvm:
+                description: JVM configures JVM detection (WO-12).
+                properties:
+                  detect:
+                    description: |-
+                      Detect JVM containers and treat their memory as heap-bound (memory changes need
+                      RestartContainer or rollout, D-007). Global default: true.
+                    type: boolean
+                type: object
+              memory:
+                description: Memory configures memory handling.
+                properties:
+                  limitEqualsRequest:
+                    description: 'LimitEqualsRequest sets the memory limit equal to
+                      the memory request. Global default: true.'
+                    type: boolean
+                  mode:
+                    description: 'Mode for memory. Global default: audit.'
+                    enum:
+                    - "off"
+                    - audit
+                    - auto-patch
+                    type: string
+                type: object
+              priority:
+                description: |-
+                  Priority decides between several matching policies: the highest priority wins; ties are
+                  broken by policy name in ascending lexical order. Only the winning policy applies (fields are
+                  not merged across policies).
+                format: int32
+                maximum: 1000000
+                minimum: 0
+                type: integer
+              profile:
+                description: 'Profile selects the recommender profile. Global default:
+                  production.'
+                enum:
+                - dev
+                - production
+                - high-availability
+                type: string
+              selector:
+                description: Selector chooses the workloads this policy applies to.
+                  An empty selector matches every workload.
+                properties:
+                  excludeNamespaces:
+                    description: ExcludeNamespaces is a list of namespace globs that
+                      never match, even if listed in namespaces.
+                    items:
+                      maxLength: 253
+                      type: string
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-type: set
+                  kinds:
+                    description: Kinds restricts the workload kinds. Empty means all
+                      supported kinds.
+                    items:
+                      description: WorkloadKind is a workload kind resource-optimizer
+                        manages.
+                      enum:
+                      - Deployment
+                      - StatefulSet
+                      - DaemonSet
+                      - CronJob
+                      type: string
+                    maxItems: 4
+                    type: array
+                    x-kubernetes-list-type: set
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: MatchLabels must all be present with equal values
+                      on the workload object (not the pod template).
+                    type: object
+                  namespaces:
+                    description: |-
+                      Namespaces is a list of namespace globs (path.Match syntax, e.g. "team-*").
+                      A workload matches if its namespace matches any entry. Empty means all namespaces.
+                    items:
+                      maxLength: 253
+                      type: string
+                    maxItems: 64
+                    type: array
+                    x-kubernetes-list-type: set
+                  workloads:
+                    description: |-
+                      Workloads restricts the policy to the listed workloads: a workload matches if it equals any
+                      entry. Empty means no restriction. Like every criterion it is combined with the others (AND).
+                      The hub uses it for UI workload overrides (D-022). Agents older than this field ignore it,
+                      so the hub also sets namespaces and kinds to narrow such a policy.
+                    items:
+                      description: NamespacedWorkloadRef identifies one workload in
+                        the cluster.
+                      properties:
+                        kind:
+                          description: Kind of the workload.
+                          enum:
+                          - Deployment
+                          - StatefulSet
+                          - DaemonSet
+                          - CronJob
+                          type: string
+                        name:
+                          description: Name of the workload.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                        namespace:
+                          description: Namespace of the workload.
+                          maxLength: 63
+                          minLength: 1
+                          type: string
+                      required:
+                      - kind
+                      - name
+                      - namespace
+                      type: object
+                    maxItems: 100
+                    type: array
+                    x-kubernetes-list-type: atomic
+                type: object
+            type: object
+          status:
+            description: RightsizingPolicyStatus is the observed state of a RightsizingPolicy.
+            properties:
+              conditions:
+                description: 'Conditions: Ready.'
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              matchedWorkloads:
+                description: MatchedWorkloads is the number of workloads for which
+                  this policy is the winning policy.
+                format: int32
+                type: integer
+              observedGeneration:
+                description: ObservedGeneration is the generation last processed by
+                  the agent.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

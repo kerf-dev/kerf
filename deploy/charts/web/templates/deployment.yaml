@@ -1,28 +1,38 @@
+{{- $ro := .Values.securityContext.readOnlyRootFilesystem }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "web.fullname" . }}
   labels: {{- include "web.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ include "web.c.replicas" . }}
+  {{- end }}
   revisionHistoryLimit: 3
   selector:
     matchLabels: {{- include "web.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      labels: {{- include "web.selectorLabels" . | nindent 8 }}
+      labels:
+        {{- include "web.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
       annotations:
         # Restart when the token changes (nginx reads it once at start).
         checksum/token: {{ (printf "%s/%s/%s" .Values.token.existingSecret .Values.token.existingSecretKey .Values.token.value) | sha256sum | trunc 16 }}
         {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
     spec:
-      automountServiceAccountToken: false
-      securityContext:
-        seccompProfile:
-          type: RuntimeDefault
+      {{- with include "web.serviceAccountName" . }}
+      serviceAccountName: {{ . }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- include "web.c.imagePullSecrets" (dict "ctx" . "indent" 6) }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: nginx
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: {{ include "web.c.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: HUB_UPSTREAM
@@ -31,25 +41,32 @@ spec:
               value: /etc/resource-optimizer/hub-token/token
             - name: ANONYMOUS_READ
               value: {{ .Values.auth.anonymousRead | quote }}
+            {{- with .Values.extraEnv }}{{ toYaml . | nindent 12 }}{{ end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: http
-              containerPort: 80
+              containerPort: {{ .Values.containerPort }}
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             periodSeconds: 5
           livenessProbe:
             httpGet: { path: /healthz, port: http }
             periodSeconds: 20
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: [ALL]
-              add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE, DAC_OVERRIDE]
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
           resources: {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: hub-token
               mountPath: /etc/resource-optimizer/hub-token
               readOnly: true
+            {{- if $ro }}
+            {{- range $i, $p := .Values.readOnlyPaths }}
+            - name: writable-{{ $i }}
+              mountPath: {{ $p }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}{{ toYaml . | nindent 12 }}{{ end }}
       volumes:
         - name: hub-token
           secret:
@@ -58,6 +75,14 @@ spec:
             items:
               - key: {{ include "web.tokenKey" . }}
                 path: token
+        {{- if $ro }}
+        {{- range $i, $p := .Values.readOnlyPaths }}
+        - name: writable-{{ $i }}
+          emptyDir: {}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}{{ toYaml . | nindent 8 }}{{ end }}
+      {{- include "web.c.topologySpread" (dict "ctx" . "indent" 6) }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}
