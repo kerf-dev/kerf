@@ -56,6 +56,15 @@ Spoke-2 is shared by scenarios that disturb its agent (hub outage, pause, RBAC r
 need it undisturbed while they apply. A suite-wide lock (`lockSpoke2`) serialises those phases;
 setup (deploying, waiting for recommendations) still runs in parallel.
 
+Run marker: while `make e2e` runs, namespace `e2e-run-<id>` exists on both spokes (so the
+pre-deploy check `kubectl get ns | grep e2e-` sees every run, including scenarios that create no
+namespace); a killed run's marker is deleted by the next run or `make e2e-clean`.
+
+Field ownership: the suite writes with field manager `resource-optimizer-e2e`. After restoring a
+Helm-owned object (agent ClusterRole, agent token Secret, webhook Deployment, kube-state-metrics)
+it drops its managedFields entry, so the next `helm upgrade` (server-side apply as `helm`) does not
+conflict; `make e2e-unblock` drops leftover entries (also the `e2e.test` ones of older versions).
+
 Hub objects: every test deletes the policies and clusters it created and resumes what it paused.
 Before the scenarios (and in `make e2e-clean`) the suite sweeps what an interrupted run left:
 hub policies and clusters named `e2e-*`, and pauses whose reason starts with `e2e `.

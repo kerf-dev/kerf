@@ -23,6 +23,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -436,7 +437,9 @@ func TestAdminRoles(t *testing.T) {
 	if r.Status != http.StatusOK {
 		t.Fatalf("operator pause: %s", r)
 	}
-	t.Cleanup(func() { _, _ = sessionOf(admin).raw(context.Background(), http.MethodPut, "/v1/clusters/"+name+"/automation", hubapi.AutomationUpdate{Reason: "e2e cleanup"}, nil) })
+	t.Cleanup(func() {
+		_, _ = sessionOf(admin).raw(context.Background(), http.MethodPut, "/v1/clusters/"+name+"/automation", hubapi.AutomationUpdate{Reason: "e2e cleanup"}, nil)
+	})
 	var ca hubapi.ClusterAdmin
 	v.get(t, "/v1/admin/clusters/"+name, &ca)
 	if !ca.Paused || ca.Automation.By == nil || ca.Automation.By.Name != operator {
@@ -615,7 +618,8 @@ func hasResizeRule(cr *rbacv1.ClusterRole) int {
 	return -1
 }
 
-// restoreResizeRule puts the agent's pods/resize rule back (no-op when present).
+// restoreResizeRule puts the agent's pods/resize rule back (no-op when present) and drops the
+// suite's field ownership of the rules, so the next helm upgrade of the agent doesn't conflict.
 func restoreResizeRule(c context.Context, cl cluster, rule rbacv1.PolicyRule) error {
 	var lastErr error
 	for i := 0; i < 5; i++ {
@@ -623,14 +627,14 @@ func restoreResizeRule(c context.Context, cl cluster, rule rbacv1.PolicyRule) er
 		if lastErr = cl.C.Get(c, client.ObjectKey{Name: agentClusterRole()}, &cr); lastErr != nil {
 			continue
 		}
-		if hasResizeRule(&cr) >= 0 {
-			return nil
+		if hasResizeRule(&cr) < 0 {
+			cr.Rules = append(cr.Rules, rule)
+			if lastErr = cl.C.Update(c, &cr); lastErr != nil {
+				time.Sleep(time.Second)
+				continue
+			}
 		}
-		cr.Rules = append(cr.Rules, rule)
-		if lastErr = cl.C.Update(c, &cr); lastErr == nil {
-			return nil
-		}
-		time.Sleep(time.Second)
+		return releaseFields(c, cl, &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: agentClusterRole()}})
 	}
 	return lastErr
 }
@@ -739,6 +743,8 @@ func TestReadinessKSMDown(t *testing.T) {
 			delete(cur.Annotations, scaledFromAnnotation)
 			if err := cl.C.Update(c, &cur); err != nil {
 				t.Errorf("cleanup: scale %s back to %d: %v", key, orig, err)
+			} else if err := releaseFields(c, cl, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name}}); err != nil {
+				t.Errorf("cleanup: %v", err)
 			}
 		}
 	})

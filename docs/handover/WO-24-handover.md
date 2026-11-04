@@ -41,6 +41,24 @@ The spoke-1 admin workloads request 100m (not 250m) to stay within spoke-1's 8 c
 (`t.Cleanup`). Before the scenarios, and in `make e2e-clean`, the suite sweeps policies and clusters
 named `e2e-*` and pauses whose reason starts with `e2e ` (left by a killed run).
 
+**Run marker and field ownership** (after the orchestrator's note of 12:2x UTC). An agent deploy
+to ro-spoke-2 at 11:48 UTC ran during the RBAC scenario of the quick run (that scenario creates no
+namespace, so the pre-deploy check saw nothing). Its `helm upgrade` failed on a ClusterRole conflict
+with field manager `e2e.test`: a plain update by the suite owns the atomic `rules` list. The quick run
+itself passed. Now:
+- TestMain creates `e2e-run-<id>` on both spokes at the start and deletes it at the end (stale markers
+  of killed runs are deleted at the next start and by `make e2e-clean`).
+- All suite writes use field manager `resource-optimizer-e2e`; after restoring the agent ClusterRole,
+  the agent token Secret, the webhook Deployment or kube-state-metrics, the suite removes its
+  managedFields entry (JSON patch of `metadata.managedFields`, guarded by resourceVersion). Values stay;
+  Helm's next server-side apply takes the fields back without a conflict (checked with a server
+  dry-run apply as `helm`).
+- `make e2e-unblock` drops leftover suite entries (`resource-optimizer-e2e` and the old `e2e.test`).
+- Leftovers of the earlier runs removed by hand: `e2e.test` on the spoke-2 agent ClusterRole, the
+  spoke-2 agent token Secret and the spoke-1 webhook Deployment (the last two from WO-09's scenarios).
+- Check: `make e2e E2E_RUN='TestReadinessRBAC|TestAdminRoles'` PASS (73 s); marker present during the
+  run and terminating after; ClusterRole managedFields afterwards: `helm Apply` only.
+
 ## Results (shared environment, 2026-11-04 UTC)
 
 Hub and agents main-5d25dd7, web main-cbc813c, both spokes AutomationReady at the start.
