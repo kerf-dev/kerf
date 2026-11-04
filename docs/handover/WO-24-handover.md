@@ -101,9 +101,11 @@ has only a soft delete.
   Seen in the first final run on main-1e72c9e (12:40 UTC): `TestWebhook/webhook_down_does_not_block_
   pod_creation` failed because a hub run landed 30 s after the apply. Suggested fix: repair while
   Applied and the new recommendation is within tolerance of the applied values (like WO-21b's
-  "new id **and** different values" rule for the approve-once hold). The suite now holds its own
-  recompute requests during that window and logs "KNOWN AGENT BUG" when the hub's periodic run still
-  lands in it; it does not hide the failure.
+  "new id **and** different values" rule for the approve-once hold). **Fixed by WO-21c** (main
+  6237bfc): drift repair compares values, not ids, and adopts a new id within the tolerance.
+  WO-24b removed the suite's hold-off: `TestWebhook` now forces a recommender run after the apply,
+  waits for the new recommendation id (and for the agent to adopt it when its values are within the
+  tolerance), and only then creates the unmutated pod, so the old failure is covered every run.
 - **D-027 hold is short on a busy hub**: the agent released the approved field 32 s after the
   apply because a recommender run issued a newer recommendation with other values (WO-21b's rule).
   On Argo CD apps with self-heal, approved values then last until the next run whose values differ
@@ -124,6 +126,26 @@ has only a soft delete.
   binding; the scenario lasts a few seconds).
 - Readiness timings seen live: recheck → agent answer + new state 30–50 s; `pods/resize` removed →
   `ReadyAudit` in 30 s; restored → `AutomationReady` in 50 s.
+
+## WO-24b (final, branch `wo-24b-final` from origin/main a06d311)
+
+Hub and web main-1e72c9e, both agents main-6237bfc (WO-21c). Change: `TestWebhook` forces a new
+recommendation id before the drift check (`adoptNewRecommendation`, `hubAPI.recomputeNow`) instead of
+holding recomputes off. The approve-once tests keep their hold-offs: approvals are superseded by
+any run and the D-027 hold ends at a newer recommendation with other values, independent of WO-21c.
+
+| Run | Result | Time |
+|---|---|---|
+| **1** (13:58:30 UTC) | **PASS** — 31 passed; skips: `TestInPlaceJVMMemory` (k3d nodes have swap: the agent correctly refuses in-place memory, asserted, then skipped), `TestReadinessKSMDown` (needs `RO_E2E_DISRUPTIVE=1` and the user's OK; not run), `TestHubSweep` (helper for `make e2e-clean`) | **14m30s** |
+| **2** (back to back) | **PASS** — same; two approvals superseded by a run and approved again | **14m08s** |
+
+`make e2e && make e2e`: **28m38s** for the pair. In both runs the forced recommendation differed from
+the live value beyond the tolerance (40m and 60m vs 125m), so the agent did not adopt it, and drift
+repair still resized the unmutated pod under the new id (0 s and 10 s): the pre-WO-21c failure case.
+The adoption path itself (new id within the tolerance) was not reached in these runs; it is asserted
+whenever it happens (`agent adopts recommendation …`). Afterwards: no e2e namespaces, CRs, hub
+policies or pauses; only `helm`/`k3s` field managers on the shared objects; both spokes
+AutomationReady.
 
 ## Not done
 
