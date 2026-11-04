@@ -63,7 +63,7 @@ func TestSingleReplica(t *testing.T) {
 				t.Fatalf("outcome %s (%s: %s), want %s", d.Outcome, d.Reason, d.Message, tc.outcome)
 			}
 			if tc.outcome == Blocked {
-				if d.Reason != ReasonSingleReplicaUnsafe || !strings.Contains(d.Message, tc.msg) || !strings.Contains(d.Message, apply.AnnotationAllowDisruption) {
+				if d.Reason != v1alpha1.ReasonSingleReplicaUnsafe || !strings.Contains(d.Message, tc.msg) || !strings.Contains(d.Message, v1alpha1.AnnotationAllowDisruption) {
 					t.Fatalf("reason %s message %q", d.Reason, d.Message)
 				}
 				if len(d.Targets) == 0 || len(d.Proposed) == 0 {

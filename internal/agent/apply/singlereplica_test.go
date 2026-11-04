@@ -12,6 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
+
+	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
 )
 
 func deploy(replicas int32, strategy appsv1.DeploymentStrategy, ann map[string]string) *appsv1.Deployment {
@@ -62,7 +64,7 @@ func TestAssessDisruption(t *testing.T) {
 		{name: "one replica, maxSurge 0 maxUnavailable 0 means unavailable 1", obj: deploy(1, rolling(&zero, &zero), nil), single: true, safe: false},
 		{name: "one replica, surge 1 unavailable 0", obj: deploy(1, rolling(&one, &zero), nil), single: true, safe: true},
 		{name: "opt-in annotation", obj: deploy(1, appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType},
-			map[string]string{AnnotationAllowDisruption: "true"}), single: true, safe: false, allowed: true},
+			map[string]string{v1alpha1.AnnotationAllowDisruption: "true"}), single: true, safe: false, allowed: true},
 		{name: "three replicas, no PDB", obj: deploy(3, appsv1.DeploymentStrategy{}, nil), single: false, safe: true},
 		{name: "three replicas, PDB minAvailable 3", obj: deploy(3, appsv1.DeploymentStrategy{}, nil),
 			pdbs: []policyv1.PodDisruptionBudget{pdb("all", ptr.To(intstr.FromInt32(3)), nil)}, single: true, safe: true, whyContains: "PodDisruptionBudget all allows 0"},

@@ -12,17 +12,6 @@ import (
 	"github.com/tomer1983/resource-optimizer/internal/agent/workload"
 )
 
-// Reasons added by WO-13. Proposed for api/v1alpha1/wellknown.go and docs/contracts/events.md
-// (contract change, reported to the orchestrator); defined here until then.
-const (
-	// ReasonSingleReplicaUnsafe (blocked): the workload has one replica (or a PodDisruptionBudget
-	// that allows no disruption) and the change would leave it without a Ready pod.
-	ReasonSingleReplicaUnsafe = "SingleReplicaUnsafe"
-	// ReasonPodDisruptionBudget (blocked): a pod of an OnDelete StatefulSet could not be evicted
-	// because a PodDisruptionBudget refused it; the agent retries.
-	ReasonPodDisruptionBudget = "PodDisruptionBudget"
-)
-
 // singleReplicaUnsafe returns why the change would leave a single-replica workload without a
 // Ready pod, or "" (WO-13): in place only without a container restart; a rollout only with
 // maxSurge >= 1 and maxUnavailable 0. The allow-disruption annotation lifts the check.
@@ -31,7 +20,7 @@ func singleReplicaUnsafe(in Input, changes []hubclient.ContainerChange) string {
 	if !d.Unsafe() || len(changes) == 0 {
 		return ""
 	}
-	optIn := fmt.Sprintf("annotate %s=true to allow it", apply.AnnotationAllowDisruption)
+	optIn := fmt.Sprintf("annotate %s=true to allow it", v1alpha1.AnnotationAllowDisruption)
 	if in.Strategy == v1alpha1.StrategyInPlace {
 		changed := changedResources(changes)
 		var restarting []string

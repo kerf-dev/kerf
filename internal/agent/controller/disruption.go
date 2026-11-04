@@ -79,9 +79,9 @@ func (w *run) blockFallback(reason, msg, why string) (ctrl.Result, error) {
 	}
 	w.rsr.Status = *status
 	w.rsr.Status.Phase = v1alpha1.PhaseBlocked
-	w.reason = guardrails.ReasonSingleReplicaUnsafe
+	w.reason = v1alpha1.ReasonSingleReplicaUnsafe
 	w.message = fmt.Sprintf("in-place resize cannot complete (%s: %s); fallback to rollout refused: %s", reason, msg, why)
-	w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: guardrails.ReasonSingleReplicaUnsafe, RecommendationID: recID,
+	w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: v1alpha1.ReasonSingleReplicaUnsafe, RecommendationID: recID,
 		Resources: keys(own), Message: w.message, Details: map[string]string{"fallbackReason": reason}}, slotDecision, w.rsr.Spec.Containers)
 	w.log.Warn("in-place fallback to rollout refused (single replica)", "reason", reason, "why", why)
 	return ctrl.Result{}, nil
@@ -117,7 +117,7 @@ func (w *run) rollOnDelete() (ctrl.Result, bool, error) {
 		return ctrl.Result{}, false, nil
 	}
 	defer func() {
-		if w.reason != guardrails.ReasonPodDisruptionBudget {
+		if w.reason != v1alpha1.ReasonPodDisruptionBudget {
 			w.message = w.note
 		}
 	}()
@@ -170,9 +170,9 @@ func (w *run) rollOnDelete() (ctrl.Result, bool, error) {
 			// Gone or recreated meanwhile: the next pass sees the new state.
 		case apply.EvictionRefused(err):
 			msg := fmt.Sprintf("eviction of pod %s refused by a PodDisruptionBudget; retrying: %v", p.Name, err)
-			w.reason, w.message = guardrails.ReasonPodDisruptionBudget, msg
+			w.reason, w.message = v1alpha1.ReasonPodDisruptionBudget, msg
 			w.note += "; " + msg
-			w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: guardrails.ReasonPodDisruptionBudget,
+			w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: v1alpha1.ReasonPodDisruptionBudget,
 				RecommendationID: w.rsr.Status.AppliedRecommendationID, Strategy: string(w.rsr.Spec.Strategy),
 				Message: msg, Details: map[string]string{"pod": p.Name}}, slotOnDelete, nil)
 			return ctrl.Result{RequeueAfter: max(requeue.RequeueAfter, 15*time.Second)}, true, nil
