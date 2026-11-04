@@ -6,6 +6,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -1238,7 +1240,7 @@ func (w *run) emit(e hubclient.Event, slot string, values []v1alpha1.ContainerRe
 	r := w.r
 	e.Workload = hubclient.WorkloadRef{Namespace: w.k.Namespace, Kind: w.k.Kind, Name: w.k.Name}
 	if slot != "" {
-		sig := signature{head: strings.Join([]string{e.Type, e.Reason, strings.Join(e.Resources, ",")}, "|"), values: values}
+		sig := signature{head: strings.Join([]string{e.Type, e.Reason, strings.Join(e.Resources, ","), w.policyDigest()}, "|"), values: values}
 		key := w.k.String() + "|" + slot
 		r.mu.Lock()
 		if r.last == nil {
@@ -1263,6 +1265,16 @@ func (w *run) emit(e hubclient.Event, slot string, values []v1alpha1.ContainerRe
 	if r.Recorder != nil && w.rsr != nil {
 		r.record(w.rsr, w.obj, e)
 	}
+}
+
+// policyDigest identifies the effective policy: editing it (e.g. turning HPA coordination on)
+// re-reports the current skip/block once, with the new reasoning (D-017).
+func (w *run) policyDigest() string {
+	e := w.eff
+	e.Warnings = nil
+	b, _ := json.Marshal(e)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:8])
 }
 
 func (r *Reconciler) resetSlots(k wkey) {
