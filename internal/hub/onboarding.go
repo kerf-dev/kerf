@@ -63,6 +63,10 @@ func (s *Server) InitOnboarding(ctx context.Context, cipher *datasource.Cipher) 
 	return err
 }
 
+// RecheckTimeout ends a re-check request the agent did not answer (no agent, or an agent without
+// self-checks), so it is not shown as pending forever.
+const RecheckTimeout = 15 * time.Minute
+
 // RunReadiness runs the hourly metrics checks and, every minute, the cheap hub checks
 // (agent.connected, metrics.recommendations). It blocks until ctx is done.
 func (s *Server) RunReadiness(ctx context.Context) {
@@ -167,6 +171,9 @@ func (s *Server) refreshAgentChecks(ctx context.Context) {
 	if err != nil {
 		s.Log.WarnContext(ctx, "readiness: list clusters", "err", err)
 		return
+	}
+	if err := s.Onb.Readiness.ExpireRechecks(ctx, s.now().Add(-RecheckTimeout)); err != nil {
+		s.Log.WarnContext(ctx, "readiness: expire re-checks", "err", err)
 	}
 	for _, c := range names {
 		checks, err := s.hubChecks(ctx, c)
@@ -480,8 +487,12 @@ func (s *Server) testDatasource(w http.ResponseWriter, r *http.Request) {
 	mc := &readiness.MetricsChecker{Q: res.Q, API: res.API, M: res.Matcher, Jobs: b.JobNames, Local: s.Prom,
 		HistoryWindow: s.historyWindow(), DocsBase: s.docsBase(), Now: s.now}
 	rep := mc.Run(r.Context())
-	found := rep.Found
-	writeJSON(w, hubapi.DatasourceTestResult{OK: rep.OK(), LatencyMs: int(rep.Latency.Milliseconds()), Found: &found, LabelValues: rep.LabelValues, Checks: rep.Checks})
+	out := hubapi.DatasourceTestResult{OK: rep.OK(), LatencyMs: int(rep.Latency.Milliseconds()), LabelValues: rep.LabelValues, Checks: rep.Checks}
+	if rep.Found != (hubapi.DatasourceTestFound{}) {
+		found := rep.Found
+		out.Found = &found // absent = nothing found
+	}
+	writeJSON(w, out)
 }
 
 // ---- readiness ----

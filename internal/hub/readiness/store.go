@@ -408,3 +408,9 @@ func (s *Store) Refresh(ctx context.Context, clusters []string) error {
 	}
 	return nil
 }
+
+// ExpireRechecks clears re-check requests made before cutoff (not answered by an agent).
+func (s *Store) ExpireRechecks(ctx context.Context, cutoff time.Time) error {
+	_, err := s.DB.Exec(ctx, `UPDATE cluster_readiness SET recheck_requested_at = NULL WHERE recheck_requested_at < $1`, cutoff)
+	return err
+}
