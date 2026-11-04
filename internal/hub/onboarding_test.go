@@ -373,3 +373,42 @@ func TestInstallSnippetAPI(t *testing.T) {
 		t.Errorf("helm snippet %s", s.Content)
 	}
 }
+
+// TestPricingTokenScope: a pricing token (D-026) reaches only the two internal endpoints.
+func TestPricingTokenScope(t *testing.T) {
+	e := newEnv(t)
+	e.initOnboarding()
+	const tokPricing = "test-pricing"
+	if err := e.st.EnsureToken(e.ctx, tokPricing, hubapi.RolePricing, "", "pricing"); err != nil {
+		t.Fatal(err)
+	}
+	var bl hubapi.MetricsBindingList
+	e.getJSON("/v1/internal/metrics-bindings", tokPricing, &bl)
+	if len(bl.Items) != 2 {
+		t.Errorf("bindings %+v", bl)
+	}
+	fp := &fakeProm{values: map[string]float64{"up": 1}}
+	ps := fp.server(t)
+	if _, err := e.st.Pool.Exec(e.ctx, `UPDATE datasources SET url = $1 WHERE id = 'local'`, ps.URL); err != nil {
+		t.Fatal(err)
+	}
+	e.srv.Cfg.PrometheusURL = ps.URL
+	expectCode(t, "proxy", e.do(http.MethodGet, "/v1/internal/datasources/local/api/v1/query?query=up", tokPricing, nil), 200)
+	expectCode(t, "proxy range", e.do(http.MethodPost, "/v1/internal/datasources/local/api/v1/query_range", tokPricing,
+		"query=up&start=1&end=2&step=1", "Content-Type", "application/x-www-form-urlencoded"), 200)
+	for _, rt := range []struct{ method, path string }{
+		{http.MethodGet, "/v1/clusters"}, {http.MethodGet, "/v1/workloads"}, {http.MethodGet, "/v1/summary"},
+		{http.MethodGet, "/v1/audit"}, {http.MethodGet, "/v1/admin/datasources"}, {http.MethodGet, "/v1/clusters/c1/recommendations"},
+		{http.MethodGet, "/v1/clusters/c1/config"}, {http.MethodGet, "/v1/clusters/c1/readiness"}, {http.MethodGet, "/v1/admin/tokens"},
+		{http.MethodPost, "/v1/admin/recompute"}, {http.MethodGet, "/v1/me"},
+	} {
+		if r := e.do(rt.method, rt.path, tokPricing, nil); r.code != http.StatusForbidden && r.code != http.StatusUnauthorized {
+			t.Errorf("%s %s with a pricing token: %d", rt.method, rt.path, r.code)
+		}
+	}
+	// admins can create pricing tokens (without a cluster)
+	r := e.do(http.MethodPost, "/v1/admin/tokens", tokAdmin, hubapi.TokenCreate{Role: hubapi.RolePricing, Reason: "pricing service"})
+	expectCode(t, "create pricing token", r, 201)
+	r = e.do(http.MethodPost, "/v1/admin/tokens", tokAdmin, hubapi.TokenCreate{Role: hubapi.RolePricing, Cluster: "c1", Reason: "x"})
+	expectCode(t, "pricing token with cluster", r, 400)
+}
