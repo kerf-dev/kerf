@@ -68,6 +68,7 @@ Hub and agents main-5d25dd7, web main-cbc813c, both spokes AutomationReady at th
 | quick (`TestAdminRoles|TestOnboarding|TestReadiness`) | PASS | 1.7 min |
 | 1 | PASS — every test (3 skips: JVM memory on swap nodes, KSM without the flag, the sweep helper) | 17m59s |
 | 2 (back to back) | PASS — same | 16m38s |
+| final 1 (main-1e72c9e merged, 12:37) | 2 failures: `TestApproveOnce` (approval superseded, test race, fixed in a713fd7), `TestWebhook/webhook_down…` (agent drift-repair bug above) | 14m06s |
 
 `make e2e && make e2e`: 34 min wall in total; each run is well under 30 min (go test 1072 s and
 984 s). The longest test is still WO-09's `TestHubUnreachable` (its outage plus waiting for the
@@ -79,7 +80,26 @@ run 2 found nothing to clean.
 Each run leaves two soft-deleted clusters (`e2e-roles-*`, `e2e-onb-*`) in the hub database: the API
 has only a soft delete.
 
-## Findings for other tracks (no product bug found)
+## Findings for other tracks
+
+- **Agent bug: drift repair stops after the next recommender run.** `internal/agent/controller/
+  reconciler.go:479` repairs drift (`keepLive`) only while `rsr.Status.AppliedRecommendationID ==
+  rec.ID`. The hub gives every workload a new recommendation id on every run, even with the same
+  values; a new recommendation within the 5% tolerance is `Skipped/NoSignificantChange` and never
+  reaches `keepLive`. So pods created while the webhook was down (or any in-place drift) stay at the
+  template values from the next run on: in production, drift repair works until the next daily run.
+  Seen in the first final run on main-1e72c9e (12:40 UTC): `TestWebhook/webhook_down_does_not_block_
+  pod_creation` failed because a hub run landed 30 s after the apply. Suggested fix: repair while
+  Applied and the new recommendation is within tolerance of the applied values (like WO-21b's
+  "new id **and** different values" rule for the approve-once hold). The suite now holds its own
+  recompute requests during that window and logs "KNOWN AGENT BUG" when the hub's periodic run still
+  lands in it; it does not hide the failure.
+- **Approvals are superseded by every recommender run** (by design: only the latest recommendation
+  can be approved). With the suite's recompute requests every 2 minutes, `TestApproveOnce` lost
+  its approval to a run between the approval and the agent's next pull (first final run). The
+  suite now holds its recompute requests while it waits and approves again when the hub reports the
+  approval `superseded` (up to 3 times). In production, with daily runs, the window is a pull
+  interval; the UI may want to say that an approval is void after the next run.
 
 - **Gating of cluster-less policies (WO-25, by design):** a policy without `clusters` (or a global
   default) is gated against every registered cluster. In dev that includes `synth-a`/`synth-b`,
