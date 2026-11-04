@@ -9,7 +9,7 @@ nodeLookback: 24h
 defaultRegion: eu-west-1
 logLevel: debug
 hub:
-  url: http://hub-api.hub.svc:8080
+  url: http://hub.resource-optimizer.svc:8080
   tokenSecret:
     name: pricing-hub-token
     create: true
