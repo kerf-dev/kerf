@@ -4,6 +4,8 @@ Kubernetes rightsizing for EKS: measures container CPU and memory usage from Pro
 recommends requests and limits, estimates the savings, and applies changes automatically for workloads
 whose mode is `auto-patch` (in-place pod resize or rollout, with guardrails and automatic rollback).
 
+**Current state and how to open the running app: [docs/STATUS.md](docs/STATUS.md).**
+
 Status: design and planning. No components are built yet.
 
 - [roadmap.md](roadmap.md) – phases and work-orders
