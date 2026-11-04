@@ -768,7 +768,7 @@ components:
       enum: [dev, production, high-availability]
     Phase:
       type: string
-      enum: [Pending, Applying, Applied, Blocked, RolledBack, Released]
+      enum: [Pending, Applying, Applied, Blocked, RolledBack, Released, Deferred]
     RiskFlag:
       type: string
       description: |
@@ -1071,6 +1071,10 @@ components:
         appliedAt:
           type: string
           format: date-time
+        nextWindow:
+          type: string
+          format: date-time
+          description: When the next maintenance window opens; set while the phase is `Deferred` (WO-10).
         observedAt:
           type: string
           format: date-time

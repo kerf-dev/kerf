@@ -783,3 +783,160 @@ func TestValuesClose(t *testing.T) {
 		}
 	}
 }
+
+func windowPolicy(name string, labels map[string]string, apply *v1alpha1.ApplyPolicy) *v1alpha1.RightsizingPolicy {
+	return &v1alpha1.RightsizingPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec:       v1alpha1.RightsizingPolicySpec{Priority: 100, Selector: v1alpha1.PolicySelector{MatchLabels: labels}, Apply: apply},
+	}
+}
+
+// TestDeferredWindow (WO-10): a deferred change waits in phase Deferred with nextWindow, and is
+// applied as a rollout once the maintenance window opens.
+func TestDeferredWindow(t *testing.T) {
+	needEnv(t)
+	const name = "deferred"
+	u := deploymentApply(name, map[string]string{v1alpha1.AnnotationMode: "auto-patch"}, "500m", "256Mi")
+	u.SetLabels(map[string]string{"windows": name})
+	if err := argoApply(t, u, false); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now().Add(6 * time.Second).Truncate(time.Second)
+	p := windowPolicy("deferred-window", map[string]string{"windows": name}, &v1alpha1.ApplyPolicy{
+		Strategy:           v1alpha1.StrategyDeferred,
+		MaintenanceWindows: []v1alpha1.TimeWindow{{Start: &metav1.Time{Time: start}, End: &metav1.Time{Time: start.Add(time.Minute)}}},
+	})
+	if err := k8s.Create(testCtx, p); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = k8s.Delete(testCtx, p) }()
+	setRec(recFor(name, "250m", "200Mi"))
+
+	eventually(t, 5*time.Second, "deferred", func() error {
+		r, err := getRSR(name)
+		if err != nil {
+			return err
+		}
+		if r.Status.Phase != v1alpha1.PhaseDeferred || r.Status.NextWindow == nil || !r.Status.NextWindow.Time.Equal(start) || r.Spec.Strategy != v1alpha1.StrategyDeferred {
+			return fmt.Errorf("phase %s nextWindow %v strategy %s", r.Status.Phase, r.Status.NextWindow, r.Spec.Strategy)
+		}
+		return nil
+	})
+	if d := getDeploy(t, name); cpuReq(d) != "500m" || time.Now().After(start) {
+		t.Fatalf("applied before the window (cpu %s)", cpuReq(d))
+	}
+	eventually(t, 5*time.Second, "blocked event", wantEvent(name, hubclient.EventBlocked, v1alpha1.ReasonOutsideMaintenanceWindow))
+	eventually(t, 5*time.Second, "hub status nextWindow", func() error {
+		st, ok := stub.Statuses(testCluster)["default/Deployment/"+name]
+		if !ok || st.Phase != "Deferred" || st.NextWindow == nil {
+			return fmt.Errorf("status %+v", st)
+		}
+		return nil
+	})
+
+	eventually(t, 20*time.Second, "applied in the window", wantPhase(name, v1alpha1.PhaseApplied))
+	if time.Now().Before(start) {
+		t.Fatal("applied before the window opened")
+	}
+	d := getDeploy(t, name)
+	if cpuReq(d) != "250m" || memReq(d) != "200Mi" {
+		t.Fatalf("template after the window: %s %s", cpuReq(d), memReq(d))
+	}
+	r, _ := getRSR(name)
+	if r.Status.NextWindow != nil {
+		t.Fatalf("nextWindow must be cleared once applied: %v", r.Status.NextWindow)
+	}
+	eventually(t, 5*time.Second, "applied event", wantEvent(name, hubclient.EventApplied, v1alpha1.ReasonRecommendationApplied))
+	for _, e := range eventsFor(name) {
+		if e.Type == hubclient.EventApplied && e.Strategy != "deferred" {
+			t.Fatalf("applied event strategy %q", e.Strategy)
+		}
+	}
+}
+
+// TestFreezeBlocksInPlace (WO-10): a freeze window blocks an in-place change.
+func TestFreezeBlocksInPlace(t *testing.T) {
+	needEnv(t)
+	const name = "frozen-inplace"
+	u := deploymentApply(name, map[string]string{v1alpha1.AnnotationCPUMode: "auto-patch"}, "500m", "256Mi")
+	u.SetLabels(map[string]string{"windows": name})
+	if err := argoApply(t, u, false); err != nil {
+		t.Fatal(err)
+	}
+	pod := makePod(t, getDeploy(t, name))
+	p := windowPolicy("freeze-inplace", map[string]string{"windows": name}, &v1alpha1.ApplyPolicy{
+		FreezeWindows: []v1alpha1.TimeWindow{{Schedule: "* * * * *", Duration: &metav1.Duration{Duration: time.Hour}}},
+	})
+	if err := k8s.Create(testCtx, p); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = k8s.Delete(testCtx, p) }()
+	setRec(recFor(name, "250m", "200Mi"))
+	eventually(t, 10*time.Second, "blocked", wantPhase(name, v1alpha1.PhaseBlocked))
+	eventually(t, 5*time.Second, "freeze event", wantEvent(name, hubclient.EventBlocked, v1alpha1.ReasonFreezeWindow))
+	time.Sleep(time.Second)
+	if got := getPod(t, pod.Name).Spec.Containers[0].Resources.Requests[corev1.ResourceCPU]; got.String() != "500m" {
+		t.Fatalf("pod resized during a freeze: %s", got.String())
+	}
+	// Freeze over: the change goes through.
+	if err := k8s.Delete(testCtx, p); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, 20*time.Second, "resized after the freeze", func() error {
+		if got := getPod(t, pod.Name).Spec.Containers[0].Resources.Requests[corev1.ResourceCPU]; got.String() != "250m" {
+			return fmt.Errorf("pod cpu %s", got.String())
+		}
+		return nil
+	})
+}
+
+// TestFreezePostponesRelease (WO-10): leaving auto-patch during a freeze keeps field ownership
+// (no change through Argo CD) until the freeze ends; then released is emitted once.
+func TestFreezePostponesRelease(t *testing.T) {
+	needEnv(t)
+	const name = "frozen-release"
+	u := deploymentApply(name, map[string]string{v1alpha1.AnnotationMode: "auto-patch", v1alpha1.AnnotationStrategy: "rollout"}, "500m", "256Mi")
+	u.SetLabels(map[string]string{"windows": name})
+	if err := argoApply(t, u, false); err != nil {
+		t.Fatal(err)
+	}
+	setRec(recFor(name, "250m", "200Mi"))
+	eventually(t, 20*time.Second, "applied", wantPhase(name, v1alpha1.PhaseApplied))
+	p := windowPolicy("freeze-release", map[string]string{"windows": name}, &v1alpha1.ApplyPolicy{
+		FreezeWindows: []v1alpha1.TimeWindow{{Start: &metav1.Time{Time: time.Now().Add(-time.Minute)}, End: &metav1.Time{Time: time.Now().Add(time.Hour)}}},
+	})
+	if err := k8s.Create(testCtx, p); err != nil {
+		t.Fatal(err)
+	}
+	annotate(t, &appsv1.Deployment{}, name, map[string]any{v1alpha1.AnnotationMode: "audit"})
+	eventually(t, 10*time.Second, "release blocked", func() error {
+		for _, e := range eventsFor(name) {
+			if e.Type == hubclient.EventBlocked && e.Reason == v1alpha1.ReasonFreezeWindow {
+				return nil
+			}
+		}
+		return fmt.Errorf("no blocked FreezeWindow event")
+	})
+	time.Sleep(time.Second)
+	if owned := apply.OwnedResources(getDeploy(t, name)); !owned[corev1.ResourceCPU] {
+		t.Fatal("ownership released during a freeze")
+	}
+	if n := countEvents(name, hubclient.EventReleased, v1alpha1.ReasonModeChanged); n != 0 {
+		t.Fatalf("released during a freeze: %d", n)
+	}
+	if err := k8s.Delete(testCtx, p); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, 20*time.Second, "released after the freeze", wantPhase(name, v1alpha1.PhaseReleased))
+	eventually(t, 5*time.Second, "released event", wantEvent(name, hubclient.EventReleased, v1alpha1.ReasonModeChanged))
+	time.Sleep(time.Second)
+	if owned := apply.OwnedResources(getDeploy(t, name)); len(owned) != 0 {
+		t.Fatalf("still owned after the freeze: %v", owned)
+	}
+	if n := countEvents(name, hubclient.EventReleased, v1alpha1.ReasonModeChanged); n != 1 {
+		for _, e := range eventsFor(name) {
+			t.Logf("event %s %s %s", e.Type, e.Reason, e.Message)
+		}
+		t.Fatalf("released events: %d", n)
+	}
+}

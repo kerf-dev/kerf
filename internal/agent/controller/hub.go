@@ -343,14 +343,29 @@ func (p *Puller) Start(ctx context.Context) error {
 		retry = min(retry*2, p.PullInterval)
 		return d
 	}
-	pull := time.NewTimer(next(p.pullOnce(ctx)))
+	// After a successful pull a full status batch follows a moment later, so that it carries the
+	// reconciles the pull triggered. It is a timer, not a sleep: changed statuses and events keep
+	// flowing every ReportInterval meanwhile.
+	var fullFlush <-chan time.Time
+	afterPull := func(ok bool) time.Duration {
+		if ok {
+			fullFlush = time.After(2 * time.Second)
+		}
+		return next(ok)
+	}
+	pull := time.NewTimer(afterPull(p.pullOnce(ctx)))
 	defer pull.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-pull.C:
-			pull.Reset(next(p.pullOnce(ctx)))
+			pull.Reset(afterPull(p.pullOnce(ctx)))
+		case <-fullFlush:
+			fullFlush = nil
+			if err := p.Reporter.Flush(ctx, true); err != nil {
+				p.Log.WarnContext(ctx, "report to hub failed", "err", err)
+			}
 		case <-report.C:
 			if err := p.Reporter.Flush(ctx, false); err != nil {
 				p.Log.DebugContext(ctx, "report to hub failed", "err", err)
@@ -378,17 +393,5 @@ func (p *Puller) pullOnce(ctx context.Context) bool {
 	}
 	p.Store.markAttempted()
 	p.Trigger()
-	ok := err == nil || errors.Is(err, hubclient.ErrNotModified)
-	if ok {
-		// Give the reconciles a moment so the full batch carries their results.
-		select {
-		case <-ctx.Done():
-			return ok
-		case <-time.After(2 * time.Second):
-		}
-		if err := p.Reporter.Flush(ctx, true); err != nil {
-			p.Log.WarnContext(ctx, "report to hub failed", "err", err)
-		}
-	}
-	return ok
+	return err == nil || errors.Is(err, hubclient.ErrNotModified)
 }

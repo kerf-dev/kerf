@@ -37,6 +37,10 @@ spec:
     - jsonPath: .status.effective.memoryMode
       name: Memory
       type: string
+    - jsonPath: .status.nextWindow
+      name: Next Window
+      priority: 1
+      type: date
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -367,6 +371,11 @@ spec:
                 - profile
                 - strategy
                 type: object
+              nextWindow:
+                description: NextWindow is when the next maintenance window opens,
+                  set while the phase is Deferred.
+                format: date-time
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the spec generation the status
                   refers to.
@@ -381,6 +390,7 @@ spec:
                 - Blocked
                 - RolledBack
                 - Released
+                - Deferred
                 type: string
               previous:
                 description: Previous holds the values that were live before the most

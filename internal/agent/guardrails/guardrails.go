@@ -45,6 +45,9 @@ const (
 	Blocked Outcome = "blocked"
 	// NoRecommendation: the hub has no recommendation for the workload.
 	NoRecommendation Outcome = "none"
+	// Deferred: strategy deferred, a change passes every guardrail, and no maintenance window is
+	// open; it is applied when the next one opens (reason OutsideMaintenanceWindow, WO-10).
+	Deferred Outcome = "deferred"
 )
 
 // Input is everything Evaluate looks at.
@@ -156,12 +159,6 @@ func Evaluate(in Input) Decision {
 	} else if err != nil {
 		return block(v1alpha1.ReasonFreezeWindow, "invalid freeze window (treated as frozen): %v", err)
 	}
-	if in.Strategy == v1alpha1.StrategyDeferred {
-		if open, _ := policy.InWindow(eff.MaintenanceWindows, in.Now); !open {
-			return block(v1alpha1.ReasonOutsideMaintenanceWindow, "strategy deferred and no maintenance window is open")
-		}
-	}
-
 	auto := map[string]bool{
 		"cpu":    eff.CPUMode == v1alpha1.ModeAutoPatch,
 		"memory": eff.MemoryMode == v1alpha1.ModeAutoPatch,
@@ -186,6 +183,16 @@ func Evaluate(in Input) Decision {
 		d.Outcome, d.Reason = Blocked, v1alpha1.ReasonCooldown
 		d.Message = fmt.Sprintf("rolled back at %s; decreases of %s blocked for %s", in.RolledBackAt.UTC().Format(time.RFC3339), resList(in.RolledBackResources), eff.Cooldown)
 		return d
+	}
+	if in.Strategy == v1alpha1.StrategyDeferred {
+		if open, _ := policy.InWindow(eff.MaintenanceWindows, in.Now); !open {
+			d.Outcome, d.Reason = Deferred, v1alpha1.ReasonOutsideMaintenanceWindow
+			d.Message = "strategy deferred: waiting for the next maintenance window"
+			if len(eff.MaintenanceWindows) == 0 {
+				d.Message = "strategy deferred but no maintenance window is configured"
+			}
+			return d
+		}
 	}
 	d.Outcome, d.Reason = Apply, v1alpha1.ReasonRecommendationApplied
 	return d

@@ -123,7 +123,9 @@ type ApplyPolicy struct {
 	// +kubebuilder:validation:MaxItems=16
 	// +listType=atomic
 	MaintenanceWindows []TimeWindow `json:"maintenanceWindows,omitempty"`
-	// FreezeWindows are times in which no strategy may apply changes. Rollbacks are still allowed.
+	// FreezeWindows are times in which no strategy may apply changes, and no field ownership is
+	// released. Rollbacks (health watch) are still allowed. A cluster-wide freeze configured on the
+	// agent applies in addition to these and cannot be overridden by a policy.
 	// +optional
 	// +kubebuilder:validation:MaxItems=16
 	// +listType=atomic

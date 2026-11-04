@@ -188,6 +188,11 @@ export const PHASE_INFO: Record<
     variant: 'secondary',
     icon: UnlinkIcon,
   },
+  Deferred: {
+    desc: 'Strategy deferred: the change waits for the next maintenance window.',
+    variant: 'info',
+    icon: AlarmClockIcon,
+  },
 }
 
 export function PhaseBadge({ phase, reason }: { phase: Phase; reason?: string }) {
