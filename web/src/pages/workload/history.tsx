@@ -1,7 +1,8 @@
-import { HistoryIcon, SparklesIcon } from 'lucide-react'
+import { HistoryIcon, SettingsIcon, SparklesIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useHistory } from '@/api/queries'
-import type { Resources, WorkloadRecommendation } from '@/api/types'
+import type { ConfigChange, Resources, WorkloadRecommendation } from '@/api/types'
+import { actionLabel } from '@/components/admin/config-audit'
 import { EVENT_INFO, EventTypeBadge, Savings } from '@/components/domain'
 import { EmptyState, ErrorState } from '@/components/states'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,10 @@ import { formatDateTime, formatPercent, formatQuantity, relativeTime } from '@/l
 import { collapseEvents, collapseRecommendations, type EventRun, type RecRun } from '@/lib/collapse'
 import { cn } from '@/lib/utils'
 
-type Item = { kind: 'rec'; time: string; run: RecRun } | { kind: 'event'; time: string; run: EventRun }
+type Item =
+  | { kind: 'rec'; time: string; run: RecRun }
+  | { kind: 'event'; time: string; run: EventRun }
+  | { kind: 'config'; time: string; change: ConfigChange }
 
 export function ResourceDiff({ from, to }: { from?: Resources; to?: Resources }) {
   const rows: [string, 'cpu' | 'memory', 'requests' | 'limits'][] = [
@@ -60,10 +64,16 @@ export function HistoryCard({ id }: { id: string }) {
         time: run.latest.time,
         run,
       })),
+      // Overrides and approvals made in the admin area (D-022, D-024).
+      ...(history.data.configChanges ?? []).map((change) => ({
+        kind: 'config' as const,
+        time: change.time,
+        change,
+      })),
     ]
     return out
       .sort((a, b) => b.time.localeCompare(a.time))
-      .filter((x) => filter === 'all' || (filter === 'events' ? x.kind === 'event' : x.kind === 'rec'))
+      .filter((x) => filter === 'all' || (filter === 'events' ? x.kind !== 'rec' : x.kind === 'rec'))
   }, [history.data, filter])
 
   return (
@@ -118,10 +128,22 @@ export function HistoryCard({ id }: { id: string }) {
               <span aria-hidden className="absolute top-3 bottom-3 left-3 w-px bg-border" />
               {items.slice(0, limit).map((it) => (
                 <li
-                  key={it.kind === 'rec' ? `r-${it.run.latest.id}` : `e-${it.run.latest.id}`}
+                  key={
+                    it.kind === 'rec'
+                      ? `r-${it.run.latest.id}`
+                      : it.kind === 'event'
+                        ? `e-${it.run.latest.id}`
+                        : `c-${it.change.id}`
+                  }
                   className="relative flex gap-3 pb-5 last:pb-0"
                 >
-                  {it.kind === 'rec' ? <RecItem run={it.run} /> : <EventItem run={it.run} />}
+                  {it.kind === 'rec' ? (
+                    <RecItem run={it.run} />
+                  ) : it.kind === 'event' ? (
+                    <EventItem run={it.run} />
+                  ) : (
+                    <ConfigItem c={it.change} />
+                  )}
                 </li>
               ))}
             </ol>
@@ -199,6 +221,26 @@ function RecItem({ run }: { run: RecRun }) {
             ) : null}
           </div>
         ) : null}
+      </div>
+    </>
+  )
+}
+
+function ConfigItem({ c }: { c: ConfigChange }) {
+  return (
+    <>
+      <span className="z-10 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary">
+        <SettingsIcon className="size-3" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5 text-[13px]">
+            <span className="font-medium">{actionLabel(c.action)}</span>
+            <span className="text-xs text-muted-foreground">by {c.actor.name}</span>
+          </div>
+          <When t={c.time} />
+        </div>
+        {c.reason ? <p className="mt-1 text-[13px] text-pretty text-muted-foreground">“{c.reason}”</p> : null}
       </div>
     </>
   )

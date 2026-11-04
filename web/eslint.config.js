@@ -37,6 +37,7 @@ export default tseslint.config(
       'src/components/domain.tsx',
       'src/components/states.tsx',
       'src/components/layout/**',
+      'src/components/admin/**',
       'src/pages/workload/history.tsx',
     ],
     rules: { 'react-refresh/only-export-components': 'off' },

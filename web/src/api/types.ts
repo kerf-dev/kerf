@@ -53,7 +53,15 @@ export type SavingsTrendQuery = NonNullable<operations['getSavingsTrend']['param
 
 export const WORKLOAD_KINDS: WorkloadKind[] = ['Deployment', 'StatefulSet', 'DaemonSet', 'CronJob']
 export const MODES: Mode[] = ['off', 'audit', 'auto-patch']
-export const PHASES: Phase[] = ['Pending', 'Applying', 'Applied', 'Blocked', 'RolledBack', 'Released', 'Deferred']
+export const PHASES: Phase[] = [
+  'Pending',
+  'Applying',
+  'Applied',
+  'Blocked',
+  'RolledBack',
+  'Released',
+  'Deferred',
+]
 export const RISK_FLAGS: RiskFlag[] = [
   'throttled',
   'oom-killed',
@@ -73,3 +81,82 @@ export const EVENT_TYPES: EventType[] = [
   'released',
   'failed',
 ]
+
+// ---- Admin area (WO-19 contract: docs/contracts/admin.md, readiness.md) ----
+export type UserRole = S['UserRole']
+export type TokenRole = S['TokenRole']
+export type Me = S['Me']
+export type User = S['User']
+export type TokenInfo = S['TokenInfo']
+export type TokenCreated = S['TokenCreated']
+export type Actor = S['Actor']
+export type RecommenderSettings = S['RecommenderSettings']
+export type RecommenderProfileSettings = S['RecommenderProfileSettings']
+export type RecommenderSettingsDoc = S['RecommenderSettingsDoc']
+export type PricingSettings = S['PricingSettings']
+export type PricingSettingsDoc = S['PricingSettingsDoc']
+export type ClusterPricingAdjustment = S['ClusterPricingAdjustment']
+export type Settings = S['Settings']
+export type SettingsVersion = S['SettingsVersion']
+export type HubPolicyType = S['HubPolicyType']
+export type ClusterPolicySource = S['ClusterPolicySource']
+export type PolicyOrigin = S['PolicyOrigin']
+export type Environment = S['Environment']
+export type PolicySelector = S['PolicySelector']
+export type NamespacedWorkloadRef = S['NamespacedWorkloadRef']
+export type TimeWindow = S['TimeWindow']
+export type RightsizingPolicySpec = S['RightsizingPolicySpec']
+export type PolicyInput = S['PolicyInput']
+export type PolicyDraft = S['PolicyDraft']
+export type AdminPolicy = S['AdminPolicy']
+export type PolicyVersion = S['PolicyVersion']
+export type PolicyInventoryItem = S['PolicyInventoryItem']
+export type ClusterPolicyInventory = S['ClusterPolicyInventory']
+export type PolicyChange = S['PolicyChange']
+export type ImpactPreview = S['ImpactPreview']
+export type ImpactItem = S['ImpactItem']
+export type Automation = S['Automation']
+export type AutomationUpdate = S['AutomationUpdate']
+export type FleetAutomation = S['FleetAutomation']
+export type AgentConfigSync = S['AgentConfigSync']
+export type ClusterAdmin = S['ClusterAdmin']
+export type ClusterCreate = S['ClusterCreate']
+export type ClusterCreated = S['ClusterCreated']
+export type ClusterUpdate = S['ClusterUpdate']
+export type Approval = S['Approval']
+export type WorkloadOverrideInput = S['WorkloadOverrideInput']
+export type LayerSource = S['LayerSource']
+export type PolicyLayer = S['PolicyLayer']
+export type EffectiveField = S['EffectiveField']
+export type EffectivePolicy = S['EffectivePolicy']
+export type ConfigTargetType = S['ConfigTargetType']
+export type ConfigAction = S['ConfigAction']
+export type ConfigChange = S['ConfigChange']
+export type DatasourceType = S['DatasourceType']
+export type DatasourceAuthType = S['DatasourceAuthType']
+export type DatasourceInput = S['DatasourceInput']
+export type Datasource = S['Datasource']
+export type MetricsBinding = S['MetricsBinding']
+export type DatasourceTestResult = S['DatasourceTestResult']
+export type ReadinessState = S['ReadinessState']
+export type ReadinessSeverity = S['ReadinessSeverity']
+export type ReadinessStatus = S['ReadinessStatus']
+export type ReadinessCategory = S['ReadinessCategory']
+export type ReadinessCheck = S['ReadinessCheck']
+export type AgentCapability = S['AgentCapability']
+export type ReadinessSummary = S['ReadinessSummary']
+export type ClusterReadiness = S['ClusterReadiness']
+export type ReadinessHistoryEntry = S['ReadinessHistoryEntry']
+export type InstallFormat = S['InstallFormat']
+export type InstallSnippet = S['InstallSnippet']
+export type ConfigAuditQuery = NonNullable<operations['queryConfigAudit']['parameters']['query']>
+
+export const USER_ROLES: UserRole[] = ['viewer', 'operator', 'admin']
+export const READINESS_STATES: ReadinessState[] = [
+  'Registered',
+  'AgentConnected',
+  'MetricsOK',
+  'ReadyAudit',
+  'AutomationReady',
+]
+export type PasswordResetResult = S['PasswordResetResult']

@@ -44,6 +44,8 @@ import {
 import { cn } from '@/lib/utils'
 import { workloadId } from '@/lib/workload-id'
 import type { WorkloadKind } from '@/api/types'
+import { ReadinessReason } from '@/components/admin/readiness-reason'
+import { AutomationActions } from './automation-actions'
 import { HistoryCard } from './history'
 import { UsageChartCard } from './usage-chart'
 import { ConfidenceCard, WhyPanel } from './why-panel'
@@ -113,6 +115,7 @@ export default function WorkloadPage() {
                 <>
                   First seen {relativeTime(w.firstSeenAt)}. The hub needs enough usage samples before it
                   recommends values; the first recommendation usually appears within a day.
+                  <ReadinessReason cluster={w.cluster} />
                 </>
               }
               className="py-16"
@@ -128,10 +131,10 @@ export default function WorkloadPage() {
             <HistoryCard id={id} />
           </div>
           <div className="min-w-0 space-y-4">
+            <AutomationCard w={w} />
             <WhyPanel rec={w.recommendation} />
             <ConfidenceCard rec={w.recommendation} />
             <RiskCard w={w} />
-            <AutomationCard w={w} />
           </div>
         </div>
       )}
@@ -495,7 +498,7 @@ function AutomationCard({ w }: { w: WorkloadDetail }) {
       <CardHeader>
         <div>
           <CardTitle>Automation</CardTitle>
-          <CardDescription>Effective modes and the policy that set them</CardDescription>
+          <CardDescription>Effective modes, the policy that set them, and actions</CardDescription>
         </div>
       </CardHeader>
       <CardContent className="space-y-3 pt-3">
@@ -524,6 +527,9 @@ function AutomationCard({ w }: { w: WorkloadDetail }) {
               )
             }
           />
+          {s?.override ? (
+            <KV k="Override" v={<span className="font-mono text-xs">{s.override}</span>} />
+          ) : null}
           {s?.strategy ? <KV k="Strategy" v={s.strategy} /> : null}
           {settings?.profile ? <KV k="Profile" v={settings.profile} /> : null}
           {settings?.cpuLimits ? (
@@ -557,6 +563,7 @@ function AutomationCard({ w }: { w: WorkloadDetail }) {
             The agent has not reported this workload yet; modes shown are the global default.
           </p>
         ) : null}
+        <AutomationActions w={w} />
       </CardContent>
     </Card>
   )
