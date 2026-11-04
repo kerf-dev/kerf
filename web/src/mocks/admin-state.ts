@@ -610,6 +610,7 @@ export function seedAdmin(db: MockDb): AdminState {
       createdAt: t(205),
       lastUsedAt: t(0, 0.01),
     })
+    tok({ role: 'pricing', description: 'pricing service', createdAt: t(1), lastUsedAt: t(0, 0.05) })
     tok({
       role: 'admin',
       description: 'ci recompute',

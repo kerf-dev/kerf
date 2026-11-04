@@ -1796,7 +1796,7 @@ export const adminHandlers = [
     const r = reasonError(b.reason)
     if (r) return r
     const errs: string[] = []
-    if (!['agent', 'ui', 'admin'].includes(b.role))
+    if (!['agent', 'ui', 'admin', 'pricing'].includes(b.role))
       errs.push(`role: Unsupported value: ${JSON.stringify(b.role)}`)
     if (!b.description?.trim() || b.description.length > 256)
       errs.push('description: Required value: 1–256 characters')

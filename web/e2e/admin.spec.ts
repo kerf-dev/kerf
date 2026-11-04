@@ -292,7 +292,8 @@ test.describe('WO-22b polish', () => {
   })
 
   test('/admin/clusters redirects to the clusters pages', async ({ page }) => {
-    await login(page, 'admin', '/admin/clusters')
+    await login(page, 'admin')
+    await page.goto('/admin/clusters')
     await expect(page).toHaveURL(/\/clusters$/)
     await page.goto('/admin/clusters/prod-eu-west-1')
     await expect(page).toHaveURL(/\/clusters\/prod-eu-west-1$/)
