@@ -204,7 +204,7 @@ var crdKinds = []struct {
 
 func (c *Checker) checkCRDs(ctx context.Context, r *result) {
 	gv := v1alpha1.GroupVersion.String()
-	rem := "kubectl apply --server-side --force-conflicts -f api/crds/   # the CRDs of the agent chart's version (Helm installs crds/ only on first install)"
+	rem := "kubectl apply --server-side --force-conflicts -f api/crds/   # or upgrade the agent chart: it renders the CRDs as templates"
 	res, err := c.Discovery.ServerResourcesForGroupVersion(gv)
 	if err != nil && !apierrors.IsNotFound(err) {
 		r.add(rd.CheckCRDs, rd.StatusUnknown, "discovery failed: "+err.Error(), "", "", nil)

@@ -26,16 +26,19 @@ imagePullSecrets: []
 # Set by Tilt (unused by the hub, which serves every cluster).
 clusterName: ""
 
-# More than 1 needs the hub's leader election (WO-18a, D-028): only the leader runs the
-# recommender, readiness checks and sweeps; every replica serves the API. Then also set
-# updateStrategy to RollingUpdate.
-replicaCount: 1
+# The hub elects a leader on Postgres (WO-18a, D-028): only the leader runs the recommender,
+# readiness checks and sweeps; every replica serves the API. The database URL must reach Postgres
+# directly or through a session-mode pooler (the leader lock and LISTEN need a real session).
+replicaCount: 2
 
-# Recreate: never two hub pods side by side during a rollout (single-replica hubs without leader
-# election would both run the recommender). With leader election (WO-18a) use
-#   {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
 updateStrategy:
-  type: Recreate
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+# Leader stop (<= 15 s) + HTTP drain (10 s) on SIGTERM; keep >= 30.
+terminationGracePeriodSeconds: 30
 
 # Created only when more than one hub pod can run (replicaCount > 1 or autoscaling.minReplicas > 1).
 podDisruptionBudget:
