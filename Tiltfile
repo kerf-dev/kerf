@@ -15,6 +15,7 @@ COMPONENTS = [
     ('pricing', ['ro-hub'], []),
     ('agent', ['ro-spoke-1', 'ro-spoke-2'], []),
     ('webhook', ['ro-spoke-1', 'ro-spoke-2'], []),
+    ('web', ['ro-hub'], ['web/src', 'web/nginx', 'web/Dockerfile', 'web/package.json']),
 ]
 
 # Tilt gives local_resource commands a kubeconfig holding only its own context; ours need all three
@@ -34,7 +35,7 @@ for name, clusters, extra in COMPONENTS:
         cmd='dev/scripts/tilt-deploy.sh %s %s' % (name, ' '.join(clusters)),
         deps=existing([chart, 'cmd/' + name, 'internal/' + name, 'api', 'go.mod', 'go.sum',
                        'build/' + name, 'Dockerfile'] + extra),
-        ignore=['**/*_test.go'],
+        ignore=['**/*_test.go', 'web/node_modules', 'web/dist'],
         labels=['components'],
         allow_parallel=True,
         env=KUBE_ENV,
