@@ -35,6 +35,7 @@ import {
   ReadOnlyNotice,
   SyncBadge,
 } from '@/components/admin/common'
+import { GitOnlyNotice } from '@/components/admin/git-notice'
 import { ImpactPreview } from '@/components/admin/impact-preview'
 import { AgentTokens, InstallSnippets, Pending } from '@/components/admin/install'
 import { PauseDialog } from '@/components/admin/pause-dialog'
@@ -353,7 +354,9 @@ function SettingsTab({ c }: { c: ClusterAdmin }) {
   const [spec, setSpec] = useState<RightsizingPolicySpec>(base)
   const [confirm, setConfirm] = useState(false)
   useEffect(() => setSpec(base), [base])
-  const readOnly = !auth.can('admin')
+  // Git-only clusters get no hub policies (D-022): their defaults are managed in Git.
+  const gitOnly = c.policySource === 'git'
+  const readOnly = !auth.can('admin') || gitOnly
   const errors = validateSpec(spec, 'cluster-default')
   const changed = changedPaths(base, spec)
   const preview = usePreview(
@@ -382,7 +385,11 @@ function SettingsTab({ c }: { c: ClusterAdmin }) {
   if (!all.data) return <Skeleton className="h-96 rounded-xl" />
   return (
     <div className="space-y-4">
-      {readOnly ? <ReadOnlyNotice need="admin" signedIn={auth.signedIn} /> : null}
+      {gitOnly ? (
+        <GitOnlyNotice clusters={[c.name]} what="Cluster defaults set here" />
+      ) : readOnly ? (
+        <ReadOnlyNotice need="admin" signedIn={auth.signedIn} />
+      ) : null}
       <p className="text-[13px] text-muted-foreground">
         Cluster defaults (<code className="font-mono">ro-cluster-defaults</code>) sit between the global
         defaults and policies. Each field shows the global value it differs from.

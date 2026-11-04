@@ -542,7 +542,7 @@ export function seedAdmin(db: MockDb): AdminState {
     'dr-eu-central-1': {
       environment: 'non-prod',
       owner: 'sre',
-      policySource: 'hub',
+      policySource: 'git',
       region: 'eu-central-1',
       version: 2,
       updatedAt: t(14),

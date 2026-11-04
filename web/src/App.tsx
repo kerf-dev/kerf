@@ -1,6 +1,6 @@
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { lazy, Suspense } from 'react'
-import { createBrowserRouter, RouterProvider } from 'react-router'
+import { createBrowserRouter, Navigate, RouterProvider, useParams } from 'react-router'
 import { ME_KEY } from '@/api/auth'
 import { RequireRole } from '@/components/admin/require-role'
 import { AppShell } from '@/components/layout/app-shell'
@@ -48,6 +48,12 @@ const queryClient: QueryClient = new QueryClient({
 
 const s = (el: React.ReactNode) => <Suspense fallback={<PageFallback />}>{el}</Suspense>
 
+/** The cluster admin views live under /clusters (list, detail tabs, onboarding); keep old links working. */
+function ClusterAdminRedirect() {
+  const { cluster } = useParams()
+  return <Navigate to={cluster ? `/clusters/${encodeURIComponent(cluster)}` : '/clusters'} replace />
+}
+
 const admin = (el: React.ReactNode, min: 'operator' | 'admin' = 'admin') =>
   s(<RequireRole min={min}>{el}</RequireRole>)
 
@@ -64,6 +70,8 @@ const router = createBrowserRouter([
       { path: 'clusters/new', element: admin(<ClusterWizardPage />) },
       { path: 'clusters/:cluster', element: s(<ClusterDetailPage />) },
       { path: 'admin', element: admin(<AutomationPage />, 'operator') },
+      { path: 'admin/clusters', element: <ClusterAdminRedirect /> },
+      { path: 'admin/clusters/:cluster', element: <ClusterAdminRedirect /> },
       { path: 'admin/policies', element: admin(<PoliciesPage />, 'operator') },
       { path: 'admin/policies/new', element: admin(<PolicyPage />) },
       { path: 'admin/policies/:policyId', element: admin(<PolicyPage />, 'operator') },
