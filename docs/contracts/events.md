@@ -54,8 +54,8 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | `Cooldown` | Last change or rollback was less than `guardrails.cooldown` ago. |
 | `HPACoupled` | Workload has a CPU/memory-utilization HPA (D-011). |
 | `Throttled` / `OOMKilled` | Decrease refused because the resource is under pressure. |
-| `FreezeWindow` | Inside an `apply.freezeWindows` entry. |
-| `OutsideMaintenanceWindow` | Strategy `deferred` and no maintenance window is open. |
+| `FreezeWindow` | Inside an `apply.freezeWindows` entry or the cluster-wide freeze: no change and no release of field ownership; health-watch rollbacks still run (WO-10). |
+| `OutsideMaintenanceWindow` | Strategy `deferred` and no maintenance window is open: the change is queued (phase `Deferred`, `status.nextWindow`) and applied as a rollout when the next window opens (WO-10). |
 | `UnsupportedNode` | In-place refused: node has swap or a static CPU/Memory Manager policy (D-007). |
 | `RestartPolicyRequired` | Memory change on a JVM/Python container whose `resizePolicy` is not `RestartContainer` and strategy is `in-place` (D-007). |
 | `HubUnreachable` | No fresh recommendation because the hub cannot be reached; nothing new is applied. |

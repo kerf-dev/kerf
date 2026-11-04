@@ -73,8 +73,10 @@ spec:
                       to rollout. Infeasible resizes fall back immediately. Global default: 10m.
                     type: string
                   freezeWindows:
-                    description: FreezeWindows are times in which no strategy may
-                      apply changes. Rollbacks are still allowed.
+                    description: |-
+                      FreezeWindows are times in which no strategy may apply changes, and no field ownership is
+                      released. Rollbacks (health watch) are still allowed. A cluster-wide freeze configured on the
+                      agent applies in addition to these and cannot be overridden by a policy.
                     items:
                       description: TimeWindow is either recurring (schedule + duration)
                         or one-off (start + end).

@@ -103,7 +103,7 @@ Workload labels below = `cluster, namespace, workload_kind, workload`.
 | Series | Type | Extra labels | Meaning |
 |---|---|---|---|
 | `ro_workload_mode` | gauge | `resource` (`cpu`\|`memory`), `mode` (`off`\|`audit`\|`auto-patch`), `source` (`global-default`\|`cluster-default`\|`policy`\|`annotation`) | 1 for the effective mode. Workloads the agent never reported have `mode="audit"`, `source="global-default"`. |
-| `ro_workload_phase` | gauge | `phase` (`Pending`\|`Applying`\|`Applied`\|`Blocked`\|`RolledBack`\|`Released`) | 1 for the current phase |
+| `ro_workload_phase` | gauge | `phase` (`Pending`\|`Applying`\|`Applied`\|`Blocked`\|`RolledBack`\|`Released`\|`Deferred`) | 1 for the current phase |
 | `ro_actions_total` | counter | `type` (event type), `strategy`, `resource` (`cpu`\|`memory`\|`""`), `reason` | incremented once per event stored by the hub (duplicates are not counted); one increment per resource listed in the event. Carries the workload labels like every hub series (the event's workload). |
 
 `ro_actions_total` lives in the hub process and resets on restart; always use `increase()`/`rate()`.

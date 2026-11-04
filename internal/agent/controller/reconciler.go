@@ -31,6 +31,7 @@ import (
 	"github.com/tomer1983/resource-optimizer/internal/agent/guardrails"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 	"github.com/tomer1983/resource-optimizer/internal/agent/policy"
+	"github.com/tomer1983/resource-optimizer/internal/agent/windows"
 	"github.com/tomer1983/resource-optimizer/internal/agent/workload"
 	"github.com/tomer1983/resource-optimizer/internal/health"
 )
@@ -58,6 +59,8 @@ type Config struct {
 	UnsupportedNodeSelectors []map[string]string
 	// ApplyingRequeue is how often an in-progress in-place resize is checked.
 	ApplyingRequeue time.Duration
+	// Freeze is the cluster-wide freeze (WO-10): added to every policy's freeze windows.
+	Freeze windows.Freeze
 }
 
 // Reconciler reconciles one workload per request. Request.Name is "<Kind>/<name>".
@@ -134,6 +137,11 @@ type run struct {
 	prevSpec v1alpha1.RightsizingRecommendationSpec
 	reason   string
 	message  string
+	// frozen is true inside a freeze window: nothing is written except rollbacks (WO-10).
+	frozen bool
+	// holdEffective keeps the stored effective policy while a release waits for a freeze to end,
+	// so the release (and its event) still happens afterwards.
+	holdEffective bool
 }
 
 func (w *run) reconcile() (ctrl.Result, error) {
@@ -153,6 +161,10 @@ func (w *run) reconcile() (ctrl.Result, error) {
 				w.eff.Warnings = append(w.eff.Warnings, "agent is read-only: auto-patch capped at audit")
 			}
 		}
+	}
+	w.eff.FreezeWindows = r.Cfg.Freeze.Merge(w.eff.FreezeWindows)
+	if open, err := windows.Open(w.eff.FreezeWindows, w.now); open || err != nil {
+		w.frozen = true // an invalid freeze window counts as frozen, like in the guardrails
 	}
 	for _, msg := range w.eff.Warnings {
 		w.log.Warn("policy", "warning", msg)
@@ -222,6 +234,14 @@ func (w *run) release() error {
 		if !want[res] {
 			drop = true
 		}
+	}
+	if drop && w.frozen && !r.Cfg.ReadOnly {
+		// Releasing hands the fields back to Argo CD, which then changes the workload: wait.
+		w.holdEffective = true
+		w.reason, w.message = v1alpha1.ReasonFreezeWindow, "inside a freeze window: field ownership is released when it ends"
+		w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: v1alpha1.ReasonFreezeWindow, Message: w.message,
+			Resources: keys(owned)}, "release", nil)
+		return nil
 	}
 	if drop && !r.Cfg.ReadOnly {
 		if _, err := apply.Release(w.ctx, r.Client, w.obj); err != nil {
@@ -396,6 +416,9 @@ func (w *run) decide() (ctrl.Result, error) {
 	}
 
 	switch dec.Outcome {
+	case guardrails.Deferred:
+		return w.deferChange(dec)
+
 	case guardrails.NoRecommendation:
 		w.reason, w.message = condReasonPending, dec.Message
 		return ctrl.Result{}, nil
@@ -500,7 +523,7 @@ func (w *run) liveValues() []v1alpha1.ContainerResources {
 func (w *run) keepLive() (ctrl.Result, error) {
 	r := w.r
 	own := w.ownedTargets()
-	if len(own) == 0 || r.Cfg.ReadOnly {
+	if len(own) == 0 || r.Cfg.ReadOnly || w.frozen {
 		return ctrl.Result{}, nil
 	}
 	// The health watch (WO-08) may have rolled this change back a moment ago and the cached RSR
@@ -605,6 +628,33 @@ func (w *run) ownedTargets() map[corev1.ResourceName]bool {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Deferred (WO-10)
+
+// deferChange queues a change of a deferred workload: the RSR carries the guardrailed values,
+// phase Deferred and the next maintenance window; the reconcile is requeued for when it opens,
+// and the change is then applied as a rollout (re-evaluated against the guardrails first).
+func (w *run) deferChange(dec guardrails.Decision) (ctrl.Result, error) {
+	if err := w.upsertSpec(dec.Targets, v1alpha1.StrategyDeferred); err != nil {
+		return ctrl.Result{}, err
+	}
+	w.rsr.Status.Phase = v1alpha1.PhaseDeferred
+	w.reason, w.message = dec.Reason, dec.Message
+	res := ctrl.Result{}
+	if next, ok := windows.Next(w.eff.MaintenanceWindows, w.now); ok {
+		t := metav1.NewTime(next)
+		w.rsr.Status.NextWindow = &t
+		w.message = fmt.Sprintf("strategy deferred: %s applied in the next maintenance window at %s",
+			guardrails.Summary(dec.Changes), next.UTC().Format(time.RFC3339))
+		res.RequeueAfter = next.Sub(w.now) + time.Second
+	} else {
+		w.rsr.Status.NextWindow = nil
+	}
+	w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: dec.Reason, Message: w.message,
+		RecommendationID: w.rec.ID, Strategy: string(v1alpha1.StrategyDeferred)}, slotDecision, recValues(w.rec))
+	return res, nil
+}
+
+// ---------------------------------------------------------------------------------------------
 // Rollout
 
 func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous []v1alpha1.ContainerResources,
@@ -646,7 +696,7 @@ func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous 
 	w.reason = v1alpha1.ReasonRecommendationApplied
 	w.message = "pod template patched, rollout started: " + guardrails.Summary(changes)
 	w.emit(hubclient.Event{Type: hubclient.EventApplied, Reason: v1alpha1.ReasonRecommendationApplied,
-		RecommendationID: recID, Strategy: string(v1alpha1.StrategyRollout), Resources: resourcesOf(changes),
+		RecommendationID: recID, Strategy: string(strategy), Resources: resourcesOf(changes),
 		Containers: changes, Message: w.message}, "", nil)
 	w.log.Info("applied (rollout)", "recommendation", recID, "changes", guardrails.Summary(changes))
 	return nil
@@ -718,9 +768,16 @@ func (w *run) progressInPlace() (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 	done := true
+	frozenWait := false
 	var deferred []string
 	for i := range pods {
 		st := apply.ObserveResize(&pods[i], targets, own)
+		if w.frozen && st.State != apply.ResizeDone && st.State != apply.ResizeInProgress {
+			// Inside a freeze only watch what was already submitted; no new resize, no fallback.
+			done = false
+			frozenWait = true
+			continue
+		}
 		switch st.State {
 		case apply.ResizeDone:
 			continue
@@ -756,6 +813,9 @@ func (w *run) progressInPlace() (ctrl.Result, error) {
 		w.reason = condReasonApplying
 		if len(deferred) > 0 {
 			w.message = "resize deferred on " + strings.Join(deferred, ", ")
+		}
+		if frozenWait {
+			w.message = "inside a freeze window: remaining pods are resized when it ends"
 		}
 		if err := w.writeStatus(); err != nil {
 			return ctrl.Result{}, err
@@ -1004,7 +1064,12 @@ func (w *run) writeStatus() error {
 		st.Phase = v1alpha1.PhasePending
 	}
 	st.ObservedGeneration = w.rsr.Generation
-	st.Effective = w.eff.API()
+	if !w.holdEffective || st.Effective == nil {
+		st.Effective = w.eff.API()
+	}
+	if st.Phase != v1alpha1.PhaseDeferred {
+		st.NextWindow = nil
+	}
 	msg := fmt.Sprintf("policy %q; cpu %s (%s), memory %s (%s); strategy %s; profile %s",
 		w.eff.Policy, w.eff.CPUMode, w.eff.CPUModeSource, w.eff.MemoryMode, w.eff.MemoryModeSource, w.eff.Strategy, w.eff.Profile)
 	if len(w.eff.Warnings) > 0 {
@@ -1291,6 +1356,10 @@ func (w *run) report() {
 		if t := w.rsr.Status.AppliedAt; t != nil {
 			at := t.UTC()
 			st.AppliedAt = &at
+		}
+		if t := w.rsr.Status.NextWindow; t != nil {
+			nw := t.UTC()
+			st.NextWindow = &nw
 		}
 	} else if w.rec != nil {
 		st.RecommendationID = w.rec.ID

@@ -12,6 +12,8 @@ data:
 {{- else }}
     {}
 {{- end }}
+  freeze.yaml: |
+{{ toYaml (.Values.freeze | default dict) | indent 4 }}
 {{- if .Values.hub.tokenSecret.create }}
 ---
 apiVersion: v1
@@ -46,7 +48,7 @@ spec:
         # The agent must never be mutated by the webhook (WO-07).
         resource-optimizer.oz.io/skip-webhook: "true"
       annotations:
-        checksum/config: {{ toYaml .Values.clusterDefaults | sha256sum }}
+        checksum/config: {{ printf "%s%s" (toYaml .Values.clusterDefaults) (toYaml .Values.freeze) | sha256sum }}
         {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{ end }}
     spec:
       serviceAccountName: {{ include "agent.fullname" . }}
@@ -63,6 +65,7 @@ spec:
             - --hub-url={{ include "agent.hubURL" . }}
             - --hub-token-file=/var/run/secrets/resource-optimizer/hub/{{ .Values.hub.tokenSecret.key }}
             - --cluster-defaults=/etc/resource-optimizer/cluster-defaults.yaml
+            - --freeze-file=/etc/resource-optimizer/freeze.yaml
             - --pull-interval={{ .Values.pullInterval }}
             - --hub-stale-after={{ .Values.hubStaleAfter }}
             - --report-interval={{ .Values.reportInterval }}
