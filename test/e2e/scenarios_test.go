@@ -18,9 +18,13 @@ import (
 
 const deployment = "Deployment"
 
-// overprovisioned: requests 500m, burns ~5% of a core.
+// overCPU is the CPU request of the over-provisioned test workloads, which burn ~50m. Kept small:
+// all scenarios run at once on one 8-core spoke node next to ~2.6 cores of shared workloads.
+const overCPU = "250m"
+
+// overprovisioned: requests overCPU, burns ~5% of a core.
 func overprovisioned(name string) app {
-	return app{Name: name, CPULoad: 5, Requests: rl("500m", "64Mi"), Limits: rl("", "128Mi")}
+	return app{Name: name, CPULoad: 5, Requests: rl(overCPU, "64Mi"), Limits: rl("", "128Mi")}
 }
 
 // cpuBelow accepts a recommendation whose first container's CPU request is below limit.
@@ -93,8 +97,8 @@ func TestAudit(t *testing.T) {
 	before := snapshot(t, cl, ns, "web")
 	gen := getDeployment(t, cl, ns, "web").Generation
 
-	rec := waitHubRecommendation(t, cl, ns, deployment, "web", cpuBelow("500m"))
-	t.Logf("hub recommends cpu %s (current 500m)", rec.Containers[0].Recommended.Requests.CPU)
+	rec := waitHubRecommendation(t, cl, ns, deployment, "web", cpuBelow(overCPU))
+	t.Logf("hub recommends cpu %s (current %s)", rec.Containers[0].Recommended.Requests.CPU, overCPU)
 	// The agent has seen it and records why it does nothing.
 	waitReason(t, cl, ns, deployment, "web", v1alpha1.ReasonModeAudit, 3*time.Minute)
 	consistently(t, 45*time.Second, 5*time.Second, "audit leaves the workload alone", func() (bool, string) {
@@ -122,11 +126,11 @@ func TestInPlaceCPU(t *testing.T) {
 	deploy(t, cl, ns, a)
 	before := snapshot(t, cl, ns, "web")
 	gen := getDeployment(t, cl, ns, "web").Generation
-	armed(t, cl, ns, ns, "web", "500m", autoCPU(v1alpha1.StrategyInPlace))
+	armed(t, cl, ns, ns, "web", overCPU, autoCPU(v1alpha1.StrategyInPlace))
 
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	want := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
-	if want.Cmp(resource.MustParse("500m")) >= 0 {
+	if want.Cmp(resource.MustParse(overCPU)) >= 0 {
 		t.Fatalf("applied cpu request %s is not a decrease", want.String())
 	}
 	after := snapshot(t, cl, ns, "web")
@@ -153,7 +157,7 @@ func TestInPlaceCPU(t *testing.T) {
 		}
 	}
 	d := getDeployment(t, cl, ns, "web")
-	if d.Generation != gen || templateCPU(d).Cmp(resource.MustParse("500m")) != 0 {
+	if d.Generation != gen || templateCPU(d).Cmp(resource.MustParse(overCPU)) != 0 {
 		t.Errorf("deployment changed: generation %d -> %d, template cpu %s", gen, d.Generation, templateCPU(d).String())
 	}
 	waitEvent(t, cl, ns, "web", "applied", func(e auditEvent) bool { return e.Strategy == string(v1alpha1.StrategyInPlace) })
@@ -279,13 +283,13 @@ func TestRollout(t *testing.T) {
 	cl := env.Spoke1
 	ns := newNamespace(t, cl, "rollout")
 	deploy(t, cl, ns, overprovisioned("web"))
-	armed(t, cl, ns, ns, "web", "500m", autoCPU(v1alpha1.StrategyRollout))
+	armed(t, cl, ns, ns, "web", overCPU, autoCPU(v1alpha1.StrategyRollout))
 
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	want := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
 	waitReady(t, cl, ns, "web", 3*time.Minute)
 	d := getDeployment(t, cl, ns, "web")
-	if templateCPU(d).Cmp(want) != 0 || want.Cmp(resource.MustParse("500m")) >= 0 {
+	if templateCPU(d).Cmp(want) != 0 || want.Cmp(resource.MustParse(overCPU)) >= 0 {
 		t.Fatalf("template cpu %s, recommendation %s: want a decrease rolled out", templateCPU(d).String(), want.String())
 	}
 	if !ownsCPURequest(d.ManagedFields) {
@@ -317,7 +321,7 @@ func TestArgoCD(t *testing.T) {
 	app := argoApp(t, cl, ns)
 	waitAppSynced(t, cl, app, 4*time.Minute)
 	waitReady(t, cl, ns, "web", 3*time.Minute)
-	armed(t, cl, ns, ns, "web", "500m", autoCPU(v1alpha1.StrategyRollout))
+	armed(t, cl, ns, ns, "web", overCPU, autoCPU(v1alpha1.StrategyRollout))
 
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	applied := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
@@ -349,9 +353,9 @@ func TestArgoCD(t *testing.T) {
 			return !ownsCPURequest(d.ManagedFields), managers(d.ManagedFields)
 		})
 		hardSync(t, cl, app)
-		eventually(t, 3*time.Minute, 5*time.Second, "Git value 500m restored", func() (bool, string) {
+		eventually(t, 3*time.Minute, 5*time.Second, "Git value "+overCPU+" restored", func() (bool, string) {
 			got := templateCPU(getDeployment(t, cl, ns, "web"))
-			return got.Cmp(resource.MustParse("500m")) == 0, "template cpu " + got.String()
+			return got.Cmp(resource.MustParse(overCPU)) == 0, "template cpu " + got.String()
 		})
 		waitAppSynced(t, cl, app, 2*time.Minute)
 	})
@@ -416,13 +420,15 @@ func TestGuardrails(t *testing.T) {
 		spec := autoCPU(v1alpha1.StrategyInPlace)
 		spec.Guardrails.MaxChangePercent = ptr(int32(20))
 		// Wait for a recommendation well below the 20% cap so the cap is what limits the change.
-		armed(t, cl, ns, ns, "web", "300m", spec)
+		armed(t, cl, ns, ns, "web", "150m", spec)
 		rec := waitHubRecommendation(t, cl, ns, deployment, "web", nil)
 		r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 		applied := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
-		t.Logf("hub recommends %s, applied %s (max change 20%% of 500m)", rec.Containers[0].Recommended.Requests.CPU, applied.String())
-		if applied.Cmp(resource.MustParse("400m")) < 0 || applied.Cmp(resource.MustParse("500m")) >= 0 {
-			t.Fatalf("applied cpu %s, want a decrease capped at 20%% (400m..500m)", applied.String())
+		floor := resource.MustParse(overCPU)
+		floor.SetMilli(floor.MilliValue() * 80 / 100)
+		t.Logf("hub recommends %s, applied %s (max change 20%% of %s)", rec.Containers[0].Recommended.Requests.CPU, applied.String(), overCPU)
+		if applied.Cmp(floor) < 0 || applied.Cmp(resource.MustParse(overCPU)) >= 0 {
+			t.Fatalf("applied cpu %s, want a decrease capped at 20%% (%s..%s)", applied.String(), floor.String(), overCPU)
 		}
 	})
 }

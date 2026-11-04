@@ -126,11 +126,11 @@ func TestHubUnreachable(t *testing.T) {
 	pa := autoCPU(v1alpha1.StrategyInPlace)
 	pa.Selector.MatchLabels = map[string]string{"e2e-role": "applied"}
 	pa.Priority = 1001
-	armed(t, cl, ns+"-applied", ns, "applied", "500m", pa)
+	armed(t, cl, ns+"-applied", ns, "applied", overCPU, pa)
 
 	waitPhase(t, cl, ns, deployment, "applied", v1alpha1.PhaseApplied)
 	// "held" must have a representative recommendation cached by the agent before the outage.
-	waitHubRecommendation(t, cl, ns, deployment, "held", cpuBelow("500m"))
+	waitHubRecommendation(t, cl, ns, deployment, "held", cpuBelow(overCPU))
 	waitReason(t, cl, ns, deployment, "held", v1alpha1.ReasonModeAudit, 3*time.Minute)
 	time.Sleep(time.Minute) // at least one agent pull after that recommendation
 	appliedPods := snapshot(t, cl, ns, "applied")
@@ -164,7 +164,7 @@ func TestHubUnreachable(t *testing.T) {
 	restore()
 	waitPhase(t, cl, ns, deployment, "held", v1alpha1.PhaseApplied)
 	for name, s := range snapshot(t, cl, ns, "held") {
-		if q(s.CPUReq).Cmp(*q("500m")) >= 0 {
+		if q(s.CPUReq).Cmp(*q(overCPU)) >= 0 {
 			t.Errorf("pod %s still at %s after the hub came back", name, s.CPUReq)
 		}
 	}

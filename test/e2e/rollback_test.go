@@ -126,10 +126,10 @@ func TestRollback(t *testing.T) {
 		t.Parallel()
 		ns := newNamespace(t, cl, "restarts")
 		setControl(t, cl, ns, "web", map[string]string{"mib": "10", "crash": "0"})
-		deploy(t, cl, ns, controllableApp("web", rl("500m", "64Mi"), rl("", "128Mi")))
+		deploy(t, cl, ns, controllableApp("web", rl(overCPU, "64Mi"), rl("", "128Mi")))
 		spec := autoCPU(v1alpha1.StrategyInPlace)
 		spec.Guardrails = rollbackGuardrails()
-		armed(t, cl, ns, ns, "web", "500m", spec)
+		armed(t, cl, ns, ns, "web", overCPU, spec)
 		r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 		applied := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
 		t.Logf("applied cpu %s in place; making the container crash", applied.String())
@@ -139,15 +139,15 @@ func TestRollback(t *testing.T) {
 		setControl(t, cl, ns, "web", map[string]string{"mib": "10", "crash": "0"})
 		ev := waitEvent(t, cl, ns, "web", "rolled_back", func(e auditEvent) bool { return e.Reason == v1alpha1.ReasonRestarts })
 		t.Logf("rolled_back event: %s", ev.Message)
-		eventually(t, 2*time.Minute, 5*time.Second, "pods resized back to 500m", func() (bool, string) {
+		eventually(t, 2*time.Minute, 5*time.Second, "pods resized back to "+overCPU, func() (bool, string) {
 			for name, s := range snapshot(t, cl, ns, "web") {
-				if q(s.CPUReq).Cmp(resource.MustParse("500m")) != 0 {
+				if q(s.CPUReq).Cmp(resource.MustParse(overCPU)) != 0 {
 					return false, fmt.Sprintf("pod %s cpu %s", name, s.CPUReq)
 				}
 			}
 			return true, ""
 		})
-		if got := templateCPU(getDeployment(t, cl, ns, "web")); got.Cmp(resource.MustParse("500m")) != 0 {
+		if got := templateCPU(getDeployment(t, cl, ns, "web")); got.Cmp(resource.MustParse(overCPU)) != 0 {
 			t.Errorf("template cpu %s: an in-place rollback must not touch the template", got.String())
 		}
 	})
