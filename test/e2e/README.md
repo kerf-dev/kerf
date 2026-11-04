@@ -25,9 +25,11 @@ make e2e-vet                     # compile/vet the suite without a cluster
 | 5 | `TestRollout` | spoke-1 | RSR `Applied`; template cpu = recommendation (a decrease); field manager `resource-optimizer` owns `…containers[app].resources.requests.cpu`; new ReplicaSet, pods at the new value; hub `applied` event, strategy rollout |
 | 6 | `TestArgoCD/hard_sync_keeps_values` | spoke-1 | workload deployed by its own Argo CD Application from the in-cluster git server (`e2e/<namespace>/`), D-006 settings; after the rollout patch a hard refresh + explicit sync keeps the value, the app is Synced, and 75 s of self-heal don't revert it |
 | 7 | `TestArgoCD/release_restores_Git_values` | spoke-1 | policy switched to audit → the agent drops its field ownership → hard refresh + sync restores the Git value (500m), app Synced |
-| 8 | `TestWebhook` | – | **skipped** until WO-07 lands |
+| 8 | `TestWebhook/scale-out_gets_the_applied_values` | spoke-1 | in-place CPU applied (RSR `Applied`, status observed its spec); scaling 1 → 3 gives new pods the applied CPU at admission (`injected-resources` annotation, no restarts); template stays 500m |
+| 8 | `TestWebhook/webhook_down_does_not_block_pod_creation` | spoke-1 | webhook Deployment scaled to 0 (original replicas recorded in an annotation, restored at the end): scaling 3 → 4 still creates a Ready pod within a minute, not mutated; after the webhook is back, the agent's drift repair resizes that pod to the applied value |
 | 9 | `TestGuardrails/*` | spoke-1 | throttled workload (limit 200m, wants a core): hub flags `throttled` and raises; applied value > current, never below. HPA-coupled (CPU-utilization HPA): RSR reason `HPACoupled`, nothing changed. `maxChangePercent: 20`: applied decrease is within 20% (400m–500m) |
-| 10 | `TestRollback` | – | **skipped** until WO-08 lands |
+| 10 | `TestRollback/OOM_after_a_memory_decrease` | spoke-1 | Python workload whose held memory is set through a ConfigMap; memory decrease applied by rollout (in-place memory is refused on swap nodes); raising the held memory past the new limit OOM-kills it → RSR `RolledBack` with `rolledBackAt`, template back at 256Mi, hub `rolled_back` event reason `OOMKills` |
+| 10 | `TestRollback/restarts_after_an_in-place_CPU_change` | spoke-1 | in-place CPU decrease applied; the container is then made to crash-loop (ConfigMap) → ≥ 3 restarts → RSR `RolledBack`, pods resized back to 500m in place, template untouched, hub `rolled_back` event reason `Restarts` |
 | 11 | `TestHubUnreachable` | spoke-2 | with one workload applied and one waiting in audit, the agent is cut off from the hub (invalid hub token) for `hubStaleAfter` + 90 s; switching the waiting workload to auto-patch gives `HubUnreachable` and nothing changes for 60 s; the applied workload is not reverted; after reconnecting, the pending change is applied |
 
 ## How the hub is driven
@@ -61,7 +63,15 @@ second agent with a stub hub would fight them over the same workloads.
   the run (`make e2e-unblock`). A NetworkPolicy does not work: the k3s policy controller keeps
   ESTABLISHED connections, and the agent's keep-alive connection to the hub never goes idle.
 
-Nothing outside the suite's namespaces is modified, except that temporary token swap.
+- Webhook down (scenario 8): the webhook Deployment on spoke-1 is scaled to 0 for about a minute,
+  with its replicas recorded in annotation `e2e.resource-optimizer.oz.io/scaled-from`, then scaled
+  back. `make e2e-unblock` scales it back after a killed run.
+- Recompute (D-019): when the hub offers `POST /v1/admin/recompute`, the suite triggers it at most
+  every 2 minutes while it waits, using the admin token from `hub-dev-tokens` (`E2E_HUB_ADMIN_TOKEN`
+  overrides; `E2E_HUB_RECOMPUTE=off` disables it). Without it (404), it waits for the periodic run.
+
+Nothing outside the suite's namespaces is modified, except that temporary token swap and webhook
+scale-down.
 
 ## Configuration (environment)
 
