@@ -149,8 +149,14 @@ func (s *Store) ClusterExists(ctx context.Context, name string) (bool, error) {
 
 // Heartbeat records an authenticated agent request.
 func (s *Store) Heartbeat(ctx context.Context, cluster, agentVersion string) error {
-	_, err := s.Pool.Exec(ctx, `UPDATE clusters SET last_seen_at = now(),
-		agent_version = coalesce(nullif($2, ''), agent_version) WHERE name = $1`, cluster, agentVersion)
+	return s.HeartbeatAt(ctx, cluster, agentVersion, time.Time{})
+}
+
+// HeartbeatAt records an agent request at a given time (the hub's clock, which the stale check
+// also uses); zero means the database clock.
+func (s *Store) HeartbeatAt(ctx context.Context, cluster, agentVersion string, at time.Time) error {
+	_, err := s.Pool.Exec(ctx, `UPDATE clusters SET last_seen_at = coalesce($3, now()),
+		agent_version = coalesce(nullif($2, ''), agent_version) WHERE name = $1`, cluster, agentVersion, nullTime(at))
 	return err
 }
 
@@ -167,6 +173,14 @@ type Attributes struct {
 // UpsertInventory records the workloads found by a run. When markDeleted is true, live workloads
 // of the cluster that are not in inv get deleted_at = seenAt. Returns workload ids by key.
 func (s *Store) UpsertInventory(ctx context.Context, cluster string, inv []recommender.WorkloadInventory, seenAt time.Time, markDeleted bool) (map[hubapi.WorkloadKey]int64, error) {
+	return s.UpsertInventoryAt(ctx, cluster, inv, seenAt, markDeleted, seenAt)
+}
+
+// UpsertInventoryAt is UpsertInventory for an inventory whose metrics end at dataEnd. A workload
+// no inventory has seen yet (created by an agent status report, empty attributes) is only marked
+// deleted when it was reported before dataEnd: one reported after the run's data is kept until a
+// run can see it.
+func (s *Store) UpsertInventoryAt(ctx context.Context, cluster string, inv []recommender.WorkloadInventory, seenAt time.Time, markDeleted bool, dataEnd time.Time) (map[hubapi.WorkloadKey]int64, error) {
 	ids := map[hubapi.WorkloadKey]int64{}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -205,7 +219,8 @@ func (s *Store) UpsertInventory(ctx context.Context, cluster string, inv []recom
 			live = append(live, id)
 		}
 		if _, err := tx.Exec(ctx, `UPDATE workloads SET deleted_at = $2
-			WHERE cluster = $1 AND deleted_at IS NULL AND NOT (id = ANY($3))`, cluster, seenAt, live); err != nil {
+			WHERE cluster = $1 AND deleted_at IS NULL AND NOT (id = ANY($3))
+			  AND (attributes <> '{}'::jsonb OR last_seen_at < $4)`, cluster, seenAt, live, dataEnd); err != nil {
 			return nil, err
 		}
 	}
@@ -238,7 +253,7 @@ func (s *Store) InsertRecommendations(ctx context.Context, runID uuid.UUID, ids 
 }
 
 const recColumns = `r.id, r.generated_at, r.strategy_name, r.settings, r.containers, r.confidence, r.risk_flags,
-	r.data_coverage, r.average_replicas, r.monthly_savings_cpu_usd, r.monthly_savings_memory_usd`
+	r.data_coverage, r.average_replicas, r.monthly_savings_cpu_usd, r.monthly_savings_memory_usd, r.pricing`
 
 type recRow struct {
 	id                             uuid.UUID
@@ -248,11 +263,12 @@ type recRow struct {
 	confidence                     float64
 	flags                          []string
 	replicas, cpuSav, memSav       float64
+	pricing                        []byte
 }
 
 func (r *recRow) dest() []any {
 	return []any{&r.id, &r.generatedAt, &r.strategy, &r.settings, &r.containers, &r.confidence, &r.flags,
-		&r.coverage, &r.replicas, &r.cpuSav, &r.memSav}
+		&r.coverage, &r.replicas, &r.cpuSav, &r.memSav, &r.pricing}
 }
 
 func (r *recRow) build(ref hubapi.WorkloadRef) (*hubapi.WorkloadRecommendation, error) {
@@ -268,6 +284,11 @@ func (r *recRow) build(ref hubapi.WorkloadRef) (*hubapi.WorkloadRecommendation, 
 	if rec.RiskFlags == nil {
 		rec.RiskFlags = []string{}
 	}
+	// Rows from before D-016 store '{}': no pricing in the response.
+	var p hubapi.RecommendationPricing
+	if json.Unmarshal(r.pricing, &p) == nil && p.Source != "" {
+		rec.Pricing = &p
+	}
 	return &rec, nil
 }
 
@@ -280,11 +301,12 @@ type nullRecRow struct {
 	confidence                     *float64
 	flags                          []string
 	replicas, cpuSav, memSav       *float64
+	pricing                        []byte
 }
 
 func (r *nullRecRow) dest() []any {
 	return []any{&r.id, &r.generatedAt, &r.strategy, &r.settings, &r.containers, &r.confidence, &r.flags,
-		&r.coverage, &r.replicas, &r.cpuSav, &r.memSav}
+		&r.coverage, &r.replicas, &r.cpuSav, &r.memSav, &r.pricing}
 }
 
 func (r *nullRecRow) row() *recRow {
@@ -293,7 +315,7 @@ func (r *nullRecRow) row() *recRow {
 	}
 	return &recRow{id: *r.id, generatedAt: *r.generatedAt, strategy: deref(r.strategy), settings: r.settings,
 		containers: r.containers, coverage: r.coverage, confidence: *r.confidence, flags: r.flags,
-		replicas: *r.replicas, cpuSav: *r.cpuSav, memSav: *r.memSav}
+		replicas: *r.replicas, cpuSav: *r.cpuSav, memSav: *r.memSav, pricing: r.pricing}
 }
 
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
@@ -518,14 +540,18 @@ type RunCluster struct {
 	Recommendations int
 	Savings         hubapi.Savings
 	Pricing         recommender.Pricing
+	// FinishedAt defaults to the database clock.
+	FinishedAt time.Time
 }
 
 // RecordRunCluster stores the per-cluster outcome of a run.
 func (s *Store) RecordRunCluster(ctx context.Context, rc RunCluster) error {
 	p, _ := json.Marshal(rc.Pricing)
 	_, err := s.Pool.Exec(ctx, `INSERT INTO recommender_run_clusters (run_id, cluster, as_of, finished_at, status, error, workloads,
-		recommendations, monthly_savings_cpu_usd, monthly_savings_memory_usd, pricing) VALUES ($1, $2, $3, now(), $4, $5, $6, $7, $8, $9, $10)`,
-		rc.RunID, rc.Cluster, rc.AsOf, rc.Status, rc.Error, rc.Workloads, rc.Recommendations, rc.Savings.CPU, rc.Savings.Memory, p)
+		recommendations, monthly_savings_cpu_usd, monthly_savings_memory_usd, pricing)
+		VALUES ($1, $2, $3, coalesce($11, now()), $4, $5, $6, $7, $8, $9, $10)`,
+		rc.RunID, rc.Cluster, rc.AsOf, rc.Status, rc.Error, rc.Workloads, rc.Recommendations, rc.Savings.CPU, rc.Savings.Memory, p,
+		nullTime(rc.FinishedAt))
 	return err
 }
 
@@ -556,34 +582,38 @@ func (s *Store) LastRunPerCluster(ctx context.Context) (map[string]time.Time, er
 	return out, rows.Err()
 }
 
-// SavingsSample is the savings of one cluster as of a run.
+// SavingsSample is the savings total of one cluster from the moment At on.
 type SavingsSample struct {
 	Cluster string
-	AsOf    time.Time
-	CPU     float64
-	Memory  float64
+	// At is when the total became current: the end of a regular run, or the as-of time of a
+	// backfill run (which recomputes the past).
+	At     time.Time
+	CPU    float64
+	Memory float64
 }
 
-// SavingsSamples returns per-cluster run totals with as_of <= to, including the last one before
-// from for each cluster, oldest first.
+// SavingsSamples returns per-cluster run totals with At <= to, including the last one before
+// from for each cluster, ordered by At.
 func (s *Store) SavingsSamples(ctx context.Context, clusters []string, from, to time.Time) ([]SavingsSample, error) {
 	if clusters == nil {
 		clusters = []string{}
 	}
 	rows, err := s.Pool.Query(ctx, `WITH rc AS (
-			SELECT cluster, as_of, monthly_savings_cpu_usd AS cpu, monthly_savings_memory_usd AS mem FROM recommender_run_clusters
-			WHERE status = 'succeeded' AND as_of <= $2 AND (cardinality($3::text[]) = 0 OR cluster = ANY($3::text[])))
-		SELECT cluster, as_of, cpu, mem FROM (
-			SELECT cluster, as_of, cpu, mem FROM rc WHERE as_of >= $1
+			SELECT rc.cluster, CASE WHEN r.backfill THEN rc.as_of ELSE rc.finished_at END AS at,
+				rc.monthly_savings_cpu_usd AS cpu, rc.monthly_savings_memory_usd AS mem
+			FROM recommender_run_clusters rc JOIN recommender_runs r ON r.id = rc.run_id
+			WHERE rc.status = 'succeeded' AND (cardinality($3::text[]) = 0 OR rc.cluster = ANY($3::text[])))
+		SELECT cluster, at, cpu, mem FROM (
+			SELECT cluster, at, cpu, mem FROM rc WHERE at >= $1 AND at <= $2
 			UNION ALL
-			(SELECT DISTINCT ON (cluster) cluster, as_of, cpu, mem FROM rc WHERE as_of < $1 ORDER BY cluster, as_of DESC)
-		) x ORDER BY as_of, cluster`, from, to, clusters)
+			(SELECT DISTINCT ON (cluster) cluster, at, cpu, mem FROM rc WHERE at < $1 ORDER BY cluster, at DESC)
+		) x ORDER BY at, cluster`, from, to, clusters)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (SavingsSample, error) {
 		var x SavingsSample
-		err := r.Scan(&x.Cluster, &x.AsOf, &x.CPU, &x.Memory)
+		err := r.Scan(&x.Cluster, &x.At, &x.CPU, &x.Memory)
 		return x, err
 	})
 }
@@ -829,6 +859,13 @@ func joinAnd(c []string) string {
 		out += " AND " + s
 	}
 	return out
+}
+
+func nullTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
 
 func nullStr(s string) *string {
