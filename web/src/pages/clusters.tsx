@@ -19,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip } from '@/components/ui/tooltip'
 import {
   formatBytes,
+  formatCores,
   formatDateTime,
   formatNumber,
   formatPercent,
@@ -300,7 +301,7 @@ function ClusterCard({ c, s }: { c: ClusterInfo; s?: ClusterSummary }) {
                   requested={s.cpu.requested}
                   recommended={s.cpu.recommended}
                   used={s.cpu.used}
-                  fmt={(v) => `${formatNumber(Math.round(v))} cores`}
+                  fmt={(v) => `${v >= 100 ? formatNumber(Math.round(v)) : formatCores(v)} cores`}
                 />
                 <Bar
                   label="Memory"

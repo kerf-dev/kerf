@@ -16,11 +16,15 @@ import { Segmented } from '@/components/ui/segmented'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip } from '@/components/ui/tooltip'
 import { formatDateTime, formatNumber } from '@/lib/format'
+import { collapseEvents, groupBursts } from '@/lib/collapse'
 import { cn } from '@/lib/utils'
 import { workloadPath } from '@/lib/workload-id'
 import { ResourceDiff } from './workload/history'
 
-const DEFAULT_TYPES: EventType[] = ['applied', 'blocked', 'fallback', 'rolled_back', 'released', 'failed']
+// Everything by default: with D-017 agents emit `skipped` once per (workload, reason), and on a fleet
+// in audit mode those are the only events, so hiding them would make the page look empty.
+const DEFAULT_TYPES: EventType[] = EVENT_TYPES
+const ACTION_TYPES: EventType[] = EVENT_TYPES.filter((t) => t !== 'skipped')
 
 export default function ActivityPage() {
   const [sp, setSp] = useSearchParams()
@@ -160,6 +164,24 @@ export default function ActivityPage() {
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Event types">
+          <Segmented
+            label="Preset"
+            value={
+              activeTypes.length === EVENT_TYPES.length
+                ? 'all'
+                : activeTypes.length === ACTION_TYPES.length && !activeTypes.includes('skipped')
+                  ? 'actions'
+                  : 'custom'
+            }
+            onChange={(v) =>
+              set({ type: v === 'all' ? undefined : v === 'actions' ? ACTION_TYPES : activeTypes })
+            }
+            options={[
+              { value: 'all', label: 'All events' },
+              { value: 'actions', label: 'Actions only' },
+            ]}
+            className="mr-1"
+          />
           {EVENT_TYPES.map((t) => {
             const on = activeTypes.includes(t)
             const info = EVENT_INFO[t]
@@ -305,9 +327,13 @@ export default function ActivityPage() {
                   {day} <span className="ml-1 font-normal normal-case">· {evs.length}</span>
                 </h2>
                 <ul className="divide-y divide-border/60">
-                  {evs.map((e) => (
-                    <EventRow key={e.id} e={e} />
-                  ))}
+                  {groupBursts(dedupe(evs)).map((g) =>
+                    g.length === 1 ? (
+                      <EventRow key={g[0]!.id} e={g[0]!} repeats={repeatCount.get(g[0]!.id)} />
+                    ) : (
+                      <BurstRow key={g[0]!.id} events={g} />
+                    ),
+                  )}
                 </ul>
               </section>
             ))}
@@ -337,7 +363,16 @@ export default function ActivityPage() {
   )
 }
 
-function EventRow({ e }: { e: AuditEvent }) {
+// Identical consecutive events for the same workload (agent retries/repeats) show once with a count.
+const repeatCount = new Map<string, number>()
+function dedupe(evs: AuditEvent[]): AuditEvent[] {
+  return collapseEvents(evs).map((r) => {
+    if (r.count > 1) repeatCount.set(r.latest.id, r.count)
+    return r.latest
+  })
+}
+
+function EventRow({ e, repeats }: { e: AuditEvent; repeats?: number }) {
   const [open, setOpen] = useState(false)
   const expandable = !!(e.containers?.length || (e.details && Object.keys(e.details).length))
   const t = new Date(e.time)
@@ -371,6 +406,11 @@ function EventRow({ e }: { e: AuditEvent }) {
           </div>
           <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[13px]">
             <span className="font-mono text-xs text-foreground/90">{e.reason}</span>
+            {repeats ? (
+              <span className="rounded-full bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                ×{repeats}
+              </span>
+            ) : null}
             {e.resources?.length ? (
               <span className="text-xs text-muted-foreground">{e.resources.join(' + ')}</span>
             ) : null}
@@ -421,6 +461,73 @@ function EventRow({ e }: { e: AuditEvent }) {
         ) : (
           <span className="size-8 shrink-0" />
         )}
+      </div>
+    </li>
+  )
+}
+
+/** Many workloads, same decision, same moment (e.g. one agent loop over an audit-mode cluster). */
+function BurstRow({ events }: { events: AuditEvent[] }) {
+  const [open, setOpen] = useState(false)
+  const e = events[0]!
+  const t = new Date(e.time)
+  const clusters = [...new Set(events.map((x) => x.cluster))]
+  const shown = open ? events : events.slice(0, 6)
+  return (
+    <li className="px-5 py-3 transition-colors hover:bg-accent/30" data-testid="activity-burst">
+      <div className="flex gap-4">
+        <Tooltip content={`${formatDateTime(events[events.length - 1]!.time)} – ${formatDateTime(e.time)}`}>
+          <time
+            dateTime={e.time}
+            className="w-11 shrink-0 pt-0.5 font-mono text-xs text-muted-foreground tabular"
+          >
+            {String(t.getHours()).padStart(2, '0')}:{String(t.getMinutes()).padStart(2, '0')}
+          </time>
+        </Tooltip>
+        <div className="w-24 shrink-0 pt-px">
+          <EventTypeBadge type={e.type} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
+            <span className="font-medium">{events.length} workloads</span>
+            <span className="text-xs text-muted-foreground">{clusters.join(', ')}</span>
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-[13px]">
+            <span className="font-mono text-xs text-foreground/90">{e.reason}</span>
+            {e.message ? <span className="text-muted-foreground">{e.message}</span> : null}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {shown.map((x) =>
+              x.workloadId ? (
+                <Link
+                  key={x.id}
+                  to={workloadPath(x.workloadId)}
+                  className="inline-flex items-center gap-1 rounded-md border bg-card px-1.5 py-0.5 text-[11px] hover:bg-accent"
+                >
+                  <span className="font-medium">{x.workload.name}</span>
+                  <span className="text-muted-foreground">
+                    {x.workload.namespace}
+                    {clusters.length > 1 ? ` · ${x.cluster}` : ''}
+                  </span>
+                </Link>
+              ) : (
+                <span key={x.id} className="rounded-md border px-1.5 py-0.5 text-[11px]">
+                  {x.workload.name}
+                </span>
+              ),
+            )}
+            {events.length > 6 ? (
+              <button
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+                className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-primary hover:underline"
+              >
+                {open ? 'Show less' : `+${events.length - 6} more`}
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <span className="size-8 shrink-0" />
       </div>
     </li>
   )

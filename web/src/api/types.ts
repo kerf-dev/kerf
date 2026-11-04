@@ -40,6 +40,11 @@ export type SavingsPoint = S['SavingsPoint']
 export type Problem = S['Problem']
 export type ValueSettings = S['ValueSettings']
 export type DataCoverage = S['DataCoverage']
+export type WorkloadFacets = S['WorkloadFacets']
+export type FacetCount = S['FacetCount']
+export type ConfidenceFactors = S['ConfidenceFactors']
+export type RecommendationPricing = S['RecommendationPricing']
+export type FacetsQuery = NonNullable<operations['getWorkloadFacets']['parameters']['query']>
 
 export type ListWorkloadsQuery = NonNullable<operations['listWorkloads']['parameters']['query']>
 export type QueryAuditQuery = NonNullable<operations['queryAudit']['parameters']['query']>

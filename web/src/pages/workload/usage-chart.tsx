@@ -24,6 +24,17 @@ function withGaps(points: readonly Pt[], stepSec: number): (Pt | [number, null])
   return out
 }
 
+/**
+ * Step series (request, limit, recommendation) may be sparse: carry the last value to the end of the
+ * usage data so the line spans the chart instead of stopping at its last change.
+ */
+function extendStep(points: readonly Pt[], endT: number | undefined): Pt[] {
+  const out = [...points]
+  const last = out[out.length - 1]
+  if (last && endT != null && last[0]! < endT) out.push([endT, last[1]!])
+  return out
+}
+
 const ms = (pts: readonly (Pt | readonly [number, null])[]) => pts.map((p) => [p[0]! * 1000, p[1]])
 
 export function UsageChartCard({ id, containers }: { id: string; containers: ContainerRecommendation[] }) {
@@ -47,6 +58,15 @@ export function UsageChartCard({ id, containers }: { id: string; containers: Con
     const base = baseOption(c)
     const p95 = parseQuantity(explanation?.observed.p95)
     const p99 = parseQuantity(explanation?.observed.p99)
+    const endT = series.usage[series.usage.length - 1]?.[0]
+    const rec = series.recommendation
+    const firstUsage = series.usage[0]?.[0]
+    // Draw it as a line only if it spans a visible part of the window (≥ 10 %); a recommendation that
+    // only exists for the last few minutes would otherwise be an invisible stub at the right edge.
+    const span = endT != null && firstUsage != null ? endT - firstUsage : 0
+    const recStart = rec[0] ? Math.max(rec[0][0]!, firstUsage ?? rec[0][0]!) : undefined
+    const recLine = rec.length > 0 && span > 0 && recStart != null && (endT! - recStart) / span >= 0.1
+    const recLevel = !recLine && rec.length ? rec[rec.length - 1]![1] : undefined
     const usageColor = resource === 'cpu' ? c['chart-5'] : c['chart-2']
     const mark = (
       v: number | undefined,
@@ -152,7 +172,7 @@ export function UsageChartCard({ id, containers }: { id: string; containers: Con
           name: 'Request',
           type: 'line',
           step: 'end',
-          data: ms(series.request),
+          data: ms(extendStep(series.request, endT)),
           showSymbol: false,
           lineStyle: { width: 1.75, color: c['muted-foreground'] },
           itemStyle: { color: c['muted-foreground'] },
@@ -162,7 +182,7 @@ export function UsageChartCard({ id, containers }: { id: string; containers: Con
           name: 'Limit',
           type: 'line',
           step: 'end',
-          data: ms(series.limit),
+          data: ms(extendStep(series.limit, endT)),
           showSymbol: false,
           lineStyle: { width: 1.25, color: c.destructive, type: [6, 4] },
           itemStyle: { color: c.destructive },
@@ -172,10 +192,31 @@ export function UsageChartCard({ id, containers }: { id: string; containers: Con
           name: 'Recommendation',
           type: 'line',
           step: 'end',
-          data: ms(series.recommendation),
+          data: recLine ? ms(extendStep(series.recommendation, endT)) : [],
           showSymbol: false,
           lineStyle: { width: 2.25, color: c.success, type: [8, 4] },
           itemStyle: { color: c.success },
+          // A single recommendation point (only the latest run in range) has no line to draw:
+          // show it as a labelled level across the chart instead.
+          markLine: recLevel
+            ? {
+                symbol: 'none',
+                silent: true,
+                data: [
+                  {
+                    yAxis: recLevel,
+                    label: {
+                      formatter: `Recommended ${fmt(recLevel)}`,
+                      position: 'insideMiddleTop',
+                      color: c.success,
+                      fontSize: 10,
+                      fontWeight: 600,
+                    },
+                    lineStyle: { color: c.success, type: [8, 4], width: 2 },
+                  },
+                ],
+              }
+            : undefined,
           z: 4,
         },
       ],

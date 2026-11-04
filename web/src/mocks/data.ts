@@ -637,7 +637,9 @@ function buildWorkload(
       } else if (phase === 'RolledBack') {
         // The rollback reason has to match a resource the agent actually changed.
         reason =
-          modes.memory === 'auto-patch' ? pick(r, ['OOMKills', 'Restarts', 'Throttling']) : 'Throttling'
+          modes.memory === 'auto-patch'
+            ? pick(r, ['OOMKills', 'Restarts'])
+            : pick(r, ['Throttling', 'Restarts'])
         message =
           reason === 'OOMKills'
             ? '2 OOM kills within 30m after change (threshold 1); previous values restored.'
@@ -705,13 +707,27 @@ function buildWorkload(
     )
 
   const coverage = ageDays >= 14 ? between(r, 0.88, 1) : Math.min(1, ageDays / 14) * between(r, 0.85, 1)
-  let confidence = round2(
-    Math.min(
-      0.99,
-      coverage * 0.75 + between(r, 0.12, 0.24) - (restarting ? 0.12 : 0) - (shortLived ? 0.1 : 0),
-    ),
-  )
-  if (confidence < 0.1) confidence = 0.1
+  const windowSec = 336 * 3600
+  const coveredSec = Math.round(Math.min(windowSec, ageDays * 86400) * coverage)
+  // D-016: per-container confidence = Σ score × weight; the workload's is the minimum over containers.
+  const samplesScore = round2(Math.min(1, coveredSec / (7 * 86400)) * (shortLived ? between(r, 0.4, 0.6) : 1))
+  for (const c of containers) {
+    const variance = round2(
+      c.sidecar || c.init
+        ? between(r, 0.85, 0.97)
+        : restarting
+          ? between(r, 0.4, 0.58)
+          : between(r, 0.62, 0.95),
+    )
+    const f = {
+      coverage: { score: round2(coverage), weight: 0.4 },
+      samples: { score: samplesScore, weight: 0.2 },
+      variance: { score: variance, weight: 0.4 },
+    }
+    const conf = round2(f.coverage.score * 0.4 + f.samples.score * 0.2 + f.variance.score * 0.4)
+    c.explanation.confidenceFactors = { ...f, confidence: conf }
+  }
+  const confidence = Math.min(...containers.map((c) => c.explanation.confidenceFactors!.confidence))
   const flags = new Set<RiskFlag>(containers.flatMap((c) => c.riskFlags))
   if (hpa) flags.add('hpa-coupled')
   if (restarting) flags.add('restarting')
@@ -720,8 +736,6 @@ function buildWorkload(
   const riskFlags = [...flags]
   const savings = sumSavings(containers.map((c) => c.savings))
 
-  const windowSec = 336 * 3600
-  const coveredSec = Math.round(Math.min(windowSec, ageDays * 86400) * coverage)
   const generatedAt = iso(lastRun - Math.floor(r() * 600) * 1000)
   const recId = uuid(r)
   const mkRec = (
@@ -741,6 +755,7 @@ function buildWorkload(
     confidence: conf,
     riskFlags,
     monthlySavingsUSD: s,
+    pricing: { source: 'metrics', cpuCoreHourUSD: spec.cpuPrice, memoryGiBHourUSD: spec.memPrice },
     dataCoverage: {
       ratio: round2(coverage),
       window: '336h0m0s',
@@ -837,18 +852,19 @@ function buildEvents(w: WorkloadModel, now: number): AuditEvent[] {
   const recAt = (i: number) => w.history[Math.min(i, w.history.length - 1)]
   if (!w.hasRecommendation) return out
 
-  // audit / off: one "skipped" per recent recommendation id (emitted only on change).
-  for (const res of ['cpu', 'memory'] as const) {
-    const mode = w.modes[res]
-    if (mode === 'auto-patch') continue
-    for (let i = 0; i < Math.min(2, w.history.length); i++) {
-      const rec = recAt(i)!
-      ev('skipped', Date.parse(rec.generatedAt) + 90_000, mode === 'off' ? 'ModeOff' : 'ModeAudit', {
-        recommendationID: rec.id,
-        resources: [res],
-        message: `Effective ${res} mode is ${mode} (${(res === 'cpu' ? w.modes.cpuSource : w.modes.memorySource) ?? 'global-default'}${w.policy ? `: ${w.policy}` : ''}).`,
-      })
-    }
+  // audit / off: D-017 — one "skipped" per (workload, type, reason), when the agent first saw it.
+  const notAuto = (['cpu', 'memory'] as const).filter((res) => w.modes[res] !== 'auto-patch')
+  if (notAuto.length) {
+    const first = recAt(w.history.length - 1)!
+    const allOff = notAuto.every((res) => w.modes[res] === 'off')
+    ev('skipped', Date.parse(first.generatedAt) + 90_000, allOff ? 'ModeOff' : 'ModeAudit', {
+      recommendationID: first.id,
+      resources: notAuto,
+      message:
+        notAuto.length === 2
+          ? 'no resource is in auto-patch mode'
+          : `${notAuto[0]} is in ${w.modes[notAuto[0]!]} mode (${(notAuto[0] === 'cpu' ? w.modes.cpuSource : w.modes.memorySource) ?? 'global-default'}${w.policy ? `: ${w.policy}` : ''})`,
+    })
   }
 
   const autoRes = (['cpu', 'memory'] as const).filter((x) => w.modes[x] === 'auto-patch')
@@ -900,15 +916,14 @@ function buildEvents(w: WorkloadModel, now: number): AuditEvent[] {
       })
     }
     // later runs too close to the live values
-    for (let i = 0; i < w.history.length; i++) {
-      const h = w.history[i]!
-      if (Date.parse(h.generatedAt) > t && r() < 0.35) {
-        ev('skipped', Date.parse(h.generatedAt) + 60_000, 'NoSignificantChange', {
-          recommendationID: h.id,
-          resources: autoRes,
-          message: 'Recommended values within 10 % of live values.',
-        })
-      }
+    // (D-017: once, not per run)
+    const later = [...w.history].reverse().find((h) => Date.parse(h.generatedAt) > t)
+    if (later && r() < 0.6) {
+      ev('skipped', Date.parse(later.generatedAt) + 60_000, 'NoSignificantChange', {
+        recommendationID: later.id,
+        resources: autoRes,
+        message: 'Recommended values within 10 % of live values.',
+      })
     }
     // an older apply for long-lived workloads
     if (r() < 0.3 && w.history.length > 8) {

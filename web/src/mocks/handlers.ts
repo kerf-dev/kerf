@@ -11,6 +11,7 @@ import type {
   UsageSeries,
   WorkloadHistory,
   WorkloadKind,
+  WorkloadFacets,
   WorkloadList,
   WorkloadModel,
 } from './types'
@@ -99,6 +100,44 @@ function findWorkload(db: MockDb, raw: string | readonly string[] | undefined): 
   return db.byId.get(id) ?? problem(404, 'workload_not_found', 'Not Found', `workload ${id} not found`)
 }
 
+interface Filters {
+  clusters: string[]
+  namespaces: string[]
+  kinds: WorkloadKind[]
+  modes: Mode[]
+  riskFlags: RiskFlag[]
+  minSavings?: number
+  q?: string
+}
+
+function parseFilters(sp: URLSearchParams): Filters | Response {
+  const minSavings = sp.get('minSavings') != null ? Number(sp.get('minSavings')) : undefined
+  if (minSavings != null && Number.isNaN(minSavings))
+    return problem(400, 'invalid_min_savings', 'Bad Request', 'minSavings must be a number')
+  return {
+    clusters: sp.getAll('cluster'),
+    namespaces: sp.getAll('namespace'),
+    kinds: sp.getAll('kind') as WorkloadKind[],
+    modes: sp.getAll('mode') as Mode[],
+    riskFlags: sp.getAll('riskFlag') as RiskFlag[],
+    minSavings,
+    q: sp.get('q')?.toLowerCase() || undefined,
+  }
+}
+
+function filterWorkloads(db: MockDb, f: Filters): WorkloadModel[] {
+  return db.workloads.filter(
+    (w) =>
+      (!f.clusters.length || f.clusters.includes(w.cluster)) &&
+      (!f.namespaces.length || f.namespaces.includes(w.namespace)) &&
+      (!f.kinds.length || f.kinds.includes(w.kind)) &&
+      (!f.modes.length || f.modes.includes(w.modes.cpu) || f.modes.includes(w.modes.memory)) &&
+      (!f.riskFlags.length || f.riskFlags.some((x) => w.riskFlags.includes(x))) &&
+      (f.minSavings == null || (w.hasRecommendation && w.savings.total >= f.minSavings)) &&
+      (!f.q || w.namespace.toLowerCase().includes(f.q) || w.name.toLowerCase().includes(f.q)),
+  )
+}
+
 export const handlers = [
   http.get('*/v1/summary', async () => {
     const g = await gate()
@@ -130,13 +169,6 @@ export const handlers = [
     if (g instanceof Response) return g
     const url = new URL(request.url)
     const sp = url.searchParams
-    const clusters = sp.getAll('cluster')
-    const namespaces = sp.getAll('namespace')
-    const kinds = sp.getAll('kind') as WorkloadKind[]
-    const modes = sp.getAll('mode') as Mode[]
-    const flags = sp.getAll('riskFlag') as RiskFlag[]
-    const minSavings = sp.get('minSavings') != null ? Number(sp.get('minSavings')) : undefined
-    const q = sp.get('q')?.toLowerCase()
     const sort = (sp.get('sort') ?? 'savings') as 'savings' | 'confidence' | 'name'
     if (!['savings', 'confidence', 'name'].includes(sort))
       return problem(400, 'invalid_sort', 'Bad Request', `invalid sort ${sort}`)
@@ -146,19 +178,10 @@ export const handlers = [
       return problem(400, 'invalid_limit', 'Bad Request', 'limit must be 1..500')
     const offset = dec(sp.get('continue'))
     if (offset < 0) return problem(400, 'invalid_continue', 'Bad Request', 'invalid continue token')
-    if (minSavings != null && Number.isNaN(minSavings))
-      return problem(400, 'invalid_min_savings', 'Bad Request', 'minSavings must be a number')
 
-    let ws = g.db.workloads.filter(
-      (w) =>
-        (!clusters.length || clusters.includes(w.cluster)) &&
-        (!namespaces.length || namespaces.includes(w.namespace)) &&
-        (!kinds.length || kinds.includes(w.kind)) &&
-        (!modes.length || modes.includes(w.modes.cpu) || modes.includes(w.modes.memory)) &&
-        (!flags.length || flags.some((f) => w.riskFlags.includes(f))) &&
-        (minSavings == null || (w.hasRecommendation && w.savings.total >= minSavings)) &&
-        (!q || w.namespace.toLowerCase().includes(q) || w.name.toLowerCase().includes(q)),
-    )
+    const f = parseFilters(sp)
+    if (f instanceof Response) return f
+    let ws = filterWorkloads(g.db, f)
     const dir = order === 'asc' ? 1 : -1
     ws = [...ws].sort((a, b) => {
       let c: number
@@ -183,6 +206,34 @@ export const handlers = [
       items: page.map(toRow),
       total: ws.length,
       ...(offset + limit < ws.length ? { continue: enc(offset + limit) } : {}),
+    }
+    return HttpResponse.json(body)
+  }),
+
+  http.get('*/v1/workloads/facets', async ({ request }) => {
+    const g = await gate()
+    if (g instanceof Response) return g
+    const f = parseFilters(new URL(request.url).searchParams)
+    if (f instanceof Response) return f
+    // Each facet ignores its own filter so a multi-select keeps offering the other values.
+    const count = (key: keyof Filters, values: (w: WorkloadModel) => string[]) => {
+      const m = new Map<string, number>()
+      for (const w of filterWorkloads(g.db, {
+        ...f,
+        [key]: key === 'minSavings' || key === 'q' ? undefined : [],
+      }))
+        for (const v of new Set(values(w))) m.set(v, (m.get(v) ?? 0) + 1)
+      return [...m.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([value, n]) => ({ value, count: n }))
+    }
+    const body: WorkloadFacets = {
+      total: filterWorkloads(g.db, f).length,
+      clusters: count('clusters', (w) => [w.cluster]),
+      namespaces: count('namespaces', (w) => [w.namespace]),
+      kinds: count('kinds', (w) => [w.kind]),
+      modes: count('modes', (w) => [w.modes.cpu, w.modes.memory]),
+      riskFlags: count('riskFlags', (w) => w.riskFlags),
     }
     return HttpResponse.json(body)
   }),
