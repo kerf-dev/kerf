@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -83,6 +84,9 @@ func readLiveState(q *prom, sc *synth.Scenario) (liveState, error) {
 }
 
 func runLive(sc *synth.Scenario, vmURL string, st liveState, interval time.Duration) error {
+	// Each tick allocates the whole simulation and drops it; a soft limit makes the GC give the
+	// memory back between ticks instead of holding ~1GB for a long-running background process.
+	debug.SetMemoryLimit(384 << 20)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	step := sc.Step.D()
