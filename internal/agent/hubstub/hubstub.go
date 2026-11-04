@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -185,6 +186,10 @@ func (s *Server) reportStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, it := range batch.Items {
+		if it.RecommendationID != "" && !isUUID(it.RecommendationID) {
+			problem(w, http.StatusBadRequest, "invalid_body", "recommendationID must be a UUID")
+			return
+		}
 		if it.Workload.Name == "" || it.Phase == "" || it.Modes.CPU == "" || it.Modes.Memory == "" {
 			problem(w, http.StatusBadRequest, "invalid_body", "workload, modes and phase are required")
 			return
@@ -213,6 +218,10 @@ func (s *Server) reportEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, e := range batch.Items {
+		if !isUUID(e.ID) || (e.RecommendationID != "" && !isUUID(e.RecommendationID)) {
+			problem(w, http.StatusBadRequest, "invalid_body", "id and recommendationID must be UUIDs")
+			return
+		}
 		if e.ID == "" || e.Type == "" || e.Reason == "" || e.Workload.Name == "" || e.Time.IsZero() {
 			problem(w, http.StatusBadRequest, "invalid_body", fmt.Sprintf("event %q misses a required field", e.ID))
 			return
@@ -233,6 +242,11 @@ func (s *Server) reportEvents(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	writeJSON(w, res)
 }
+
+var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// isUUID mirrors the hub's validation of `format: uuid` fields.
+func isUUID(s string) bool { return uuidRe.MatchString(s) }
 
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
