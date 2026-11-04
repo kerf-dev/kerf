@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hub.fullname" . }}
+  labels: {{- include "hub.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # One recommender at a time: never run two hub pods side by side during a rollout.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "hub.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "hub.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+    spec:
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: hub
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["--config=/etc/hub/hub.yaml", "--log-level={{ .Values.logLevel }}"]
+          env:
+            - name: HUB_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "hub.dbSecret" . }}
+                  key: {{ .Values.database.existingSecretKey }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/hub/hub.yaml
+              subPath: hub.yaml
+            {{- if .Values.devSeed.enabled }}
+            - name: dev-tokens
+              mountPath: /etc/hub/dev-tokens
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "hub.fullname" . }}-config
+        {{- if .Values.devSeed.enabled }}
+        - name: dev-tokens
+          secret:
+            secretName: hub-dev-tokens
+        {{- end }}

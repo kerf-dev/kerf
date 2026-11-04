@@ -1,0 +1,28 @@
+# Hub config for `go run ./cmd/hub --config dev/hub.yaml` on the host (WO-04).
+# Uses the shared k3d environment through its host ports (docs/handover/WO-01-handover.md).
+# The in-cluster deployment uses deploy/charts/hub/values-dev.yaml instead.
+listen: ":8080"
+databaseURL: postgres://ro:ro@localhost:15432/resource_optimizer?sslmode=disable
+prometheusURL: http://localhost:18428
+migrationsDir: db/migrations
+corsOrigins: ["http://localhost:5173"]
+agentStaleAfter: 10m
+devSeed:
+  enabled: true
+  clusters: [ro-spoke-1, ro-spoke-2, synth-a, synth-b]
+  # Development tokens only; same values as Secret hub-dev-tokens (deploy/charts/hub/README.md).
+  tokens:
+    ro-spoke-1: ro-dev-rospoke1-2b8dbdc041b28d5865e7caf7
+    ro-spoke-2: ro-dev-rospoke2-22690fedaab92db2f9f3b91b
+    synth-a: ro-dev-syntha-624ec11020f8aadc7458d7a6
+    synth-b: ro-dev-synthb-a06443f1dbc00f61be2e0900
+    ui: ro-dev-ui-97446cd3a095035d6290abc5
+    admin: ro-dev-admin-1b71e51dc42ec5deb56e7f06
+recommender:
+  interval: 5m
+  backfill:
+    runs: 7
+    every: 24h
+history:
+  fullResolution: 6h
+  retention: 720h
