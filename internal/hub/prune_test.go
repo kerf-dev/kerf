@@ -14,8 +14,10 @@ import (
 // the summary, kept for its detail page and audit, revived when it reappears. Live workloads the
 // agent does not report and clusters without an agent keep the metrics-based behaviour.
 func TestPruneAbsent(t *testing.T) {
-	e := newEnv(t) // c1: checkout, ledger, frontend, report, legacy; c2: api (no agent)
-	kGhost := key("c1", "e2e-x", hubapi.KindDeployment, "ghost") // known only from agent reports
+	// c1: checkout, ledger, frontend, report, legacy; c2: api (no agent).
+	e := newEnv(t)
+	// ghost is known only from agent reports.
+	kGhost := key("c1", "e2e-x", hubapi.KindDeployment, "ghost")
 
 	// legacy was deleted: still in the metrics window, but no pods any more.
 	e.loader.mu.Lock()
