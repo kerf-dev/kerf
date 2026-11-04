@@ -82,22 +82,23 @@ The UI is no longer read-only. Sign-in uses local users with three roles (D-023)
   - registering a cluster and the auto-patch gate
   - readiness, and losing an RBAC rule → *Ready (audit)*
 - **Bug found and fixed:** the suite caught an agent bug. Drift repair stopped after the next recommender run, because the hub issues a new recommendation id on every run. Fixed in WO-21c, and covered by the test now.
-- **Skipped:**
-  - JVM in-place memory: the k3d nodes report swap, so the agent correctly refuses.
-  - kube-state-metrics scaled to 0: waits for your OK, see below.
+- **Skipped:** JVM in-place memory: the k3d nodes report swap, so the agent correctly refuses.
+- **kube-state-metrics outage (run with your OK):** `TestReadinessKSMDown` passed on its own (8m37s) with `RO_E2E_DISRUPTIVE=1`.
+  - With KSM scaled to 0 on `ro-spoke-2`, `metrics.freshness` failed as a blocking check after about 6 minutes, and the cluster list showed the banner.
+  - The test now restores KSM itself and waits until the spoke is *Automation ready* again (2m15s). Without that wait, the spoke stayed degraded for up to the hub's check interval (10m in dev, 1h by default), because the first re-check came before KSM had been scraped again.
+  - It stays off in normal runs: it degrades `ro-spoke-2` for everyone for about 9 minutes.
 
 ## Needs you
 
-1. **May the e2e suite scale kube-state-metrics to 0 on `ro-spoke-2`?** The test checks that a broken metrics setup shows up as a blocking failure, then restores KSM. It is skipped by default (`RO_E2E_DISRUPTIVE=1` enables it), because a session's permission check refused the scale-down.
-2. **GitHub token with the `workflow` scope.** CI can't be enabled without it. Both workflows are parked in `ci/github-workflows/`; activate them with `git mv ci/github-workflows/*.yaml .github/workflows/`. The e2e workflow needs an 8-core runner.
-3. **Remaining phase-4 work (not started):**
+1. **GitHub token with the `workflow` scope.** CI can't be enabled without it. Both workflows are parked in `ci/github-workflows/`; activate them with `git mv ci/github-workflows/*.yaml .github/workflows/`. The e2e workflow needs an 8-core runner.
+2. **Remaining phase-4 work (not started):**
    - WO-15 notifications
    - WO-16 CUR-based prices
    - WO-17 realized savings
    - WO-18 EKS rollout (Pod Identity for pricing, mTLS agent↔hub)
    - OIDC login (D-023 says later)
-4. **AWS pricing.** The tests replay AWS responses that were assembled offline. Re-capture them once there is real AWS access.
-5. **Optional clean-up.** `/Users/tomer/Projects/resource-optimizer-plan` duplicates the repo. The linked work sessions are idle and can be archived.
+3. **AWS pricing.** The tests replay AWS responses that were assembled offline. Re-capture them once there is real AWS access.
+4. **Optional clean-up.** `/Users/tomer/Projects/resource-optimizer-plan` duplicates the repo. The linked work sessions are idle and can be archived.
 
 ## Process notes
 
