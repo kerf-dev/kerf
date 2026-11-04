@@ -47,6 +47,8 @@ tags:
     description: Audit log queries.
   - name: ui
     description: Read-only endpoints for the web UI.
+  - name: admin
+    description: Operator endpoints (role `admin` only).
 paths:
   /v1/clusters/{cluster}/recommendations:
     parameters:
@@ -612,6 +614,45 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/recompute:
+    post:
+      tags: [admin]
+      operationId: recompute
+      security:
+        - bearerAuth: [admin]
+      summary: Run the recommender now
+      description: |
+        Queues a recommender run (D-019) for one cluster (`cluster`) or for all registered
+        clusters, and returns at once with the run id. The run starts as soon as no other run is
+        in progress; it uses usage data up to the last full recommender step (5 minutes by
+        default) before it starts, like a scheduled run. A request for the same scope that
+        arrives while an earlier one is still queued gets that run's id (`coalesced: true`)
+        instead of queuing another.
+
+        Completion is visible through the existing endpoints: `lastRecommenderRunAt` of the
+        cluster in `GET /v1/clusters` moves past `requestedAt`, and the agent endpoint returns
+        the new recommendations.
+      parameters:
+        - name: cluster
+          in: query
+          description: Only this cluster. Default all clusters.
+          schema:
+            $ref: '#/components/schemas/ClusterName'
+      responses:
+        '202':
+          description: Run queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecomputeAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     bearerAuth:
@@ -733,8 +774,10 @@ components:
       description: |
         `throttled`, `oom-killed`: the workload is under-provisioned; the recommendation is never
         a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only
-        (D-011). `low-confidence`: confidence below the hub threshold.
-      enum: [throttled, oom-killed, restarting, hpa-coupled, sidecar, short-lived, low-confidence]
+        (D-011). `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
+        container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`); its memory is audit-only,
+        the agent never changes it (WO-12).
+      enum: [throttled, oom-killed, restarting, hpa-coupled, sidecar, short-lived, low-confidence, jvm-fixed-heap]
     EventType:
       type: string
       enum: [applied, skipped, blocked, fallback, rolled_back, released, failed]
@@ -988,6 +1031,51 @@ components:
         observedAt:
           type: string
           format: date-time
+        jvm:
+          type: array
+          description: |
+            JVM containers detected by the agent with their heap settings (WO-12). Absent when JVM
+            detection is off (`RightsizingPolicy.spec.jvm.detect: false`) or no container is a JVM.
+          items:
+            $ref: '#/components/schemas/JVMContainer'
+    JVMContainer:
+      type: object
+      description: |
+        Heap settings of one JVM container, parsed from `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`,
+        `JAVA_OPTS`, the container command/args and `_JAVA_OPTIONS` (later sources win, as in the
+        JVM). A missing value means "not set" (JVM default).
+      required: [name, detectedBy]
+      properties:
+        name:
+          type: string
+        detectedBy:
+          type: array
+          description: What identified the container as a JVM.
+          items:
+            type: string
+            enum: [image, command, env]
+        maxHeap:
+          description: '`-Xmx` / `-XX:MaxHeapSize`.'
+          allOf:
+            - $ref: '#/components/schemas/Quantity'
+        initialHeap:
+          description: '`-Xms` / `-XX:InitialHeapSize`.'
+          allOf:
+            - $ref: '#/components/schemas/Quantity'
+        maxRAMPercentage:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 100
+          description: '`-XX:MaxRAMPercentage` (or 100 / `-XX:MaxRAMFraction`).'
+        maxRAM:
+          description: '`-XX:MaxRAM`.'
+          allOf:
+            - $ref: '#/components/schemas/Quantity'
+        unresolved:
+          type: array
+          description: Option variables set from a ConfigMap/Secret reference, which the agent does not read.
+          items:
+            type: string
     WorkloadStatusBatch:
       type: object
       required: [items]
@@ -1137,6 +1225,43 @@ components:
           description: 'Adjustments, e.g. "raised: throttled" or "kept current: oom-killed".'
           items:
             type: string
+        jvm:
+          $ref: '#/components/schemas/JVMExplanation'
+    JVMExplanation:
+      type: object
+      description: |
+        How the JVM heap shaped the memory recommendation (WO-12), only on `memory` of JVM
+        containers. `heapSizing`: `fixed` (`-Xmx`; memory audit-only, flag `jvm-fixed-heap`),
+        `percentage` (`-XX:MaxRAMPercentage`, max heap follows the memory limit), `default` (no heap
+        flags: the JVM default of 25 % of the limit). `heapNeed` is the observed peak working set
+        capped at the current maximum heap; `floor` is the smallest memory that keeps the maximum
+        heap at or above `heapNeed` (percentage, default) or fits heap plus `nonHeap` (fixed).
+      required: [heapSizing, detectedBy]
+      properties:
+        heapSizing:
+          type: string
+          enum: [fixed, percentage, default]
+        detectedBy:
+          type: array
+          items:
+            type: string
+            enum: [image, command, env]
+        source:
+          type: string
+          enum: [agent, image]
+          description: '`agent`: heap settings reported by the agent; `image`: only the image name was known (no agent report), JVM defaults assumed.'
+        maxRAMPercentage:
+          type: number
+        maxHeapBefore:
+          $ref: '#/components/schemas/Quantity'
+        maxHeapAfter:
+          $ref: '#/components/schemas/Quantity'
+        heapNeed:
+          $ref: '#/components/schemas/Quantity'
+        nonHeap:
+          $ref: '#/components/schemas/Quantity'
+        floor:
+          $ref: '#/components/schemas/Quantity'
     ContainerExplanation:
       type: object
       description: Why the values were recommended. Only returned by `GET /v1/workloads/{id}`.
@@ -1555,6 +1680,24 @@ components:
                 type: array
                 items:
                   $ref: '#/components/schemas/SavingsPoint'
+    RecomputeAccepted:
+      type: object
+      required: [runId, requestedAt, coalesced]
+      properties:
+        runId:
+          type: string
+          format: uuid
+          description: Id of the queued run (UUIDv7).
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+          description: The requested cluster; absent for a run over all clusters.
+        requestedAt:
+          type: string
+          format: date-time
+          description: When the run was first requested (for a coalesced request, the earlier one).
+        coalesced:
+          type: boolean
+          description: True when an already queued run for the same scope was returned.
     Problem:
       type: object
       description: |

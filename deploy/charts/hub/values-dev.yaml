@@ -27,10 +27,11 @@ config:
   corsOrigins: ["http://localhost:5173"]
   recommender:
     interval: 5m
-    # First start on an empty database: also compute daily recommendations for the past 7 days
-    # (history and savings trend for the UI).
+    # History before the first regular run, computed from the stored metrics: one run as of each
+    # UTC midnight of the 29 days before it (the synthetic data covers 30 days). Missing days are
+    # filled at every start, between the regular runs; runs off that grid are replaced.
     backfill:
-      runs: 7
+      runs: 29
       every: 24h
   history:
     fullResolution: 6h

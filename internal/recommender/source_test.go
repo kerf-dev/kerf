@@ -94,6 +94,7 @@ var (
 type sourceQueries struct {
 	cpu, mem, pods, cpu24h, mem24h, throttle string
 	oom, restarts, init, hpa, hpaMetrics     string
+	images                                   string
 	priceCPU, priceMem, priceNodes           string
 	// res[metric][init][lookback>0]
 	res map[string]map[bool]map[bool]string
@@ -113,6 +114,7 @@ func buildSourceQueries(cfg Config) sourceQueries {
 		init:       q.InitContainers(cfg.InventoryLookback),
 		hpa:        q.HPAInfo(cfg.InventoryLookback),
 		hpaMetrics: q.HPAMetrics(cfg.InventoryLookback),
+		images:     q.ContainerImages(cfg.InventoryLookback),
 		res:        map[string]map[bool]map[bool]string{},
 	}
 	sq.priceCPU, sq.priceNodes = q.Pricing("ro_cpu_core_hourly_cost_usd", time.Hour)
@@ -205,6 +207,19 @@ func sourceFixture(cfg Config) (*fakeQuerier, sourceQueries) {
 	f.instant[sq.res["limits"][true][false]] = nil
 	f.instant[sq.res["limits"][true][true]] = nil
 	f.instant[sq.init] = []VectorSample{vs(istio, 1), vs(setup, 1)}
+	img := func(l Labels, image string) VectorSample {
+		c := Labels{"image": image}
+		for k, v := range l {
+			c[k] = v
+		}
+		return vs(c, 1)
+	}
+	f.instant[sq.images] = []VectorSample{
+		img(app, "registry/web:1.2.0-temurin21-jre"), img(app, "registry/web:1.1.0-temurin21-jre"), img(app, "registry/web:1.2.0-temurin21-jre"),
+		img(pg, "postgres:17"),
+		img(wl("ns1", hubapi.KindDeployment, "gone", "app"), "openjdk:17"), // not in the inventory
+		img(wl("ns1", hubapi.KindDeployment, "web", ""), "x"),              // no container label
+	}
 	hpaL := func(name, kind, target string, extra ...string) Labels {
 		l := Labels{"cluster": "c1", "namespace": "ns1", "horizontalpodautoscaler": name, "scaletargetref_kind": kind, "scaletargetref_name": target}
 		for i := 0; i+1 < len(extra); i += 2 {
@@ -306,6 +321,20 @@ func TestSourceLoad(t *testing.T) {
 					if got[k] != w {
 						t.Errorf("%s current = %+v, want %+v", k, got[k], w)
 					}
+				}
+			},
+		},
+		{
+			name: "container images (JVM detection)",
+			check: func(t *testing.T, d *ClusterData) {
+				if got, want := d.Workloads[keyWeb].Containers["app"].Images, []string{"registry/web:1.1.0-temurin21-jre", "registry/web:1.2.0-temurin21-jre"}; !reflect.DeepEqual(got, want) {
+					t.Errorf("web/app images = %v, want %v", got, want)
+				}
+				if got := d.Workloads[keyDB].Containers["postgres"].Images; !reflect.DeepEqual(got, []string{"postgres:17"}) {
+					t.Errorf("db/postgres images = %v", got)
+				}
+				if _, ok := d.Workloads[hubapi.WorkloadKey{Cluster: "c1", Namespace: "ns1", Kind: hubapi.KindDeployment, Name: "gone"}]; ok {
+					t.Error("an image alone must not add a workload to the inventory")
 				}
 			},
 		},
@@ -487,8 +516,8 @@ func TestSourceLoadQueries(t *testing.T) {
 	for q := range f.instant {
 		instants = append(instants, q)
 	}
-	if len(instants) != 16 {
-		t.Errorf("fixture has %d instant queries, want 16", len(instants))
+	if len(instants) != 17 {
+		t.Errorf("fixture has %d instant queries, want 17", len(instants))
 	}
 	for _, q := range instants {
 		if got, ok := f.called[q]; !ok || !got.Equal(testEnd) {

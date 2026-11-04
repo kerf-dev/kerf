@@ -250,6 +250,10 @@ func TestRolloutFieldManagerAndRelease(t *testing.T) {
 		t.Fatalf("managed annotation not removed: %v", d.Annotations)
 	}
 	eventually(t, 5*time.Second, "released event", wantEvent(name, hubclient.EventReleased, v1alpha1.ReasonModeChanged))
+	time.Sleep(time.Second)
+	if n := countEvents(name, hubclient.EventReleased, v1alpha1.ReasonModeChanged); n != 1 {
+		t.Fatalf("released must be emitted exactly once, got %d", n)
+	}
 
 	// Argo CD restores Git values without force: no conflict because nobody else owns them.
 	gitAudit := deploymentApply(name, map[string]string{v1alpha1.AnnotationMode: "audit", v1alpha1.AnnotationStrategy: "rollout"}, "500m", "256Mi")
@@ -636,6 +640,21 @@ func TestDedupD017(t *testing.T) {
 		t.Fatalf("same values under a new id re-emitted: %d events", n)
 	}
 
+	r = recFor(name, "255m", "200Mi") // hub jitter within the tolerance
+	r.ID = "55555555-5555-4555-a555-555555555555"
+	setRec(r)
+	eventually(t, 10*time.Second, "jitter id seen", func() error {
+		rsr, err := getRSR(name)
+		if err != nil || rsr.Spec.Source.RecommendationID != r.ID {
+			return fmt.Errorf("rsr source not updated yet: %w", err)
+		}
+		return nil
+	})
+	time.Sleep(time.Second)
+	if n := countEvents(name, hubclient.EventSkipped, v1alpha1.ReasonModeAudit); n != 1 {
+		t.Fatalf("jitter within the tolerance re-emitted: %d events", n)
+	}
+
 	r = recFor(name, "300m", "200Mi") // values change
 	r.ID = "33333333-3333-4333-a333-333333333333"
 	setRec(r)
@@ -672,5 +691,95 @@ func TestRolledBackStays(t *testing.T) {
 	eventually(t, 20*time.Second, "blocked by cooldown", wantEvent(name, hubclient.EventBlocked, v1alpha1.ReasonCooldown))
 	if err := wantPhase(name, v1alpha1.PhaseRolledBack)(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestReleaseInPlaceOnce: leaving auto-patch after an in-place change emits one released and one
+// skipped event (the proposed values used to differ between the reconcile that released and the
+// next one, so skipped came twice).
+func TestReleaseInPlaceOnce(t *testing.T) {
+	needEnv(t)
+	const name = "release-inplace"
+	if err := argoApply(t, deploymentApply(name, map[string]string{v1alpha1.AnnotationCPUMode: "auto-patch"}, "500m", "256Mi"), false); err != nil {
+		t.Fatal(err)
+	}
+	pod := makePod(t, getDeploy(t, name))
+	setRec(recFor(name, "100m", "200Mi")) // clamped to 250m (50% step)
+	eventually(t, 20*time.Second, "pod resized", func() error {
+		p := getPod(t, pod.Name)
+		if got := p.Spec.Containers[0].Resources.Requests[corev1.ResourceCPU]; got.String() != "250m" {
+			return fmt.Errorf("pod cpu request %s", got.String())
+		}
+		return nil
+	})
+	setPodStatus(t, pod.Name, func(p *corev1.Pod) {
+		p.Status.ContainerStatuses[0].Resources = p.Spec.Containers[0].Resources.DeepCopy()
+	})
+	eventually(t, 20*time.Second, "applied", wantPhase(name, v1alpha1.PhaseApplied))
+	annotate(t, &appsv1.Deployment{}, name, map[string]any{v1alpha1.AnnotationCPUMode: nil})
+	eventually(t, 20*time.Second, "released", wantPhase(name, v1alpha1.PhaseReleased))
+	time.Sleep(2 * time.Second)
+	if n := countEvents(name, hubclient.EventReleased, v1alpha1.ReasonModeChanged); n != 1 {
+		t.Fatalf("released events: %d", n)
+	}
+	if n := countEvents(name, hubclient.EventSkipped, v1alpha1.ReasonModeAudit); n != 1 {
+		t.Fatalf("skipped events after release: %d", n)
+	}
+	// An agent restart forgets the in-memory slots; the RSR status must stop the repeat.
+	testReconciler.mu.Lock()
+	testReconciler.last = nil
+	testReconciler.mu.Unlock()
+	annotate(t, &appsv1.Deployment{}, name, map[string]any{"test/poke": "1"}) // forces a reconcile
+	time.Sleep(2 * time.Second)
+	if n := countEvents(name, hubclient.EventSkipped, v1alpha1.ReasonModeAudit); n != 1 {
+		t.Fatalf("skipped re-emitted after a simulated restart: %d", n)
+	}
+}
+
+// TestNonUUIDRecommendationID: a hand-made RSR with a non-UUID source id must not make the hub
+// reject the whole status batch; the id is omitted.
+func TestNonUUIDRecommendationID(t *testing.T) {
+	needEnv(t)
+	rep := NewReporter(nil, "test", 10, nil)
+	k := wkey{"default", "Deployment", "hand-made"}
+	rep.SetStatus(k, hubclient.WorkloadStatus{RecommendationID: "hand-made-1"})
+	rep.SetStatus(wkey{"default", "Deployment", "ok"}, hubclient.WorkloadStatus{RecommendationID: "6f1c2a8e-0d7b-4c55-a0b1-8f9e2f0d1c3a"})
+	rep.Event(hubclient.Event{Type: "skipped", Reason: "ModeAudit", RecommendationID: "not-a-uuid"})
+	if got := rep.statuses[k].RecommendationID; got != "" {
+		t.Fatalf("status kept %q", got)
+	}
+	if got := rep.statuses[wkey{"default", "Deployment", "ok"}].RecommendationID; got == "" {
+		t.Fatal("valid id dropped")
+	}
+	if got := rep.PendingEvents()[0].RecommendationID; got != "" {
+		t.Fatalf("event kept %q", got)
+	}
+}
+
+func TestValuesClose(t *testing.T) {
+	mk := func(cpu, mem string) []v1alpha1.ContainerRecommendation {
+		l := corev1.ResourceList{}
+		if cpu != "" {
+			l[corev1.ResourceCPU] = resource.MustParse(cpu)
+		}
+		if mem != "" {
+			l[corev1.ResourceMemory] = resource.MustParse(mem)
+		}
+		return []v1alpha1.ContainerRecommendation{{ContainerResources: v1alpha1.ContainerResources{Name: "app", Requests: l}}}
+	}
+	tests := []struct {
+		a, b []v1alpha1.ContainerRecommendation
+		want bool
+	}{
+		{mk("740m", "32Mi"), mk("745m", "32Mi"), true},
+		{mk("740m", "32Mi"), mk("800m", "32Mi"), false},
+		{mk("740m", "32Mi"), mk("740m", ""), false},
+		{nil, nil, true},
+		{mk("1", ""), mk("1000m", ""), true},
+	}
+	for i, tt := range tests {
+		if got := valuesClose(tt.a, tt.b, 0.05); got != tt.want {
+			t.Errorf("%d: got %v want %v", i, got, tt.want)
+		}
 	}
 }

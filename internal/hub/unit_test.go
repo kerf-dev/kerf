@@ -561,8 +561,9 @@ func TestRecommendationPoints(t *testing.T) {
 			[]hubapi.Point{p(0, 0.5), p(time.Hour, 0.5), p(2*time.Hour, 0.25)}}, // to is exclusive
 		{"memory", "app", "memory", t0, t0.Add(2 * time.Hour), time.Hour,
 			[]hubapi.Point{p(0, 256*recommender.MiB), p(time.Hour, 256*recommender.MiB)}},
+		// Unaligned window: the grid is aligned like the metric backend's, starting before from.
 		{"between steps", "app", "cpu", t0.Add(30 * time.Minute), t0.Add(150 * time.Minute), time.Hour,
-			[]hubapi.Point{p(30*time.Minute, 0.5), p(90*time.Minute, 0.5)}},
+			[]hubapi.Point{p(0, 0.5), p(time.Hour, 0.5), p(2*time.Hour, 0.25)}},
 		{"unset value skipped", "sidecar", "cpu", t0, t0.Add(3 * time.Hour), time.Hour,
 			[]hubapi.Point{p(0, 0.05), p(time.Hour, 0.05)}},
 		{"no memory for sidecar", "sidecar", "memory", t0, t0.Add(3 * time.Hour), time.Hour, []hubapi.Point{}},
@@ -571,7 +572,7 @@ func TestRecommendationPoints(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := recommendationPoints(steps, tc.container, tc.resource, tc.from, tc.to, tc.step)
+			got := recommendationPoints(steps, tc.container, tc.resource, usageGrid(tc.from, tc.to, tc.step, nil))
 			if got == nil {
 				t.Fatal("nil slice (must encode as [])")
 			}
@@ -580,8 +581,54 @@ func TestRecommendationPoints(t *testing.T) {
 			}
 		})
 	}
-	if got := recommendationPoints(nil, "app", "cpu", t0, t0.Add(time.Hour), time.Minute); got == nil || len(got) != 0 {
+	if got := recommendationPoints(nil, "app", "cpu", usageGrid(t0, t0.Add(time.Hour), time.Minute, nil)); got == nil || len(got) != 0 {
 		t.Errorf("no steps: %v", got)
+	}
+}
+
+func TestUsageGrid(t *testing.T) {
+	t0 := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	at := t0.Add
+	ptr := func(t time.Time) *time.Time { return &t }
+	cases := []struct {
+		name     string
+		from, to time.Time
+		step     time.Duration
+		origin   *time.Time
+		want     []time.Time
+	}{
+		{"aligned window", at(0), at(3 * time.Hour), time.Hour, nil, []time.Time{at(0), at(time.Hour), at(2 * time.Hour)}},
+		// VictoriaMetrics: from rounded down to the step, end exclusive.
+		{"unaligned, VictoriaMetrics-like", at(20 * time.Minute), at(2*time.Hour + 20*time.Minute), time.Hour, nil,
+			[]time.Time{at(0), at(time.Hour), at(2 * time.Hour)}},
+		{"sub-second to", at(0), at(2*time.Hour + time.Millisecond), time.Hour, nil, []time.Time{at(0), at(time.Hour), at(2 * time.Hour)}},
+		// Prometheus: the series start at from; the grid follows the series wherever they start.
+		{"origin from the series", at(20 * time.Minute), at(2*time.Hour + 30*time.Minute), time.Hour, ptr(at(80 * time.Minute)),
+			[]time.Time{at(20 * time.Minute), at(80 * time.Minute), at(140 * time.Minute)}},
+		{"origin before from", at(20 * time.Minute), at(2 * time.Hour), time.Hour, ptr(at(-50 * time.Hour)),
+			[]time.Time{at(0), at(time.Hour)}},
+		{"empty window", at(0), at(0), time.Hour, nil, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := usageGrid(tc.from, tc.to, tc.step, tc.origin); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("got %v\nwant %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAlignDown(t *testing.T) {
+	day := 24 * time.Hour
+	for in, want := range map[time.Time]time.Time{
+		time.Date(2026, 11, 4, 3, 47, 12, 5, time.UTC):                 time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC):                   time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 11, 4, 3, 47, 0, 0, time.FixedZone("x", 7200)): time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC),
+		time.Date(1969, 12, 31, 12, 0, 0, 0, time.UTC):                 time.Date(1969, 12, 31, 0, 0, 0, 0, time.UTC),
+	} {
+		if got := alignDown(in, day); !got.Equal(want) {
+			t.Errorf("alignDown(%s) = %s, want %s", in, got, want)
+		}
 	}
 }
 
@@ -791,8 +838,9 @@ func TestDevSeedTokens(t *testing.T) {
 
 func TestMetricsCountAction(t *testing.T) {
 	m := NewMetrics()
-	m.countAction("c1", hubapi.Event{Type: "applied", Strategy: "in-place", Resources: []string{"cpu", "memory"}, Reason: "Applied"})
-	m.countAction("c1", hubapi.Event{Type: "blocked", Reason: "PDBViolation"})
+	wl := hubapi.WorkloadRef{Namespace: "payments", Kind: hubapi.KindDeployment, Name: "checkout"}
+	m.countAction("c1", hubapi.Event{Type: "applied", Workload: wl, Strategy: "in-place", Resources: []string{"cpu", "memory"}, Reason: "Applied"})
+	m.countAction("c1", hubapi.Event{Type: "blocked", Workload: wl, Reason: "PDBViolation"})
 	s := newUnitServer()
 	s.Metrics = m
 	rr := httptest.NewRecorder()
@@ -802,7 +850,8 @@ func TestMetricsCountAction(t *testing.T) {
 		labels map[string]string
 		value  string
 	}{
-		{map[string]string{"cluster": "c1", "type": "applied", "strategy": "in-place", "resource": "cpu", "reason": "Applied"}, "1"},
+		{map[string]string{"cluster": "c1", "namespace": "payments", "workload_kind": "Deployment", "workload": "checkout",
+			"type": "applied", "strategy": "in-place", "resource": "cpu", "reason": "Applied"}, "1"},
 		{map[string]string{"cluster": "c1", "type": "applied", "strategy": "in-place", "resource": "memory", "reason": "Applied"}, "1"},
 		{map[string]string{"cluster": "c1", "type": "blocked", "strategy": "", "resource": "", "reason": "PDBViolation"}, "1"},
 	} {

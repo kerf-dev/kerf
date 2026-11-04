@@ -27,6 +27,8 @@ type RawContainer struct {
 	Current  Current
 	// Used24hCPU / Used24hMemory: mean over the last 24 h of the usage summed over pods.
 	Used24hCPU, Used24hMemory float64
+	// Images are the container's images within the inventory lookback (JVM detection, WO-12).
+	Images []string
 }
 
 // RawWorkload holds the raw data of one workload.
@@ -251,6 +253,8 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 		}
 		initNames[k][r.Labels["container"]] = true
 	})
+	images := containerImages{}
+	instantQ("images", q.ContainerImages(cfg.InventoryLookback), func(r VectorSample) { images.add(cluster, r.Labels) })
 	type hpaKey struct{ ns, name string }
 	hpaTargets := map[hpaKey]Labels{}
 	hpaMetrics := map[hpaKey][]string{}
@@ -284,6 +288,7 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 			}
 		}
 	}
+	images.apply(d)
 	for k, l := range hpaTargets {
 		wk := hubapi.WorkloadKey{Cluster: cluster, Namespace: k.ns, Kind: l["scaletargetref_kind"], Name: l["scaletargetref_name"]}
 		if w := d.Workloads[wk]; w != nil {
