@@ -39,7 +39,7 @@ Operating loop: large task → Execution Plan with parallel tracks → one file 
   into namespace `resource-optimizer`. Do not run `tilt up` (several tracks would fight over its port).
 - Synthetic data (WO-02) uses cluster names `synth-a` and `synth-b`; never write synthetic series for the real `ro-*` clusters.
 - Migration numbers in `db/migrations/` are assigned by the orchestrator (ask first). The hub DB is shared: a hub
-  deploy applies your migrations for everyone, so only deploy the hub from a branch rebased on `origin/main`.
+  deploy applies your migrations for everyone, so tracks never deploy the hub: the orchestrator deploys it from `main` after merging.
 - Spoke agent/webhook deploys replace what other tracks (and running e2e suites) rely on: check that no `make e2e`
   is running (`kubectl --context k3d-ro-spoke-1 get ns | grep e2e-`) before `make deploy-agent`/`deploy-webhook`.
 - You may add Go dependencies to `go.mod`/`go.sum` (run `go mod tidy`); the orchestrator resolves conflicts at merge.
