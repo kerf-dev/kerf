@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
 )
 
 // Node is a node discovered from kube-state-metrics series in VictoriaMetrics.
@@ -39,6 +43,23 @@ type Discovery struct {
 	// 0 = DefaultNodeLookback. Larger values keep backfilled (synthetic) nodes priced.
 	Lookback time.Duration
 	HTTP     *http.Client
+	// Targets lists clusters with a metrics binding (D-025); nil = only VMURL.
+	Targets TargetLister
+	Log     *slog.Logger
+}
+
+// Target is a cluster whose node metrics are read from its bound datasource.
+type Target struct {
+	// Cluster is the registered cluster name.
+	Cluster string
+	BaseURL string
+	HTTP    *http.Client
+	Matcher datasource.Matcher
+}
+
+// TargetLister lists the bound clusters.
+type TargetLister interface {
+	Targets(ctx context.Context) ([]Target, error)
 }
 
 const gib = 1 << 30
@@ -48,11 +69,78 @@ const DefaultNodeLookback = 10 * time.Minute
 
 // Nodes returns the nodes currently reported, sorted by cluster and name. Nodes with an unknown
 // capacity type are returned with an empty CapacityType so the caller can count them.
+//
+// Every cluster label value in VMURL is discovered as before D-025. Clusters with a metrics
+// binding (Targets) are then read from their own datasource with their own matchers and
+// re-labelled to the registered cluster name; they replace whatever VMURL had for that name. A
+// failing target is logged and skipped.
 func (d *Discovery) Nodes(ctx context.Context) ([]Node, error) {
 	sel := `cluster!=""`
 	if d.ClusterRegex != "" {
 		sel = `cluster=~` + strconv.Quote(d.ClusterRegex)
 	}
+	nodes := map[nodeID]*Node{}
+	if err := d.discover(ctx, d.VMURL, d.HTTP, []string{sel}, func(s string) string { return s }, nodes); err != nil {
+		return nil, err
+	}
+	if d.Targets != nil {
+		targets, err := d.Targets.Targets(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list metrics bindings: %w", err)
+		}
+		var re *regexp.Regexp
+		if d.ClusterRegex != "" {
+			if re, err = regexp.Compile("^(?:" + d.ClusterRegex + ")$"); err != nil {
+				return nil, fmt.Errorf("cluster regex: %w", err)
+			}
+		}
+		for _, t := range targets {
+			if re != nil && !re.MatchString(t.Cluster) {
+				continue
+			}
+			for id := range nodes {
+				if id.cluster == t.Cluster {
+					delete(nodes, id)
+				}
+			}
+			found := map[nodeID]*Node{}
+			if err := d.discover(ctx, t.BaseURL, t.HTTP, t.Matcher.Selectors(), t.Matcher.Relabel, found); err != nil {
+				d.log().WarnContext(ctx, "node discovery failed for a bound cluster", "cluster", t.Cluster, "err", err)
+				continue
+			}
+			for id, n := range found {
+				if id.cluster == t.Cluster {
+					nodes[id] = n
+				}
+			}
+		}
+	}
+
+	out := make([]Node, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, *n)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Cluster != out[j].Cluster {
+			return out[i].Cluster < out[j].Cluster
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out, nil
+}
+
+type nodeID struct{ cluster, node string }
+
+func (d *Discovery) log() *slog.Logger {
+	if d.Log != nil {
+		return d.Log
+	}
+	return slog.Default()
+}
+
+// discover reads nodes from one datasource. sel are the label matchers of the series; rel wraps
+// each raw vector (relabelling to the registered cluster name).
+func (d *Discovery) discover(ctx context.Context, base string, hc *http.Client, sel []string, rel func(string) string, nodes map[nodeID]*Node) error {
 	lookback := d.Lookback
 	if lookback <= 0 {
 		lookback = DefaultNodeLookback
@@ -60,20 +148,17 @@ func (d *Discovery) Nodes(ctx context.Context) ([]Node, error) {
 	window := "[" + strconv.FormatInt(int64(lookback/time.Second), 10) + "s]"
 	labelsQ := `max by (cluster, node, label_node_kubernetes_io_instance_type, label_karpenter_sh_capacity_type, ` +
 		`label_eks_amazonaws_com_capacity_type, label_topology_kubernetes_io_region, label_topology_kubernetes_io_zone) ` +
-		`(last_over_time(kube_node_labels{` + sel + `}` + window + `))`
-	allocQ := `max by (cluster, node, resource) (last_over_time(kube_node_status_allocatable{` + sel + `, resource=~"cpu|memory"}` + window + `))`
+		`(` + rel(`last_over_time(kube_node_labels{`+strings.Join(sel, ", ")+`}`+window+`)`) + `)`
+	allocQ := `max by (cluster, node, resource) (` + rel(`last_over_time(kube_node_status_allocatable{`+strings.Join(append(append([]string{}, sel...), `resource=~"cpu|memory"`), ", ")+`}`+window+`)`) + `)`
 
-	labelRows, err := d.query(ctx, labelsQ)
+	labelRows, err := d.query(ctx, base, hc, labelsQ)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	allocRows, err := d.query(ctx, allocQ)
+	allocRows, err := d.query(ctx, base, hc, allocQ)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	type id struct{ cluster, node string }
-	nodes := map[id]*Node{}
 	for _, r := range labelRows {
 		m := r.Metric
 		n := &Node{
@@ -96,10 +181,10 @@ func (d *Discovery) Nodes(ctx context.Context) ([]Node, error) {
 		if n.Region == "" {
 			n.Region = d.DefaultRegion
 		}
-		nodes[id{n.Cluster, n.Name}] = n
+		nodes[nodeID{n.Cluster, n.Name}] = n
 	}
 	for _, r := range allocRows {
-		n, ok := nodes[id{r.Metric["cluster"], r.Metric["node"]}]
+		n, ok := nodes[nodeID{r.Metric["cluster"], r.Metric["node"]}]
 		if !ok {
 			continue
 		}
@@ -110,18 +195,7 @@ func (d *Discovery) Nodes(ctx context.Context) ([]Node, error) {
 			n.AllocatableGiB = r.Value / gib
 		}
 	}
-
-	out := make([]Node, 0, len(nodes))
-	for _, n := range nodes {
-		out = append(out, *n)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Cluster != out[j].Cluster {
-			return out[i].Cluster < out[j].Cluster
-		}
-		return out[i].Name < out[j].Name
-	})
-	return out, nil
+	return nil
 }
 
 type sample struct {
@@ -129,13 +203,12 @@ type sample struct {
 	Value  float64
 }
 
-func (d *Discovery) query(ctx context.Context, q string) ([]sample, error) {
-	u := strings.TrimRight(d.VMURL, "/") + "/api/v1/query?" + url.Values{"query": {q}}.Encode()
+func (d *Discovery) query(ctx context.Context, base string, hc *http.Client, q string) ([]sample, error) {
+	u := strings.TrimRight(base, "/") + "/api/v1/query?" + url.Values{"query": {q}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
-	hc := d.HTTP
 	if hc == nil {
 		hc = &http.Client{Timeout: 30 * time.Second}
 	}

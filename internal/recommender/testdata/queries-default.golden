@@ -1,0 +1,534 @@
+## PodWorkload
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job"}, "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet"}, "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+
+## PodWorkload/filter+lastOver
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet", namespace="shop"}[24h]), "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(last_over_time(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment", namespace="shop"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job", namespace="shop"}[24h]), "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(last_over_time(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob", namespace="shop"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet", namespace="shop"}[24h]), "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+
+## CPUPerPod
+sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{cluster="ro-spoke-1", container!="", container!="POD"}[5m]))
+
+## CPUPerPod/filter
+sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{cluster="ro-spoke-1", container!="", container!="POD", namespace="shop"}[5m]))
+
+## MemoryPerPod
+max by (cluster, namespace, pod, container) (max_over_time(container_memory_working_set_bytes{cluster="ro-spoke-1", container!="", container!="POD"}[5m]))
+
+## CPUUsage/max
+max by (cluster, namespace, workload_kind, workload, container) (
+sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{cluster="ro-spoke-1", container!="", container!="POD"}[5m]))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job"}, "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet"}, "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## CPUUsage/avg/filter
+avg by (cluster, namespace, workload_kind, workload, container) (
+sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{cluster="ro-spoke-1", container!="", container!="POD", namespace="shop"}[5m]))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet", namespace="shop"}, "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment", namespace="shop"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job", namespace="shop"}, "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob", namespace="shop"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet", namespace="shop"}, "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## MemoryUsage/max
+max by (cluster, namespace, workload_kind, workload, container) (
+max by (cluster, namespace, pod, container) (max_over_time(container_memory_working_set_bytes{cluster="ro-spoke-1", container!="", container!="POD"}[5m]))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job"}, "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet"}, "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## MemoryUsage/avg/filter
+avg by (cluster, namespace, workload_kind, workload, container) (
+max by (cluster, namespace, pod, container) (max_over_time(container_memory_working_set_bytes{cluster="ro-spoke-1", container!="", container!="POD", namespace="shop"}[1h]))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet", namespace="shop"}, "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment", namespace="shop"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job", namespace="shop"}, "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob", namespace="shop"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet", namespace="shop"}, "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## ThrottleRatio
+max by (cluster, namespace, workload_kind, workload, container) (
+(
+  sum by (cluster, namespace, pod, container) (rate(container_cpu_cfs_throttled_periods_total{cluster="ro-spoke-1", container!="", container!="POD"}[5m]))
+  / clamp_min(sum by (cluster, namespace, pod, container) (rate(container_cpu_cfs_periods_total{cluster="ro-spoke-1", container!="", container!="POD"}[5m])), 1)
+)
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job"}, "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet"}, "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## OOMKills
+max by (cluster, namespace, workload_kind, workload, container) (
+(
+  (
+    max by (cluster, namespace, pod, container) (max_over_time(kube_pod_container_status_last_terminated_reason{cluster="ro-spoke-1", reason="OOMKilled"}[24h]))
+    and on (cluster, namespace, pod, container)
+    (max by (cluster, namespace, pod, container) (increase(kube_pod_container_status_restarts_total{cluster="ro-spoke-1"}[24h])) > 0)
+  )
+  or
+  (max by (cluster, namespace, pod, container) (increase(container_oom_events_total{cluster="ro-spoke-1", container!="", container!="POD"}[24h])) > 0)
+)
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet"}[24h]), "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(last_over_time(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job"}[24h]), "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(last_over_time(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet"}[24h]), "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## Restarts
+sum by (cluster, namespace, workload_kind, workload, container) (
+sum by (cluster, namespace, pod, container) (increase(kube_pod_container_status_restarts_total{cluster="ro-spoke-1"}[24h]))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet"}[24h]), "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(last_over_time(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job"}[24h]), "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(last_over_time(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet"}[24h]), "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## RunningPods
+count by (cluster, namespace, workload_kind, workload) (
+max by (cluster, namespace, pod) (max_over_time(container_memory_working_set_bytes{cluster="ro-spoke-1", container!="", container!="POD"}[5m]))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job"}, "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet"}, "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## Resources/requests
+max by (cluster, namespace, workload_kind, workload, container, resource) (
+max by (cluster, namespace, pod, container, resource) (kube_pod_container_resource_requests{cluster="ro-spoke-1", resource=~"cpu|memory"})
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet"}, "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job"}, "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob"}, "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet"}, "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## Resources/limits/init/lookback/filter
+max by (cluster, namespace, workload_kind, workload, container, resource) (
+max by (cluster, namespace, pod, container, resource) (last_over_time(kube_pod_init_container_resource_limits{cluster="ro-spoke-1", resource=~"cpu|memory", namespace="shop"}[24h]))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet", namespace="shop"}[24h]), "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(last_over_time(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment", namespace="shop"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job", namespace="shop"}[24h]), "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(last_over_time(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob", namespace="shop"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet", namespace="shop"}[24h]), "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## InitContainers
+max by (cluster, namespace, workload_kind, workload, container) (
+max by (cluster, namespace, pod, container) (last_over_time(kube_pod_init_container_info{cluster="ro-spoke-1"}[24h]))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet"}[24h]), "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(last_over_time(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job"}[24h]), "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(last_over_time(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet"}[24h]), "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## ContainerImages
+max by (cluster, namespace, workload_kind, workload, container, image) (
+max by (cluster, namespace, pod, container, image) (last_over_time(kube_pod_container_info{cluster="ro-spoke-1"}[24h]))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="ReplicaSet"}[24h]), "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(last_over_time(kube_replicaset_owner{cluster="ro-spoke-1", owner_kind="Deployment"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind="Job"}[24h]), "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(last_over_time(kube_job_owner{cluster="ro-spoke-1", owner_kind="CronJob"}[24h]), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(last_over_time(kube_pod_owner{cluster="ro-spoke-1", owner_kind=~"StatefulSet|DaemonSet"}[24h]), "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## HPAInfo
+max by (cluster, namespace, horizontalpodautoscaler, scaletargetref_kind, scaletargetref_name) (last_over_time(kube_horizontalpodautoscaler_info{cluster="ro-spoke-1"}[24h]))
+
+## HPAMetrics
+max by (cluster, namespace, horizontalpodautoscaler, metric_name, metric_target_type) (last_over_time(kube_horizontalpodautoscaler_spec_target_metric{cluster="ro-spoke-1"}[24h]))
+
+## HPAReplicaBounds/min
+max by (cluster, namespace, horizontalpodautoscaler) (last_over_time(kube_horizontalpodautoscaler_spec_min_replicas{cluster="ro-spoke-1"}[24h]))
+
+## HPAPeakReplicas
+max by (cluster, namespace, horizontalpodautoscaler) (max_over_time(kube_horizontalpodautoscaler_status_current_replicas{cluster="ro-spoke-1"}[168h]))
+
+## Pricing/avg
+avg by (cluster) (max by (cluster, node) (last_over_time(ro_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}[1h])))
+
+## Pricing/count
+count by (cluster) (max by (cluster, node) (last_over_time(ro_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}[1h])))
+
