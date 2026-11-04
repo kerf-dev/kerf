@@ -342,6 +342,46 @@ func approve(t *testing.T, user string, cl cluster, ns, name string) hubapi.Appr
 	return a
 }
 
+// approveApplied approves the latest recommendation and waits for the agent's applied/ApprovedOnce
+// event. A recommender run between the approval and the agent's next pull supersedes the approval
+// (only the latest recommendation can be approved): then it approves the new one, up to 3 times.
+// The suite's own recompute requests are held off meanwhile.
+func approveApplied(t *testing.T, user string, cl cluster, ns, name string) (hubapi.Approval, auditEvent) {
+	t.Helper()
+	release := env.Hub.holdRecompute(t)
+	defer release()
+	for attempt := 1; ; attempt++ {
+		a := approve(t, user, cl, ns, name)
+		var ev auditEvent
+		var state string
+		eventually(t, 3*time.Minute, 5*time.Second, "approval "+a.ID+" applied or superseded", func() (bool, string) {
+			evs, err := env.Hub.audit(ctx(t), cl.Name, ns, deployment, name, "applied")
+			if err != nil {
+				return false, err.Error()
+			}
+			for _, e := range evs {
+				if e.Reason == v1alpha1.ReasonApprovedOnce {
+					ev = e
+					return true, ""
+				}
+			}
+			var d hubapi.WorkloadDetail
+			as(t, viewer).get(t, workloadPath(cl, ns, name), &d)
+			if d.Approval != nil && d.Approval.ID == a.ID {
+				state = d.Approval.State
+			}
+			return state == hubapi.ApprovalSuperseded || state == hubapi.ApprovalExpired, fmt.Sprintf("approval %s, %d applied events", state, len(evs))
+		})
+		if ev.ID != "" {
+			return a, ev
+		}
+		if attempt == 3 {
+			t.Fatalf("approval of %s/%s %s three times in a row", ns, name, state)
+		}
+		t.Logf("approval %s was %s before the agent applied it (a recommender run in between); approving again", a.ID, state)
+	}
+}
+
 // ---- automation ----
 
 // setPause pauses or resumes a cluster's automation as user and returns the answer.
