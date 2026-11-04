@@ -5,7 +5,11 @@
 // tests instead of failing silently at runtime.
 package hubclient
 
-import "time"
+import (
+	"time"
+
+	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+)
 
 // Schema names used by spec_test.go to map Go types to components/schemas entries.
 var schemaTypes = map[string]any{
@@ -30,6 +34,27 @@ var schemaTypes = map[string]any{
 	"EventBatch":              EventBatch{},
 	"BatchResult":             BatchResult{},
 	"Problem":                 Problem{},
+
+	// Admin area (WO-19, D-022/D-024).
+	"ClusterConfig":       ClusterConfig{},
+	"ConfigPolicy":        ConfigPolicy{},
+	"ConfigFlags":         ConfigFlags{},
+	"ConfigApproval":      ConfigApproval{},
+	"PolicyInventoryItem": PolicyInventoryItem{},
+
+	// RightsizingPolicy spec as sent in ConfigPolicy.spec: the CRD types (api/v1alpha1).
+	"RightsizingPolicySpec": v1alpha1.RightsizingPolicySpec{},
+	"PolicySelector":        v1alpha1.PolicySelector{},
+	"NamespacedWorkloadRef": v1alpha1.NamespacedWorkloadRef{},
+	"CPUPolicy":             v1alpha1.CPUPolicy{},
+	"MemoryPolicy":          v1alpha1.MemoryPolicy{},
+	"ApplyPolicy":           v1alpha1.ApplyPolicy{},
+	"TimeWindow":            v1alpha1.TimeWindow{},
+	"Guardrails":            v1alpha1.Guardrails{},
+	"RollbackPolicy":        v1alpha1.RollbackPolicy{},
+	"HPAPolicy":             v1alpha1.HPAPolicy{},
+	"HPATargetBounds":       v1alpha1.HPATargetBounds{},
+	"JVMPolicy":             v1alpha1.JVMPolicy{},
 }
 
 // ResourceValues holds quantities per resource; empty means "not set".
@@ -154,8 +179,10 @@ type EffectiveModes struct {
 
 // WorkloadStatus is what the agent reports per workload.
 type WorkloadStatus struct {
-	Workload         WorkloadRef          `json:"workload"`
-	Policy           string               `json:"policy,omitempty"`
+	Workload WorkloadRef `json:"workload"`
+	Policy   string      `json:"policy,omitempty"`
+	// Override is the hub workload-override policy layered on top of Policy (D-022).
+	Override         string               `json:"override,omitempty"`
 	Modes            EffectiveModes       `json:"modes"`
 	Strategy         string               `json:"strategy,omitempty"`
 	Settings         *ValueSettings       `json:"settings,omitempty"`
@@ -186,6 +213,11 @@ type JVMContainer struct {
 type WorkloadStatusBatch struct {
 	AgentVersion string           `json:"agentVersion,omitempty"`
 	Items        []WorkloadStatus `json:"items"`
+	// ConfigVersion is the ClusterConfig.configVersion the agent last materialised (D-022).
+	ConfigVersion string `json:"configVersion,omitempty"`
+	// PolicyInventory: nil = unchanged since the last report (omitted); non-nil, even empty =
+	// the complete inventory. Send it with full batches.
+	PolicyInventory []PolicyInventoryItem `json:"policyInventory,omitempty"`
 }
 
 // ContainerChange is the before/after of one container in an event.
@@ -244,3 +276,90 @@ const (
 
 // MaxBatch is the maximum number of items per batch request.
 const MaxBatch = 1000
+
+// Admin area (WO-19, docs/contracts/admin.md).
+
+// ClusterConfig is the response of GET /v1/clusters/{cluster}/config. Policies is the complete set
+// of hub-managed policies: the agent makes the CRs labelled LabelManagedBy=ManagedByHub equal to
+// it (create, update, delete) and never touches other CRs.
+type ClusterConfig struct {
+	Cluster       string           `json:"cluster"`
+	ConfigVersion string           `json:"configVersion"`
+	GeneratedAt   time.Time        `json:"generatedAt"`
+	PolicySource  string           `json:"policySource"`
+	Policies      []ConfigPolicy   `json:"policies"`
+	Flags         ConfigFlags      `json:"flags"`
+	Approvals     []ConfigApproval `json:"approvals"`
+}
+
+// ConfigPolicy is one hub-managed policy. The CR gets name Name, label
+// v1alpha1.LabelManagedBy=v1alpha1.ManagedByHub and annotations AnnotationHubPolicyID=ID,
+// AnnotationHubVersion=Version, AnnotationHubPolicyType=Type. Validate Spec with
+// api/v1alpha1/validate.HubPolicy before materialising it.
+type ConfigPolicy struct {
+	ID       string                         `json:"id"`
+	Name     string                         `json:"name"`
+	Type     string                         `json:"type"`
+	Version  int                            `json:"version"`
+	Priority int32                          `json:"priority"`
+	Spec     v1alpha1.RightsizingPolicySpec `json:"spec"`
+}
+
+// ConfigFlags are the cluster flags. Paused behaves like the cluster-wide freeze (reason
+// v1alpha1.ReasonPaused); the agent keeps the last value it received while the hub is unreachable
+// and does not evaluate ResumeAt.
+type ConfigFlags struct {
+	Paused      bool       `json:"paused"`
+	PauseScope  string     `json:"pauseScope,omitempty"`
+	PauseReason string     `json:"pauseReason,omitempty"`
+	PausedAt    *time.Time `json:"pausedAt,omitempty"`
+	ResumeAt    *time.Time `json:"resumeAt,omitempty"`
+}
+
+// ConfigApproval is an approve-once grant (D-024): apply RecommendationID of Workload once, as if
+// its audit resources were auto-patch, with all guardrails, if it is still the latest
+// recommendation and ExpiresAt has not passed; then emit applied/ApprovedOnce with
+// details approvalId and approvedBy.
+type ConfigApproval struct {
+	ID               string      `json:"id"`
+	Workload         WorkloadRef `json:"workload"`
+	RecommendationID string      `json:"recommendationID"`
+	ExpiresAt        time.Time   `json:"expiresAt"`
+	ApprovedBy       string      `json:"approvedBy"`
+	ApprovedAt       time.Time   `json:"approvedAt"`
+}
+
+// PolicyInventoryItem is one RightsizingPolicy CR on the cluster (or a hub policy the agent could
+// not materialise, Generation 0, Valid false).
+type PolicyInventoryItem struct {
+	Name             string                          `json:"name"`
+	Source           string                          `json:"source"`
+	Priority         int32                           `json:"priority"`
+	Generation       int64                           `json:"generation"`
+	Valid            bool                            `json:"valid"`
+	Message          string                          `json:"message,omitempty"`
+	HubPolicyID      string                          `json:"hubPolicyId,omitempty"`
+	HubVersion       int                             `json:"hubVersion,omitempty"`
+	HubPolicyType    string                          `json:"hubPolicyType,omitempty"`
+	MatchedWorkloads *int32                          `json:"matchedWorkloads,omitempty"`
+	Spec             *v1alpha1.RightsizingPolicySpec `json:"spec,omitempty"`
+}
+
+// Policy inventory sources (PolicyInventoryItem.source).
+const (
+	PolicySourceHub = "hub"
+	PolicySourceGit = "git"
+)
+
+// Pause scopes (ConfigFlags.pauseScope).
+const (
+	PauseScopeCluster = "cluster"
+	PauseScopeFleet   = "fleet"
+)
+
+// Event detail keys of the admin area (docs/contracts/events.md).
+const (
+	DetailApprovalID = "approvalId"
+	DetailApprovedBy = "approvedBy"
+	DetailPauseScope = "pauseScope"
+)

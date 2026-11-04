@@ -21,9 +21,9 @@ in `audit_events` (`db/migrations/0001_init.sql`), counts them in `ro_actions_to
 
 | Type | Emitted when | Typical reasons |
 |---|---|---|
-| `applied` | A change became live: resize accepted by the kubelet (in-place) or pod template patched and rollout started (rollout). One event per workload change, covering all changed containers. | `RecommendationApplied` |
+| `applied` | A change became live: resize accepted by the kubelet (in-place) or pod template patched and rollout started (rollout). One event per workload change, covering all changed containers. | `RecommendationApplied`, `ApprovedOnce` |
 | `skipped` | The agent deliberately did not act and nothing is wrong: mode is not `auto-patch`, the change is too small, or the recommendation does not match the current policy. | `ModeOff`, `ModeAudit`, `NoSignificantChange`, `RecommendationStale` |
-| `blocked` | A guardrail prevented a change the mode would allow. | `LearningPeriod`, `LowConfidence`, `Cooldown`, `HPACoupled`, `Throttled`, `OOMKilled`, `FreezeWindow`, `OutsideMaintenanceWindow`, `UnsupportedNode`, `RestartPolicyRequired`, `JVMFixedHeap`, `HubUnreachable`, `SingleReplicaUnsafe`, `PodDisruptionBudget` |
+| `blocked` | A guardrail prevented a change the mode would allow. | `LearningPeriod`, `LowConfidence`, `Cooldown`, `HPACoupled`, `Throttled`, `OOMKilled`, `FreezeWindow`, `OutsideMaintenanceWindow`, `UnsupportedNode`, `RestartPolicyRequired`, `JVMFixedHeap`, `HubUnreachable`, `SingleReplicaUnsafe`, `PodDisruptionBudget`, `Paused` |
 | `fallback` | An `in-place` change switched to `rollout`. | `ResizeInfeasible`, `ResizeDeferredTimeout` |
 | `rolled_back` | The health watch restored the previous values (WO-08). | `OOMKills`, `Restarts`, `Throttling` |
 | `released` | The workload left `auto-patch`; field ownership was released so Argo CD restores Git values (D-006). | `ModeChanged` |
@@ -47,6 +47,7 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | Reason | Meaning |
 |---|---|
 | `RecommendationApplied` | Values from the referenced recommendation are live. |
+| `ApprovedOnce` | Values from the referenced recommendation are live because an operator approved it once in the hub (D-024); the workload's mode stays `audit`. `details.approvalId` is the approval id, `details.approvedBy` its actor. Guardrails applied as for `auto-patch`. |
 | `ModeOff` / `ModeAudit` | Effective mode for the resource is `off` / `audit`. |
 | `NoSignificantChange` | Recommended value is within the agent's tolerance of the current value. |
 | `RecommendationStale` | The recommendation's `settings` differ from the current effective policy; waiting for the next hub run. |
@@ -61,6 +62,7 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | `RestartPolicyRequired` | Memory change on a JVM/Python container whose `resizePolicy` is not `RestartContainer` and strategy is `in-place` (D-007). |
 | `JVMFixedHeap` | Memory change on a JVM container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`, detected live or flagged `jvm-fixed-heap` by the hub); memory is audit-only (WO-12). |
 | `HubUnreachable` | No fresh recommendation because the hub cannot be reached; nothing new is applied. |
+| `Paused` | Automation of the cluster (or of the whole fleet) is paused in the hub (`GET /v1/clusters/{cluster}/config`, `flags.paused`, D-022). Behaves like the cluster-wide freeze: no change and no release of field ownership; health-watch rollbacks still run. `details.pauseScope` is `cluster` or `fleet`. |
 | `SingleReplicaUnsafe` | The workload is single-replica (Deployment/StatefulSet with `replicas: 1`, or a PodDisruptionBudget that allows 0 disruptions) and the change would leave it without a Ready pod: the in-place resize restarts a container (`resizePolicy: RestartContainer`), or the rollout has no surge (needs maxSurge ≥ 1 and maxUnavailable 0; Recreate and StatefulSets never qualify). Also when an in-place fallback to such a rollout is refused (`details.fallbackReason`). Opt in with the annotation `resource-optimizer.oz.io/allow-disruption: "true"` (WO-13). |
 | `PodDisruptionBudget` | A PodDisruptionBudget refused (or the API server held) the eviction of an outdated pod of an `OnDelete` StatefulSet after its template was patched; the agent retries (`details.pod`, WO-13). |
 | `ResizeInfeasible` | Pod resize status `Infeasible`. |
@@ -105,7 +107,32 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | `resources` | if specific | `cpu`, `memory`, or both. Empty means the whole workload. |
 | `containers` | for applied/rolled_back | `from` = values before, `to` = values after. Only changed resources are listed. |
 | `message` | no | Human-readable, ≤ 1024 chars. |
-| `details` | no | String map; well-known keys: `oomKills`, `restarts`, `throttlingRatio`, `watchDuration`, `resizeStatus`, `previousMode`, `newMode`, `error`; on `applied` with HPA coordination (WO-11) `hpa`, `hpaResource`, `hpaTargetFrom`, `hpaTargetTo` (percent). |
+| `details` | no | String map; well-known keys: `oomKills`, `restarts`, `throttlingRatio`, `watchDuration`, `resizeStatus`, `previousMode`, `newMode`, `error`; on `applied` with HPA coordination (WO-11) `hpa`, `hpaResource`, `hpaTargetFrom`, `hpaTargetTo` (percent); on `applied`/`ApprovedOnce` `approvalId`, `approvedBy`; on `blocked`/`Paused` `pauseScope`. |
 
 The hub adds `cluster` (from the URL path) and `receivedAt` when it stores an event; both are returned
 by `GET /v1/audit`.
+
+## Configuration changes (`config_changed`, WO-19)
+
+The hub itself records every configuration change made through its API (admin area, D-022) in
+the same audit log, with type `config_changed`. Agents never send this type (`POST .../events`
+rejects it with `400`, code `invalid_item`, as any unknown type), and `GET /v1/audit` never returns it, because its
+shape differs from a workload event: it is served by `GET /v1/audit/config` (schema
+`ConfigChange` in `api/openapi/hub.yaml`) and, for changes that target one workload, in
+`WorkloadHistory.configChanges`. Storage: `audit_events` rows with `type = 'config_changed'`
+(`db/migrations/0009_*`), `reason` = the action below, `message` = the user's reason, plus
+`actor`, `target_*`, `before`, `after`.
+
+| Action (`ConfigChange.action`) | Target type | Recorded when |
+|---|---|---|
+| `SettingsUpdated` | `settings` | `PUT /v1/admin/settings/{recommender,pricing}` |
+| `PolicyCreated` / `PolicyUpdated` / `PolicyDeleted` / `PolicyReverted` | `policy` | policy create, update, soft delete, revert |
+| `OverrideSet` / `OverrideCleared` | `workload-override` | `PUT` / `DELETE /v1/workloads/{id}/override` |
+| `WorkloadApproved` | `approval` | `POST /v1/workloads/{id}/approve` |
+| `ClusterCreated` / `ClusterUpdated` / `ClusterDeleted` | `cluster` | cluster register, metadata change, retire |
+| `AutomationPaused` / `AutomationResumed` | `automation` | pause / resume of a cluster (`id` = cluster) or the fleet (`id` = `*`); an auto-resume at `resumeAt` has actor type `system` |
+| `TokenCreated` / `TokenRevoked` | `token` | API token create / revoke |
+| `UserCreated` / `UserUpdated` / `UserDeleted` / `PasswordReset` | `user` | local user changes |
+
+`before`/`after` hold the target's API representation and never contain password hashes, passwords
+or token values. Login attempts are not configuration changes and are not recorded here.
