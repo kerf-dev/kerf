@@ -103,4 +103,4 @@ The UI is no longer read-only. Sign-in uses local users with three roles (D-023)
 
 - **Deploys overlapping test runs.** Twice today a track deployed an agent while e2e was running. The suite now creates an `e2e-run-<id>` namespace on both spokes for its whole run, and drops its field ownership after restoring Helm-owned objects. Neither overlap made a test fail.
 - **Pricing deploy.** The pricing image stopped building after WO-25: its Dockerfile didn't copy the hub packages pricing now imports. Its dev settings also pointed at the hub's hostname from the spokes. Both are fixed; the old pod served throughout.
-- **One bad image tag.** During a GitHub outage, a failed push cut short my deploy command, and agents and web went out tagged `main-` for a few minutes. The image content was correct. Deploy commands now refuse an empty tag.
+- **One bad image tag.** During a GitHub outage, a failed push cut short my deploy command, and agents and web went out tagged `main-` for a few minutes. The image content was correct. My deploy commands now stop if the commit id is empty.
