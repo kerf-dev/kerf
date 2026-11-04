@@ -1,0 +1,49 @@
+# Example RightsizingPolicy. Unset fields inherit the cluster default, then the global default (D-005).
+apiVersion: resource-optimizer.oz.io/v1alpha1
+kind: RightsizingPolicy
+metadata:
+  name: team-payments-production
+spec:
+  selector:
+    namespaces: ["payments-*"]
+    excludeNamespaces: ["payments-sandbox"]
+    matchLabels:
+      tier: backend
+    kinds: [Deployment, StatefulSet]
+  priority: 100
+  profile: production
+  cpu:
+    mode: auto-patch
+    limits: ratio
+    limitRatio: "2"
+  memory:
+    mode: audit
+    limitEqualsRequest: true
+  apply:
+    strategy: in-place
+    fallbackAfter: 10m
+    freezeWindows:
+      - start: "2026-12-20T00:00:00Z"
+        end: "2027-01-03T00:00:00Z"
+      - schedule: "0 18 * * 5"   # Friday 18:00 until Monday 06:00
+        duration: 60h
+        timeZone: Asia/Jerusalem
+  guardrails:
+    learningPeriod: 168h
+    minConfidence: "0.7"
+    maxChangePercent: 30
+    minCPU: 10m
+    minMemory: 64Mi
+    cooldown: 24h
+    rollback:
+      watchDuration: 30m
+      oomKills: 1
+      restarts: 3
+      throttlingRatio: "0.25"
+  hpa:
+    coordinate: false
+    targetBounds:
+      minUtilization: 50
+      maxUtilization: 80
+  jvm:
+    detect: true

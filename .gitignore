@@ -1,0 +1,28 @@
+# Binaries and tools
+/bin/
+/dist/
+*.test
+*.exe
+
+# Go
+*.out
+coverage.*
+go.work
+go.work.sum
+
+# Local env and secrets
+.env
+.env.*
+*.kubeconfig
+kubeconfig
+
+# Tooling
+node_modules/
+tilt_modules/
+.tiltbuild/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store

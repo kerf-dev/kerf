@@ -1,0 +1,24 @@
+# Example RightsizingRecommendation as written by the agent (WO-06). Users never create these.
+apiVersion: resource-optimizer.oz.io/v1alpha1
+kind: RightsizingRecommendation
+metadata:
+  name: checkout
+  namespace: default
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: checkout
+  strategy: in-place
+  source:
+    recommendationID: 0b9b5c1e-4f7c-4a52-9a43-1f1d3f6b7c10
+    generatedAt: "2026-11-04T02:00:00Z"
+    confidence: "0.92"
+    riskFlags: []
+  containers:
+    - name: app
+      requests: {cpu: 250m, memory: 384Mi}
+      limits: {cpu: 500m, memory: 384Mi}
+    - name: istio-proxy
+      requests: {cpu: 20m}
+      removeLimits: [cpu]
