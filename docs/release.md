@@ -165,6 +165,10 @@ aws ecr describe-image-scan-findings --repository-name resource-optimizer/hub --
 
 The digest in `imagetools inspect` (`Digest:`) must match the one in `bin/release/images.txt`.
 
+**Docker Desktop with the containerd image store:** when a tag is already present locally for one platform,
+`docker run --platform <other>` fails with `failed to extract layer … content digest … not found`.
+Run `docker pull --platform <other> <image>` first.
+
 ### Local dry run against the k3d registry
 
 ```bash
