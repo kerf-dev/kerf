@@ -1,0 +1,70 @@
+name: e2e
+
+# WO-09: create the k3d environment, deploy hub, pricing and agents, run the end-to-end suite,
+# upload logs on failure. Runs nightly and on demand (the suite needs ~25 min plus ~5 min setup).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+  pull_request:
+    paths:
+      - "test/e2e/**"
+      - "make/e2e.mk"
+      - "ci/github-workflows/e2e.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest-8-cores   # three k3d clusters + Argo CD + VictoriaMetrics need ~10 GiB
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install k3d, kubectl, helm
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/v5.9.1/install.sh | TAG=v5.9.1 bash
+          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.35.4/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+          curl -fsSL https://get.helm.sh/helm-v4.1.3-linux-amd64.tar.gz | tar -xz -C /tmp
+          sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
+      - name: Create clusters (WO-01)
+        run: make dev-up
+      - name: Deploy hub, pricing, agents
+        run: |
+          make deploy-hub deploy-pricing
+          kubectl --context k3d-ro-hub -n resource-optimizer rollout status deploy/hub --timeout=5m
+          make deploy-agent
+          # Agent tokens (WO-06 hand-over): key <cluster> of Secret hub-dev-tokens on ro-hub.
+          for c in ro-spoke-1 ro-spoke-2; do
+            kubectl --context k3d-ro-hub -n resource-optimizer get secret hub-dev-tokens -o jsonpath="{.data.$c}" | base64 -d \
+              | kubectl --context k3d-$c -n resource-optimizer create secret generic resource-optimizer-agent-token \
+                  --from-file=token=/dev/stdin --dry-run=client -o yaml | kubectl --context k3d-$c apply -f -
+          done
+      - name: Run e2e
+        run: make e2e
+      - name: Collect logs
+        if: failure()
+        run: |
+          mkdir -p e2e-logs
+          cp bin/e2e.log e2e-logs/ || true
+          for c in ro-hub ro-spoke-1 ro-spoke-2; do
+            kubectl --context k3d-$c cluster-info dump --all-namespaces --output-directory=e2e-logs/$c >/dev/null || true
+            kubectl --context k3d-$c get rightsizingrecommendations,rightsizingpolicies -A -o yaml > e2e-logs/$c/rightsizing.yaml 2>/dev/null || true
+          done
+          kubectl --context k3d-ro-spoke-1 -n argocd get applications -o yaml > e2e-logs/argocd-applications.yaml || true
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-logs
+          path: e2e-logs
+          retention-days: 7
