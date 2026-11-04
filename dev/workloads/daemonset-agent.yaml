@@ -1,0 +1,28 @@
+# DaemonSet: a light per-node agent (one pod per node).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: daemonset-agent
+  labels:
+    app: daemonset-agent
+spec:
+  selector:
+    matchLabels:
+      app: daemonset-agent
+  template:
+    metadata:
+      labels:
+        app: daemonset-agent
+    spec:
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: app
+          image: colinianking/stress-ng:77b17fb95ec2f00e1c2ac2a8a20fe799150d8bd5
+          args: ["--cpu", "1", "--cpu-load", "2", "--vm", "1", "--vm-bytes", "16M", "--vm-hang", "0", "--timeout", "0"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

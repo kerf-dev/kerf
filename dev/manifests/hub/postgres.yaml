@@ -1,0 +1,82 @@
+# Postgres for hub state and audit log (D-009), ro-hub namespace `postgres`.
+# In-cluster: postgres.postgres.svc:5432   From the host: localhost:15432   (dev credentials: ro / ro)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: postgres
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres
+  namespace: postgres
+type: Opaque
+stringData:
+  POSTGRES_USER: ro
+  POSTGRES_PASSWORD: ro # dev only
+  POSTGRES_DB: resource_optimizer
+  # convenience for components: DATABASE_URL
+  DATABASE_URL: postgres://ro:ro@postgres.postgres.svc:5432/resource_optimizer?sslmode=disable
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: postgres
+spec:
+  type: NodePort
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      nodePort: 30432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18.6-alpine3.23
+          args: ["-c", "shared_buffers=32MB", "-c", "max_connections=50"]
+          envFrom:
+            - secretRef:
+                name: postgres
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "ro", "-d", "resource_optimizer"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi

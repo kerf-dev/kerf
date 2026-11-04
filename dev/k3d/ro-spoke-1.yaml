@@ -1,0 +1,54 @@
+# Spoke 1: kube-state-metrics, vmagent -> hub, cert-manager, metrics-server (HPA), Argo CD + git server,
+# sample workloads synced by Argo CD. The k3s image is passed from dev/versions.env (K3S_IMAGE).
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: ro-spoke-1
+servers: 1
+agents: 0
+kubeAPI:
+  hostIP: 127.0.0.1
+  hostPort: "16444"
+network: ro-dev
+registries:
+  use:
+    - k3d-ro-registry:5005        # images built by Tilt/e2e: push to localhost:5005
+    - k3d-ro-dockerio-cache:5000  # pull-through cache for docker.io, kept across dev-down
+  config: |
+    mirrors:
+      docker.io:
+        endpoint:
+          - http://k3d-ro-dockerio-cache:5000
+ports:
+  - port: 127.0.0.1:18090:30080 # Argo CD UI/API (http)
+    nodeFilters: [server:0:direct]
+  - port: 127.0.0.1:19418:30418 # git daemon (push to git://localhost:19418/workloads.git)
+    nodeFilters: [server:0:direct]
+options:
+  k3d:
+    wait: true
+    timeout: 180s
+    disableLoadbalancer: true
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik,servicelb
+        nodeFilters: [server:*]
+      - arg: --disable-helm-controller
+        nodeFilters: [server:*]
+      - arg: --kubelet-arg=eviction-hard=imagefs.available<1%,nodefs.available<1%
+        nodeFilters: [server:*]
+      - arg: --kubelet-arg=eviction-minimum-reclaim=imagefs.available=1%,nodefs.available=1%
+        nodeFilters: [server:*]
+    # Fake EKS/Karpenter node labels (read by pricing via kube_node_labels).
+    nodeLabels:
+      - label: node.kubernetes.io/instance-type=m6i.xlarge
+        nodeFilters: [server:*]
+      - label: karpenter.sh/capacity-type=on-demand
+        nodeFilters: [server:*]
+      - label: topology.kubernetes.io/region=eu-west-1
+        nodeFilters: [server:*]
+      - label: topology.kubernetes.io/zone=eu-west-1a
+        nodeFilters: [server:*]
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: false

@@ -1,0 +1,29 @@
+# Throttled: wants a full core but is capped at 200m, so most CFS periods are throttled.
+# Guardrail case: must never be decreased (WO-06/WO-09).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: throttled
+  labels:
+    app: throttled
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: throttled
+  template:
+    metadata:
+      labels:
+        app: throttled
+    spec:
+      containers:
+        - name: app
+          image: colinianking/stress-ng:77b17fb95ec2f00e1c2ac2a8a20fe799150d8bd5
+          args: ["--cpu", "1", "--cpu-load", "100", "--timeout", "0"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi

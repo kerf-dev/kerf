@@ -1,0 +1,59 @@
+# vm/victoria-metrics-agent on ro-hub, namespace monitoring: scrapes hub components (pricing WO-03, hub WO-04)
+# into the hub's VictoriaMetrics. Discovery is by annotation, so components need no change here:
+#   Service annotations: prometheus.io/scrape: "true", prometheus.io/port: "<port>", prometheus.io/path: "/metrics"
+# honor_labels: true keeps the `cluster` label that pricing/hub series carry (docs/contracts/metrics.md).
+# No external `cluster` label on the hub.
+fullnameOverride: vmagent
+
+remoteWrite:
+  - url: http://victoria-metrics.monitoring.svc:8428/api/v1/write
+
+extraArgs:
+  envflag.enable: true
+  envflag.prefix: VM_
+  loggerFormat: json
+  promscrape.dropOriginalLabels: true
+  remoteWrite.queues: 2 # default is 2x CPUs (16 here): needless buffers for a dev cluster
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 48Mi
+  limits:
+    memory: 192Mi
+
+config:
+  global:
+    scrape_interval: 30s
+  scrape_configs:
+    - job_name: vmagent
+      static_configs:
+        - targets: ["localhost:8429"]
+
+    - job_name: annotated-services
+      honor_labels: true
+      kubernetes_sd_configs:
+        - role: endpoints
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: "true"
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: replace
+          target_label: __scheme__
+          regex: (https?)
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+        - source_labels: [__meta_kubernetes_namespace]
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_service_name]
+          target_label: kubernetes_service
+        - source_labels: [__meta_kubernetes_pod_name]
+          target_label: kubernetes_pod
