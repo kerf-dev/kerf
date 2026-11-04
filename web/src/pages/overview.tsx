@@ -25,6 +25,7 @@ import {
   formatCores,
   formatDateTime,
   formatNumber,
+  formatDelta,
   formatPercent,
   formatUSD,
   parseQuantity,
@@ -232,8 +233,7 @@ function SavingsTile({ summary }: { summary?: Summary }) {
             {first ? (
               <Tooltip content="Change of the estimated savings over the last 30 days. Applied recommendations turn estimated savings into realized ones, so this can go down while costs fall.">
                 <span className="ml-1.5 cursor-help whitespace-nowrap underline decoration-dotted underline-offset-2">
-                  {total >= first ? '+' : '−'}
-                  {formatPercent(Math.abs(total - first) / first)} 30d
+                  {formatDelta((total - first) / first)} 30d
                 </span>
               </Tooltip>
             ) : null}
