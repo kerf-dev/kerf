@@ -6,7 +6,7 @@ whose mode is `auto-patch` (in-place pod resize or rollout, with guardrails and 
 
 **Current state and how to open the running app: [docs/STATUS.md](docs/STATUS.md).**
 
-Status: phases 1–3 delivered and running on the local k3d fleet; phase 4 not started.
+Status: phases 1–3 and the phase-4 admin area + cluster onboarding delivered and running on the local k3d fleet; WO-15–18 not started.
 
 - [roadmap.md](roadmap.md) – phases and work-orders
 - [DECISIONS.md](DECISIONS.md) – architecture decisions
