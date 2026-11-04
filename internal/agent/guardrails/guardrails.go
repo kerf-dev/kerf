@@ -189,7 +189,7 @@ func Evaluate(in Input) Decision {
 		return d
 	}
 	if why := singleReplicaUnsafe(in, changes); why != "" {
-		d.Outcome, d.Reason, d.Message = Blocked, ReasonSingleReplicaUnsafe, why
+		d.Outcome, d.Reason, d.Message = Blocked, v1alpha1.ReasonSingleReplicaUnsafe, why
 		return d
 	}
 	if in.Strategy == v1alpha1.StrategyDeferred {

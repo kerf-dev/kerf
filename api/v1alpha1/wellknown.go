@@ -25,6 +25,10 @@ const (
 	AnnotationStrategy = Prefix + "strategy"
 	// AnnotationProfile overrides the recommender profile: dev | production | high-availability.
 	AnnotationProfile = Prefix + "profile"
+	// AnnotationAllowDisruption set to "true" allows changes that leave a single-replica workload
+	// (one replica, or a PodDisruptionBudget that allows no disruption) without a Ready pod for a
+	// moment: an in-place resize that restarts the container, or a rollout without surge (WO-13).
+	AnnotationAllowDisruption = Prefix + "allow-disruption"
 )
 
 // Annotations written by resource-optimizer.
@@ -90,6 +94,12 @@ const (
 	ReasonHubUnreachable           = "HubUnreachable"
 	// ReasonJVMFixedHeap: memory change refused on a JVM with a fixed -Xmx (WO-12).
 	ReasonJVMFixedHeap = "JVMFixedHeap"
+	// ReasonSingleReplicaUnsafe: single-replica workload and the change would leave it without a
+	// Ready pod; opt in with AnnotationAllowDisruption (WO-13).
+	ReasonSingleReplicaUnsafe = "SingleReplicaUnsafe"
+	// ReasonPodDisruptionBudget: a PodDisruptionBudget refused the eviction of an OnDelete
+	// StatefulSet pod; the agent retries (WO-13).
+	ReasonPodDisruptionBudget = "PodDisruptionBudget"
 
 	// fallback
 	ReasonResizeInfeasible      = "ResizeInfeasible"

@@ -1167,7 +1167,7 @@ func isBlockedReason(r string) bool {
 	case v1alpha1.ReasonLearningPeriod, v1alpha1.ReasonLowConfidence, v1alpha1.ReasonCooldown, v1alpha1.ReasonHPACoupled,
 		v1alpha1.ReasonThrottled, v1alpha1.ReasonOOMKilled, v1alpha1.ReasonFreezeWindow, v1alpha1.ReasonOutsideMaintenanceWindow,
 		v1alpha1.ReasonUnsupportedNode, v1alpha1.ReasonRestartPolicyRequired, v1alpha1.ReasonHubUnreachable,
-		guardrails.ReasonSingleReplicaUnsafe, guardrails.ReasonPodDisruptionBudget:
+		v1alpha1.ReasonSingleReplicaUnsafe, v1alpha1.ReasonPodDisruptionBudget:
 		return true
 	}
 	return false

@@ -23,7 +23,7 @@ in `audit_events` (`db/migrations/0001_init.sql`), counts them in `ro_actions_to
 |---|---|---|
 | `applied` | A change became live: resize accepted by the kubelet (in-place) or pod template patched and rollout started (rollout). One event per workload change, covering all changed containers. | `RecommendationApplied` |
 | `skipped` | The agent deliberately did not act and nothing is wrong: mode is not `auto-patch`, the change is too small, or the recommendation does not match the current policy. | `ModeOff`, `ModeAudit`, `NoSignificantChange`, `RecommendationStale` |
-| `blocked` | A guardrail prevented a change the mode would allow. | `LearningPeriod`, `LowConfidence`, `Cooldown`, `HPACoupled`, `Throttled`, `OOMKilled`, `FreezeWindow`, `OutsideMaintenanceWindow`, `UnsupportedNode`, `RestartPolicyRequired`, `HubUnreachable` |
+| `blocked` | A guardrail prevented a change the mode would allow. | `LearningPeriod`, `LowConfidence`, `Cooldown`, `HPACoupled`, `Throttled`, `OOMKilled`, `FreezeWindow`, `OutsideMaintenanceWindow`, `UnsupportedNode`, `RestartPolicyRequired`, `JVMFixedHeap`, `HubUnreachable`, `SingleReplicaUnsafe`, `PodDisruptionBudget` |
 | `fallback` | An `in-place` change switched to `rollout`. | `ResizeInfeasible`, `ResizeDeferredTimeout` |
 | `rolled_back` | The health watch restored the previous values (WO-08). | `OOMKills`, `Restarts`, `Throttling` |
 | `released` | The workload left `auto-patch`; field ownership was released so Argo CD restores Git values (D-006). | `ModeChanged` |
@@ -61,6 +61,8 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | `RestartPolicyRequired` | Memory change on a JVM/Python container whose `resizePolicy` is not `RestartContainer` and strategy is `in-place` (D-007). |
 | `JVMFixedHeap` | Memory change on a JVM container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`, detected live or flagged `jvm-fixed-heap` by the hub); memory is audit-only (WO-12). |
 | `HubUnreachable` | No fresh recommendation because the hub cannot be reached; nothing new is applied. |
+| `SingleReplicaUnsafe` | The workload is single-replica (Deployment/StatefulSet with `replicas: 1`, or a PodDisruptionBudget that allows 0 disruptions) and the change would leave it without a Ready pod: the in-place resize restarts a container (`resizePolicy: RestartContainer`), or the rollout has no surge (needs maxSurge ≥ 1 and maxUnavailable 0; Recreate and StatefulSets never qualify). Also when an in-place fallback to such a rollout is refused (`details.fallbackReason`). Opt in with the annotation `resource-optimizer.oz.io/allow-disruption: "true"` (WO-13). |
+| `PodDisruptionBudget` | A PodDisruptionBudget refused (or the API server held) the eviction of an outdated pod of an `OnDelete` StatefulSet after its template was patched; the agent retries (`details.pod`, WO-13). |
 | `ResizeInfeasible` | Pod resize status `Infeasible`. |
 | `ResizeDeferredTimeout` | Pod resize stayed `Deferred` longer than `apply.fallbackAfter`. |
 | `OOMKills` / `Restarts` / `Throttling` | Rollback threshold from `guardrails.rollback` exceeded. |
