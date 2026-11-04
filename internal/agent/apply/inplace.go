@@ -208,12 +208,13 @@ func onlyCPUMem(r corev1.ResourceRequirements) corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{Requests: pick(r.Requests), Limits: pick(r.Limits)}
 }
 
-// NodeSupportsInPlace reports whether in-place resize may be used on a node (D-007): not on nodes
-// with swap, nor on nodes matching one of the unsupported label selectors (e.g. nodes whose
-// kubelet runs a static CPU or Memory Manager policy, which the API does not expose).
-func NodeSupportsInPlace(node *corev1.Node, unsupported []map[string]string) (bool, string) {
-	if sw := node.Status.NodeInfo.Swap; sw != nil && sw.Capacity != nil && *sw.Capacity > 0 {
-		return false, fmt.Sprintf("node %s has swap (%s)", node.Name, resource.NewQuantity(*sw.Capacity, resource.BinarySI))
+// NodeSupportsInPlace reports whether in-place resize may be used on a node (D-007): not for
+// memory changes on nodes with swap (memory accounting differs; CPU is unaffected), and not on
+// nodes matching one of the unsupported label selectors (e.g. nodes whose kubelet runs a static
+// CPU or Memory Manager policy, which the API does not expose).
+func NodeSupportsInPlace(node *corev1.Node, unsupported []map[string]string, memoryChange bool) (bool, string) {
+	if sw := node.Status.NodeInfo.Swap; memoryChange && sw != nil && sw.Capacity != nil && *sw.Capacity > 0 {
+		return false, fmt.Sprintf("node %s has swap (%s); in-place memory changes are not used there", node.Name, resource.NewQuantity(*sw.Capacity, resource.BinarySI))
 	}
 	for _, sel := range unsupported {
 		if len(sel) == 0 {

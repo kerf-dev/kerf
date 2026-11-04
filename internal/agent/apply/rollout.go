@@ -162,7 +162,7 @@ func OwnedResources(obj client.Object) map[corev1.ResourceName]bool {
 			continue
 		}
 		var tree map[string]any
-		if err := json.Unmarshal(mf.FieldsV1.Raw, &tree); err != nil {
+		if err := json.Unmarshal(mf.FieldsV1.GetRawBytes(), &tree); err != nil {
 			continue
 		}
 		walkResources(tree, false, out)

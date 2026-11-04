@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -43,11 +44,11 @@ func TestClientAgainstStub(t *testing.T) {
 	// Wrong cluster and wrong token.
 	other, _ := hubclient.New(srv.URL, "ro-spoke-2", hubclient.StaticToken("tok-1"), nil)
 	var apiErr *hubclient.APIError
-	if _, _, err := other.ListRecommendations(ctx, ""); !errors.As(err, &apiErr) || apiErr.StatusCode != 403 || apiErr.Problem.Code != "cluster_forbidden" {
+	if _, _, err := other.ListRecommendations(ctx, ""); !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusForbidden || apiErr.Problem.Code != "cluster_forbidden" {
 		t.Fatalf("expected 403 cluster_forbidden, got %v", err)
 	}
 	bad, _ := hubclient.New(srv.URL, "ro-spoke-1", hubclient.StaticToken("nope"), nil)
-	if _, _, err := bad.ListRecommendations(ctx, ""); !errors.As(err, &apiErr) || apiErr.StatusCode != 401 {
+	if _, _, err := bad.ListRecommendations(ctx, ""); !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %v", err)
 	}
 
@@ -75,7 +76,7 @@ func TestClientAgainstStub(t *testing.T) {
 	}
 
 	stub.SetDown(true)
-	if _, _, err := c.ListRecommendations(ctx, ""); !errors.As(err, &apiErr) || apiErr.StatusCode != 503 {
+	if _, _, err := c.ListRecommendations(ctx, ""); !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %v", err)
 	}
 }

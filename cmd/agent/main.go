@@ -250,7 +250,7 @@ func runStubHub(args []string) error {
 func logRequests(log *slog.Logger, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/healthz" {
-			log.Info("request", "method", r.Method, "path", r.URL.Path)
+			log.InfoContext(r.Context(), "request", "method", r.Method, "path", r.URL.Path)
 		}
 		h.ServeHTTP(w, r)
 	})
