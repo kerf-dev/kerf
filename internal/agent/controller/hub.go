@@ -149,6 +149,7 @@ type Reporter struct {
 	log          *slog.Logger
 
 	mu       sync.Mutex
+	badIDs   map[string]bool // non-UUID recommendation ids already logged
 	statuses map[wkey]hubclient.WorkloadStatus
 	dirty    map[wkey]bool
 	events   []hubclient.Event
@@ -160,13 +161,14 @@ func NewReporter(hub Hub, agentVersion string, maxEvents int, log *slog.Logger) 
 		maxEvents = 10000
 	}
 	return &Reporter{hub: hub, agentVersion: agentVersion, maxEvents: maxEvents, log: log,
-		statuses: map[wkey]hubclient.WorkloadStatus{}, dirty: map[wkey]bool{}}
+		statuses: map[wkey]hubclient.WorkloadStatus{}, dirty: map[wkey]bool{}, badIDs: map[string]bool{}}
 }
 
 // SetStatus records the status of a workload; it is sent on the next flush if it changed.
 func (r *Reporter) SetStatus(k wkey, st hubclient.WorkloadStatus) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	st.RecommendationID = r.validID(st.RecommendationID, k.String())
 	old, ok := r.statuses[k]
 	if ok && statusEqual(old, st) {
 		return
@@ -201,12 +203,32 @@ func (r *Reporter) Event(e hubclient.Event) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	e.RecommendationID = r.validID(e.RecommendationID, e.Workload.Namespace+"/"+e.Workload.Kind+"/"+e.Workload.Name)
 	r.events = append(r.events, e)
 	if over := len(r.events) - r.maxEvents; over > 0 {
 		r.events = r.events[over:]
 		eventsDropped.Add(float64(over))
 	}
 	eventsBuffered.Set(float64(len(r.events)))
+}
+
+// validID returns id if it is a UUID (the hub API requires one, and rejects a whole batch
+// otherwise), else "" — logging each bad id once. RSRs written by hand or by tests may carry
+// arbitrary source ids. Callers hold r.mu.
+func (r *Reporter) validID(id, workload string) string {
+	if id == "" {
+		return ""
+	}
+	if _, err := uuid.Parse(id); err == nil {
+		return id
+	}
+	if !r.badIDs[id] {
+		r.badIDs[id] = true
+		if r.log != nil {
+			r.log.Warn("recommendation id is not a UUID; omitted from hub reports", "workload", workload, "recommendationID", id)
+		}
+	}
+	return ""
 }
 
 // PendingEvents returns a copy of the buffered events.
