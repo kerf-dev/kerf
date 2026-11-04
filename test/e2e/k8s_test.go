@@ -33,8 +33,10 @@ type app struct {
 	Limits    corev1.ResourceList
 	Resize    corev1.ResourceResizeRestartPolicy // memory resize policy; cpu is always NotRequired
 	Labels    map[string]string
-	JVM       bool // run a small JVM program instead of stress-ng
-	Container *corev1.Container
+	JVM       bool              // run a small JVM program instead of stress-ng
+	FixedHeap bool              // JVM with -Xmx (memory is audit-only, WO-12) instead of MaxRAMPercentage
+	Container *corev1.Container // replaces the stress-ng container
+	Volumes   []corev1.Volume   // pod volumes for Container
 }
 
 func rl(cpu, mem string) corev1.ResourceList {
@@ -76,13 +78,20 @@ func (a app) deployment(ns string) *appsv1.Deployment {
 	if a.JVM {
 		c.Image = jvmImage
 		c.Args = nil
-		c.Command = []string{"java", "-Xmx64m", "-XX:+UseSerialGC", "/app/Main.java"}
+		// The heap follows the container memory limit, so a memory resize with RestartContainer
+		// takes effect. A fixed -Xmx makes memory audit-only (WO-12, JVMFixedHeap).
+		heap := "-XX:MaxRAMPercentage=50"
+		if a.FixedHeap {
+			heap = "-Xmx64m"
+		}
+		c.Command = []string{"java", heap, "-XX:+UseSerialGC", "/app/Main.java"}
 		c.VolumeMounts = []corev1.VolumeMount{{Name: "src", MountPath: "/app"}}
 		volumes = []corev1.Volume{{Name: "src", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
 			LocalObjectReference: corev1.LocalObjectReference{Name: a.Name + "-src"}}}}}
 	}
 	if a.Container != nil {
 		c = *a.Container
+		volumes = a.Volumes
 	}
 	zero := int64(1)
 	return &appsv1.Deployment{
@@ -257,6 +266,7 @@ func waitPhase(t *testing.T, cl cluster, ns, kind, name string, phase v1alpha1.P
 	t.Helper()
 	var r *v1alpha1.RightsizingRecommendation
 	eventually(t, env.ApplyTimeout, 5*time.Second, fmt.Sprintf("%s %s phase %s", kind, name, phase), func() (bool, string) {
+		env.Hub.maybeRecompute(ctx(t), t.Logf)
 		r = rsr(t, cl, ns, kind, name)
 		return r != nil && r.Status.Phase == phase, rsrStatus(r)
 	})
@@ -282,6 +292,7 @@ func waitHubRecommendation(t *testing.T, cl cluster, ns, kind, name string, ok f
 	t.Helper()
 	var rec *workloadRec
 	eventually(t, env.ApplyTimeout, 10*time.Second, fmt.Sprintf("hub recommendation for %s/%s", ns, name), func() (bool, string) {
+		env.Hub.maybeRecompute(ctx(t), t.Logf)
 		d, err := env.Hub.workload(ctx(t), cl.Name, ns, kind, name)
 		if err != nil {
 			return false, err.Error()

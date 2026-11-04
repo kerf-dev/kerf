@@ -9,13 +9,59 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
 
-// hubAPI reads the hub's UI endpoints (role `ui`, api/openapi/hub.yaml).
+// hubAPI reads the hub's UI endpoints (role `ui`, api/openapi/hub.yaml) and, when an admin token
+// is available, triggers recommender runs (D-019, POST /v1/admin/recompute).
 type hubAPI struct {
-	Base  string
-	Token string
+	Base       string
+	Token      string
+	AdminToken string
+
+	mu            sync.Mutex
+	lastRecompute time.Time
+	noRecompute   bool
+}
+
+// recomputeEvery limits suite-wide recompute requests: every run covers every cluster.
+const recomputeEvery = 2 * time.Minute
+
+// maybeRecompute asks the hub for a recommender run, at most every recomputeEvery across the
+// suite. It is a best-effort speed-up: without an admin token, or when the hub has no such
+// endpoint (404/405), the suite relies on the periodic run.
+func (h *hubAPI) maybeRecompute(ctx context.Context, logf func(string, ...any)) {
+	h.mu.Lock()
+	if h.noRecompute || h.AdminToken == "" || time.Since(h.lastRecompute) < recomputeEvery {
+		h.mu.Unlock()
+		return
+	}
+	h.lastRecompute = time.Now()
+	h.mu.Unlock()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.Base+"/v1/admin/recompute", nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+h.AdminToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		logf("recompute request failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	switch {
+	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed:
+		h.mu.Lock()
+		h.noRecompute = true
+		h.mu.Unlock()
+		logf("hub has no recompute trigger (%s); waiting for its periodic run", resp.Status)
+	case resp.StatusCode/100 != 2:
+		logf("recompute: %s: %s", resp.Status, b)
+	default:
+		logf("hub recompute triggered (%s)", resp.Status)
+	}
 }
 
 type resourceValues struct {
