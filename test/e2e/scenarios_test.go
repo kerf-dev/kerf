@@ -204,6 +204,29 @@ func TestInPlaceJVMMemory(t *testing.T) {
 	}
 }
 
+// WO-12: a JVM with a fixed maximum heap (-Xmx) is memory audit-only, whatever the policy says.
+func TestJVMFixedHeapIsAuditOnly(t *testing.T) {
+	t.Parallel()
+	cl := env.Spoke1
+	ns := newNamespace(t, cl, "jvmfixed")
+	deploy(t, cl, ns, app{Name: "jvm", JVM: true, FixedHeap: true, Requests: rl("200m", "512Mi"), Limits: rl("", "512Mi"), Resize: corev1.RestartContainer})
+	before := snapshot(t, cl, ns, "jvm")
+	gen := getDeployment(t, cl, ns, "jvm").Generation
+	policy(t, cl, ns, ns, v1alpha1.RightsizingPolicySpec{
+		CPU:        &v1alpha1.CPUPolicy{Mode: v1alpha1.ModeAudit},
+		Memory:     &v1alpha1.MemoryPolicy{Mode: v1alpha1.ModeAutoPatch},
+		Apply:      &v1alpha1.ApplyPolicy{Strategy: v1alpha1.StrategyRollout},
+		Guardrails: relaxed(),
+	})
+	waitReason(t, cl, ns, deployment, "jvm", v1alpha1.ReasonJVMFixedHeap, env.ApplyTimeout)
+	if after := snapshot(t, cl, ns, "jvm"); fmt.Sprint(after) != fmt.Sprint(before) {
+		t.Errorf("pods changed although memory is audit-only: %v -> %v", before, after)
+	}
+	if d := getDeployment(t, cl, ns, "jvm"); d.Generation != gen {
+		t.Errorf("deployment changed (generation %d -> %d) although memory is audit-only", gen, d.Generation)
+	}
+}
+
 // nodeSwap returns "<node> has <n> swap" if a pod of the app runs on a node reporting swap.
 func nodeSwap(t *testing.T, cl cluster, ns, app string) string {
 	t.Helper()
