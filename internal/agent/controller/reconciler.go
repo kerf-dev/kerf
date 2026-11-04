@@ -174,6 +174,8 @@ type run struct {
 	// approvedApply: this reconcile applied an approval (the Applied condition then says
 	// ApprovedOnce, which keeps the field ownership after it, D-027).
 	approvedApply bool
+	// adopted: this reconcile adopted a new recommendation id with the applied values (WO-21c).
+	adopted bool
 }
 
 func (w *run) reconcile() (ctrl.Result, error) {
@@ -476,14 +478,38 @@ func (w *run) decide() (ctrl.Result, error) {
 		}
 	}
 
-	// Values of the current recommendation are live: keep them live (drift repair, silently).
-	if w.rsr != nil && w.rec != nil && len(auto) > 0 && w.prev.Phase == v1alpha1.PhaseApplied &&
-		w.rsr.Status.AppliedRecommendationID == w.rec.ID {
-		w.reason, w.message = v1alpha1.ReasonRecommendationApplied, "recommended values are live"
-		return w.keepLive()
+	// Values of the current recommendation are live: keep them live (drift repair, silently). The
+	// hub issues a new recommendation id on every run, also when the values stay the same: a new
+	// id whose guardrailed values are the applied ones is adopted as the applied recommendation,
+	// without an applied event, and drift repair goes on (WO-21c).
+	if w.rsr != nil && w.rec != nil && len(auto) > 0 && w.prev.Phase == v1alpha1.PhaseApplied {
+		switch {
+		case w.rsr.Status.AppliedRecommendationID == w.rec.ID:
+			w.reason, w.message = v1alpha1.ReasonRecommendationApplied, "recommended values are live"
+			if c := meta.FindStatusCondition(w.prev.Conditions, v1alpha1.ConditionBlocked); c != nil &&
+				c.Status == metav1.ConditionFalse && c.Reason == v1alpha1.ReasonNoSignificantChange {
+				// Adopted (below): the skip stays the latest decision, so a restarted agent does
+				// not report it again (D-017).
+				w.reason, w.message = c.Reason, c.Message
+			}
+			return w.keepLive()
+		case w.adoptable(dec, auto):
+			w.reason, w.message = v1alpha1.ReasonRecommendationApplied, "recommended values are live"
+			if dec.Outcome == guardrails.Skipped && dec.Reason == v1alpha1.ReasonNoSignificantChange {
+				// Reported once, as before (D-017): the new recommendation changes nothing.
+				w.reason, w.message = dec.Reason, dec.Message
+				w.emit(hubclient.Event{Type: hubclient.EventSkipped, Reason: dec.Reason, Message: dec.Message,
+					RecommendationID: w.rec.ID}, slotDecision, recValues(w.rec))
+			}
+			if err := w.adopt(); err != nil {
+				return ctrl.Result{}, err
+			}
+			return w.keepLive()
+		}
 	}
-	// Rolled back by the health watch (WO-08): never re-apply the same recommendation.
-	if w.rsr != nil && w.rec != nil && w.prev.Phase == v1alpha1.PhaseRolledBack && w.rsr.Spec.Source.RecommendationID == w.rec.ID {
+	// Rolled back by the health watch (WO-08): never re-apply the rolled-back values, also under a
+	// new recommendation id.
+	if w.rsr != nil && w.rec != nil && w.prev.Phase == v1alpha1.PhaseRolledBack && w.rolledBackAgain(dec) {
 		w.reason, w.message = condReasonFromConditions(w.prev), "rolled back; waiting for a new recommendation"
 		return ctrl.Result{}, nil
 	}
@@ -511,7 +537,8 @@ func (w *run) decide() (ctrl.Result, error) {
 			return ctrl.Result{}, nil
 		}
 		live := w.rsr != nil && w.rsr.Status.Phase == v1alpha1.PhaseApplied
-		if !live {
+		rolledBack := w.rsr != nil && w.rsr.Status.Phase == v1alpha1.PhaseRolledBack
+		if !live && !rolledBack {
 			targets := dec.Targets
 			if len(auto) == 0 || len(targets) == 0 {
 				targets = dec.Proposed
@@ -520,9 +547,6 @@ func (w *run) decide() (ctrl.Result, error) {
 				return ctrl.Result{}, err
 			}
 			switch {
-			case w.rsr.Status.Phase == v1alpha1.PhaseRolledBack:
-				// The previous values are live again; RolledBack describes that until a new change
-				// is applied (WO-08).
 			case dec.Outcome == guardrails.Blocked:
 				w.rsr.Status.Phase = v1alpha1.PhaseBlocked
 			case w.rsr.Status.Phase == v1alpha1.PhaseReleased:
@@ -531,8 +555,14 @@ func (w *run) decide() (ctrl.Result, error) {
 				w.rsr.Status.Phase = v1alpha1.PhasePending
 			}
 		}
+		// After a rollback (WO-08) the spec keeps the rolled-back values and id until a new change
+		// is applied: the previous values are live again, and RolledBack describes that.
 		w.emit(hubclient.Event{Type: evType, Reason: dec.Reason, Message: dec.Message,
 			RecommendationID: w.rec.ID, Resources: refusedResources(dec)}, slotDecision, recValues(w.rec))
+		if live && len(auto) > 0 && w.prev.Phase == v1alpha1.PhaseApplied {
+			// A newer recommendation is not applied (yet): the applied values stay live.
+			return w.keepLive()
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -608,7 +638,7 @@ func (w *run) keepLive() (ctrl.Result, error) {
 	if err := r.Reader.Get(w.ctx, client.ObjectKeyFromObject(w.rsr), &fresh); err != nil {
 		return ctrl.Result{}, err
 	}
-	if fresh.Status.Phase != v1alpha1.PhaseApplied || fresh.Status.AppliedRecommendationID != w.rsr.Status.AppliedRecommendationID {
+	if fresh.Status.Phase != v1alpha1.PhaseApplied || fresh.Status.AppliedRecommendationID != w.prev.AppliedRecommendationID {
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	targets := w.rsr.Spec.Containers
@@ -684,6 +714,55 @@ func templateMatches(spec *corev1.PodSpec, targets []v1alpha1.ContainerRecommend
 		}
 	}
 	return true
+}
+
+// adoptable reports whether the current recommendation, under a new id, advises the applied
+// values: the guardrails turn it into targets within the tolerance of the RSR's spec for every
+// auto-patch resource (the same change, so nothing to apply). A resource that became auto-patch
+// after the change (no value in the spec) is a change of its own.
+func (w *run) adoptable(dec guardrails.Decision, auto map[corev1.ResourceName]bool) bool {
+	own := w.ownedTargets()
+	if len(dec.Targets) == 0 || len(own) == 0 || !hasAll(own, auto) {
+		return false
+	}
+	return sameAdvice(dec.Targets, w.rsr.Spec.Containers, own, w.r.tolerance())
+}
+
+// adopt records the current recommendation as the applied one (spec source and
+// status.appliedRecommendationID) while its values stay the live ones: no applied event, the
+// cooldown keeps counting from the last change, and an approve-once hold stays (D-027). The
+// status is written at the end of the reconcile.
+func (w *run) adopt() error {
+	prevID := w.rsr.Status.AppliedRecommendationID
+	if src := w.source(); !jsonEqual(w.rsr.Spec.Source, src) {
+		status := w.rsr.Status.DeepCopy()
+		w.rsr.Spec.Source = src
+		if err := w.r.Client.Update(w.ctx, w.rsr); err != nil {
+			return fmt.Errorf("adopt recommendation %s: %w", w.rec.ID, err)
+		}
+		w.rsr.Status = *status
+	}
+	w.rsr.Status.AppliedRecommendationID = w.rec.ID
+	w.adopted = true
+	w.log.Info("new recommendation advises the live values: adopted", "recommendation", w.rec.ID, "previous", prevID)
+	return nil
+}
+
+// rolledBackAgain reports whether applying the current recommendation would bring back what the
+// health watch rolled back (WO-08): the same id, or a new id whose guardrailed targets are the
+// rolled-back values (the RSR spec) for every resource it changes.
+func (w *run) rolledBackAgain(dec guardrails.Decision) bool {
+	if w.rsr.Spec.Source.RecommendationID == w.rec.ID {
+		return true
+	}
+	changed := map[corev1.ResourceName]bool{}
+	for _, r := range dec.Resources {
+		changed[corev1.ResourceName(r)] = true
+	}
+	if len(dec.Targets) == 0 || len(changed) == 0 {
+		return false
+	}
+	return sameAdvice(dec.Targets, w.rsr.Spec.Containers, changed, w.r.tolerance())
 }
 
 // ownedTargets are the auto-patch resources that the RSR's spec carries values for.
@@ -1068,12 +1147,7 @@ func (w *run) upsertSpec(targets []v1alpha1.ContainerRecommendation, strategy v1
 		TargetRef:  v1alpha1.TargetRef{APIVersion: gvk.GroupVersion().String(), Kind: w.kind, Name: w.k.Name},
 		Containers: targets,
 		Strategy:   strategy,
-		Source: v1alpha1.RecommendationSource{
-			RecommendationID: w.rec.ID,
-			GeneratedAt:      metav1.NewTime(w.rec.GeneratedAt),
-			Confidence:       fmt.Sprintf("%.3g", w.rec.Confidence),
-			RiskFlags:        riskFlags(w.rec.RiskFlags),
-		},
+		Source:     w.source(),
 	}
 	if w.hpa != nil && w.hpa.target != nil {
 		t := *w.hpa.target
@@ -1113,6 +1187,15 @@ func (w *run) upsertSpec(targets []v1alpha1.ContainerRecommendation, strategy v1
 	w.rsr = rsr
 	w.prev = v1alpha1.RightsizingRecommendationStatus{}
 	return nil
+}
+
+func (w *run) source() v1alpha1.RecommendationSource {
+	return v1alpha1.RecommendationSource{
+		RecommendationID: w.rec.ID,
+		GeneratedAt:      metav1.NewTime(w.rec.GeneratedAt),
+		Confidence:       fmt.Sprintf("%.3g", w.rec.Confidence),
+		RiskFlags:        riskFlags(w.rec.RiskFlags),
+	}
 }
 
 func specEqual(a, b v1alpha1.RightsizingRecommendationSpec) bool {
@@ -1179,7 +1262,7 @@ func (w *run) writeStatus() error {
 			applied += "; " + w.note
 		}
 		appliedReason := v1alpha1.ReasonRecommendationApplied
-		if w.approvedApply || (approvedLive(w.prev) && st.AppliedRecommendationID == w.prev.AppliedRecommendationID) {
+		if w.approvedApply || (approvedLive(w.prev) && (st.AppliedRecommendationID == w.prev.AppliedRecommendationID || w.adopted)) {
 			// Remembered across restarts: the approved values keep their field ownership (D-027).
 			appliedReason = v1alpha1.ReasonApprovedOnce
 			applied += " (approved once)"
