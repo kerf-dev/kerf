@@ -245,7 +245,7 @@ func setup(t *testing.T, f fixture) (*appsv1.Deployment, *corev1.Pod) {
 	setStatus(t, pod.Name, func(p *corev1.Pod) {
 		p.Status.Phase = corev1.PodRunning
 		p.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", Image: "busybox", ImageID: "x", Ready: true,
-			State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: metav1.Now()}},
+			State:     corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: metav1.Now()}},
 			Resources: p.Spec.Containers[0].Resources.DeepCopy()}}
 	})
 	return d, pod
