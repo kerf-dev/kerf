@@ -1,6 +1,6 @@
 /**
  * Visual capture of every page in light and dark mode. Skipped unless SCREENSHOTS_DIR is set:
- *   SCREENSHOTS_DIR=../docs/screenshots npx playwright test screenshots
+ *   make web-screenshots   (or: SCREENSHOTS_DIR=$PWD/../docs/screenshots npx playwright test screenshots)
  */
 import { expect, test } from '@playwright/test'
 
@@ -34,7 +34,7 @@ for (const theme of ['light', 'dark'] as const) {
       await page.goto(target)
       await expect(page.locator('main')).toBeVisible()
       await page.waitForLoadState('networkidle')
-      await expect(page.locator('[aria-busy=true], .animate-pulse')).toHaveCount(0, { timeout: 15_000 })
+      await expect(page.locator('[aria-busy=true], .animate-pulse')).toHaveCount(0, { timeout: 30_000 })
       await page.waitForTimeout(900) // let chart animations settle
       await page.screenshot({ path: `${dir}/${name}-${theme}.png`, fullPage: true })
     })
@@ -46,6 +46,8 @@ for (const [name, path] of [
   ['overview', '/'],
   ['opportunities', '/opportunities'],
   ['workload', '/workloads/prod-eu-west-1/payments/Deployment/checkout-api'],
+  ['clusters', '/clusters'],
+  ['activity', '/activity'],
 ] as const) {
   test(`${name} (tablet)`, async ({ page }) => {
     test.skip(!dir, 'set SCREENSHOTS_DIR to capture')
@@ -54,7 +56,7 @@ for (const [name, path] of [
     await page.goto(path)
     await expect(page.locator('main')).toBeVisible()
     await page.waitForLoadState('networkidle')
-    await expect(page.locator('[aria-busy=true], .animate-pulse')).toHaveCount(0, { timeout: 15_000 })
+    await expect(page.locator('[aria-busy=true], .animate-pulse')).toHaveCount(0, { timeout: 30_000 })
     await page.waitForTimeout(900)
     await page.screenshot({ path: `${dir}/${name}-tablet.png`, fullPage: true })
   })

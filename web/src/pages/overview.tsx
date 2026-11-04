@@ -25,6 +25,7 @@ import {
   formatCores,
   formatDateTime,
   formatNumber,
+  formatDelta,
   formatPercent,
   formatUSD,
   parseQuantity,
@@ -178,8 +179,10 @@ function SavingsTile({ summary }: { summary?: Summary }) {
   const trend = useSavingsTrend('30d', 'none')
   const c = useChartColors()
   const pts = useMemo(() => {
+    // The sparkline starts at the first non-zero point (no ramp up from "no data yet").
     const p = trend.data?.series[0]?.points ?? []
-    return p.slice(trimLeadingZeros([{ points: p }]))
+    const i = p.findIndex((x) => x.total > 0)
+    return i < 0 ? [] : p.slice(i)
   }, [trend.data])
   const first = pts[0]?.total
   const option = useMemo(
@@ -226,12 +229,11 @@ function SavingsTile({ summary }: { summary?: Summary }) {
             {formatUSD(total)}
           </div>
           <div className="mt-1.5 text-xs text-muted-foreground">
-            {formatUSD(total * 12, { compact: true })} / year
+            <span className="whitespace-nowrap">{formatUSD(total * 12, { compact: true })} / year</span>
             {first ? (
               <Tooltip content="Change of the estimated savings over the last 30 days. Applied recommendations turn estimated savings into realized ones, so this can go down while costs fall.">
                 <span className="ml-1.5 cursor-help whitespace-nowrap underline decoration-dotted underline-offset-2">
-                  {total >= first ? '+' : '−'}
-                  {formatPercent(Math.abs(total - first) / first)} 30d
+                  {formatDelta((total - first) / first)} 30d
                 </span>
               </Tooltip>
             ) : null}

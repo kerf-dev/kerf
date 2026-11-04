@@ -85,9 +85,17 @@ export function formatUSD(v: number | undefined, opts: { compact?: boolean; cent
   return usd0.format(v)
 }
 
+/**
+ * 0.42 → "42%". A ratio strictly between 0 and 1 never rounds to "0%" or "100%" (2 of 568 workloads is
+ * "<1%", 566 of 568 is ">99%"), so "0%" and "100%" always mean none and all.
+ */
 export function formatPercent(ratio: number | undefined, digits = 0): string {
   if (ratio == null || Number.isNaN(ratio)) return '—'
-  return `${(ratio * 100).toFixed(digits)}%`
+  const s = (ratio * 100).toFixed(digits)
+  const step = 10 ** -digits
+  if (ratio > 0 && Number(s) === 0) return `<${step}%`
+  if (ratio < 1 && Number(s) === 100) return `>${trim(100 - step, digits)}%`
+  return `${s}%`
 }
 
 /** Signed change from `from` to `to` as a ratio; undefined if either is missing or from is 0. */

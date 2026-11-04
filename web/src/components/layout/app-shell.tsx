@@ -5,13 +5,14 @@ import {
   LayoutDashboardIcon,
   MonitorIcon,
   MoonIcon,
+  PiggyBankIcon,
   SearchIcon,
   ServerIcon,
   SunIcon,
   TrendingDownIcon,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { useSummary } from '@/api/queries'
 import { useTheme, type Theme } from '@/components/theme-provider'
 import { Button } from '@/components/ui/button'
@@ -25,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip } from '@/components/ui/tooltip'
-import { formatDateTime, relativeTime } from '@/lib/format'
+import { formatDateTime, formatNumber, formatUSD, relativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CommandPalette } from './command-palette'
 
@@ -83,6 +84,52 @@ function Freshness() {
         </span>
         <span className="hidden lg:inline">Recommender ran {relativeTime(at)}</span>
       </div>
+    </Tooltip>
+  )
+}
+
+/** Fleet-wide savings, always visible in the top bar. */
+function FleetSavings() {
+  const { data, isError } = useSummary()
+  if (isError) return null
+  if (!data)
+    return (
+      <div
+        className="h-8 w-40 animate-pulse rounded-lg bg-muted"
+        aria-hidden
+        data-testid="fleet-savings-loading"
+      />
+    )
+  const f = data.fleet
+  if (!f.workloads) return null
+  const clusters = data.clusters.filter((c) => c.workloads > 0).length
+  return (
+    <Tooltip
+      content={
+        <div className="space-y-0.5">
+          <div>
+            {formatUSD(f.monthlySavingsUSD.total * 12, { compact: true })} per year · CPU{' '}
+            {formatUSD(f.monthlySavingsUSD.cpu)} · memory {formatUSD(f.monthlySavingsUSD.memory)} per month
+          </div>
+          <div className="text-muted-foreground">
+            Estimated if every recommendation were applied, across {formatNumber(f.workloads)} workloads in{' '}
+            {clusters} cluster{clusters === 1 ? '' : 's'}.
+          </div>
+        </div>
+      }
+    >
+      <Link
+        to="/opportunities"
+        data-testid="fleet-savings"
+        className="group flex h-8 shrink-0 items-center gap-2 rounded-lg border border-success/25 bg-success/8 pr-2.5 pl-2 text-[13px] transition-colors outline-none hover:border-success/45 hover:bg-success/12 focus-visible:ring-[3px] focus-visible:ring-ring/30"
+      >
+        <PiggyBankIcon className="size-4 text-success" />
+        <span className="hidden text-muted-foreground sm:inline">Fleet savings</span>
+        <span className="font-semibold text-success tabular">
+          {formatUSD(f.monthlySavingsUSD.total)}
+          <span className="text-xs font-normal text-muted-foreground">/mo</span>
+        </span>
+      </Link>
     </Tooltip>
   )
 }
@@ -272,6 +319,7 @@ export function AppShell() {
           </button>
           <div className="ml-auto flex items-center gap-1.5">
             <MockMenu />
+            <FleetSavings />
             <ThemeMenu />
           </div>
         </header>

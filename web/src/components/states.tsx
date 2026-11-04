@@ -75,8 +75,18 @@ export function ErrorState({
         ? 'Not found'
         : e?.status === 0
           ? 'Cannot reach the hub'
-          : 'Something went wrong'
+          : e && e.status >= 502 && e.status <= 504
+            ? 'The hub is unavailable'
+            : e && e.status >= 500
+              ? 'The hub returned an error'
+              : 'Something went wrong'
   const message = error instanceof Error ? error.message : String(error)
+  // Server-side failures are usually transient (a hub restart or rollout): say so, since the
+  // generic "Internal error." from the hub gives the reader nothing to act on.
+  const hint =
+    e && (e.status >= 500 || e.status === 0)
+      ? 'This is usually temporary, for example while the hub restarts. Try again in a moment.'
+      : undefined
   return (
     <div
       role="alert"
@@ -91,6 +101,7 @@ export function ErrorState({
       </div>
       <h3 className="text-sm font-semibold">{title}</h3>
       <p className="mt-1 max-w-md text-[13px] text-muted-foreground">{message}</p>
+      {hint && !compact ? <p className="mt-1 max-w-md text-[13px] text-muted-foreground">{hint}</p> : null}
       {e?.problem?.code || e?.status ? (
         <p className="mt-2 font-mono text-[11px] text-muted-foreground/80">
           {e.status ? `HTTP ${e.status}` : ''}

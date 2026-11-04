@@ -109,7 +109,7 @@ export default function ClustersPage() {
       ) : (
         <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3" data-testid="cluster-cards">
           {items.map((c) => (
-            <ClusterCard key={c.name} c={c} s={byName.get(c.name)} />
+            <ClusterCard key={c.name} c={c} s={byName.get(c.name)} summaryLoading={summary.isPending} />
           ))}
         </div>
       )}
@@ -191,7 +191,15 @@ function Bar({
   )
 }
 
-function ClusterCard({ c, s }: { c: ClusterInfo; s?: ClusterSummary }) {
+function ClusterCard({
+  c,
+  s,
+  summaryLoading,
+}: {
+  c: ClusterInfo
+  s?: ClusterSummary
+  summaryLoading: boolean
+}) {
   const st = STATUS[c.agentStatus]
   const coverage = c.counts.workloads ? c.counts.withRecommendation / c.counts.workloads : 0
   return (
@@ -325,6 +333,12 @@ function ClusterCard({ c, s }: { c: ClusterInfo; s?: ClusterSummary }) {
                     Requested
                   </span>
                 </div>
+              </div>
+            ) : summaryLoading ? (
+              <div className="space-y-3" aria-busy="true">
+                <Skeleton className="h-7 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
               </div>
             ) : null}
           </>

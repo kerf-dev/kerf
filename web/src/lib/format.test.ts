@@ -4,6 +4,7 @@ import {
   formatBytes,
   formatCores,
   formatDelta,
+  formatPercent,
   formatQuantity,
   formatUSD,
   humanDuration,
@@ -11,6 +12,21 @@ import {
   parseQuantity,
 } from './format'
 import { encodeWorkloadId, parseWorkloadId, workloadPath } from './workload-id'
+
+describe('formatPercent', () => {
+  it.each([
+    [0, '0%'],
+    [1, '100%'],
+    [0.42, '42%'],
+    [2 / 568, '<1%'],
+    [566 / 568, '>99%'],
+    [0.0004, '<0.1%', 1],
+    [0.9996, '>99.9%', 1],
+    [undefined, '—'],
+  ] as [number | undefined, string, number?][])('%s → %s', (v, want, digits = 0) => {
+    expect(formatPercent(v, digits)).toBe(want)
+  })
+})
 
 describe('parseQuantity', () => {
   it.each([
