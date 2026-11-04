@@ -208,3 +208,88 @@ func TestInWindow(t *testing.T) {
 		})
 	}
 }
+
+func hubPol(p v1alpha1.RightsizingPolicy, typ string) v1alpha1.RightsizingPolicy {
+	p.Labels = map[string]string{v1alpha1.LabelManagedBy: v1alpha1.ManagedByHub}
+	p.Annotations = map[string]string{v1alpha1.AnnotationHubPolicyType: typ}
+	return p
+}
+
+// TestHubLayers covers the D-022 layering: hub defaults and overrides are layers around the
+// winning policy, not competitors.
+func TestHubLayers(t *testing.T) {
+	web := Workload{Namespace: "shop", Kind: v1alpha1.KindDeployment, Name: "web"}
+	all := v1alpha1.PolicySelector{}
+	global := hubPol(pol(v1alpha1.GlobalDefaultsPolicyName, 0, all, audit, off), v1alpha1.HubPolicyTypeGlobalDefault)
+	global.Spec.Guardrails = &v1alpha1.Guardrails{MinConfidence: "0.8"}
+	clusterHub := hubPol(pol(v1alpha1.ClusterDefaultsPolicyName, 10, all, "", audit), v1alpha1.HubPolicyTypeClusterDefault)
+	team := pol("team", 50, v1alpha1.PolicySelector{Namespaces: []string{"shop"}}, auto, "")
+	overrideName := v1alpha1.OverridePolicyName("shop", v1alpha1.KindDeployment, "web")
+	override := hubPol(pol(overrideName, v1alpha1.PriorityWorkloadOverride, v1alpha1.PolicySelector{
+		Namespaces: []string{"shop"}, Kinds: []v1alpha1.WorkloadKind{v1alpha1.KindDeployment},
+		Workloads: []v1alpha1.NamespacedWorkloadRef{{Kind: v1alpha1.KindDeployment, Namespace: "shop", Name: "web"}},
+	}, "", off), v1alpha1.HubPolicyTypeWorkloadOverride)
+	otherOverride := hubPol(pol(v1alpha1.OverridePolicyName("shop", v1alpha1.KindDeployment, "api"), v1alpha1.PriorityWorkloadOverride, v1alpha1.PolicySelector{
+		Workloads: []v1alpha1.NamespacedWorkloadRef{{Kind: v1alpha1.KindDeployment, Namespace: "shop", Name: "api"}},
+	}, off, off), v1alpha1.HubPolicyTypeWorkloadOverride)
+	// A Git CR pretending to be a layer is an ordinary policy (no managed-by label).
+	fake := pol("git-fake-default", 1, all, off, off)
+	fake.Annotations = map[string]string{v1alpha1.AnnotationHubPolicyType: v1alpha1.HubPolicyTypeGlobalDefault}
+
+	tests := []struct {
+		name               string
+		cluster            *v1alpha1.RightsizingPolicySpec
+		policies           []v1alpha1.RightsizingPolicy
+		cpu, mem           v1alpha1.Mode
+		cpuS, memS         v1alpha1.ModeSource
+		wantPol, wantOverr string
+	}{
+		{"hub global default", nil, []v1alpha1.RightsizingPolicy{global}, audit, off, srcGlobal, srcGlobal, "", ""},
+		{"chart cluster default over hub global", clusterDefault("", audit), []v1alpha1.RightsizingPolicy{global}, audit, audit, srcGlobal, srcCluster, "", ""},
+		{"hub cluster default over chart", clusterDefault("", auto), []v1alpha1.RightsizingPolicy{global, clusterHub}, audit, audit, srcGlobal, srcCluster, "", ""},
+		{"winner over defaults, defaults do not compete", nil, []v1alpha1.RightsizingPolicy{global, clusterHub, team}, auto, audit, srcPolicy, srcCluster, "team", ""},
+		{"override over winner", nil, []v1alpha1.RightsizingPolicy{global, team, override, otherOverride}, auto, off, srcPolicy, srcPolicy, "team", overrideName},
+		{"override alone", nil, []v1alpha1.RightsizingPolicy{override}, audit, off, srcGlobal, srcPolicy, "", overrideName},
+		{"git CR with the annotation competes", nil, []v1alpha1.RightsizingPolicy{fake}, off, off, srcPolicy, srcPolicy, "git-fake-default", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := Resolve(web, tt.policies, tt.cluster)
+			if e.CPUMode != tt.cpu || e.MemoryMode != tt.mem || e.CPUModeSource != tt.cpuS || e.MemoryModeSource != tt.memS ||
+				e.Policy != tt.wantPol || e.Override != tt.wantOverr {
+				t.Errorf("got cpu %s(%s) mem %s(%s) policy %q override %q", e.CPUMode, e.CPUModeSource, e.MemoryMode,
+					e.MemoryModeSource, e.Policy, e.Override)
+			}
+		})
+	}
+	if e := Resolve(web, []v1alpha1.RightsizingPolicy{global, team}, nil); e.MinConfidence != 0.8 {
+		t.Errorf("hub global default guardrail not layered: %v", e.MinConfidence)
+	}
+}
+
+func TestSelectorWorkloads(t *testing.T) {
+	sel := v1alpha1.PolicySelector{Workloads: []v1alpha1.NamespacedWorkloadRef{
+		{Kind: v1alpha1.KindDeployment, Namespace: "shop", Name: "web"},
+		{Kind: v1alpha1.KindStatefulSet, Namespace: "db", Name: "pg"},
+	}}
+	tests := []struct {
+		w    Workload
+		want bool
+	}{
+		{Workload{Namespace: "shop", Kind: v1alpha1.KindDeployment, Name: "web"}, true},
+		{Workload{Namespace: "db", Kind: v1alpha1.KindStatefulSet, Name: "pg"}, true},
+		{Workload{Namespace: "shop", Kind: v1alpha1.KindStatefulSet, Name: "web"}, false},
+		{Workload{Namespace: "other", Kind: v1alpha1.KindDeployment, Name: "web"}, false},
+		{Workload{Namespace: "shop", Kind: v1alpha1.KindDeployment, Name: "api"}, false},
+	}
+	for _, tt := range tests {
+		if got := Matches(sel, tt.w); got != tt.want {
+			t.Errorf("%+v: got %v", tt.w, got)
+		}
+	}
+	// AND with the other criteria.
+	sel.Namespaces = []string{"db"}
+	if Matches(sel, Workload{Namespace: "shop", Kind: v1alpha1.KindDeployment, Name: "web"}) {
+		t.Error("workloads must be combined with namespaces (AND)")
+	}
+}

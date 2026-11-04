@@ -1,14 +1,18 @@
-// Package policy resolves the effective rightsizing policy of a workload (D-005):
+// Package policy resolves the effective rightsizing policy of a workload (D-005, D-022):
 //
-//	global default < cluster default < RightsizingPolicy (highest priority match) < workload annotation
+//	built-in defaults < hub ro-global-defaults < chart cluster defaults < hub ro-cluster-defaults
+//	  < winning RightsizingPolicy (highest priority match) < hub workload override < annotations
 //
 // Every field is layered separately: a level that leaves a field unset inherits it from the level
 // below. Only the winning RightsizingPolicy takes part; fields are never merged across policies.
+// The hub's defaults and overrides (CRs labelled managed-by=hub with a hub-policy-type
+// annotation) are layers, not competitors: they never win or lose against a policy.
 package policy
 
 import (
 	"fmt"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -52,7 +56,9 @@ type Workload struct {
 
 // Effective is the resolved policy of one workload, with every default filled in.
 type Effective struct {
-	Policy           string
+	Policy string
+	// Override is the hub workload-override policy layered on top of Policy (D-022).
+	Override         string
 	CPUMode          v1alpha1.Mode
 	CPUModeSource    v1alpha1.ModeSource
 	MemoryMode       v1alpha1.Mode
@@ -189,7 +195,27 @@ func Matches(sel v1alpha1.PolicySelector, w Workload) bool {
 			return false
 		}
 	}
+	if len(sel.Workloads) > 0 {
+		ref := v1alpha1.NamespacedWorkloadRef{Kind: w.Kind, Namespace: w.Namespace, Name: w.Name}
+		if !slices.Contains(sel.Workloads, ref) {
+			return false
+		}
+	}
 	return true
+}
+
+// HubLayer returns the hub policy type of a CR that is a layer rather than a competing policy:
+// HubPolicyTypeGlobalDefault, HubPolicyTypeClusterDefault or HubPolicyTypeWorkloadOverride, and
+// "" otherwise. Only CRs labelled managed-by=hub count (a Git CR cannot become a layer).
+func HubLayer(p *v1alpha1.RightsizingPolicy) string {
+	if p.Labels[v1alpha1.LabelManagedBy] != v1alpha1.ManagedByHub {
+		return ""
+	}
+	switch t := p.Annotations[v1alpha1.AnnotationHubPolicyType]; t {
+	case v1alpha1.HubPolicyTypeGlobalDefault, v1alpha1.HubPolicyTypeClusterDefault, v1alpha1.HubPolicyTypeWorkloadOverride:
+		return t
+	}
+	return ""
 }
 
 func globAny(patterns []string, s string) bool {
@@ -224,9 +250,18 @@ func Winner(policies []v1alpha1.RightsizingPolicy, w Workload) *v1alpha1.Rightsi
 	return matching[0]
 }
 
-// Resolve computes the effective policy. cluster holds the cluster defaults (its selector and
-// priority are ignored); nil means none.
+// Resolve computes the effective policy. cluster holds the chart's cluster defaults (its selector
+// and priority are ignored); nil means none.
 func Resolve(w Workload, policies []v1alpha1.RightsizingPolicy, cluster *v1alpha1.RightsizingPolicySpec) Effective {
+	var competing []v1alpha1.RightsizingPolicy
+	layers := map[string][]v1alpha1.RightsizingPolicy{}
+	for i := range policies {
+		if t := HubLayer(&policies[i]); t != "" {
+			layers[t] = append(layers[t], policies[i])
+		} else {
+			competing = append(competing, policies[i])
+		}
+	}
 	e := Effective{
 		CPUMode:                  v1alpha1.DefaultMode,
 		CPUModeSource:            v1alpha1.ModeSourceGlobalDefault,
@@ -251,12 +286,22 @@ func Resolve(w Workload, policies []v1alpha1.RightsizingPolicy, cluster *v1alpha
 		HPAMinTarget:             DefaultHPAMinTarget,
 		HPAMaxTarget:             DefaultHPAMaxTarget,
 	}
+	if p := Winner(layers[v1alpha1.HubPolicyTypeGlobalDefault], w); p != nil {
+		e.layer(&p.Spec, v1alpha1.ModeSourceGlobalDefault, "hub global defaults "+p.Name)
+	}
 	if cluster != nil {
 		e.layer(cluster, v1alpha1.ModeSourceClusterDefault, "cluster default")
 	}
-	if p := Winner(policies, w); p != nil {
+	if p := Winner(layers[v1alpha1.HubPolicyTypeClusterDefault], w); p != nil {
+		e.layer(&p.Spec, v1alpha1.ModeSourceClusterDefault, "hub cluster defaults "+p.Name)
+	}
+	if p := Winner(competing, w); p != nil {
 		e.Policy = p.Name
 		e.layer(&p.Spec, v1alpha1.ModeSourcePolicy, "RightsizingPolicy "+p.Name)
+	}
+	if p := Winner(layers[v1alpha1.HubPolicyTypeWorkloadOverride], w); p != nil {
+		e.Override = p.Name
+		e.layer(&p.Spec, v1alpha1.ModeSourcePolicy, "workload override "+p.Name)
 	}
 	e.annotations(w.Annotations)
 	return e

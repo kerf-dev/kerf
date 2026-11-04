@@ -62,10 +62,11 @@ rules:
   - apiGroups: ["autoscaling"]
     resources: ["horizontalpodautoscalers"]
     verbs: ["get", "list", "watch"{{ if not .Values.readOnly }}, "patch"{{ end }}]
-  # Our CRDs.
+  # Our CRDs. RightsizingPolicies are written only when they are materialised from the hub
+  # config (labelled managed-by=hub, D-022); others are never touched.
   - apiGroups: ["resource-optimizer.oz.io"]
     resources: ["rightsizingpolicies"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch"{{ if and .Values.configSync.enabled (not .Values.readOnly) }}, "create", "update", "patch", "delete"{{ end }}]
   - apiGroups: ["resource-optimizer.oz.io"]
     resources: ["rightsizingrecommendations"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -93,6 +94,39 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "agent.fullname" . }}
     namespace: {{ .Release.Namespace }}
+{{- if .Values.configSync.enabled }}
+---
+# The last hub config (pause flag, approvals) persisted across restarts (WO-21).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "agent.fullname" . }}-config-state
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: [{{ printf "%s-config-state" (include "agent.fullname" .) | quote }}]
+    verbs: ["get", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "agent.fullname" . }}-config-state
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "agent.fullname" . }}-config-state
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "agent.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
 {{- if .Values.leaderElection }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1

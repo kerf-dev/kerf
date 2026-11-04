@@ -68,7 +68,7 @@ func TestClientAgainstStub(t *testing.T) {
 		sts = append(sts, hubclient.WorkloadStatus{Workload: hubclient.WorkloadRef{Namespace: "default", Kind: "Deployment", Name: fmt.Sprintf("s%d", i)},
 			Modes: hubclient.EffectiveModes{CPU: "audit", Memory: "audit"}, Phase: "Pending"})
 	}
-	if err := c.ReportWorkloadStatus(ctx, "test", sts); err != nil {
+	if err := c.ReportWorkloadStatus(ctx, hubclient.WorkloadStatusBatch{AgentVersion: "test", Items: sts}); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(stub.Statuses("ro-spoke-1")); n != 1500 || stub.Requests("reportWorkloadStatus") != 2 {

@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
+	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 )
 
@@ -136,7 +137,7 @@ func (s *Store) getETag() string {
 // Hub is the part of hubclient.Client the agent uses (an interface for tests).
 type Hub interface {
 	ListRecommendations(ctx context.Context, etag string) ([]hubclient.WorkloadRecommendation, string, error)
-	ReportWorkloadStatus(ctx context.Context, agentVersion string, items []hubclient.WorkloadStatus) error
+	ReportWorkloadStatus(ctx context.Context, batch hubclient.WorkloadStatusBatch) error
 	ReportEvents(ctx context.Context, items []hubclient.Event) (hubclient.BatchResult, error)
 }
 
@@ -153,6 +154,45 @@ type Reporter struct {
 	statuses map[wkey]hubclient.WorkloadStatus
 	dirty    map[wkey]bool
 	events   []hubclient.Event
+
+	// configVersion is sent with every status batch, inventory with full ones (D-022); nil
+	// inventory = not known yet (omitted).
+	configVersion string
+	inventory     []hubclient.PolicyInventoryItem
+}
+
+// SetConfig records the hub config version the agent materialised and the policy inventory.
+func (r *Reporter) SetConfig(configVersion string, inventory []hubclient.PolicyInventoryItem) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.configVersion = configVersion
+	r.inventory = inventory
+}
+
+// matched counts the workloads each policy takes part in: the winning policy or override of a
+// workload, and the hub default layers for every workload. Callers hold r.mu.
+func (r *Reporter) matched(inv []hubclient.PolicyInventoryItem) []hubclient.PolicyInventoryItem {
+	out := make([]hubclient.PolicyInventoryItem, len(inv))
+	counts := map[string]int32{}
+	for _, st := range r.statuses {
+		counts[st.Policy]++
+		if st.Override != "" {
+			counts[st.Override]++
+		}
+	}
+	for i, it := range inv {
+		out[i] = it
+		if it.Generation == 0 {
+			continue // not materialised
+		}
+		n := counts[it.Name]
+		if it.Source == hubclient.PolicySourceHub &&
+			(it.HubPolicyType == v1alpha1.HubPolicyTypeGlobalDefault || it.HubPolicyType == v1alpha1.HubPolicyTypeClusterDefault) {
+			n = int32(len(r.statuses))
+		}
+		out[i].MatchedWorkloads = &n
+	}
+	return out
 }
 
 // NewReporter returns a reporter with an event buffer of maxEvents.
@@ -298,11 +338,15 @@ func (r *Reporter) flushStatuses(ctx context.Context, full bool) error {
 		st.ObservedAt = &now
 		items = append(items, st)
 	}
+	batch := hubclient.WorkloadStatusBatch{AgentVersion: r.agentVersion, ConfigVersion: r.configVersion, Items: items}
+	if full && r.inventory != nil {
+		batch.PolicyInventory = r.matched(r.inventory)
+	}
 	r.mu.Unlock()
-	if len(items) == 0 {
+	if len(items) == 0 && batch.PolicyInventory == nil {
 		return nil
 	}
-	if err := r.hub.ReportWorkloadStatus(ctx, r.agentVersion, items); err != nil {
+	if err := r.hub.ReportWorkloadStatus(ctx, batch); err != nil {
 		hubRequests.WithLabelValues("reportWorkloadStatus", "error").Inc()
 		return err
 	}
@@ -325,11 +369,27 @@ type Puller struct {
 	// Trigger is called after every pull (successful or not) to re-evaluate every workload: it
 	// is the periodic resync and picks up a hub that became (un)reachable.
 	Trigger func()
-	Log     *slog.Logger
+	// Config pulls and materialises the hub config after every recommendation pull (D-022), so
+	// the reconciles that follow see the current pause flag and approvals; nil disables it.
+	Config ConfigSyncer
+	Log    *slog.Logger
+}
+
+// ConfigSyncer is the hub config side of the pull loop (configsync.Syncer).
+type ConfigSyncer interface {
+	// Load restores the persisted config before the first pull.
+	Load(ctx context.Context) error
+	// Sync pulls the config and materialises it.
+	Sync(ctx context.Context)
 }
 
 // Start implements manager.Runnable.
 func (p *Puller) Start(ctx context.Context) error {
+	if p.Config != nil {
+		if err := p.Config.Load(ctx); err != nil {
+			p.Log.WarnContext(ctx, "restore hub config state", "err", err)
+		}
+	}
 	report := time.NewTicker(p.ReportInterval)
 	defer report.Stop()
 	// After a failed pull retry sooner (5s, doubling) than the pull interval.
@@ -348,7 +408,7 @@ func (p *Puller) Start(ctx context.Context) error {
 	// flowing every ReportInterval meanwhile.
 	var fullFlush <-chan time.Time
 	afterPull := func(ok bool) time.Duration {
-		if ok {
+		if ok && fullFlush == nil { // not re-armed by every pull: short intervals would starve it
 			fullFlush = time.After(2 * time.Second)
 		}
 		return next(ok)
@@ -390,6 +450,9 @@ func (p *Puller) pullOnce(ctx context.Context) bool {
 		hubRequests.WithLabelValues("listRecommendations", "ok").Inc()
 		changed := p.Store.Replace(items, etag)
 		p.Log.InfoContext(ctx, "pulled recommendations", "items", len(items), "changed", len(changed))
+	}
+	if p.Config != nil {
+		p.Config.Sync(ctx)
 	}
 	p.Store.markAttempted()
 	p.Trigger()

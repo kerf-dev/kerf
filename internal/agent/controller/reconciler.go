@@ -79,10 +79,20 @@ type Reconciler struct {
 	Recorder events.EventRecorder
 	Log      *slog.Logger
 	Now      func() time.Time
+	// Admin is the hub-managed configuration (pause flag, approve-once grants; D-022, D-024);
+	// nil means none.
+	Admin AdminState
 
 	mu sync.Mutex
 	// last holds, per workload and dedup slot, the signature of the last event emitted there (D-017).
 	last map[string]signature
+}
+
+// AdminState is the part of the hub config the reconciler consults (configsync.State).
+type AdminState interface {
+	Flags() hubclient.ConfigFlags
+	Approval(w hubclient.WorkloadRef, recID string, now time.Time) *hubclient.ConfigApproval
+	Consume(id string, now time.Time)
 }
 
 func requestName(kind v1alpha1.WorkloadKind, name string) string { return string(kind) + "/" + name }
@@ -134,7 +144,10 @@ type run struct {
 	now  time.Time
 	log  *slog.Logger
 
-	eff      policy.Effective
+	eff policy.Effective
+	// base is the effective policy as resolved, before an approve-once grant raised audit
+	// resources to auto-patch for this one change: it is what the RSR status and the hub show.
+	base     policy.Effective
 	strategy v1alpha1.Strategy
 	rec      *hubclient.WorkloadRecommendation
 	fresh    bool
@@ -151,6 +164,12 @@ type run struct {
 	holdEffective bool
 	// note is appended to the Applied condition message (OnDelete roll progress, WO-13).
 	note string
+	// paused: automation is paused in the hub config (D-022); frozen is set too.
+	paused     bool
+	pauseScope string
+	pauseMsg   string
+	// approval is the approve-once grant being applied (D-024); nil otherwise.
+	approval *hubclient.ConfigApproval
 }
 
 func (w *run) reconcile() (ctrl.Result, error) {
@@ -175,6 +194,13 @@ func (w *run) reconcile() (ctrl.Result, error) {
 	if open, err := windows.Open(w.eff.FreezeWindows, w.now); open || err != nil {
 		w.frozen = true // an invalid freeze window counts as frozen, like in the guardrails
 	}
+	if r.Admin != nil {
+		if f := r.Admin.Flags(); f.Paused {
+			w.paused, w.frozen = true, true
+			w.pauseScope, w.pauseMsg = f.PauseScope, pauseMessage(f)
+		}
+	}
+	w.base = w.eff
 	for _, msg := range w.eff.Warnings {
 		w.log.Warn("policy", "warning", msg)
 	}
@@ -189,6 +215,7 @@ func (w *run) reconcile() (ctrl.Result, error) {
 	}
 	w.rec, _ = r.Store.Get(w.k)
 	w.fresh = r.Store.Fresh()
+	w.approve()
 
 	// Strategy in effect: an in-place fallback (spec.strategy rollout while the configured
 	// strategy is in-place) sticks until the configured strategy changes.
@@ -248,7 +275,10 @@ func (w *run) release() error {
 		// Releasing hands the fields back to Argo CD, which then changes the workload: wait.
 		w.holdEffective = true
 		w.reason, w.message = v1alpha1.ReasonFreezeWindow, "inside a freeze window: field ownership is released when it ends"
-		w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: v1alpha1.ReasonFreezeWindow, Message: w.message,
+		if w.paused {
+			w.reason, w.message = v1alpha1.ReasonPaused, w.pauseMsg+": field ownership is released when automation resumes"
+		}
+		w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: w.reason, Message: w.message,
 			Resources: keys(owned)}, "release", nil)
 		return nil
 	}
@@ -425,6 +455,7 @@ func (w *run) decide() (ctrl.Result, error) {
 		Containers:    w.containersForEval(),
 		LastAppliedAt: lastApplied, RolledBackAt: rolledBack, Tolerance: r.Cfg.Tolerance,
 		RolledBackResources: w.rolledBackResources(), Disruption: disruption,
+		Paused: w.paused, PauseMessage: w.pauseMsg,
 	}
 	w.hpa.guardrailInput(&in)
 	dec := guardrails.Evaluate(in)
@@ -871,6 +902,9 @@ func (w *run) progressInPlace() (ctrl.Result, error) {
 		}
 		if frozenWait {
 			w.message = "inside a freeze window: remaining pods are resized when it ends"
+			if w.paused {
+				w.message = w.pauseMsg + ": remaining pods are resized when automation resumes"
+			}
 		}
 		if err := w.writeStatus(); err != nil {
 			return ctrl.Result{}, err
@@ -1101,15 +1135,22 @@ func (w *run) writeStatus() error {
 	}
 	st.ObservedGeneration = w.rsr.Generation
 	if !w.holdEffective || st.Effective == nil {
-		st.Effective = w.eff.API()
+		st.Effective = w.base.API()
 	}
 	if st.Phase != v1alpha1.PhaseDeferred {
 		st.NextWindow = nil
 	}
+	b := w.base
 	msg := fmt.Sprintf("policy %q; cpu %s (%s), memory %s (%s); strategy %s; profile %s",
-		w.eff.Policy, w.eff.CPUMode, w.eff.CPUModeSource, w.eff.MemoryMode, w.eff.MemoryModeSource, w.eff.Strategy, w.eff.Profile)
-	if len(w.eff.Warnings) > 0 {
-		msg += "; " + strings.Join(w.eff.Warnings, "; ")
+		b.Policy, b.CPUMode, b.CPUModeSource, b.MemoryMode, b.MemoryModeSource, b.Strategy, b.Profile)
+	if b.Override != "" {
+		msg += fmt.Sprintf("; override %q", b.Override)
+	}
+	if w.approval != nil {
+		msg += fmt.Sprintf("; approved once by %s (approval %s)", w.approval.ApprovedBy, w.approval.ID)
+	}
+	if len(b.Warnings) > 0 {
+		msg += "; " + strings.Join(b.Warnings, "; ")
 	}
 	setCond(st, v1alpha1.ConditionPolicyResolved, metav1.ConditionTrue, condReasonResolved, msg)
 
@@ -1167,7 +1208,7 @@ func isBlockedReason(r string) bool {
 	case v1alpha1.ReasonLearningPeriod, v1alpha1.ReasonLowConfidence, v1alpha1.ReasonCooldown, v1alpha1.ReasonHPACoupled,
 		v1alpha1.ReasonThrottled, v1alpha1.ReasonOOMKilled, v1alpha1.ReasonFreezeWindow, v1alpha1.ReasonOutsideMaintenanceWindow,
 		v1alpha1.ReasonUnsupportedNode, v1alpha1.ReasonRestartPolicyRequired, v1alpha1.ReasonHubUnreachable,
-		v1alpha1.ReasonSingleReplicaUnsafe, v1alpha1.ReasonPodDisruptionBudget:
+		v1alpha1.ReasonSingleReplicaUnsafe, v1alpha1.ReasonPodDisruptionBudget, v1alpha1.ReasonPaused:
 		return true
 	}
 	return false
@@ -1270,6 +1311,18 @@ func (r *Reconciler) tolerance() float64 {
 func (w *run) emit(e hubclient.Event, slot string, values []v1alpha1.ContainerRecommendation) {
 	r := w.r
 	e.Workload = hubclient.WorkloadRef{Namespace: w.k.Namespace, Kind: w.k.Kind, Name: w.k.Name}
+	if e.Reason == v1alpha1.ReasonPaused && w.pauseScope != "" {
+		e.Details = withDetail(e.Details, hubclient.DetailPauseScope, w.pauseScope)
+	}
+	if a := w.approval; a != nil && e.Type == hubclient.EventApplied && e.Reason == v1alpha1.ReasonRecommendationApplied {
+		// Approve once (D-024): the hub marks the approval consumed when it stores this event.
+		e.Reason = v1alpha1.ReasonApprovedOnce
+		e.Details = withDetail(withDetail(e.Details, hubclient.DetailApprovalID, a.ID), hubclient.DetailApprovedBy, a.ApprovedBy)
+		e.Message = "approved once by " + a.ApprovedBy + ": " + e.Message
+		r.Admin.Consume(a.ID, w.now)
+		w.approval = nil
+		w.log.Info("approval applied", "approval", a.ID, "recommendation", e.RecommendationID, "approvedBy", a.ApprovedBy)
+	}
 	if slot != "" {
 		sig := signature{head: strings.Join([]string{e.Type, e.Reason, strings.Join(e.Resources, ","), w.policyDigest()}, "|"), values: values}
 		key := w.k.String() + "|" + slot
@@ -1301,7 +1354,7 @@ func (w *run) emit(e hubclient.Event, slot string, values []v1alpha1.ContainerRe
 // policyDigest identifies the effective policy: editing it (e.g. turning HPA coordination on)
 // re-reports the current skip/block once, with the new reasoning (D-017).
 func (w *run) policyDigest() string {
-	e := w.eff
+	e := w.base
 	e.Warnings = nil
 	b, _ := json.Marshal(e)
 	sum := sha256.Sum256(b)
@@ -1388,12 +1441,14 @@ func isSkipReason(r string) bool {
 
 // report records the hub WorkloadStatus.
 func (w *run) report() {
-	settings := w.eff.Settings()
+	b := w.base
+	settings := b.Settings()
 	st := hubclient.WorkloadStatus{
 		Workload: hubclient.WorkloadRef{Namespace: w.k.Namespace, Kind: w.k.Kind, Name: w.k.Name},
-		Policy:   w.eff.Policy,
-		Modes: hubclient.EffectiveModes{CPU: string(w.eff.CPUMode), Memory: string(w.eff.MemoryMode),
-			CPUSource: string(w.eff.CPUModeSource), MemorySource: string(w.eff.MemoryModeSource)},
+		Policy:   b.Policy,
+		Override: b.Override,
+		Modes: hubclient.EffectiveModes{CPU: string(b.CPUMode), Memory: string(b.MemoryMode),
+			CPUSource: string(b.CPUModeSource), MemorySource: string(b.MemoryModeSource)},
 		Strategy: string(w.strategy),
 		Settings: &settings,
 		Phase:    string(v1alpha1.PhasePending),
@@ -1450,4 +1505,61 @@ func toHubResources(c v1alpha1.ContainerResources) hubclient.ContainerResources 
 		return v
 	}
 	return hubclient.ContainerResources{Name: c.Name, Requests: conv(c.Requests), Limits: conv(c.Limits)}
+}
+
+// withDetail returns a copy of details with key set (event details may be shared).
+func withDetail(details map[string]string, key, value string) map[string]string {
+	out := make(map[string]string, len(details)+1)
+	for k, v := range details {
+		out[k] = v
+	}
+	out[key] = value
+	return out
+}
+
+// pauseMessage describes a hub pause for events and status messages.
+func pauseMessage(f hubclient.ConfigFlags) string {
+	scope := f.PauseScope
+	if scope == "" {
+		scope = hubclient.PauseScopeCluster
+	}
+	msg := "automation is paused in the hub (" + scope + ")"
+	if f.PauseReason != "" {
+		msg += ": " + f.PauseReason
+	}
+	return msg
+}
+
+// ---------------------------------------------------------------------------------------------
+// Approve once (D-024)
+
+// approve applies an approve-once grant for the workload's current recommendation: its audit
+// resources count as auto-patch for this one change, with every guardrail. The grant is
+// consumed by the applied event (emit); until then it also carries an in-place change already in
+// flight. A recommendation that is already live is not applied again.
+func (w *run) approve() {
+	r := w.r
+	if r.Admin == nil || r.Cfg.ReadOnly {
+		return
+	}
+	ref := hubclient.WorkloadRef{Namespace: w.k.Namespace, Kind: w.k.Kind, Name: w.k.Name}
+	var a *hubclient.ConfigApproval
+	if w.rec != nil && (w.rsr == nil || w.prev.Phase != v1alpha1.PhaseApplied || w.rsr.Status.AppliedRecommendationID != w.rec.ID) {
+		a = r.Admin.Approval(ref, w.rec.ID, w.now)
+	}
+	if a == nil && w.rsr != nil && w.prev.Phase == v1alpha1.PhaseApplying {
+		a = r.Admin.Approval(ref, w.rsr.Spec.Source.RecommendationID, w.now)
+	}
+	if a == nil {
+		return
+	}
+	raised := false
+	for _, m := range []*v1alpha1.Mode{&w.eff.CPUMode, &w.eff.MemoryMode} {
+		if *m == v1alpha1.ModeAudit {
+			*m, raised = v1alpha1.ModeAutoPatch, true
+		}
+	}
+	if raised {
+		w.approval = a
+	}
 }

@@ -3,15 +3,25 @@
 // on the local k3d clusters until the real hub (WO-04) is deployed.
 //
 // Implemented: bearer-token auth bound to one cluster, ETag / If-None-Match on recommendations,
-// limit/continue pagination, workload-status upserts and idempotent event storage by id.
+// limit/continue pagination, workload-status upserts and idempotent event storage by id, and the
+// cluster config of the admin area (D-022, WO-21): GET config with ETag, approvals consumed on an
+// applied/ApprovedOnce event, configVersion and policyInventory recorded from status batches.
+//
+// With an upstream (SetUpstream) it serves only the config itself and forwards recommendations,
+// statuses and events to the real hub (recording them on the way), so an agent can be tested
+// against hub-managed config while keeping its real recommendations.
 package hubstub
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -32,18 +42,95 @@ type Server struct {
 	eventIDs map[string]bool
 	down     bool
 	requests map[string]int
+
+	configs   map[string]*hubclient.ClusterConfig        // cluster -> config served at GET config
+	inventory map[string][]hubclient.PolicyInventoryItem // cluster -> last reported inventory
+	applied   map[string]string                          // cluster -> last reported configVersion
+	upstream  *httputil.ReverseProxy
 }
 
 // New returns an empty stub hub.
 func New() *Server {
 	return &Server{
-		tokens:   map[string]string{},
-		recs:     map[string][]hubclient.WorkloadRecommendation{},
-		statuses: map[string]map[string]hubclient.WorkloadStatus{},
-		events:   map[string][]hubclient.Event{},
-		eventIDs: map[string]bool{},
-		requests: map[string]int{},
+		tokens:    map[string]string{},
+		recs:      map[string][]hubclient.WorkloadRecommendation{},
+		statuses:  map[string]map[string]hubclient.WorkloadStatus{},
+		events:    map[string][]hubclient.Event{},
+		eventIDs:  map[string]bool{},
+		requests:  map[string]int{},
+		configs:   map[string]*hubclient.ClusterConfig{},
+		inventory: map[string][]hubclient.PolicyInventoryItem{},
+		applied:   map[string]string{},
 	}
+}
+
+// SetUpstream forwards recommendations, statuses and events to a real hub (the request's
+// Authorization header is passed through); config is still served by the stub.
+func (s *Server) SetUpstream(u *url.URL) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.upstream = httputil.NewSingleHostReverseProxy(u)
+}
+
+// SetConfig replaces the config of a cluster; nil removes it (GET config then answers 404, like a
+// hub that predates the admin area). An empty ConfigVersion is derived from the content.
+func (s *Server) SetConfig(cluster string, cfg *hubclient.ClusterConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if cfg == nil {
+		delete(s.configs, cluster)
+		return
+	}
+	c := *cfg
+	c.Cluster = cluster
+	c.Policies = slices.Clone(c.Policies)
+	c.Approvals = slices.Clone(c.Approvals)
+	if c.Policies == nil {
+		c.Policies = []hubclient.ConfigPolicy{}
+	}
+	if c.Approvals == nil {
+		c.Approvals = []hubclient.ConfigApproval{}
+	}
+	if c.PolicySource == "" {
+		c.PolicySource = "both"
+	}
+	if c.ConfigVersion == "" {
+		c.ConfigVersion = configVersion(&c)
+	}
+	c.GeneratedAt = time.Now().UTC().Truncate(time.Second)
+	s.configs[cluster] = &c
+}
+
+// Config returns a copy of the config of a cluster (nil if none).
+func (s *Server) Config(cluster string) *hubclient.ClusterConfig {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.configs[cluster]
+	if !ok {
+		return nil
+	}
+	out := *c
+	out.Policies = slices.Clone(c.Policies)
+	out.Approvals = slices.Clone(c.Approvals)
+	return &out
+}
+
+// Inventory returns the last policy inventory and configVersion the agent reported.
+func (s *Server) Inventory(cluster string) ([]hubclient.PolicyInventoryItem, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.inventory[cluster]), s.applied[cluster]
+}
+
+func configVersion(c *hubclient.ClusterConfig) string {
+	b, _ := json.Marshal(struct {
+		P []hubclient.ConfigPolicy
+		F hubclient.ConfigFlags
+		A []hubclient.ConfigApproval
+		S string
+	}{c.Policies, c.Flags, c.Approvals, c.PolicySource})
+	sum := sha256.Sum256(b)
+	return "c-" + hex.EncodeToString(sum[:6])
 }
 
 // AddToken registers an agent token for cluster ("" = admin token valid for every cluster).
@@ -98,7 +185,23 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/clusters/{cluster}/recommendations", s.auth("listRecommendations", s.listRecommendations))
 	mux.HandleFunc("POST /v1/clusters/{cluster}/workload-status", s.auth("reportWorkloadStatus", s.reportStatus))
 	mux.HandleFunc("POST /v1/clusters/{cluster}/events", s.auth("reportEvents", s.reportEvents))
+	mux.HandleFunc("GET /v1/clusters/{cluster}/config", s.auth("getClusterConfig", s.getConfig))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
+	// Debugging (no auth, stub only): what the agent reported for the admin area.
+	mux.HandleFunc("GET /debug/clusters/{cluster}", func(w http.ResponseWriter, r *http.Request) {
+		c := r.PathValue("cluster")
+		inv, applied := s.Inventory(c)
+		writeJSON(w, map[string]any{"config": s.Config(c), "appliedConfigVersion": applied, "policyInventory": inv})
+	})
+	mux.HandleFunc("PUT /debug/clusters/{cluster}/config", func(w http.ResponseWriter, r *http.Request) {
+		var cfg hubclient.ClusterConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			problem(w, http.StatusBadRequest, "invalid_body", err.Error())
+			return
+		}
+		s.SetConfig(r.PathValue("cluster"), &cfg)
+		writeJSON(w, s.Config(r.PathValue("cluster")))
+	})
 	return mux
 }
 
@@ -127,7 +230,41 @@ func (s *Server) auth(op string, next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// proxy forwards the request upstream (if configured) with body; it reports whether it did.
+func (s *Server) proxy(w http.ResponseWriter, r *http.Request, body []byte) bool {
+	s.mu.Lock()
+	up := s.upstream
+	s.mu.Unlock()
+	if up == nil {
+		return false
+	}
+	if body != nil {
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		r.ContentLength = int64(len(body))
+	}
+	up.ServeHTTP(w, r)
+	return true
+}
+
+func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := s.Config(r.PathValue("cluster"))
+	if cfg == nil {
+		problem(w, http.StatusNotFound, "not_found", "no config for this cluster")
+		return
+	}
+	etag := `"` + cfg.ConfigVersion + `"`
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("ETag", etag)
+	writeJSON(w, cfg)
+}
+
 func (s *Server) listRecommendations(w http.ResponseWriter, r *http.Request) {
+	if s.proxy(w, r, nil) {
+		return
+	}
 	cluster := r.PathValue("cluster")
 	ns := r.URL.Query().Get("namespace")
 	s.mu.Lock()
@@ -177,8 +314,24 @@ func (s *Server) listRecommendations(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) reportStatus(w http.ResponseWriter, r *http.Request) {
 	var batch hubclient.WorkloadStatusBatch
-	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err == nil {
+		err = json.Unmarshal(body, &batch)
+	}
+	if err != nil {
 		problem(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	cluster := r.PathValue("cluster")
+	s.mu.Lock()
+	if batch.ConfigVersion != "" {
+		s.applied[cluster] = batch.ConfigVersion
+	}
+	if batch.PolicyInventory != nil {
+		s.inventory[cluster] = batch.PolicyInventory
+	}
+	s.mu.Unlock()
+	if s.proxy(w, r, body) {
 		return
 	}
 	if len(batch.Items) > hubclient.MaxBatch {
@@ -195,7 +348,6 @@ func (s *Server) reportStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	cluster := r.PathValue("cluster")
 	s.mu.Lock()
 	if s.statuses[cluster] == nil {
 		s.statuses[cluster] = map[string]hubclient.WorkloadStatus{}
@@ -209,8 +361,22 @@ func (s *Server) reportStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) reportEvents(w http.ResponseWriter, r *http.Request) {
 	var batch hubclient.EventBatch
-	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err == nil {
+		err = json.Unmarshal(body, &batch)
+	}
+	if err != nil {
 		problem(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	s.consumeApprovals(r.PathValue("cluster"), batch.Items)
+	s.mu.Lock()
+	proxied := s.upstream != nil
+	if proxied { // keep a copy for Events; the real hub de-duplicates and validates
+		s.events[r.PathValue("cluster")] = append(s.events[r.PathValue("cluster")], batch.Items...)
+	}
+	s.mu.Unlock()
+	if s.proxy(w, r, body) {
 		return
 	}
 	if len(batch.Items) > hubclient.MaxBatch {
@@ -241,6 +407,30 @@ func (s *Server) reportEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Unlock()
 	writeJSON(w, res)
+}
+
+// consumeApprovals removes approvals an applied/ApprovedOnce event reports (as the hub marks them
+// consumed when it stores the event, D-024) and changes the config version.
+func (s *Server) consumeApprovals(cluster string, events []hubclient.Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cfg := s.configs[cluster]
+	if cfg == nil {
+		return
+	}
+	changed := false
+	for _, e := range events {
+		if e.Type != hubclient.EventApplied || e.Reason != "ApprovedOnce" {
+			continue
+		}
+		id := e.Details[hubclient.DetailApprovalID]
+		n := len(cfg.Approvals)
+		cfg.Approvals = slices.DeleteFunc(cfg.Approvals, func(a hubclient.ConfigApproval) bool { return a.ID == id })
+		changed = changed || len(cfg.Approvals) != n
+	}
+	if changed {
+		cfg.ConfigVersion = configVersion(cfg)
+	}
 }
 
 var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)

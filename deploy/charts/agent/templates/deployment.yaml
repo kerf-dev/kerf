@@ -83,6 +83,8 @@ spec:
             - --health-cadvisor-fallback={{ .Values.health.cadvisorFallback }}
             - --max-pod-deletes-per-run={{ .Values.onDelete.maxPodDeletesPerRun }}
             - --ondelete-settle={{ .Values.onDelete.settle }}
+            - --config-sync={{ .Values.configSync.enabled }}
+            - --config-state-configmap={{ include "agent.fullname" . }}-config-state
             {{- range .Values.unsupportedNodeSelectors }}
             - --unsupported-node-selector={{ . }}
             {{- end }}
