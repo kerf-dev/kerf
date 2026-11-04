@@ -60,6 +60,11 @@ type Config struct {
 	ApplyingRequeue time.Duration
 	// Freeze is the cluster-wide freeze (WO-10): added to every policy's freeze windows.
 	Freeze windows.Freeze
+	// MaxPodDeletesPerRun caps the pods of an OnDelete StatefulSet evicted at once (WO-13, default 1).
+	MaxPodDeletesPerRun int
+	// OnDeleteSettle is how long a replaced pod must be Ready before the next one is evicted
+	// (WO-13, default 30s; the StatefulSet's minReadySeconds if longer).
+	OnDeleteSettle time.Duration
 }
 
 // Reconciler reconciles one workload per request. Request.Name is "<Kind>/<name>".
@@ -142,6 +147,8 @@ type run struct {
 	// holdEffective keeps the stored effective policy while a release waits for a freeze to end,
 	// so the release (and its event) still happens afterwards.
 	holdEffective bool
+	// note is appended to the Applied condition message (OnDelete roll progress, WO-13).
+	note string
 }
 
 func (w *run) reconcile() (ctrl.Result, error) {
@@ -385,6 +392,10 @@ func (w *run) decide() (ctrl.Result, error) {
 			return w.progressInPlace()
 		}
 	}
+	// An OnDelete StatefulSet roll in flight keeps going (WO-13).
+	if res, active, err := w.rollOnDelete(); err != nil || active {
+		return res, err
+	}
 
 	var lastApplied, rolledBack *time.Time
 	if w.rsr != nil {
@@ -399,6 +410,10 @@ func (w *run) decide() (ctrl.Result, error) {
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	disruption, err := w.disruption()
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	w.hpa = hpa
 	if w.hpa.coordinate && w.strategy == v1alpha1.StrategyInPlace {
 		w.strategy = v1alpha1.StrategyRollout // in-place is not used for HPA workloads (WO-11)
@@ -407,7 +422,7 @@ func (w *run) decide() (ctrl.Result, error) {
 		Now: w.now, Effective: w.eff, Strategy: w.strategy, Rec: w.rec, HubFresh: w.fresh,
 		Containers:    w.containersForEval(),
 		LastAppliedAt: lastApplied, RolledBackAt: rolledBack, Tolerance: r.Cfg.Tolerance,
-		RolledBackResources: w.rolledBackResources(),
+		RolledBackResources: w.rolledBackResources(), Disruption: disruption,
 	}
 	w.hpa.guardrailInput(&in)
 	dec := guardrails.Evaluate(in)
@@ -489,7 +504,10 @@ func (w *run) decide() (ctrl.Result, error) {
 		}
 		return requeue, nil
 	}
-	return ctrl.Result{}, w.applyRollout(dec.Targets, w.liveValues(), w.strategy, "")
+	if err := w.applyRollout(dec.Targets, w.liveValues(), w.strategy, ""); err != nil || !apply.IsOnDelete(w.obj) {
+		return ctrl.Result{}, err
+	}
+	return requeue, nil
 }
 
 // rolledBackResources are the resources the last rollback restored, from the HealthWatch
@@ -726,6 +744,10 @@ func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous 
 	w.rsr.Status.AppliedRecommendationID = recID
 	w.reason = v1alpha1.ReasonRecommendationApplied
 	w.message = "pod template patched, rollout started: " + guardrails.Summary(changes) + hpaMsg
+	if note := w.onDeleteNote(); note != "" {
+		w.message = "pod template patched: " + guardrails.Summary(changes) + hpaMsg + "; " + note
+		w.note = note
+	}
 	w.emit(hubclient.Event{Type: hubclient.EventApplied, Reason: v1alpha1.ReasonRecommendationApplied,
 		RecommendationID: recID, Strategy: string(strategy), Resources: resourcesOf(changes),
 		Containers: changes, Message: w.message, Details: hpaDetails}, "", nil)
@@ -870,6 +892,11 @@ func (w *run) progressInPlace() (ctrl.Result, error) {
 // fallback switches an in-place change to rollout (D-007) and applies it to the template.
 func (w *run) fallback(reason, msg, resizeStatus string) (ctrl.Result, error) {
 	recID := w.rsr.Spec.Source.RecommendationID
+	if why, err := w.fallbackUnsafe(); err != nil {
+		return ctrl.Result{}, err
+	} else if why != "" {
+		return w.blockFallback(reason, msg, why)
+	}
 	w.emit(hubclient.Event{Type: hubclient.EventFallback, Reason: reason, RecommendationID: recID,
 		Strategy: string(v1alpha1.StrategyRollout), Resources: keys(w.ownedTargets()), Message: msg,
 		Details: map[string]string{"resizeStatus": resizeStatus}}, "", nil)
@@ -1094,6 +1121,9 @@ func (w *run) writeStatus() error {
 		if st.AppliedRecommendationID != "" {
 			applied = "recommendation " + st.AppliedRecommendationID + " is live"
 		}
+		if w.note != "" {
+			applied += "; " + w.note
+		}
 		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionTrue, v1alpha1.ReasonRecommendationApplied, applied)
 	} else {
 		// The reason is the latest decision (e.g. ModeAudit for a Released workload): the phase
@@ -1129,7 +1159,8 @@ func isBlockedReason(r string) bool {
 	switch r {
 	case v1alpha1.ReasonLearningPeriod, v1alpha1.ReasonLowConfidence, v1alpha1.ReasonCooldown, v1alpha1.ReasonHPACoupled,
 		v1alpha1.ReasonThrottled, v1alpha1.ReasonOOMKilled, v1alpha1.ReasonFreezeWindow, v1alpha1.ReasonOutsideMaintenanceWindow,
-		v1alpha1.ReasonUnsupportedNode, v1alpha1.ReasonRestartPolicyRequired, v1alpha1.ReasonHubUnreachable:
+		v1alpha1.ReasonUnsupportedNode, v1alpha1.ReasonRestartPolicyRequired, v1alpha1.ReasonHubUnreachable,
+		guardrails.ReasonSingleReplicaUnsafe, guardrails.ReasonPodDisruptionBudget:
 		return true
 	}
 	return false
