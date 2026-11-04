@@ -5,6 +5,8 @@ go 1.26.0
 toolchain go1.27.3
 
 require (
+	github.com/golang/snappy v1.0.0
+	go.yaml.in/yaml/v3 v3.0.4
 	k8s.io/api v0.37.2
 	k8s.io/apimachinery v0.37.2
 )
@@ -13,6 +15,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/x448/float16 v0.8.4 // indirect
