@@ -62,6 +62,27 @@ func (h *hubAPI) maybeRecompute(ctx context.Context, logf func(string, ...any)) 
 	}
 	h.lastRecompute = time.Now()
 	h.mu.Unlock()
+	h.recompute(ctx, logf)
+}
+
+// recomputeNow asks for a recommender run now, outside the rate limit and other scenarios' holds
+// (theirs are robust to a run: approvals are re-approved, the D-027 check ends early). It reports
+// false when the hub has no recompute trigger.
+func (h *hubAPI) recomputeNow(ctx context.Context, logf func(string, ...any)) bool {
+	h.mu.Lock()
+	if h.noRecompute || h.AdminToken == "" {
+		h.mu.Unlock()
+		return false
+	}
+	h.lastRecompute = time.Now()
+	h.mu.Unlock()
+	h.recompute(ctx, logf)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return !h.noRecompute
+}
+
+func (h *hubAPI) recompute(ctx context.Context, logf func(string, ...any)) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.Base+"/v1/admin/recompute", nil)
 	if err != nil {
 		return
