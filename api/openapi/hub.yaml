@@ -1,0 +1,1402 @@
+openapi: 3.1.0
+info:
+  title: resource-optimizer hub API
+  version: 0.1.0
+  summary: Contract between the hub, the per-cluster agents and the web UI (WO-00).
+  description: |
+    The hub computes recommendations for every workload in every cluster; each cluster's agent
+    pulls them, applies them according to its local policy and reports status and events back
+    (D-004). The hub never calls the agents. The web UI reads through the `ui` endpoints.
+
+    **Authentication** (D-012): every request carries `Authorization: Bearer <token>`. Each token
+    has one role; the roles an operation accepts are listed in its `security` requirement.
+    - `agent`: bound to exactly one cluster. It may only use the `/v1/clusters/{cluster}/...`
+      endpoints of that cluster (otherwise `403`), and `GET /v1/audit` restricted to that cluster.
+    - `ui`: read-only, all clusters. May use the `ui`-tagged endpoints and `GET /v1/audit`.
+    - `admin`: may use every endpoint for every cluster (satisfies every role).
+    A token without an accepted role gets `403`. The hub stores only a SHA-256 hash of each token.
+
+    **Conventions**
+    - `cluster` is the cluster name, identical to the `cluster` label on all metrics
+      (`docs/contracts/metrics.md`).
+    - Quantities use Kubernetes quantity syntax (`250m`, `512Mi`).
+    - Durations use Go duration syntax (`336h0m0s`, `10m`).
+    - Timestamps are RFC 3339 in UTC.
+    - Workload ids are `<cluster>/<namespace>/<kind>/<name>`, e.g.
+      `ro-spoke-1/payments/Deployment/checkout`. In a path they are one segment, URL-encoded
+      (`encodeURIComponent`, so `/` becomes `%2F`). Reverse proxies in front of the hub must pass
+      `%2F` through undecoded.
+    - Numbers in time series and totals use base units: cores, bytes, USD.
+    - Errors use `application/problem+json` (RFC 9457).
+    - Unknown fields must be ignored by readers, so fields can be added without a new version.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: '{baseURL}'
+    description: Hub base URL. Local development (WO-01) uses http://localhost:8080.
+    variables:
+      baseURL:
+        default: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: agent
+    description: Endpoints used by the per-cluster agent.
+  - name: audit
+    description: Audit log queries.
+  - name: ui
+    description: Read-only endpoints for the web UI.
+paths:
+  /v1/clusters/{cluster}/recommendations:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [agent]
+      operationId: listRecommendations
+      security:
+        - bearerAuth: [agent]
+      summary: Latest recommendation for every workload of a cluster
+      description: |
+        Returns the latest recommendation per workload. Workloads without a recommendation
+        (e.g. unknown to the hub) are omitted. Supports conditional requests: the response carries
+        an `ETag`; sending it back in `If-None-Match` returns `304` when nothing changed.
+        Without `limit` all items are returned in one page.
+      parameters:
+        - name: namespace
+          in: query
+          description: Only workloads in this namespace.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Continue'
+        - name: If-None-Match
+          in: header
+          description: ETag of a previous response.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recommendations.
+          headers:
+            ETag:
+              description: Opaque version of the result set.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationList'
+        '304':
+          description: Not modified since the given ETag.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/clusters/{cluster}/workload-status:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    post:
+      tags: [agent]
+      operationId: reportWorkloadStatus
+      security:
+        - bearerAuth: [agent]
+      summary: Report the status of a batch of workloads
+      description: |
+        Upserts the status of each listed workload (keyed by namespace, kind and name). Workloads
+        not listed keep their previous status. The agent sends a full batch at least once per
+        recommendation pull, and a partial batch on every phase change. The hub uses
+        `settings` as input for the next recommendation run of that workload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkloadStatusBatch'
+      responses:
+        '200':
+          description: Batch accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+  /v1/clusters/{cluster}/events:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    post:
+      tags: [agent]
+      operationId: reportEvents
+      security:
+        - bearerAuth: [agent]
+      summary: Append audit events
+      description: |
+        Appends events to the audit log (`docs/contracts/events.md`). Idempotent by event `id`:
+        re-sending an event that was already stored is counted as a duplicate, not an error, so
+        the agent can retry a whole batch after a timeout.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventBatch'
+      responses:
+        '200':
+          description: Batch accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+  /v1/audit:
+    get:
+      tags: [audit]
+      operationId: queryAudit
+      security:
+        - bearerAuth: [agent]
+        - bearerAuth: [ui]
+      summary: Query the audit log
+      description: |
+        Returns audit events matching all given filters, ordered by event `time` (ascending by
+        default). An agent token implicitly filters on its own cluster.
+      parameters:
+        - name: cluster
+          in: query
+          schema:
+            $ref: '#/components/schemas/ClusterName'
+        - name: namespace
+          in: query
+          schema:
+            type: string
+        - name: kind
+          in: query
+          schema:
+            $ref: '#/components/schemas/WorkloadKind'
+        - name: workload
+          in: query
+          description: Workload name.
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: Event types; repeat the parameter for several.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/EventType'
+        - name: from
+          in: query
+          description: Inclusive lower bound on event time.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Exclusive upper bound on event time.
+          schema:
+            type: string
+            format: date-time
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - $ref: '#/components/parameters/Continue'
+      responses:
+        '200':
+          description: Audit events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEventList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/summary:
+    get:
+      tags: [ui]
+      operationId: getSummary
+      security:
+        - bearerAuth: [ui]
+      summary: Fleet and per-cluster totals
+      description: |
+        Totals over the latest recommendation of every live workload. Workloads the agent never
+        reported count as `audit` / `Pending` (global default, D-005).
+      responses:
+        '200':
+          description: Summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/clusters:
+    get:
+      tags: [ui]
+      operationId: listClusters
+      security:
+        - bearerAuth: [ui]
+      summary: Clusters with agent heartbeat and counts
+      responses:
+        '200':
+          description: Clusters, ordered by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/workloads:
+    get:
+      tags: [ui]
+      operationId: listWorkloads
+      security:
+        - bearerAuth: [ui]
+      summary: Workloads with their latest recommendation
+      description: |
+        One row per live workload, including workloads that have no recommendation yet (their
+        recommendation fields are absent). All filters are combined with AND; repeatable filters
+        match any of their values.
+      parameters:
+        - name: cluster
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ClusterName'
+        - name: namespace
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+        - name: kind
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/WorkloadKind'
+        - name: mode
+          in: query
+          description: Matches if the CPU or the memory mode is one of the values.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Mode'
+        - name: riskFlag
+          in: query
+          description: Matches if the workload has any of the flags.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/RiskFlag'
+        - name: minSavings
+          in: query
+          description: Minimum total estimated monthly savings in USD.
+          schema:
+            type: number
+        - name: q
+          in: query
+          description: Case-insensitive substring match on namespace and workload name.
+          schema:
+            type: string
+            maxLength: 253
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [savings, confidence, name]
+            default: savings
+        - name: order
+          in: query
+          description: Default `desc` for savings and confidence, `asc` for name.
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+        - $ref: '#/components/parameters/Continue'
+      responses:
+        '200':
+          description: Workloads.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/workloads/{id}:
+    parameters:
+      - $ref: '#/components/parameters/WorkloadID'
+    get:
+      tags: [ui]
+      operationId: getWorkload
+      security:
+        - bearerAuth: [ui]
+      summary: Workload detail with per-container explanation
+      responses:
+        '200':
+          description: Workload detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WorkloadNotFound'
+  /v1/workloads/{id}/usage:
+    parameters:
+      - $ref: '#/components/parameters/WorkloadID'
+    get:
+      tags: [ui]
+      operationId: getWorkloadUsage
+      security:
+        - bearerAuth: [ui]
+      summary: Usage, request, limit and recommendation time series
+      description: |
+        Per container. `usage` is the maximum across the workload's pods at each step (what a
+        per-pod request has to cover); `usageAvg` is the mean across pods. `request`, `limit` and
+        `recommendation` (recommended request) are step functions. Values are cores for `cpu` and
+        bytes for `memory`.
+      parameters:
+        - name: resource
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/ResourceName'
+        - name: container
+          in: query
+          description: Only this container.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Step'
+      responses:
+        '200':
+          description: Time series.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageSeries'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WorkloadNotFound'
+  /v1/workloads/{id}/history:
+    parameters:
+      - $ref: '#/components/parameters/WorkloadID'
+    get:
+      tags: [ui]
+      operationId: getWorkloadHistory
+      security:
+        - bearerAuth: [ui]
+      summary: Past recommendations and audit events of a workload
+      description: Both lists are newest first and capped at `limit` entries each.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: History.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadHistory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WorkloadNotFound'
+  /v1/savings/trend:
+    get:
+      tags: [ui]
+      operationId: getSavingsTrend
+      security:
+        - bearerAuth: [ui]
+      summary: Estimated monthly savings over time
+      description: |
+        At each step: the sum of the estimated monthly savings of the recommendation that was
+        latest at that time, over the workloads live at that time. Estimated, not realized
+        (realized savings are WO-17).
+      parameters:
+        - name: cluster
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ClusterName'
+        - name: groupBy
+          in: query
+          description: '`none` returns one fleet series; `cluster` one series per cluster.'
+          schema:
+            type: string
+            enum: [none, cluster]
+            default: none
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Step'
+      responses:
+        '200':
+          description: Savings trend.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavingsTrend'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Opaque token with role `agent` (per cluster), `ui` or `admin` (D-012).
+  parameters:
+    Cluster:
+      name: cluster
+      in: path
+      required: true
+      description: Cluster name.
+      schema:
+        $ref: '#/components/schemas/ClusterName'
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of items in this page.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 5000
+    WorkloadID:
+      name: id
+      in: path
+      required: true
+      description: Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment.
+      schema:
+        $ref: '#/components/schemas/WorkloadID'
+    From:
+      name: from
+      in: query
+      description: Inclusive start. Default `to` minus 7 days.
+      schema:
+        type: string
+        format: date-time
+    To:
+      name: to
+      in: query
+      description: Exclusive end. Default now.
+      schema:
+        type: string
+        format: date-time
+    Step:
+      name: step
+      in: query
+      description: Resolution (Go duration). Default chosen so the result has at most 1000 points.
+      schema:
+        type: string
+        examples: [5m, 1h, 24h]
+    Continue:
+      name: continue
+      in: query
+      description: Token from a previous page's `continue` field.
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: The request is malformed or fails validation.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: The token is not allowed to access this cluster.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    WorkloadNotFound:
+      description: Unknown workload id.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Unknown cluster.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooLarge:
+      description: Batch too large (more than 1000 items or 8 MiB).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    ClusterName:
+      type: string
+      pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$'
+      examples: [ro-spoke-1]
+    WorkloadKind:
+      type: string
+      enum: [Deployment, StatefulSet, DaemonSet, CronJob]
+    Mode:
+      type: string
+      enum: ['off', audit, auto-patch]
+    ModeSource:
+      type: string
+      enum: [global-default, cluster-default, policy, annotation]
+    Strategy:
+      type: string
+      enum: [in-place, rollout, deferred]
+    Profile:
+      type: string
+      enum: [dev, production, high-availability]
+    Phase:
+      type: string
+      enum: [Pending, Applying, Applied, Blocked, RolledBack, Released]
+    RiskFlag:
+      type: string
+      description: |
+        `throttled`, `oom-killed`: the workload is under-provisioned; the recommendation is never
+        a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only
+        (D-011). `low-confidence`: confidence below the hub threshold.
+      enum: [throttled, oom-killed, restarting, hpa-coupled, sidecar, short-lived, low-confidence]
+    EventType:
+      type: string
+      enum: [applied, skipped, blocked, fallback, rolled_back, released, failed]
+    ResourceName:
+      type: string
+      enum: [cpu, memory]
+    Quantity:
+      type: string
+      description: Kubernetes resource quantity.
+      pattern: '^[0-9]+(\.[0-9]+)?(m|k|M|G|T|Ki|Mi|Gi|Ti)?$'
+      examples: [250m, 512Mi]
+    Decimal:
+      type: number
+      minimum: 0
+      maximum: 1
+    ResourceValues:
+      type: object
+      description: Values per resource. A missing key means "not set".
+      additionalProperties: false
+      properties:
+        cpu:
+          $ref: '#/components/schemas/Quantity'
+        memory:
+          $ref: '#/components/schemas/Quantity'
+    Resources:
+      type: object
+      properties:
+        requests:
+          $ref: '#/components/schemas/ResourceValues'
+        limits:
+          $ref: '#/components/schemas/ResourceValues'
+    ContainerResources:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        requests:
+          $ref: '#/components/schemas/ResourceValues'
+        limits:
+          $ref: '#/components/schemas/ResourceValues'
+    WorkloadRef:
+      type: object
+      required: [namespace, kind, name]
+      properties:
+        namespace:
+          type: string
+        kind:
+          $ref: '#/components/schemas/WorkloadKind'
+        name:
+          type: string
+    ValueSettings:
+      type: object
+      description: |
+        The policy settings that change recommended values. Reported by the agent from its
+        effective policy; echoed by the hub in each recommendation as the settings it used. If they
+        differ from the agent's current effective policy, the agent treats the recommendation as
+        stale (reason `RecommendationStale`) and waits for the next run.
+      properties:
+        profile:
+          $ref: '#/components/schemas/Profile'
+        cpuLimits:
+          type: string
+          enum: [keep, remove, ratio]
+        cpuLimitRatio:
+          type: string
+          description: Decimal multiple of the request, only with `cpuLimits = ratio`.
+          examples: ['2']
+        memoryLimitEqualsRequest:
+          type: boolean
+    ContainerRecommendation:
+      type: object
+      required: [name, current, recommended]
+      properties:
+        name:
+          type: string
+        init:
+          type: boolean
+          description: True for init and native sidecar containers.
+        current:
+          $ref: '#/components/schemas/Resources'
+        recommended:
+          $ref: '#/components/schemas/Resources'
+        removeLimits:
+          type: array
+          description: Resources whose limit should be removed.
+          items:
+            $ref: '#/components/schemas/ResourceName'
+        riskFlags:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskFlag'
+        monthlySavingsUSD:
+          $ref: '#/components/schemas/Savings'
+        explanation:
+          $ref: '#/components/schemas/ContainerExplanation'
+    Savings:
+      type: object
+      description: |
+        Estimated monthly savings in USD: (current - recommended request) x hourly rate x average
+        replicas x 730 h. Negative for increases.
+      required: [cpu, memory, total]
+      properties:
+        cpu:
+          type: number
+        memory:
+          type: number
+        total:
+          type: number
+    DataCoverage:
+      type: object
+      required: [ratio, window]
+      properties:
+        ratio:
+          description: Fraction of the window for which usage samples exist.
+          allOf:
+            - $ref: '#/components/schemas/Decimal'
+        window:
+          type: string
+          description: Recommendation window (Go duration).
+          examples: [336h0m0s]
+        covered:
+          type: string
+          description: Time span with data (Go duration). The agent compares it with `learningPeriod`.
+          examples: [200h0m0s]
+        firstSample:
+          type: string
+          format: date-time
+        lastSample:
+          type: string
+          format: date-time
+        samples:
+          type: integer
+          minimum: 0
+    WorkloadRecommendation:
+      type: object
+      required: [id, workload, generatedAt, containers, confidence, riskFlags, monthlySavingsUSD, dataCoverage, settings]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique per recommendation; a new run produces a new id.
+        workload:
+          $ref: '#/components/schemas/WorkloadRef'
+        generatedAt:
+          type: string
+          format: date-time
+        strategyName:
+          type: string
+          description: Recommender strategy, e.g. `percentile`.
+        settings:
+          $ref: '#/components/schemas/ValueSettings'
+        averageReplicas:
+          type: number
+          minimum: 0
+        containers:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ContainerRecommendation'
+        confidence:
+          $ref: '#/components/schemas/Decimal'
+        riskFlags:
+          type: array
+          description: Union of the containers' flags plus workload-level flags.
+          items:
+            $ref: '#/components/schemas/RiskFlag'
+        monthlySavingsUSD:
+          $ref: '#/components/schemas/Savings'
+        dataCoverage:
+          $ref: '#/components/schemas/DataCoverage'
+    RecommendationList:
+      type: object
+      required: [cluster, items]
+      properties:
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadRecommendation'
+        continue:
+          type: string
+          description: Present when more pages exist.
+    EffectiveModes:
+      type: object
+      required: [cpu, memory]
+      properties:
+        cpu:
+          $ref: '#/components/schemas/Mode'
+        memory:
+          $ref: '#/components/schemas/Mode'
+        cpuSource:
+          $ref: '#/components/schemas/ModeSource'
+        memorySource:
+          $ref: '#/components/schemas/ModeSource'
+    WorkloadStatus:
+      type: object
+      required: [workload, modes, phase]
+      properties:
+        workload:
+          $ref: '#/components/schemas/WorkloadRef'
+        policy:
+          type: string
+          description: Winning RightsizingPolicy name; empty when none matched.
+        modes:
+          $ref: '#/components/schemas/EffectiveModes'
+        strategy:
+          $ref: '#/components/schemas/Strategy'
+        settings:
+          $ref: '#/components/schemas/ValueSettings'
+        phase:
+          $ref: '#/components/schemas/Phase'
+        reason:
+          type: string
+          description: Reason for the phase (e.g. the Blocked reason), see `docs/contracts/events.md`.
+        message:
+          type: string
+        recommendationID:
+          type: string
+          format: uuid
+          description: Hub recommendation the phase refers to.
+        live:
+          type: array
+          description: Resources currently set on the workload's containers.
+          items:
+            $ref: '#/components/schemas/ContainerResources'
+        appliedAt:
+          type: string
+          format: date-time
+        observedAt:
+          type: string
+          format: date-time
+    WorkloadStatusBatch:
+      type: object
+      required: [items]
+      properties:
+        agentVersion:
+          type: string
+        items:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/WorkloadStatus'
+    ContainerChange:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        from:
+          $ref: '#/components/schemas/Resources'
+        to:
+          $ref: '#/components/schemas/Resources'
+    Event:
+      type: object
+      description: See `docs/contracts/events.md` for when each type is emitted.
+      required: [id, type, time, workload, reason]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Generated by the agent; idempotency key.
+        type:
+          $ref: '#/components/schemas/EventType'
+        time:
+          type: string
+          format: date-time
+        workload:
+          $ref: '#/components/schemas/WorkloadRef'
+        recommendationID:
+          type: string
+          format: uuid
+        strategy:
+          $ref: '#/components/schemas/Strategy'
+        resources:
+          type: array
+          description: Resources the event is about.
+          items:
+            $ref: '#/components/schemas/ResourceName'
+        containers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContainerChange'
+        reason:
+          type: string
+          pattern: '^[A-Z][A-Za-z0-9]*$'
+          description: CamelCase reason, see `docs/contracts/events.md`.
+        message:
+          type: string
+          maxLength: 1024
+        details:
+          type: object
+          description: Free-form string attributes (e.g. `oomKills`, `throttlingRatio`).
+          additionalProperties:
+            type: string
+    EventBatch:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/Event'
+    BatchResult:
+      type: object
+      required: [accepted]
+      properties:
+        accepted:
+          type: integer
+          minimum: 0
+        duplicates:
+          type: integer
+          minimum: 0
+          description: Events already stored (same id); not an error.
+    AuditEvent:
+      allOf:
+        - $ref: '#/components/schemas/Event'
+        - type: object
+          required: [cluster, receivedAt]
+          properties:
+            cluster:
+              $ref: '#/components/schemas/ClusterName'
+            receivedAt:
+              type: string
+              format: date-time
+            workloadId:
+              $ref: '#/components/schemas/WorkloadID'
+    AuditEventList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+        continue:
+          type: string
+          description: Present when more pages exist.
+    WorkloadID:
+      type: string
+      description: '`<cluster>/<namespace>/<kind>/<name>`'
+      pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?/[^/]+/(Deployment|StatefulSet|DaemonSet|CronJob)/[^/]+$'
+      examples: [ro-spoke-1/payments/Deployment/checkout]
+    UsageStats:
+      type: object
+      description: Statistics of per-pod usage over the window.
+      properties:
+        p50:
+          $ref: '#/components/schemas/Quantity'
+        p95:
+          $ref: '#/components/schemas/Quantity'
+        p99:
+          $ref: '#/components/schemas/Quantity'
+        max:
+          $ref: '#/components/schemas/Quantity'
+    ResourceExplanation:
+      type: object
+      required: [statistic, observed]
+      properties:
+        statistic:
+          type: string
+          description: Statistic the request is based on, e.g. `p95` (CPU) or `max(p99,peak)` (memory).
+        observed:
+          $ref: '#/components/schemas/UsageStats'
+        base:
+          $ref: '#/components/schemas/Quantity'
+        margin:
+          type: number
+          minimum: 0
+          description: Added fraction; CPU headroom or memory buffer (0.15 = +15 %).
+        roundedTo:
+          $ref: '#/components/schemas/Quantity'
+        limitRule:
+          type: string
+          description: How the limit was derived, e.g. `keep`, `remove`, `ratio 2`, `equals request`.
+        notes:
+          type: array
+          description: 'Adjustments, e.g. "raised: throttled" or "kept current: oom-killed".'
+          items:
+            type: string
+    ContainerExplanation:
+      type: object
+      description: Why the values were recommended. Only returned by `GET /v1/workloads/{id}`.
+      required: [profile, strategyName, window]
+      properties:
+        profile:
+          $ref: '#/components/schemas/Profile'
+        strategyName:
+          type: string
+        window:
+          type: string
+          description: Go duration.
+        cpu:
+          $ref: '#/components/schemas/ResourceExplanation'
+        memory:
+          $ref: '#/components/schemas/ResourceExplanation'
+    ModeCounts:
+      type: object
+      required: ['off', audit, auto-patch]
+      properties:
+        'off':
+          type: integer
+          minimum: 0
+        audit:
+          type: integer
+          minimum: 0
+        auto-patch:
+          type: integer
+          minimum: 0
+    ResourceTotals:
+      type: object
+      description: |
+        Sums over workloads (per-pod value x average replicas). `used` is the average usage over
+        the last 24 h. Cores for CPU, bytes for memory.
+      required: [requested, used, recommended]
+      properties:
+        requested:
+          type: number
+        used:
+          type: number
+        recommended:
+          type: number
+    Summary:
+      type: object
+      required: [workloads, workloadsByMode, workloadsByRiskFlag, cpu, memory, monthlySavingsUSD]
+      properties:
+        workloads:
+          type: integer
+          minimum: 0
+        workloadsByMode:
+          type: object
+          required: [cpu, memory]
+          properties:
+            cpu:
+              $ref: '#/components/schemas/ModeCounts'
+            memory:
+              $ref: '#/components/schemas/ModeCounts'
+        workloadsByRiskFlag:
+          type: object
+          description: Number of workloads per risk flag; flags with zero workloads may be omitted.
+          propertyNames:
+            $ref: '#/components/schemas/RiskFlag'
+          additionalProperties:
+            type: integer
+            minimum: 0
+        workloadsByPhase:
+          type: object
+          propertyNames:
+            $ref: '#/components/schemas/Phase'
+          additionalProperties:
+            type: integer
+            minimum: 0
+        cpu:
+          $ref: '#/components/schemas/ResourceTotals'
+        memory:
+          $ref: '#/components/schemas/ResourceTotals'
+        monthlySavingsUSD:
+          $ref: '#/components/schemas/Savings'
+        lastRecommenderRunAt:
+          type: string
+          format: date-time
+          description: End of the last recommender run that covered these workloads.
+    ClusterSummary:
+      allOf:
+        - $ref: '#/components/schemas/Summary'
+        - type: object
+          required: [cluster]
+          properties:
+            cluster:
+              $ref: '#/components/schemas/ClusterName'
+    FleetSummary:
+      type: object
+      required: [generatedAt, fleet, clusters]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        fleet:
+          $ref: '#/components/schemas/Summary'
+        clusters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterSummary'
+    ClusterInfo:
+      type: object
+      required: [name, agentStatus, counts]
+      properties:
+        name:
+          $ref: '#/components/schemas/ClusterName'
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastHeartbeatAt:
+          type: string
+          format: date-time
+          description: Last authenticated agent request.
+        agentVersion:
+          type: string
+        agentStatus:
+          type: string
+          description: '`stale` when the last heartbeat is older than the hub''s configured threshold.'
+          enum: [connected, stale, never]
+        counts:
+          type: object
+          required: [workloads, withRecommendation, autoPatch, blocked]
+          properties:
+            workloads:
+              type: integer
+              minimum: 0
+            withRecommendation:
+              type: integer
+              minimum: 0
+            autoPatch:
+              type: integer
+              minimum: 0
+              description: Workloads with CPU or memory in `auto-patch`.
+            blocked:
+              type: integer
+              minimum: 0
+    ClusterList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterInfo'
+    WorkloadRow:
+      type: object
+      description: Recommendation fields are absent when the workload has no recommendation yet.
+      required: [id, cluster, namespace, kind, name, modes, phase]
+      properties:
+        id:
+          $ref: '#/components/schemas/WorkloadID'
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        namespace:
+          type: string
+        kind:
+          $ref: '#/components/schemas/WorkloadKind'
+        name:
+          type: string
+        modes:
+          $ref: '#/components/schemas/EffectiveModes'
+        phase:
+          $ref: '#/components/schemas/Phase'
+        recommendationID:
+          type: string
+          format: uuid
+        generatedAt:
+          type: string
+          format: date-time
+        containers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContainerRecommendation'
+        confidence:
+          $ref: '#/components/schemas/Decimal'
+        riskFlags:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskFlag'
+        monthlySavingsUSD:
+          $ref: '#/components/schemas/Savings'
+    WorkloadList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadRow'
+        total:
+          type: integer
+          minimum: 0
+          description: Number of workloads matching the filters (all pages).
+        continue:
+          type: string
+          description: Present when more pages exist.
+    WorkloadDetail:
+      type: object
+      required: [id, cluster, namespace, kind, name, modes, phase]
+      properties:
+        id:
+          $ref: '#/components/schemas/WorkloadID'
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        namespace:
+          type: string
+        kind:
+          $ref: '#/components/schemas/WorkloadKind'
+        name:
+          type: string
+        modes:
+          $ref: '#/components/schemas/EffectiveModes'
+        phase:
+          $ref: '#/components/schemas/Phase'
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        recommendation:
+          description: Latest recommendation; containers include `explanation`. Absent if none yet.
+          allOf:
+            - $ref: '#/components/schemas/WorkloadRecommendation'
+        status:
+          description: Latest status reported by the agent. Absent if never reported.
+          allOf:
+            - $ref: '#/components/schemas/WorkloadStatus'
+    Point:
+      type: array
+      description: '[unix seconds, value]'
+      prefixItems:
+        - type: number
+        - type: number
+      minItems: 2
+      maxItems: 2
+    ContainerSeries:
+      type: object
+      required: [name, usage, request, limit, recommendation]
+      properties:
+        name:
+          type: string
+        usage:
+          type: array
+          items:
+            $ref: '#/components/schemas/Point'
+        usageAvg:
+          type: array
+          items:
+            $ref: '#/components/schemas/Point'
+        request:
+          type: array
+          items:
+            $ref: '#/components/schemas/Point'
+        limit:
+          type: array
+          description: Empty when no limit is set.
+          items:
+            $ref: '#/components/schemas/Point'
+        recommendation:
+          type: array
+          description: Recommended request.
+          items:
+            $ref: '#/components/schemas/Point'
+    UsageSeries:
+      type: object
+      required: [workloadId, resource, unit, from, to, step, containers]
+      properties:
+        workloadId:
+          $ref: '#/components/schemas/WorkloadID'
+        resource:
+          $ref: '#/components/schemas/ResourceName'
+        unit:
+          type: string
+          enum: [cores, bytes]
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        step:
+          type: string
+        containers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContainerSeries'
+    WorkloadHistory:
+      type: object
+      required: [workloadId, recommendations, events]
+      properties:
+        workloadId:
+          $ref: '#/components/schemas/WorkloadID'
+        recommendations:
+          type: array
+          description: Newest first.
+          items:
+            $ref: '#/components/schemas/WorkloadRecommendation'
+        events:
+          type: array
+          description: Newest first.
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+    SavingsPoint:
+      type: object
+      required: [time, cpu, memory, total]
+      properties:
+        time:
+          type: string
+          format: date-time
+        cpu:
+          type: number
+        memory:
+          type: number
+        total:
+          type: number
+    SavingsTrend:
+      type: object
+      required: [from, to, step, series]
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        step:
+          type: string
+        series:
+          type: array
+          items:
+            type: object
+            required: [points]
+            properties:
+              cluster:
+                description: Absent for the fleet series (`groupBy=none`).
+                allOf:
+                  - $ref: '#/components/schemas/ClusterName'
+              points:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SavingsPoint'
+    Problem:
+      type: object
+      description: |
+        RFC 9457 problem details; the single error schema for every endpoint. `code` is a stable
+        machine-readable identifier (e.g. `cluster_forbidden`, `invalid_workload_id`).
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
