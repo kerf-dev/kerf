@@ -155,7 +155,7 @@ Screenshots: `docs/screenshots/` (`make web-screenshots`). New captures:
 
 ## WO-22b (admin polish)
 
-Branch `wo-22b-admin-polish` from origin/main `9325962`; deployed as `web:wo22b-<sha>`.
+Branch `wo-22b-admin-polish` from origin/main `9325962`; deployed as `web:wo22b-59ff5d7`.
 - **Mode controls:** the CPU/memory segmented controls and the form grids use container queries (the
   form column is a `@container`), so they stack by the width they actually get. Playwright checks
   this at a 1060 px viewport (~800 px content).
