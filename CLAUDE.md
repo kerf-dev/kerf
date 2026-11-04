@@ -38,6 +38,10 @@ Operating loop: large task → Execution Plan with parallel tracks → one file 
 - Deploy only your component: build, push to `localhost:5005/resource-optimizer/<component>:<tag>`, `helm upgrade --install`
   into namespace `resource-optimizer`. Do not run `tilt up` (several tracks would fight over its port).
 - Synthetic data (WO-02) uses cluster names `synth-a` and `synth-b`; never write synthetic series for the real `ro-*` clusters.
+- Migration numbers in `db/migrations/` are assigned by the orchestrator (ask first). The hub DB is shared: a hub
+  deploy applies your migrations for everyone, so tracks never deploy the hub: the orchestrator deploys it from `main` after merging.
+- Spoke agent/webhook deploys replace what other tracks (and running e2e suites) rely on: check that no `make e2e`
+  is running (`kubectl --context k3d-ro-spoke-1 get ns | grep e2e-`) before `make deploy-agent`/`deploy-webhook`.
 - You may add Go dependencies to `go.mod`/`go.sum` (run `go mod tidy`); the orchestrator resolves conflicts at merge.
 - GitHub rejects pushes that touch `.github/workflows/` (token lacks `workflow` scope): put workflow files in
   `ci/github-workflows/` instead. `gh` is not installed: push your branch, never push `main`, don't open PRs.

@@ -49,10 +49,12 @@ const (
 	FlagSidecar       = "sidecar"
 	FlagShortLived    = "short-lived"
 	FlagLowConfidence = "low-confidence"
+	// FlagJVMFixedHeap: JVM with a fixed -Xmx; memory is audit-only (WO-12).
+	FlagJVMFixedHeap = "jvm-fixed-heap"
 )
 
 // AllRiskFlags lists the RiskFlag enum in contract order.
-var AllRiskFlags = []string{FlagThrottled, FlagOOMKilled, FlagRestarting, FlagHPACoupled, FlagSidecar, FlagShortLived, FlagLowConfidence}
+var AllRiskFlags = []string{FlagThrottled, FlagOOMKilled, FlagRestarting, FlagHPACoupled, FlagSidecar, FlagShortLived, FlagLowConfidence, FlagJVMFixedHeap}
 
 // WorkloadKinds lists the WorkloadKind enum.
 var WorkloadKinds = []string{KindDeployment, KindStatefulSet, KindDaemonSet, KindCronJob}
@@ -141,6 +143,8 @@ type ResourceExplanation struct {
 	RoundedTo string     `json:"roundedTo,omitempty"`
 	LimitRule string     `json:"limitRule,omitempty"`
 	Notes     []string   `json:"notes,omitempty"`
+	// JVM is set on the memory explanation of JVM containers (WO-12).
+	JVM *JVMExplanation `json:"jvm,omitempty"`
 }
 
 // ContainerExplanation explains why the values were recommended.
@@ -264,6 +268,8 @@ type WorkloadStatus struct {
 	AppliedAt        *time.Time           `json:"appliedAt,omitempty"`
 	NextWindow       *time.Time           `json:"nextWindow,omitempty"`
 	ObservedAt       *time.Time           `json:"observedAt,omitempty"`
+	// JVM lists the JVM containers the agent detected (WO-12).
+	JVM []JVMContainer `json:"jvm,omitempty"`
 }
 
 // WorkloadStatusBatch is the body of POST .../workload-status.

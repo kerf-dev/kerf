@@ -421,6 +421,7 @@ func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*Workloa
 				st.Settings = &vs
 			}
 			_ = json.Unmarshal(sLive, &st.Live)
+			st.JVM = statusJVM(sSettings)
 			st.AppliedAt, st.ObservedAt, st.NextWindow = utc(sApplied), utc(sObserved), utc(sNextWindow)
 			v.Status = st
 		}
@@ -682,10 +683,7 @@ func (s *Store) UpsertStatuses(ctx context.Context, cluster string, items []huba
 	// One statement per item (workload upsert + status upsert), all sent in one batch.
 	batch := &pgx.Batch{}
 	for _, it := range items {
-		settings := []byte("{}")
-		if it.Settings != nil {
-			settings, _ = json.Marshal(it.Settings)
-		}
+		settings := statusSettings(it)
 		live := []byte("[]")
 		if it.Live != nil {
 			live, _ = json.Marshal(it.Live)

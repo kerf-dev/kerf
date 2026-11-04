@@ -61,6 +61,8 @@ type ContainerData struct {
 	Current  Current
 	// Used24h is the 24 h average usage summed over all pods (cores, bytes).
 	Used24hCPU, Used24hMemory float64
+	// JVM is set for JVM containers (WO-12).
+	JVM *JVMInfo
 }
 
 // HPA describes the HorizontalPodAutoscaler targeting a workload.

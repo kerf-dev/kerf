@@ -387,18 +387,19 @@ func TestThrottlingRollback(t *testing.T) {
 		previous: v1alpha1.ContainerResources{Name: "app", Requests: rl("500m", "256Mi"), Limits: rl("", "256Mi")},
 		target:   rec("app", "100m", "256Mi")})
 	wantRolledBack(t, name, v1alpha1.ReasonThrottling)
-	if err := k8s.Get(testCtx, client.ObjectKeyFromObject(d), d); err != nil {
-		t.Fatal(err)
-	}
-	if got := d.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().String(); got != "500m" {
-		t.Fatalf("cpu after rollback = %s", got)
-	}
+	// RolledBack is recorded before the restore; the event follows the restore.
 	eventually(t, 10*time.Second, "rolled_back event", func() error {
 		if emitter.find(name, hubclient.EventRolledBack) == nil {
 			return fmt.Errorf("none yet")
 		}
 		return nil
 	})
+	if err := k8s.Get(testCtx, client.ObjectKeyFromObject(d), d); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().String(); got != "500m" {
+		t.Fatalf("cpu after rollback = %s", got)
+	}
 	if e := emitter.find(name, hubclient.EventRolledBack); e == nil || e.Details["throttlingRatio"] != "0.600" {
 		t.Fatalf("event %+v", e)
 	}

@@ -237,7 +237,7 @@ var heapRuntime = regexp.MustCompile(`(?i)(^|[/:_.-])(java|jdk|jre|openjdk|temur
 // HeapBound reports whether a container looks like a JVM or Python process, whose memory is
 // bound at start-up (heap sizing), so a memory change only takes effect after a restart (D-007).
 func HeapBound(c corev1.Container) bool {
-	if heapRuntime.MatchString(c.Image) {
+	if heapRuntime.MatchString(c.Image) || JVMImage(c.Image) {
 		return true
 	}
 	for _, s := range append(append([]string{}, c.Command...), c.Args...) {

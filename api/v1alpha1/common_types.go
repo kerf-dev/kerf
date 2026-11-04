@@ -95,6 +95,8 @@ const (
 	RiskSidecar       RiskFlag = "sidecar"
 	RiskShortLived    RiskFlag = "short-lived"
 	RiskLowConfidence RiskFlag = "low-confidence"
+	// RiskJVMFixedHeap: JVM with a fixed maximum heap; memory is audit-only (WO-12).
+	RiskJVMFixedHeap RiskFlag = "jvm-fixed-heap"
 )
 
 // TargetRef identifies the workload a RightsizingRecommendation belongs to.

@@ -20,7 +20,7 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-09b | E2E: webhook (8) and rollback (10) scenarios | 2 | in-progress | local_038e4612 | wo-09b-e2e | – | |
 | WO-14 | Web UI | 1 | done | local_9fadb724 | wo-14-web | – | Merged; http://localhost:19090 |
 | WO-14c | Web polish: deps, D-016 consumption | 1 | done | local_9fadb724 | wo-14c-web-polish | – | Merged; npm audit clean |
-| WO-12 | JVM-aware memory | 3 | in-progress | local_14a53b46 | wo-12-jvm | – | |
+| WO-12 | JVM-aware memory | 3 | done | local_14a53b46 | wo-12-jvm | – | |
 | WO-13 | Single replica / OnDelete | 3 | in-progress | local_ed8cb3f5 | wo-13-single-replica | – | |
 | WO-10 | Deferred strategy and windows | 3 | in-progress | local_11de0a00 | wo-10-windows | – | |
 | WO-11 | HPA coordination | 3 | in-progress | local_9125207c | wo-11-hpa | – | |
@@ -38,3 +38,4 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-04 Merged WO-04b, WO-05, WO-07, WO-08, WO-09, WO-14c (clean merges). `make ci` exit 0 on main (lint 0 issues, all packages pass incl. internal/health and internal/webhook). Agent redeployed from main; dashboards provisioned to Grafana. Grafana limit raised to 1Gi (OOM at 384Mi). WO-09: `make e2e && make e2e` passed (scenario 3 skips on k3d swap; 8/10 pending WO-09b).
 - 2026-11-04 Phase-3 work-orders WO-10..WO-13 written; WO-12 and WO-13 started.
 - 2026-11-04 Merged WO-04c (hub wo04c-1 already live) and WO-08b; `make ci` exit 0. WO-09b first run: 8 and 10 pass; 11 broke when WO-12 redeployed the spoke-2 agent mid-run — spoke deploys frozen until the rerun ends. WO-10 and WO-11 started.
+- 2026-11-04 Incident 04:30–04:43 UTC: WO-11 deployed the hub with a second migration 0003 (WO-12's 0003 already applied) → recommendations 500s; WO-11 rolled back to WO-12's image. Fix: orchestrator assigns migration numbers (0003 WO-12, 0004 WO-11, 0005 WO-10) and is the only one deploying the hub (CLAUDE.md). WO-12 merged (126d69e), make ci green.

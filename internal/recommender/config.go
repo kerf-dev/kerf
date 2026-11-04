@@ -97,6 +97,9 @@ type Config struct {
 	DefaultMemoryGiBHourUSD float64 `json:"defaultMemoryGiBHourUSD"`
 
 	Profiles map[string]Profile `json:"profiles"`
+
+	// JVM configures JVM-aware memory recommendations (WO-12).
+	JVM JVMConfig `json:"jvm"`
 }
 
 // MiB and GiB in bytes.
@@ -135,6 +138,7 @@ func DefaultConfig() Config {
 		DefaultCPUCoreHourUSD:   0.02675,
 		DefaultMemoryGiBHourUSD: 0.0066875,
 		Profiles:                DefaultProfiles(),
+		JVM:                     DefaultJVMConfig(),
 	}
 }
 
