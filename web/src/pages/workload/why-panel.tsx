@@ -1,6 +1,12 @@
-import { CpuIcon, InfoIcon, LightbulbIcon, MemoryStickIcon } from 'lucide-react'
+import { AlertTriangleIcon, CoinsIcon, CpuIcon, InfoIcon, LightbulbIcon, MemoryStickIcon } from 'lucide-react'
 import { useState } from 'react'
-import type { ContainerRecommendation, ResourceExplanation, WorkloadRecommendation } from '@/api/types'
+import type {
+  ConfidenceFactors,
+  ContainerRecommendation,
+  RecommendationPricing,
+  ResourceExplanation,
+  WorkloadRecommendation,
+} from '@/api/types'
 import { RISK_INFO } from '@/components/domain'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tooltip } from '@/components/ui/tooltip'
@@ -128,6 +134,59 @@ function DistributionStrip({
           </Tooltip>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+function PricingWhy({ pricing, replicas }: { pricing?: RecommendationPricing; replicas?: number }) {
+  return (
+    <div className="space-y-2" data-testid="pricing">
+      <div className="flex items-center gap-2 text-[13px] font-semibold">
+        <CoinsIcon className="size-4 text-muted-foreground" />
+        Savings estimate
+        {pricing ? (
+          pricing.source === 'metrics' ? (
+            <Tooltip content="Average of the cluster's ro_*_hourly_cost_usd pricing series (WO-03).">
+              <span className="ml-auto rounded-md bg-success/12 px-1.5 py-0.5 text-[11px] font-medium text-success">
+                pricing metrics
+              </span>
+            </Tooltip>
+          ) : (
+            <Tooltip content="The cluster had no pricing series, so the hub used its configured fallback rates. Treat the dollar figures as rough.">
+              <span className="ml-auto inline-flex items-center gap-1 rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-[color-mix(in_oklch,var(--warning)_70%,var(--foreground))]">
+                <AlertTriangleIcon className="size-3" /> default rates
+              </span>
+            </Tooltip>
+          )
+        ) : null}
+      </div>
+      {pricing ? (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg border bg-muted/40 px-2.5 py-1.5">
+            <div className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">CPU</div>
+            <div className="font-mono text-[13px] font-medium tabular">
+              ${pricing.cpuCoreHourUSD.toFixed(4)}
+              <span className="text-[11px] font-normal text-muted-foreground"> /core·h</span>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-muted/40 px-2.5 py-1.5">
+            <div className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+              Memory
+            </div>
+            <div className="font-mono text-[13px] font-medium tabular">
+              ${pricing.memoryGiBHourUSD.toFixed(4)}
+              <span className="text-[11px] font-normal text-muted-foreground"> /GiB·h</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">This recommendation predates pricing details.</p>
+      )}
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        (current − recommended request) × hourly rate ×{' '}
+        {replicas != null ? replicas.toFixed(replicas % 1 ? 2 : 0) : 'avg.'} replicas × 730 h per container.
+        Estimated, not realized.
+      </p>
     </div>
   )
 }
@@ -278,6 +337,8 @@ export function WhyPanel({ rec }: { rec: WorkloadRecommendation }) {
             <ResourceWhy resource="cpu" c={c} />
             <div className="border-t" />
             <ResourceWhy resource="memory" c={c} />
+            <div className="border-t" />
+            <PricingWhy pricing={rec.pricing} replicas={rec.averageReplicas} />
           </>
         )}
       </CardContent>
@@ -294,6 +355,15 @@ export function ConfidenceCard({ rec }: { rec: WorkloadRecommendation }) {
   const stroke = conf >= 0.8 ? 'stroke-success' : conf >= 0.6 ? 'stroke-warning' : 'stroke-destructive'
   const reducers = rec.riskFlags.filter((f) =>
     ['restarting', 'short-lived', 'low-confidence', 'throttled', 'oom-killed'].includes(f),
+  )
+  // D-016: each container's confidence is Σ score × weight; the workload's is the minimum, so the
+  // breakdown shown is the container that limits it.
+  const withFactors = rec.containers
+    .filter((c) => c.explanation?.confidenceFactors)
+    .map((c) => ({ name: c.name, factors: c.explanation!.confidenceFactors! }))
+  const limiting = withFactors.reduce<(typeof withFactors)[number] | undefined>(
+    (min, c) => (!min || c.factors.confidence < min.factors.confidence ? c : min),
+    undefined,
   )
   const R = 26
   const C = 2 * Math.PI * R
@@ -330,16 +400,25 @@ export function ConfidenceCard({ rec }: { rec: WorkloadRecommendation }) {
             </div>
           </div>
         </div>
+        {limiting ? (
+          <FactorBreakdown
+            factors={limiting.factors}
+            container={limiting.name}
+            multi={withFactors.length > 1}
+          />
+        ) : null}
         <div className="space-y-2.5 text-[13px]">
-          <div>
-            <div className="mb-1 flex justify-between">
-              <span className="text-muted-foreground">Data coverage</span>
-              <span className="font-medium tabular">{formatPercent(dc.ratio)}</span>
+          {!limiting ? (
+            <div>
+              <div className="mb-1 flex justify-between">
+                <span className="text-muted-foreground">Data coverage</span>
+                <span className="font-medium tabular">{formatPercent(dc.ratio)}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${dc.ratio * 100}%` }} />
+              </div>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${dc.ratio * 100}%` }} />
-            </div>
-          </div>
+          ) : null}
           <Row
             k="History covered"
             v={
@@ -365,6 +444,94 @@ export function ConfidenceCard({ rec }: { rec: WorkloadRecommendation }) {
         ) : null}
       </CardContent>
     </Card>
+  )
+}
+
+const FACTORS = [
+  {
+    key: 'coverage',
+    label: 'Coverage',
+    desc: 'Fraction of the window’s steps with usage data.',
+    cls: 'bg-chart-1',
+  },
+  {
+    key: 'samples',
+    label: 'Samples',
+    desc: 'Samples relative to the count the hub needs for full confidence.',
+    cls: 'bg-chart-2',
+  },
+  {
+    key: 'variance',
+    label: 'Stability',
+    desc: 'CPU usage stability, 1 / (1 + coefficient of variation).',
+    cls: 'bg-chart-3',
+  },
+] as const
+
+function FactorBreakdown({
+  factors,
+  container,
+  multi,
+}: {
+  factors: ConfidenceFactors
+  container: string
+  multi: boolean
+}) {
+  return (
+    <div className="space-y-2.5" data-testid="confidence-factors">
+      <div className="flex items-baseline justify-between text-[11px] text-muted-foreground">
+        <span className="font-medium tracking-wide uppercase">score × weight</span>
+        {multi ? (
+          <Tooltip content="The workload's confidence is the lowest of its containers'.">
+            <span className="cursor-help font-mono underline decoration-dotted underline-offset-2">
+              limited by {container}
+            </span>
+          </Tooltip>
+        ) : null}
+      </div>
+      {/* contribution of each factor to the total, as one stacked bar */}
+      <div className="flex h-2 gap-px overflow-hidden rounded-full bg-muted">
+        {FACTORS.map((f) => (
+          <div
+            key={f.key}
+            className={f.cls}
+            style={{ width: `${factors[f.key].score * factors[f.key].weight * 100}%` }}
+          />
+        ))}
+      </div>
+      <table className="w-full text-[13px]">
+        <tbody>
+          {FACTORS.map((f) => {
+            const x = factors[f.key]
+            return (
+              <tr key={f.key}>
+                <td className="py-0.5">
+                  <Tooltip content={f.desc}>
+                    <span className="inline-flex cursor-help items-center gap-1.5 text-muted-foreground">
+                      <span className={cn('size-2 rounded-sm', f.cls)} />
+                      {f.label}
+                    </span>
+                  </Tooltip>
+                </td>
+                <td className="py-0.5 text-right font-mono text-xs tabular">{x.score.toFixed(2)}</td>
+                <td className="py-0.5 text-right font-mono text-xs text-muted-foreground tabular">
+                  × {x.weight.toFixed(2)}
+                </td>
+                <td className="py-0.5 text-right font-mono text-xs font-medium tabular">
+                  {(x.score * x.weight).toFixed(2)}
+                </td>
+              </tr>
+            )
+          })}
+          <tr className="border-t">
+            <td className="pt-1.5 font-medium">Confidence</td>
+            <td colSpan={3} className="pt-1.5 text-right font-mono text-xs font-semibold tabular">
+              = {factors.confidence.toFixed(2)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   )
 }
 

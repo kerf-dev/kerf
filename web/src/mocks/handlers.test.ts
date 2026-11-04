@@ -107,6 +107,38 @@ describe('mock responses match hub.yaml', () => {
       expectValid('WorkloadHistory', hist)
     }
   })
+  it('GET /v1/workloads/facets matches list totals and ignores its own filter', async () => {
+    const all = await unwrap(api.GET('/v1/workloads/facets'))
+    expectValid('WorkloadFacets', all)
+    expect(all.namespaces.length).toBeGreaterThan(10)
+    const query = { namespace: ['payments'], kind: ['Deployment' as const] }
+    const f = await unwrap(api.GET('/v1/workloads/facets', { params: { query } }))
+    expectValid('WorkloadFacets', f)
+    const list = await unwrap(api.GET('/v1/workloads', { params: { query: { ...query, limit: 1 } } }))
+    expect(f.total).toBe(list.total)
+    // the namespace facet still offers other namespaces (own filter not applied)
+    expect(f.namespaces.length).toBeGreaterThan(1)
+    expect(f.kinds.map((k) => k.value)).toContain('CronJob')
+    // facets without their own filter set sum to the total
+    expect(f.clusters.reduce((n, c) => n + c.count, 0)).toBe(f.total)
+  })
+  it('detail carries pricing and confidence factors that add up', async () => {
+    const list = await unwrap(api.GET('/v1/workloads', { params: { query: { limit: 20 } } }))
+    for (const row of list.items.filter((w) => w.recommendationID).slice(0, 5)) {
+      const d = await unwrap(api.GET('/v1/workloads/{id}', { params: { path: { id: row.id } } }))
+      expect(d.recommendation?.pricing?.source).toBeDefined()
+      const confs = d.recommendation!.containers.map((c) => {
+        const f = c.explanation!.confidenceFactors!
+        const sum =
+          f.coverage.score * f.coverage.weight +
+          f.samples.score * f.samples.weight +
+          f.variance.score * f.variance.weight
+        expect(Math.abs(sum - f.confidence)).toBeLessThan(0.011)
+        return f.confidence
+      })
+      expect(d.recommendation!.confidence).toBe(Math.min(...confs))
+    }
+  })
   it('unknown workload → 404 problem', async () => {
     const res = await api.GET('/v1/workloads/{id}', {
       params: { path: { id: 'prod-eu-west-1/x/Deployment/nope' } },

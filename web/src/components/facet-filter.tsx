@@ -70,7 +70,12 @@ export function FacetFilter({
               {options.map((o) => {
                 const on = set.has(o.value)
                 return (
-                  <CommandItem key={o.value} value={o.value} onSelect={() => onToggle(o.value)}>
+                  <CommandItem
+                    key={o.value}
+                    value={o.value}
+                    onSelect={() => onToggle(o.value)}
+                    className={cn(o.count === 0 && !on && 'opacity-50')}
+                  >
                     <span
                       className={cn(
                         'flex size-4 items-center justify-center rounded-[4px] border',
