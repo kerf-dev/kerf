@@ -637,7 +637,7 @@ func TestUISummaryAndClusters(t *testing.T) {
 	if !c1.LastRecommenderRunAt.Equal(lastRun) && !c2.LastRecommenderRunAt.Equal(lastRun) {
 		t.Errorf("fleet lastRecommenderRunAt %s not the latest cluster run (%s, %s)", lastRun, c1.LastRecommenderRunAt, c2.LastRecommenderRunAt)
 	}
-	time.Sleep(10 * time.Millisecond)
+	e.advance(time.Second)
 	e.run(e.now.Add(-72*time.Hour), true)
 	var backfillFinished time.Time
 	if err := e.st.Pool.QueryRow(e.ctx, `SELECT max(rc.finished_at) FROM recommender_run_clusters rc JOIN recommender_runs r ON r.id = rc.run_id WHERE r.backfill`).Scan(&backfillFinished); err != nil {
@@ -999,15 +999,16 @@ func TestWorkloadUsage(t *testing.T) {
 	e.problem(e.do("GET", wlPath(kCheckout, "/usage?resource=cpu"), tokUI, nil), 502, "metrics_unavailable")
 }
 
-// TestUsageInitContainerSeries exercises init-container request/limit series, which are written
-// from concurrent queries (regression test for a map race; run with -race).
+// TestUsageInitContainerSeries exercises init-container series, which are written from concurrent
+// queries (regression test for a map race; run with -race). The fake init container has requests
+// but no usage and no recommendation, so it is left out of the response (no empty charts).
 func TestUsageInitContainerSeries(t *testing.T) {
 	e := newEnv(t)
 	e.prom.initSeries = true
 	for i := 0; i < 20; i++ {
 		var u hubapi.UsageSeries
 		e.getJSON(wlPath(kCheckout, "/usage?resource=cpu"), tokUI, &u)
-		if len(u.Containers) != 2 || u.Containers[0].Name != "app" || u.Containers[1].Name != "init-proxy" {
+		if len(u.Containers) != 1 || u.Containers[0].Name != "app" || len(u.Containers[0].Usage) == 0 {
 			t.Fatalf("containers %+v", u.Containers)
 		}
 	}
@@ -1015,20 +1016,23 @@ func TestUsageInitContainerSeries(t *testing.T) {
 
 func TestSavingsTrend(t *testing.T) {
 	e := newEnv(t)
-	// Oracle: per-cluster run totals as stored, cross-checked against the recommendations.
+	// Oracle: per-cluster run totals as stored, effective from the end of a regular run or the
+	// as-of time of a backfill run.
 	type sample struct {
-		asOf     time.Time
+		at       time.Time
 		cpu, mem float64
 	}
 	runs := map[string][]sample{}
-	rows, err := e.st.Pool.Query(e.ctx, `SELECT cluster, as_of, monthly_savings_cpu_usd, monthly_savings_memory_usd FROM recommender_run_clusters WHERE status = 'succeeded' ORDER BY as_of`)
+	rows, err := e.st.Pool.Query(e.ctx, `SELECT rc.cluster, CASE WHEN r.backfill THEN rc.as_of ELSE rc.finished_at END AS at,
+		rc.monthly_savings_cpu_usd, rc.monthly_savings_memory_usd FROM recommender_run_clusters rc
+		JOIN recommender_runs r ON r.id = rc.run_id WHERE rc.status = 'succeeded' ORDER BY at`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for rows.Next() {
 		var c string
 		var s sample
-		if err := rows.Scan(&c, &s.asOf, &s.cpu, &s.mem); err != nil {
+		if err := rows.Scan(&c, &s.at, &s.cpu, &s.mem); err != nil {
 			t.Fatal(err)
 		}
 		runs[c] = append(runs[c], s)
@@ -1037,19 +1041,16 @@ func TestSavingsTrend(t *testing.T) {
 	if len(runs["c1"]) != 3 || len(runs["c2"]) != 3 {
 		t.Fatalf("runs: %+v", runs)
 	}
-	for c, rs := range runs {
-		var list hubapi.RecommendationList
-		e.getJSON("/v1/clusters/"+c+"/recommendations", tokAdmin, &list)
-		sum := 0.0
-		for _, it := range list.Items {
-			sum += it.MonthlySavingsUSD.Total
+	// The regular run's total is exactly the summary's cluster total.
+	var sum hubapi.FleetSummary
+	e.getJSON("/v1/summary", tokUI, &sum)
+	for _, cs := range sum.Clusters {
+		latest := runs[cs.Cluster][len(runs[cs.Cluster])-1]
+		if got := round2(latest.cpu + latest.mem); got != cs.MonthlySavingsUSD.Total {
+			t.Errorf("%s: run total %v != summary %v", cs.Cluster, got, cs.MonthlySavingsUSD.Total)
 		}
-		latest := rs[len(rs)-1]
-		if !approx(latest.cpu+latest.mem, sum, 0.05) {
-			t.Errorf("%s: run total %v != sum of recommendations %v", c, latest.cpu+latest.mem, sum)
-		}
-		if approx(rs[0].cpu+rs[0].mem, latest.cpu+latest.mem, 0.01) {
-			t.Errorf("%s: test data: backfill and regular totals are equal", c)
+		if approx(runs[cs.Cluster][0].cpu+runs[cs.Cluster][0].mem, latest.cpu+latest.mem, 0.01) {
+			t.Errorf("%s: test data: backfill and regular totals are equal", cs.Cluster)
 		}
 	}
 	expect := func(clusters []string, at time.Time) float64 {
@@ -1057,7 +1058,7 @@ func TestSavingsTrend(t *testing.T) {
 		for _, c := range clusters {
 			var last *sample
 			for i := range runs[c] {
-				if !runs[c][i].asOf.After(at) {
+				if !runs[c][i].at.After(at) {
 					last = &runs[c][i]
 				}
 			}
@@ -1068,7 +1069,7 @@ func TestSavingsTrend(t *testing.T) {
 		return v
 	}
 
-	from := e.backfillAsOf[0].Add(-3 * time.Hour)
+	from := e.backfillAsOf[0].Add(-3*time.Hour - 20*time.Minute).Truncate(time.Second) // RFC 3339 on the wire; not on the step grid
 	to := e.now.Add(time.Hour)
 	q := fmt.Sprintf("from=%s&to=%s&step=1h", url.QueryEscape(from.Format(time.RFC3339)), url.QueryEscape(to.Format(time.RFC3339)))
 	var tr hubapi.SavingsTrend
@@ -1077,15 +1078,25 @@ func TestSavingsTrend(t *testing.T) {
 		t.Fatalf("trend header: %+v", tr)
 	}
 	pts := tr.Series[0].Points
-	if want := int((to.Sub(from) + time.Hour - 1) / time.Hour); len(pts) != want {
+	first := from.Truncate(time.Hour) // first point: the first full hour at or after from
+	if first.Before(from) {
+		first = first.Add(time.Hour)
+	}
+	if want := int((to.Sub(first) + time.Hour - 1) / time.Hour); len(pts) != want {
 		t.Errorf("%d points, want %d", len(pts), want)
+	}
+	bucketEnd := func(t time.Time) time.Time {
+		if e := t.Add(time.Hour); e.Before(to) {
+			return e
+		}
+		return to
 	}
 	distinct := map[float64]bool{}
 	for i, p := range pts {
-		if !p.Time.Equal(from.Add(time.Duration(i) * time.Hour)) {
-			t.Errorf("point %d at %s", i, p.Time)
+		if !p.Time.Equal(first.Add(time.Duration(i) * time.Hour)) {
+			t.Errorf("point %d at %s, want aligned to the hour from %s", i, p.Time, first)
 		}
-		want := expect([]string{"c1", "c2"}, p.Time)
+		want := expect([]string{"c1", "c2"}, bucketEnd(p.Time))
 		if !approx(p.Total, want, 0.011) || !approx(p.Total, p.CPU+p.Memory, 0.011) {
 			t.Errorf("point %s: total %v (cpu %v mem %v), want %v", p.Time, p.Total, p.CPU, p.Memory, want)
 		}
@@ -1098,6 +1109,21 @@ func TestSavingsTrend(t *testing.T) {
 		t.Errorf("want 4 levels (none, backfill 1, backfill 2, regular), got %v", distinct)
 	}
 
+	// Default range (to = now): the last point equals the summary, per cluster and for the fleet.
+	var def hubapi.SavingsTrend
+	e.getJSON("/v1/savings/trend?groupBy=cluster", tokUI, &def)
+	for i, cs := range sum.Clusters {
+		last := def.Series[i].Points[len(def.Series[i].Points)-1]
+		if def.Series[i].Cluster != cs.Cluster || last.Total != cs.MonthlySavingsUSD.Total || last.CPU != cs.MonthlySavingsUSD.CPU {
+			t.Errorf("%s: last trend point %+v != summary %+v", cs.Cluster, last, cs.MonthlySavingsUSD)
+		}
+	}
+	var fleet hubapi.SavingsTrend
+	e.getJSON("/v1/savings/trend", tokUI, &fleet)
+	if last := fleet.Series[0].Points[len(fleet.Series[0].Points)-1]; last.Total != sum.Fleet.MonthlySavingsUSD.Total {
+		t.Errorf("fleet: last trend point %v != summary %v", last.Total, sum.Fleet.MonthlySavingsUSD.Total)
+	}
+
 	// groupBy=cluster: one series per cluster, summing to the fleet series.
 	var byC hubapi.SavingsTrend
 	e.getJSON("/v1/savings/trend?groupBy=cluster&"+q, tokUI, &byC)
@@ -1106,7 +1132,7 @@ func TestSavingsTrend(t *testing.T) {
 	}
 	for i := range pts {
 		a, b := byC.Series[0].Points[i], byC.Series[1].Points[i]
-		if !approx(a.Total, expect([]string{"c1"}, a.Time), 0.011) || !approx(b.Total, expect([]string{"c2"}, b.Time), 0.011) {
+		if !approx(a.Total, expect([]string{"c1"}, bucketEnd(a.Time)), 0.011) || !approx(b.Total, expect([]string{"c2"}, bucketEnd(b.Time)), 0.011) {
 			t.Errorf("per-cluster point %s: %v %v", a.Time, a.Total, b.Total)
 		}
 		if !approx(a.Total+b.Total, pts[i].Total, 0.021) {
@@ -1117,7 +1143,7 @@ func TestSavingsTrend(t *testing.T) {
 	var c2 hubapi.SavingsTrend
 	e.getJSON("/v1/savings/trend?cluster=c2&"+q, tokUI, &c2)
 	for _, p := range c2.Series[0].Points {
-		if !approx(p.Total, expect([]string{"c2"}, p.Time), 0.011) {
+		if !approx(p.Total, expect([]string{"c2"}, bucketEnd(p.Time)), 0.011) {
 			t.Errorf("cluster=c2 point %s: %v", p.Time, p.Total)
 		}
 	}
@@ -1125,16 +1151,19 @@ func TestSavingsTrend(t *testing.T) {
 	late := e.now.Add(-time.Minute)
 	var tl hubapi.SavingsTrend
 	e.getJSON(fmt.Sprintf("/v1/savings/trend?from=%s&to=%s&step=10s", url.QueryEscape(late.Format(time.RFC3339)), url.QueryEscape(e.now.Format(time.RFC3339))), tokUI, &tl)
-	if p := tl.Series[0].Points; len(p) != 6 || !approx(p[0].Total, expect([]string{"c1", "c2"}, late), 0.011) || p[0].Total == 0 {
+	lateFirst := late.Truncate(10 * time.Second)
+	if lateFirst.Before(late) {
+		lateFirst = lateFirst.Add(10 * time.Second)
+	}
+	if p := tl.Series[0].Points; len(p) != int((e.now.Sub(lateFirst)+10*time.Second-1)/(10*time.Second)) ||
+		!approx(p[0].Total, expect([]string{"c1", "c2"}, lateFirst.Add(10*time.Second)), 0.011) || p[0].Total == 0 {
 		t.Errorf("late window: %+v", p)
 	}
 	// Default window and step.
-	var def hubapi.SavingsTrend
-	e.getJSON("/v1/savings/trend", tokUI, &def)
-	if def.Step != "15m0s" || !def.To.Equal(e.now) || len(def.Series[0].Points) != 672 {
-		t.Errorf("defaults: step %s to %s points %d", def.Step, def.To, len(def.Series[0].Points))
+	if fleet.Step != "15m0s" || !fleet.To.Equal(e.now) || len(fleet.Series[0].Points) != 672 {
+		t.Errorf("defaults: step %s to %s points %d", fleet.Step, fleet.To, len(fleet.Series[0].Points))
 	}
-	if last := def.Series[0].Points[671]; !approx(last.Total, expect([]string{"c1", "c2"}, last.Time), 0.011) {
+	if last := fleet.Series[0].Points[671]; !approx(last.Total, expect([]string{"c1", "c2"}, e.now), 0.011) {
 		t.Errorf("default last point %v", last)
 	}
 	// Unknown cluster: empty series, no error.

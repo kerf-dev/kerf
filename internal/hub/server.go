@@ -81,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 	route("GET /v1/summary", ui, s.getSummary)
 	route("GET /v1/clusters", ui, s.listClusters)
 	route("GET /v1/workloads", ui, s.listWorkloads)
+	route("GET /v1/workloads/facets", ui, s.getWorkloadFacets)
 	route("GET /v1/workloads/{id}", ui, s.getWorkload)
 	route("GET /v1/workloads/{id}/usage", ui, s.getWorkloadUsage)
 	route("GET /v1/workloads/{id}/history", ui, s.getWorkloadHistory)
@@ -245,7 +246,7 @@ func (s *Server) heartbeat(ctx context.Context, cluster, version string) {
 	}
 	s.heartbeats[cluster] = now
 	s.mu.Unlock()
-	if err := s.Store.Heartbeat(ctx, cluster, version); err != nil {
+	if err := s.Store.HeartbeatAt(ctx, cluster, version, now); err != nil {
 		s.Log.WarnContext(ctx, "heartbeat", "cluster", cluster, "err", err)
 	}
 }
@@ -273,6 +274,11 @@ func badRequest(w http.ResponseWriter, r *http.Request, code, detail string) {
 }
 
 func (s *Server) internal(w http.ResponseWriter, r *http.Request, err error) {
+	// The client went away (e.g. the UI navigated): nothing to answer, nothing failed.
+	if r.Context().Err() != nil && errors.Is(err, context.Canceled) {
+		s.Log.DebugContext(r.Context(), "request canceled by client", "path", r.URL.Path)
+		return
+	}
 	s.Log.ErrorContext(r.Context(), "request failed", "path", r.URL.Path, "err", err)
 	writeProblem(w, r, http.StatusInternalServerError, "internal", "Internal error.")
 }
