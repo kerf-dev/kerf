@@ -18,9 +18,13 @@ import (
 
 const deployment = "Deployment"
 
-// overprovisioned: requests 500m, burns ~5% of a core.
+// overCPU is the CPU request of the over-provisioned test workloads, which burn ~50m. Kept small:
+// all scenarios run at once on one 8-core spoke node next to ~2.6 cores of shared workloads.
+const overCPU = "250m"
+
+// overprovisioned: requests overCPU, burns ~5% of a core.
 func overprovisioned(name string) app {
-	return app{Name: name, CPULoad: 5, Requests: rl("500m", "64Mi"), Limits: rl("", "128Mi")}
+	return app{Name: name, CPULoad: 5, Requests: rl(overCPU, "64Mi"), Limits: rl("", "128Mi")}
 }
 
 // cpuBelow accepts a recommendation whose first container's CPU request is below limit.
@@ -36,21 +40,47 @@ func cpuBelow(limit string) func(*workloadRec) (bool, string) {
 // auto-patch, so the agent applies a representative recommendation.
 func armed(t *testing.T, cl cluster, name, ns, workload, below string, spec v1alpha1.RightsizingPolicySpec) {
 	t.Helper()
-	spec.CPU.Mode = v1alpha1.ModeAudit
+	armedFor(t, cl, corev1.ResourceCPU, name, ns, workload, below, spec)
+}
+
+// armedFor is armed for either resource: res starts in audit and switches to auto-patch once the
+// hub recommends a request below `below`.
+func armedFor(t *testing.T, cl cluster, res corev1.ResourceName, name, ns, workload, below string, spec v1alpha1.RightsizingPolicySpec) {
+	t.Helper()
+	setMode := func(s *v1alpha1.RightsizingPolicySpec, m v1alpha1.Mode) {
+		if res == corev1.ResourceMemory {
+			s.Memory.Mode = m
+		} else {
+			s.CPU.Mode = m
+		}
+	}
+	setMode(&spec, v1alpha1.ModeAudit)
 	p := policy(t, cl, name, ns, spec)
-	rec := waitHubRecommendation(t, cl, ns, deployment, workload, cpuBelow(below))
-	t.Logf("hub recommends cpu %s for %s; switching cpu to auto-patch", rec.Containers[0].Recommended.Requests.CPU, workload)
+	cond := cpuBelow(below)
+	if res == corev1.ResourceMemory {
+		cond = memoryBelow(below)
+	}
+	rec := waitHubRecommendation(t, cl, ns, deployment, workload, cond)
+	t.Logf("hub recommends %v for %s; switching %s to auto-patch", rec.Containers[0].Recommended.Requests, workload, res)
 	eventually(t, time.Minute, 2*time.Second, "policy switched to auto-patch", func() (bool, string) {
 		var cur v1alpha1.RightsizingPolicy
 		if err := cl.C.Get(ctx(t), client.ObjectKeyFromObject(p), &cur); err != nil {
 			return false, err.Error()
 		}
-		cur.Spec.CPU.Mode = v1alpha1.ModeAutoPatch
+		setMode(&cur.Spec, v1alpha1.ModeAutoPatch)
 		if err := cl.C.Update(ctx(t), &cur); err != nil {
 			return false, err.Error()
 		}
 		return true, ""
 	})
+}
+
+// memoryBelow accepts a recommendation whose first container's memory request is below limit.
+func memoryBelow(limit string) func(*workloadRec) (bool, string) {
+	return func(r *workloadRec) (bool, string) {
+		got := r.Containers[0].Recommended.Requests.Memory
+		return got != "" && q(got).Cmp(resource.MustParse(limit)) < 0, "memory " + got
+	}
 }
 
 // Scenario 1: audit mode. The hub recommends, nothing changes in the cluster.
@@ -67,8 +97,8 @@ func TestAudit(t *testing.T) {
 	before := snapshot(t, cl, ns, "web")
 	gen := getDeployment(t, cl, ns, "web").Generation
 
-	rec := waitHubRecommendation(t, cl, ns, deployment, "web", cpuBelow("500m"))
-	t.Logf("hub recommends cpu %s (current 500m)", rec.Containers[0].Recommended.Requests.CPU)
+	rec := waitHubRecommendation(t, cl, ns, deployment, "web", cpuBelow(overCPU))
+	t.Logf("hub recommends cpu %s (current %s)", rec.Containers[0].Recommended.Requests.CPU, overCPU)
 	// The agent has seen it and records why it does nothing.
 	waitReason(t, cl, ns, deployment, "web", v1alpha1.ReasonModeAudit, 3*time.Minute)
 	consistently(t, 45*time.Second, 5*time.Second, "audit leaves the workload alone", func() (bool, string) {
@@ -96,11 +126,11 @@ func TestInPlaceCPU(t *testing.T) {
 	deploy(t, cl, ns, a)
 	before := snapshot(t, cl, ns, "web")
 	gen := getDeployment(t, cl, ns, "web").Generation
-	armed(t, cl, ns, ns, "web", "500m", autoCPU(v1alpha1.StrategyInPlace))
+	armed(t, cl, ns, ns, "web", overCPU, autoCPU(v1alpha1.StrategyInPlace))
 
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	want := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
-	if want.Cmp(resource.MustParse("500m")) >= 0 {
+	if want.Cmp(resource.MustParse(overCPU)) >= 0 {
 		t.Fatalf("applied cpu request %s is not a decrease", want.String())
 	}
 	after := snapshot(t, cl, ns, "web")
@@ -127,7 +157,7 @@ func TestInPlaceCPU(t *testing.T) {
 		}
 	}
 	d := getDeployment(t, cl, ns, "web")
-	if d.Generation != gen || templateCPU(d).Cmp(resource.MustParse("500m")) != 0 {
+	if d.Generation != gen || templateCPU(d).Cmp(resource.MustParse(overCPU)) != 0 {
 		t.Errorf("deployment changed: generation %d -> %d, template cpu %s", gen, d.Generation, templateCPU(d).String())
 	}
 	waitEvent(t, cl, ns, "web", "applied", func(e auditEvent) bool { return e.Strategy == string(v1alpha1.StrategyInPlace) })
@@ -175,6 +205,29 @@ func TestInPlaceJVMMemory(t *testing.T) {
 		case q(a.MemReq).Cmp(want) != 0:
 			t.Errorf("pod %s memory request %s, want %s", name, a.MemReq, want.String())
 		}
+	}
+}
+
+// WO-12: a JVM with a fixed maximum heap (-Xmx) is memory audit-only, whatever the policy says.
+func TestJVMFixedHeapIsAuditOnly(t *testing.T) {
+	t.Parallel()
+	cl := env.Spoke1
+	ns := newNamespace(t, cl, "jvmfixed")
+	deploy(t, cl, ns, app{Name: "jvm", JVM: true, FixedHeap: true, Requests: rl("200m", "512Mi"), Limits: rl("", "512Mi"), Resize: corev1.RestartContainer})
+	before := snapshot(t, cl, ns, "jvm")
+	gen := getDeployment(t, cl, ns, "jvm").Generation
+	policy(t, cl, ns, ns, v1alpha1.RightsizingPolicySpec{
+		CPU:        &v1alpha1.CPUPolicy{Mode: v1alpha1.ModeAudit},
+		Memory:     &v1alpha1.MemoryPolicy{Mode: v1alpha1.ModeAutoPatch},
+		Apply:      &v1alpha1.ApplyPolicy{Strategy: v1alpha1.StrategyRollout},
+		Guardrails: relaxed(),
+	})
+	waitReason(t, cl, ns, deployment, "jvm", v1alpha1.ReasonJVMFixedHeap, env.ApplyTimeout)
+	if after := snapshot(t, cl, ns, "jvm"); fmt.Sprint(after) != fmt.Sprint(before) {
+		t.Errorf("pods changed although memory is audit-only: %v -> %v", before, after)
+	}
+	if d := getDeployment(t, cl, ns, "jvm"); d.Generation != gen {
+		t.Errorf("deployment changed (generation %d -> %d) although memory is audit-only", gen, d.Generation)
 	}
 }
 
@@ -230,13 +283,13 @@ func TestRollout(t *testing.T) {
 	cl := env.Spoke1
 	ns := newNamespace(t, cl, "rollout")
 	deploy(t, cl, ns, overprovisioned("web"))
-	armed(t, cl, ns, ns, "web", "500m", autoCPU(v1alpha1.StrategyRollout))
+	armed(t, cl, ns, ns, "web", overCPU, autoCPU(v1alpha1.StrategyRollout))
 
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	want := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
 	waitReady(t, cl, ns, "web", 3*time.Minute)
 	d := getDeployment(t, cl, ns, "web")
-	if templateCPU(d).Cmp(want) != 0 || want.Cmp(resource.MustParse("500m")) >= 0 {
+	if templateCPU(d).Cmp(want) != 0 || want.Cmp(resource.MustParse(overCPU)) >= 0 {
 		t.Fatalf("template cpu %s, recommendation %s: want a decrease rolled out", templateCPU(d).String(), want.String())
 	}
 	if !ownsCPURequest(d.ManagedFields) {
@@ -268,7 +321,7 @@ func TestArgoCD(t *testing.T) {
 	app := argoApp(t, cl, ns)
 	waitAppSynced(t, cl, app, 4*time.Minute)
 	waitReady(t, cl, ns, "web", 3*time.Minute)
-	armed(t, cl, ns, ns, "web", "500m", autoCPU(v1alpha1.StrategyRollout))
+	armed(t, cl, ns, ns, "web", overCPU, autoCPU(v1alpha1.StrategyRollout))
 
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	applied := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
@@ -300,18 +353,12 @@ func TestArgoCD(t *testing.T) {
 			return !ownsCPURequest(d.ManagedFields), managers(d.ManagedFields)
 		})
 		hardSync(t, cl, app)
-		eventually(t, 3*time.Minute, 5*time.Second, "Git value 500m restored", func() (bool, string) {
+		eventually(t, 3*time.Minute, 5*time.Second, "Git value "+overCPU+" restored", func() (bool, string) {
 			got := templateCPU(getDeployment(t, cl, ns, "web"))
-			return got.Cmp(resource.MustParse("500m")) == 0, "template cpu " + got.String()
+			return got.Cmp(resource.MustParse(overCPU)) == 0, "template cpu " + got.String()
 		})
 		waitAppSynced(t, cl, app, 2*time.Minute)
 	})
-}
-
-// Scenario 8: webhook (WO-07).
-func TestWebhook(t *testing.T) {
-	// TODO(WO-07): scale-out gets the recommended values; webhook down does not block pod creation.
-	t.Skip("waiting for WO-07 (admission webhook, branch wo-07-webhook)")
 }
 
 // Scenario 9: guardrails.
@@ -373,21 +420,17 @@ func TestGuardrails(t *testing.T) {
 		spec := autoCPU(v1alpha1.StrategyInPlace)
 		spec.Guardrails.MaxChangePercent = ptr(int32(20))
 		// Wait for a recommendation well below the 20% cap so the cap is what limits the change.
-		armed(t, cl, ns, ns, "web", "300m", spec)
+		armed(t, cl, ns, ns, "web", "150m", spec)
 		rec := waitHubRecommendation(t, cl, ns, deployment, "web", nil)
 		r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 		applied := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
-		t.Logf("hub recommends %s, applied %s (max change 20%% of 500m)", rec.Containers[0].Recommended.Requests.CPU, applied.String())
-		if applied.Cmp(resource.MustParse("400m")) < 0 || applied.Cmp(resource.MustParse("500m")) >= 0 {
-			t.Fatalf("applied cpu %s, want a decrease capped at 20%% (400m..500m)", applied.String())
+		floor := resource.MustParse(overCPU)
+		floor.SetMilli(floor.MilliValue() * 80 / 100)
+		t.Logf("hub recommends %s, applied %s (max change 20%% of %s)", rec.Containers[0].Recommended.Requests.CPU, applied.String(), overCPU)
+		if applied.Cmp(floor) < 0 || applied.Cmp(resource.MustParse(overCPU)) >= 0 {
+			t.Fatalf("applied cpu %s, want a decrease capped at 20%% (%s..%s)", applied.String(), floor.String(), overCPU)
 		}
 	})
-}
-
-// Scenario 10: rollback (WO-08).
-func TestRollback(t *testing.T) {
-	// TODO(WO-08): OOM kills / restarts / throttling after an apply roll back to status.previous.
-	t.Skip("waiting for WO-08 (health watch and rollback, branch wo-08-health)")
 }
 
 // waitEvent waits for a hub audit event (the agent reports within seconds; the default timeout

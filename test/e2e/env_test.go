@@ -101,18 +101,28 @@ func setup() error {
 	if err != nil {
 		return err
 	}
-	token := os.Getenv("E2E_HUB_UI_TOKEN")
-	if token == "" {
+	token, admin := os.Getenv("E2E_HUB_UI_TOKEN"), os.Getenv("E2E_HUB_ADMIN_TOKEN")
+	if token == "" || admin == "" {
 		// The dev hub chart seeds tokens into this Secret (deploy/charts/hub/README.md).
 		var s corev1.Secret
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := hubCluster.C.Get(ctx, client.ObjectKey{Namespace: "resource-optimizer", Name: "hub-dev-tokens"}, &s); err != nil {
-			return fmt.Errorf("hub UI token: set E2E_HUB_UI_TOKEN or deploy the hub with devSeed: %w", err)
+			if token == "" {
+				return fmt.Errorf("hub UI token: set E2E_HUB_UI_TOKEN or deploy the hub with devSeed: %w", err)
+			}
 		}
-		token = strings.TrimSpace(string(s.Data["ui"]))
+		if token == "" {
+			token = strings.TrimSpace(string(s.Data["ui"]))
+		}
+		if admin == "" {
+			admin = strings.TrimSpace(string(s.Data["admin"]))
+		}
 	}
-	env.Hub = &hubAPI{Base: strings.TrimRight(getenv("E2E_HUB_URL", "http://localhost:18080"), "/"), Token: token}
+	env.Hub = &hubAPI{Base: strings.TrimRight(getenv("E2E_HUB_URL", "http://localhost:18080"), "/"), Token: token, AdminToken: admin}
+	if os.Getenv("E2E_HUB_RECOMPUTE") == "off" {
+		env.Hub.AdminToken = ""
+	}
 	env.GitURL = getenv("E2E_GIT_URL", "git://localhost:19418/workloads.git")
 	env.GitInCluster = getenv("E2E_GIT_IN_CLUSTER_URL", "git://git-server.git-server.svc.cluster.local/workloads.git")
 	env.ArgoNamespace = getenv("E2E_ARGOCD_NAMESPACE", "argocd")
