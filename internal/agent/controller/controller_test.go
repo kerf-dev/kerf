@@ -725,6 +725,15 @@ func TestReleaseInPlaceOnce(t *testing.T) {
 	if n := countEvents(name, hubclient.EventSkipped, v1alpha1.ReasonModeAudit); n != 1 {
 		t.Fatalf("skipped events after release: %d", n)
 	}
+	// An agent restart forgets the in-memory slots; the RSR status must stop the repeat.
+	testReconciler.mu.Lock()
+	testReconciler.last = nil
+	testReconciler.mu.Unlock()
+	annotate(t, &appsv1.Deployment{}, name, map[string]any{"test/poke": "1"}) // forces a reconcile
+	time.Sleep(2 * time.Second)
+	if n := countEvents(name, hubclient.EventSkipped, v1alpha1.ReasonModeAudit); n != 1 {
+		t.Fatalf("skipped re-emitted after a simulated restart: %d", n)
+	}
 }
 
 // TestNonUUIDRecommendationID: a hand-made RSR with a non-UUID source id must not make the hub

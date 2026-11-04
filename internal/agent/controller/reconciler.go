@@ -42,7 +42,6 @@ const (
 	condReasonNotBlocked = "NotBlocked"
 	condReasonApplying   = "Applying"
 	condReasonPending    = "Pending"
-	condReasonReleased   = "Released"
 )
 
 // Config configures the reconciler.
@@ -1025,11 +1024,9 @@ func (w *run) writeStatus() error {
 		}
 		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionTrue, v1alpha1.ReasonRecommendationApplied, applied)
 	} else {
-		r := reason
-		if st.Phase == v1alpha1.PhaseReleased {
-			r = condReasonReleased
-		}
-		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionFalse, r, message)
+		// The reason is the latest decision (e.g. ModeAudit for a Released workload): the phase
+		// already says Released, and the reason lets a restarted agent recognise events it emitted.
+		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionFalse, reason, message)
 	}
 	if blocked {
 		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionTrue, reason, message)
