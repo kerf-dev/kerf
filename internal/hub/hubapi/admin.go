@@ -473,6 +473,9 @@ type PolicyVersionList struct {
 type PolicyRevert struct {
 	Version int    `json:"version"`
 	Reason  string `json:"reason"`
+	// OverrideReadiness (admin only) allows a revert that enables auto-patch on clusters that are
+	// not AutomationReady (D-025).
+	OverrideReadiness bool `json:"overrideReadiness,omitempty"`
 }
 
 // PolicyInventoryItem is one RightsizingPolicy CR on a cluster as the agent reports it.

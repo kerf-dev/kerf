@@ -103,9 +103,70 @@ const CATEGORY_ORDER: ReadinessCategory[] = [
 
 /** A check that needs attention: a blocking check not passing, or a warning that warns/fails. */
 export function isProblem(c: ReadinessCheck) {
-  if (c.severity === 'blocking') return c.status !== 'pass'
+  if (c.severity === 'blocking') return c.status === 'fail' || c.status === 'warn'
   if (c.severity === 'warning') return c.status === 'warn' || c.status === 'fail'
   return false
+}
+
+/**
+ * A blocking check without a result yet (`unknown`, counted in `summary.unknown`, not in
+ * `summary.blocking`). It still keeps the cluster from the state it gates, but it is not a failure:
+ * typically the agent has not sent its self-checks yet.
+ */
+export function isPending(c: ReadinessCheck) {
+  return c.severity === 'blocking' && c.status === 'unknown'
+}
+
+/** States the blocking checks gate (api/v1alpha1/readiness catalog). */
+export const CHECK_GATES: Record<string, ReadinessState> = {
+  'agent.connected': 'AgentConnected',
+  'agent.version': 'AgentConnected',
+  'agent.crds': 'AgentConnected',
+  'rbac.read': 'AgentConnected',
+  'datasource.reachable': 'MetricsOK',
+  'metrics.cluster-label': 'MetricsOK',
+  'metrics.cadvisor': 'MetricsOK',
+  'metrics.ksm-owners': 'MetricsOK',
+  'metrics.ksm-resources': 'MetricsOK',
+  'metrics.freshness': 'MetricsOK',
+  'metrics.recommendations': 'ReadyAudit',
+  'rbac.resize': 'AutomationReady',
+  'rbac.rollout': 'AutomationReady',
+  'rbac.hpa': 'AutomationReady',
+  'rbac.evict': 'AutomationReady',
+  'rbac.policies': 'AutomationReady',
+  'rbac.events': 'AutomationReady',
+}
+
+/**
+ * Adds a pending row for every id in `blockedBy` that has no result in `checks` (the hub lists
+ * blocking checks that have not reported yet there, but not in `checks`).
+ */
+export function withPending(checks: ReadinessCheck[], blockedBy?: string[]): ReadinessCheck[] {
+  const have = new Set(checks.map((c) => c.id))
+  const missing = (blockedBy ?? []).filter((id) => !have.has(id))
+  if (!missing.length) return checks
+  return [
+    ...checks,
+    ...missing.map((id): ReadinessCheck => ({
+      id,
+      category: (CATEGORY_ORDER.find((c) => id.startsWith(`${c}.`)) ?? 'agent') as ReadinessCategory,
+      severity: 'blocking',
+      source:
+        id.startsWith('agent.') && id !== 'agent.connected'
+          ? 'agent'
+          : id.startsWith('rbac.')
+            ? 'agent'
+            : 'hub',
+      gates: CHECK_GATES[id],
+      status: 'unknown',
+      message:
+        id.startsWith('rbac.') || (id.startsWith('agent.') && id !== 'agent.connected')
+          ? 'Not reported yet: the agent sends this with its self-checks.'
+          : 'Not reported yet.',
+      checkedAt: '',
+    })),
+  ]
 }
 
 /** Cluster list badge, as in the plan: ✓ Automation ready · ● Ready (audit) · ▲ N warnings · ✕ N blocking. */
@@ -240,6 +301,7 @@ export function StatusIcon({
 
 function CheckRow({ check, capability }: { check: ReadinessCheck; capability?: AgentCapability }) {
   const problem = isProblem(check)
+  const pending = isPending(check)
   const [open, setOpen] = useState(problem)
   const expandable = !!(check.remediation || check.details || capability?.missing?.length || check.docsURL)
   return (
@@ -263,6 +325,7 @@ function CheckRow({ check, capability }: { check: ReadinessCheck; capability?: A
             {check.severity === 'blocking' ? (
               <Badge variant={problem ? 'destructive' : 'muted'} className="text-[10px]">
                 blocking{check.gates ? ` · ${STATE_INFO[check.gates].label}` : ''}
+                {pending ? ' · pending' : ''}
               </Badge>
             ) : check.severity === 'info' ? (
               <Badge variant="muted" className="text-[10px]">
@@ -274,9 +337,9 @@ function CheckRow({ check, capability }: { check: ReadinessCheck; capability?: A
         </span>
         <span
           className="hidden shrink-0 text-[11px] text-muted-foreground sm:block"
-          title={formatDateTime(check.checkedAt)}
+          title={check.checkedAt ? formatDateTime(check.checkedAt) : undefined}
         >
-          {check.source} · {relativeTime(check.checkedAt)}
+          {check.source} · {check.checkedAt ? relativeTime(check.checkedAt) : 'waiting'}
         </span>
         {expandable ? (
           <ChevronRightIcon
@@ -353,12 +416,16 @@ export function ReadinessChecklist({
   checks,
   capabilities,
   onlyProblems,
+  blockedBy,
 }: {
   checks: ReadinessCheck[]
   capabilities?: AgentCapability[]
   onlyProblems?: boolean
+  /** `ClusterReadiness.blockedBy`: blocking checks without a result get a pending row. */
+  blockedBy?: string[]
 }) {
-  const list = onlyProblems ? checks.filter(isProblem) : checks
+  const all = withPending(checks, blockedBy)
+  const list = onlyProblems ? all.filter(isProblem) : all
   const groups = CATEGORY_ORDER.map((cat) => ({ cat, items: list.filter((c) => c.category === cat) }))
     .filter((g) => g.items.length)
     // Categories that need attention first, the rest in catalog order.
@@ -368,6 +435,7 @@ export function ReadinessChecklist({
     <div className="flex flex-col gap-4">
       {groups.map((g) => {
         const bad = g.items.filter(isProblem).length
+        const waiting = g.items.filter(isPending).length
         return (
           <section key={g.cat} className="overflow-hidden rounded-xl border bg-card">
             <header className="flex items-center justify-between border-b bg-muted/30 px-4 py-2">
@@ -376,6 +444,7 @@ export function ReadinessChecklist({
               </h3>
               <span className="text-xs text-muted-foreground">
                 {bad ? `${bad} need attention · ` : ''}
+                {waiting ? `${waiting} not reported yet · ` : ''}
                 {g.items.filter((c) => c.status === 'pass').length}/{g.items.length} passing
               </span>
             </header>

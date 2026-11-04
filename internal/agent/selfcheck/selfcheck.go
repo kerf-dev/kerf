@@ -597,11 +597,17 @@ func (c *Checker) checkArgoCD(ctx context.Context, r *result) {
 		r.add(rd.CheckArgoCD, rd.StatusWarn, "argocd-cm in "+ns+" lacks managedFieldsManagers: ["+FieldManager+"]: Argo CD self-heal reverts the agent's changes", rem, RemediationCommand, d)
 		return
 	}
+	// Without the argoproj.io API there is no Argo CD in this cluster: a 403 on argocd-cm then only
+	// means the chart created no Role (no argocd namespace), not that argocd-cm is unreadable.
 	switch {
-	case forbidden || installed:
-		r.add(rd.CheckArgoCD, rd.StatusUnknown, "Argo CD is installed but argocd-cm is not readable by the agent: check that it ignores fields managed by "+FieldManager, rem, RemediationCommand, nil)
+	case installed:
+		msg := "Argo CD is installed but argocd-cm was not found in " + strings.Join(nss, ", ")
+		if forbidden {
+			msg = "Argo CD is installed but argocd-cm is not readable by the agent (selfCheck.argocd in the agent chart)"
+		}
+		r.add(rd.CheckArgoCD, rd.StatusUnknown, msg+": check that it ignores fields managed by "+FieldManager, rem, RemediationCommand, nil)
 	default:
-		r.add(rd.CheckArgoCD, rd.StatusPass, "Argo CD not installed", "", "", nil)
+		r.add(rd.CheckArgoCD, rd.StatusPass, "Argo CD not installed in this cluster (if an Argo CD elsewhere deploys to it, add the snippet to that Argo CD's argocd-cm)", "", "", nil)
 	}
 }
 

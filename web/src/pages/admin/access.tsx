@@ -348,7 +348,7 @@ function TokenDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="New API token"
-      description="Machine tokens (D-012): agent tokens are per cluster; ui tokens are read-only; admin tokens can do everything an admin can."
+      description="Machine tokens (D-012): agent tokens are per cluster; ui tokens are read-only; admin tokens can do everything an admin can; the pricing token only reaches the metrics bindings and the datasource query proxy (D-026)."
       confirmLabel="Create token"
       confirmDisabled={bad}
       onConfirm={async (o) => onCreated((await write.mutateAsync(o)) as TokenCreated)}
@@ -359,6 +359,7 @@ function TokenDialog({
             <option value="ui">ui (read-only)</option>
             <option value="agent">agent</option>
             <option value="admin">admin</option>
+            <option value="pricing">pricing (pricing service, D-026)</option>
           </NativeSelect>
         </Field>
         {f.role === 'agent' ? (

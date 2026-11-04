@@ -420,3 +420,44 @@ func TestPricingTokenScope(t *testing.T) {
 	r = e.do(http.MethodPost, "/v1/admin/tokens", tokAdmin, hubapi.TokenCreate{Role: hubapi.RolePricing, Cluster: "c1", Reason: "x"})
 	expectCode(t, "pricing token with cluster", r, 400)
 }
+
+// TestRevertGating: reverting to a version that enables auto-patch is gated like an update.
+func TestRevertGating(t *testing.T) {
+	e := newEnv(t)
+	e.initOnboarding()
+	e.seedUsers()
+	admin, _ := e.login("admin", testPassword)
+	// make c1 AutomationReady, create an auto-patch policy, then turn it to audit
+	now := e.now
+	ids := append(readiness.MetricsCheckIDs(), rd.CheckAgentConnected, rd.CheckRecommendations)
+	ids = append(ids, readiness.AgentCheckIDs()...)
+	if _, err := e.srv.Onb.Readiness.Apply(e.ctx, "c1", readiness.Update{Checks: passing(ids, now), At: now}); err != nil {
+		t.Fatal(err)
+	}
+	r := e.sdo(admin, http.MethodPost, "/v1/admin/policies", autoPatchPolicy("rv", 100, []string{"c1"}, "shop"))
+	expectCode(t, "create", r, 201)
+	var p hubapi.AdminPolicy
+	mustJSON(t, r.body, &p)
+	audit := hubapi.PolicyInput{Type: p.Type, Name: p.Name, Clusters: p.Clusters, Reason: "back to audit",
+		Spec: v1alpha1.RightsizingPolicySpec{Priority: 100, Selector: p.Spec.Selector, CPU: &v1alpha1.CPUPolicy{Mode: v1alpha1.ModeAudit}}}
+	r = e.sdo(admin, http.MethodPut, "/v1/admin/policies/"+p.ID, audit, "If-Match", `"1"`)
+	expectCode(t, "to audit", r, 200)
+	// c1 loses resize
+	if _, err := e.srv.Onb.Readiness.Apply(e.ctx, "c1", readiness.Update{Checks: []hubapi.ReadinessCheck{
+		readiness.NewCheck(rd.CheckRBACResize, rd.StatusFail, "denied", "", "", "", now, nil)}, At: now}); err != nil {
+		t.Fatal(err)
+	}
+	e.problem(e.sdo(admin, http.MethodPost, "/v1/admin/policies/"+p.ID+"/revert", hubapi.PolicyRevert{Version: 1, Reason: "undo"}, "If-Match", `"2"`),
+		409, hubapi.CodeClusterNotAutomationReady)
+	r = e.sdo(admin, http.MethodPost, "/v1/admin/policies/"+p.ID+"/revert", hubapi.PolicyRevert{Version: 1, Reason: "undo", OverrideReadiness: true}, "If-Match", `"2"`)
+	expectCode(t, "revert override", r, 200)
+	var cl hubapi.ConfigChangeList
+	e.getJSON("/v1/audit/config?targetType=policy", tokUI, &cl)
+	if len(cl.Items) == 0 || cl.Items[0].Action != hubapi.ActionPolicyReverted || !strings.Contains(string(cl.Items[0].After), `"overrideReadiness":true`) {
+		t.Errorf("revert audit %+v", cl.Items)
+	}
+	// reverting to an audit version is never gated
+	expectCode(t, "revert to audit", e.sdo(admin, http.MethodPost, "/v1/admin/policies/"+p.ID+"/revert", hubapi.PolicyRevert{Version: 2, Reason: "audit again"}, "If-Match", `"3"`), 200)
+	// a bad version still answers 400
+	e.problem(e.sdo(admin, http.MethodPost, "/v1/admin/policies/"+p.ID+"/revert", hubapi.PolicyRevert{Version: 9, Reason: "x"}, "If-Match", `"4"`), 400, "invalid_version")
+}
