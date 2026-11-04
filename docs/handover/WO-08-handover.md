@@ -53,7 +53,31 @@ note about per-id noise is obsolete.)
 - Dockerfile copies `internal/health`.
 
 ## Verification
-See the WO-08 report (results of the live run are in the "Live run" section below).
+- `go test ./internal/health/... -cover`: ok, 76% (unit: signals, restore logic, PromQL query/parse, cAdvisor
+  parse, pod->workload mapping; envtest: rollout OOM rollback, in-place restarts rollback, throttling rollback,
+  watch completing Healthy, retry of an unfinished restore). `make lint` 0 issues, `make test` all ok.
+- Live, ro-spoke-1 (the WO's `memory-leak` cannot be used: the hub flags it `oom-killed` and never decreases it):
+  namespace `wo08-health` (deleted afterwards), Deployment `leaky2` (python holding N MiB read from a ConfigMap,
+  256Mi), RightsizingPolicy for that namespace (memory auto-patch, rollout, learningPeriod 0s, minConfidence 0,
+  maxChangePercent 100, watchDuration 20m). The real hub recommended 32Mi; the agent applied it (rollout) and the
+  watch started. Raising the allocation to 64 MiB OOM-killed the pod; 53 s after the ConfigMap change (most of it
+  ConfigMap propagation) the RSR was `RolledBack` and the template back at 256Mi. Hub audit
+  (`GET /v1/audit?workload=leaky2`): `applied` 256Mi->32Mi, then `rolled_back` OOMKills 32Mi->256Mi,
+  details `{oomKills: 1, watchDuration: 20m0s}`; `.items[-1].type` = `"rolled_back"`.
+- D-017 live: `overprovisioned` (audit) had 5 identical `skipped ModeAudit` events in the audit log between 01:00
+  and 02:34 (one per hub run); after this build, none across the following runs.
 
-## Live run
-(filled in below)
+## Found and fixed during the live run
+- Stripping managedFields in the cache (meant for pods) hid the agent's own field ownership on workloads: it then
+  re-applied templates on every reconcile and would never release. Only pods are stripped now.
+- Race: the agent's drift repair, reading a cached RSR still `Applied`, re-applied the decreased values right after
+  the watcher restored them. Now the watcher marks `RolledBack` first and then restores (a RolledBack RSR whose
+  restore is not confirmed is restored again on the next reconcile), and drift repair re-reads the RSR uncached.
+
+## For other tracks
+- WO-09 (e2e): every applied change in any namespace is now health-watched (e.g. `e2e-fallback-*/web` showed
+  `HealthWatch=True Watching`). Restarts ≥ 3 or an OOM kill after a memory change within 30m roll it back; set
+  `guardrails.rollback` in the e2e policies if a test should not be rolled back.
+- WO-07 (webhook): after a rollback the phase is `RolledBack`, so the webhook stops injecting; in-place pods are
+  resized back, templates were never touched.
+- WO-04 (hub): `rolled_back` events carry `details.oomKills|restarts|throttlingRatio` and `watchDuration`.
