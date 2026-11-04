@@ -33,6 +33,9 @@ type Signals struct {
 type tracker struct {
 	mu      sync.Mutex
 	watches map[types.UID]*watchState
+	// restored and restoreFailed are keyed by RSR and hold the rolledBackAt they refer to.
+	restored      map[types.UID]time.Time
+	restoreFailed map[types.UID]time.Time
 }
 
 type watchState struct {
@@ -41,12 +44,13 @@ type watchState struct {
 	ooms      map[string]struct{} // podUID/container/finishedAt
 	throttle  map[string]counter  // cAdvisor baselines: pod/container -> counters
 	watching  bool
-	failed    bool
 }
 
 type counter struct{ throttled, periods float64 }
 
-func newTracker() *tracker { return &tracker{watches: map[types.UID]*watchState{}} }
+func newTracker() *tracker {
+	return &tracker{watches: map[types.UID]*watchState{}, restored: map[types.UID]time.Time{}, restoreFailed: map[types.UID]time.Time{}}
+}
 
 // state returns the state of a watch, resetting it when the change it belongs to changed.
 func (t *tracker) state(uid types.UID, appliedAt time.Time) *watchState {

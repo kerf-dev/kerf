@@ -314,6 +314,12 @@ func TestRolloutOOMRollback(t *testing.T) {
 		p.Status.ContainerStatuses[0].LastTerminationState.Terminated = oom(time.Now())
 	})
 	r := wantRolledBack(t, name, v1alpha1.ReasonOOMKills)
+	eventually(t, 10*time.Second, "rolled_back event", func() error {
+		if emitter.find(name, hubclient.EventRolledBack) == nil {
+			return fmt.Errorf("none yet")
+		}
+		return nil
+	})
 	if c := meta.FindStatusCondition(r.Status.Conditions, v1alpha1.ConditionApplied); c == nil || c.Reason != v1alpha1.ReasonOOMKills {
 		t.Fatalf("Applied condition %+v", c)
 	}
@@ -349,13 +355,22 @@ func TestInPlaceRestartsRollback(t *testing.T) {
 		p.Status.ContainerStatuses[0].LastTerminationState.Terminated = &corev1.ContainerStateTerminated{Reason: "Error", ExitCode: 1, FinishedAt: metav1.Now()}
 	})
 	wantRolledBack(t, name, v1alpha1.ReasonRestarts)
-	var p corev1.Pod
-	if err := k8s.Get(testCtx, client.ObjectKeyFromObject(pod), &p); err != nil {
-		t.Fatal(err)
-	}
-	if got := p.Spec.Containers[0].Resources.Requests.Cpu().String(); got != "500m" {
-		t.Fatalf("pod cpu after rollback = %s", got)
-	}
+	eventually(t, 10*time.Second, "pod resized back", func() error {
+		var p corev1.Pod
+		if err := k8s.Get(testCtx, client.ObjectKeyFromObject(pod), &p); err != nil {
+			return err
+		}
+		if got := p.Spec.Containers[0].Resources.Requests.Cpu().String(); got != "500m" {
+			return fmt.Errorf("pod cpu after rollback = %s", got)
+		}
+		return nil
+	})
+	eventually(t, 10*time.Second, "rolled_back event", func() error {
+		if emitter.find(name, hubclient.EventRolledBack) == nil {
+			return fmt.Errorf("none yet")
+		}
+		return nil
+	})
 	e := emitter.find(name, hubclient.EventRolledBack)
 	if e == nil || e.Strategy != "in-place" || e.Details["restarts"] != "3" || len(e.Resources) != 1 || e.Resources[0] != "cpu" {
 		t.Fatalf("rolled_back event %+v", e)
@@ -378,6 +393,12 @@ func TestThrottlingRollback(t *testing.T) {
 	if got := d.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().String(); got != "500m" {
 		t.Fatalf("cpu after rollback = %s", got)
 	}
+	eventually(t, 10*time.Second, "rolled_back event", func() error {
+		if emitter.find(name, hubclient.EventRolledBack) == nil {
+			return fmt.Errorf("none yet")
+		}
+		return nil
+	})
 	if e := emitter.find(name, hubclient.EventRolledBack); e == nil || e.Details["throttlingRatio"] != "0.600" {
 		t.Fatalf("event %+v", e)
 	}
@@ -414,5 +435,55 @@ func TestWatchCompletes(t *testing.T) {
 	})
 	if e := emitter.find(name, hubclient.EventRolledBack); e != nil {
 		t.Fatalf("unexpected rollback: %+v", e)
+	}
+}
+
+// TestFinishRollback: an RSR already marked RolledBack whose template was not restored (the restore
+// failed, or the agent restarted in between) is restored by the next reconcile, and reported once.
+func TestFinishRollback(t *testing.T) {
+	needEnv(t)
+	const name = "finish-rollback"
+	d, _ := setup(t, fixture{name: name, strategy: v1alpha1.StrategyRollout,
+		template: req("500m", "256Mi"), podValues: req("250m", "64Mi"),
+		previous: v1alpha1.ContainerResources{Name: "app", Requests: rl("500m", "256Mi"), Limits: rl("", "256Mi")},
+		target:   rec("app", "250m", "64Mi")})
+	r := rsrOf(t, name)
+	now := metav1.Now()
+	r.Status.Phase = v1alpha1.PhaseRolledBack
+	r.Status.RolledBackAt = &now
+	meta.SetStatusCondition(&r.Status.Conditions, metav1.Condition{Type: v1alpha1.ConditionHealthWatch, Status: metav1.ConditionFalse,
+		Reason: v1alpha1.ReasonOOMKills, Message: "2 OOM kill(s)"})
+	if err := k8s.Status().Update(testCtx, r); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, 15*time.Second, "template restored", func() error {
+		if err := k8s.Get(testCtx, client.ObjectKeyFromObject(d), d); err != nil {
+			return err
+		}
+		if got := d.Spec.Template.Spec.Containers[0].Resources.Requests.Memory().String(); got != "256Mi" {
+			return fmt.Errorf("memory %s", got)
+		}
+		return nil
+	})
+	if got := d.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().String(); got != "250m" {
+		t.Fatalf("cpu must stay applied: %s", got)
+	}
+	eventually(t, 5*time.Second, "event", func() error {
+		if emitter.find(name, hubclient.EventRolledBack) == nil {
+			return fmt.Errorf("no rolled_back event")
+		}
+		return nil
+	})
+	time.Sleep(time.Second)
+	n := 0
+	emitter.mu.Lock()
+	for _, e := range emitter.events {
+		if e.Workload.Name == name && e.Type == hubclient.EventRolledBack {
+			n++
+		}
+	}
+	emitter.mu.Unlock()
+	if n != 1 {
+		t.Fatalf("rolled_back events: %d", n)
 	}
 }

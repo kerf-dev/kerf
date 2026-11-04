@@ -499,6 +499,15 @@ func (w *run) keepLive() (ctrl.Result, error) {
 	if len(own) == 0 || r.Cfg.ReadOnly {
 		return ctrl.Result{}, nil
 	}
+	// The health watch (WO-08) may have rolled this change back a moment ago and the cached RSR
+	// not show it yet: confirm the phase uncached before re-asserting anything.
+	var fresh v1alpha1.RightsizingRecommendation
+	if err := r.Reader.Get(w.ctx, client.ObjectKeyFromObject(w.rsr), &fresh); err != nil {
+		return ctrl.Result{}, err
+	}
+	if fresh.Status.Phase != v1alpha1.PhaseApplied || fresh.Status.AppliedRecommendationID != w.rsr.Status.AppliedRecommendationID {
+		return ctrl.Result{RequeueAfter: time.Second}, nil
+	}
 	targets := w.rsr.Spec.Containers
 	if w.rsr.Spec.Strategy != v1alpha1.StrategyInPlace {
 		if templateMatches(workload.PodSpec(w.obj), targets, own) && hasAll(apply.OwnedResources(w.obj), own) {
