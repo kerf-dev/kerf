@@ -294,7 +294,10 @@ export function WriteError({ error, onReload }: { error: unknown; onReload?: () 
     <Callout
       tone="destructive"
       icon={AlertTriangleIcon}
-      title={(e?.code && CODE_TITLE[e.code]) ?? (e?.status === 400 ? 'The hub rejected the change' : 'Could not save')}
+      title={
+        (e?.code && CODE_TITLE[e.code]) ??
+        (e?.status === 400 ? 'The hub rejected the change' : 'Could not save')
+      }
     >
       {e ? e.message : String(error)}
       {e?.code ? <span className="ml-1 font-mono text-[11px]">({e.code})</span> : null}
