@@ -34,6 +34,8 @@ re-read on every request. The Secret is optional: without it the hub answers 401
 | apps replicasets, batch jobs | get list | owner chain to find a workload's pods |
 | pods | get list watch (+ patch) | in-place status, health watch (restarts, OOM kills); patch only for the `previous-resources` / `recommendation-id` annotations |
 | pods/resize | patch | in-place resize (D-007) |
+| pods/eviction | create | OnDelete StatefulSets: outdated pods are evicted so PodDisruptionBudgets apply (WO-13) |
+| policy poddisruptionbudgets | get list watch | single-replica protection: a PDB that allows 0 disruptions (WO-13) |
 | nodes | get list watch | swap / unsupported-node detection |
 | nodes/proxy | get (only with `health.cadvisorFallback`) | throttling from kubelet cAdvisor when the hub metrics are unreachable; reaches every kubelet API, hence off by default |
 | autoscaling horizontalpodautoscalers | get list watch (+ patch unless readOnly) | HPA coupling (D-011); target set by HPA coordination (WO-11) |

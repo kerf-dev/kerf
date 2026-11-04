@@ -80,6 +80,14 @@ health:
   # off by default.
   cadvisorFallback: false
 
+# StatefulSets with updateStrategy OnDelete (WO-13): after the rollout strategy patched the pod
+# template, the agent evicts the outdated pods (eviction API, so PodDisruptionBudgets apply),
+# highest ordinal first, at most maxPodDeletesPerRun at a time, and only once every pod has been
+# Ready for `settle` (or the StatefulSet's minReadySeconds) and the health watch reports no breach.
+onDelete:
+  maxPodDeletesPerRun: 1
+  settle: 30s
+
 replicas: 1
 leaderElection: false
 

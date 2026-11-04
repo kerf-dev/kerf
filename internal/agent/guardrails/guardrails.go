@@ -12,6 +12,7 @@
 //     RestartContainer for in-place (RestartPolicyRequired); changes below the tolerance are dropped
 //  5. nothing left to change                    -> skipped NoSignificantChange (or the refusal)
 //  6. cooldown since the last change / rollback -> blocked Cooldown
+//  7. single replica without a disruption-free way to apply (WO-13) -> blocked SingleReplicaUnsafe
 package guardrails
 
 import (
@@ -25,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/tomer1983/resource-optimizer/internal/agent/apply"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 	"github.com/tomer1983/resource-optimizer/internal/agent/policy"
 	"github.com/tomer1983/resource-optimizer/internal/agent/workload"
@@ -75,6 +77,8 @@ type Input struct {
 	RolledBackResources []string
 	// Tolerance is the relative change below which a value is left alone (default 5%).
 	Tolerance float64
+	// Disruption describes single-replica protection (WO-13); nil skips the check.
+	Disruption *apply.Disruption
 }
 
 // Refusal is a per-resource guardrail that removed part of a change.
@@ -182,6 +186,10 @@ func Evaluate(in Input) Decision {
 	if in.RolledBackAt != nil && in.Now.Sub(*in.RolledBackAt) < eff.Cooldown && hasDecrease(changes, in.RolledBackResources) {
 		d.Outcome, d.Reason = Blocked, v1alpha1.ReasonCooldown
 		d.Message = fmt.Sprintf("rolled back at %s; decreases of %s blocked for %s", in.RolledBackAt.UTC().Format(time.RFC3339), resList(in.RolledBackResources), eff.Cooldown)
+		return d
+	}
+	if why := singleReplicaUnsafe(in, changes); why != "" {
+		d.Outcome, d.Reason, d.Message = Blocked, ReasonSingleReplicaUnsafe, why
 		return d
 	}
 	if in.Strategy == v1alpha1.StrategyDeferred {
