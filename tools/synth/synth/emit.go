@@ -3,6 +3,7 @@ package synth
 import (
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -105,6 +106,17 @@ func valueSeries(ls labels, start int, vals []float64) *Series {
 // EmitNodes emits node-level kube-state-metrics series for a cluster.
 func (g *Generator) EmitNodes(cm *ClusterModel, emit Emit) error {
 	n := g.Timeline.N
+	// Where this scenario's timeline starts and what it is anchored to, so `synth live` can
+	// continue it later with identical results.
+	sl := labels{{"cluster", cm.Spec.Name}, {"job", "synth"}, {"scenario", g.Scenario.Name}, {"seed", strconv.FormatInt(g.Scenario.Seed, 10)}}
+	for _, s := range []*Series{
+		constSeries(sl.with("__name__", "synth_scenario_start_timestamp_seconds"), 0, n, float64(g.Timeline.Start.Unix())),
+		constSeries(sl.with("__name__", "synth_scenario_anchor_timestamp_seconds"), 0, n, float64(g.Anchor().Unix())),
+	} {
+		if err := emit(s); err != nil {
+			return err
+		}
+	}
 	base := labels{{"cluster", cm.Spec.Name}, {"job", ksmJob}, {"instance", ksmInstance}}
 	for _, nd := range cm.Nodes {
 		nl := base.with("node", nd.Name)

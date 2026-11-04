@@ -38,6 +38,8 @@ type VMWriter struct {
 	Series, Samples, Bytes atomic.Int64
 	// Paused counts how long requests waited for VictoriaMetrics memory to drop.
 	Paused atomic.Int64
+	// PostTime is the total time spent in import requests; WireBytes the bytes sent.
+	PostTime, WireBytes atomic.Int64
 
 	rw      bool
 	base    string
@@ -54,9 +56,9 @@ type VMOptions struct {
 	// Format is "remote-write" (Prometheus remote write protobuf + snappy to /api/v1/write,
 	// default, fastest for VictoriaMetrics to ingest) or "json" (/api/v1/import JSON lines).
 	Format string
-	// MaxRSSFraction pauses imports while VictoriaMetrics' Go heap in use is above this
-	// fraction of its available memory (default 0.75; negative disables). VictoriaMetrics
-	// itself keeps caches up to 60% of available memory, so lower values stall the import. The shared dev VM
+	// MaxRSSFraction pauses imports while the memory VictoriaMetrics' Go runtime holds is above
+	// this fraction of its memory limit (default 0.8; negative disables). VictoriaMetrics keeps
+	// caches up to 60% of the limit itself, so values below ~0.7 stall the import. The shared dev VM
 	// runs with a 768Mi limit and is OOM-killed by unthrottled backfills.
 	MaxRSSFraction float64
 }
@@ -70,7 +72,7 @@ func NewVMWriter(vmURL string, tl Timeline, opt VMOptions) *VMWriter {
 		opt.BatchBytes = 8 << 20
 	}
 	if opt.MaxRSSFraction == 0 {
-		opt.MaxRSSFraction = 0.75
+		opt.MaxRSSFraction = 0.8
 	}
 	if opt.Format == "" {
 		opt.Format = "remote-write"
@@ -103,8 +105,11 @@ func NewVMWriter(vmURL string, tl Timeline, opt VMOptions) *VMWriter {
 	return v
 }
 
-// memory reads vm_available_memory_bytes and go_memstats_heap_inuse_bytes from /metrics.
-func (v *VMWriter) memory() (avail, rss float64, err error) {
+// memory reads vm_available_memory_bytes (the container limit) and the memory the Go runtime
+// holds from the OS (go_memstats_sys_bytes - go_memstats_heap_released_bytes) from /metrics.
+// RSS is not used: it includes VictoriaMetrics' mmapped data files, which the kernel reclaims
+// before an OOM kill.
+func (v *VMWriter) memory() (avail, used float64, err error) {
 	c := &http.Client{Timeout: 3 * time.Second}
 	resp, err := c.Get(v.base + "/metrics")
 	if err != nil {
@@ -115,20 +120,23 @@ func (v *VMWriter) memory() (avail, rss float64, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
+	var sys, released float64
 	for _, line := range strings.Split(string(b), "\n") {
 		name, val, ok := strings.Cut(line, " ")
 		if !ok {
 			continue
 		}
+		f, _ := strconv.ParseFloat(val, 64)
 		switch name {
 		case "vm_available_memory_bytes":
-			avail, _ = strconv.ParseFloat(val, 64)
-		case "go_memstats_heap_inuse_bytes":
-			// Heap in use, not RSS: Go keeps freed memory resident, so RSS never drops.
-			rss, _ = strconv.ParseFloat(val, 64)
+			avail = f
+		case "go_memstats_sys_bytes":
+			sys = f
+		case "go_memstats_heap_released_bytes":
+			released = f
 		}
 	}
-	return avail, rss, nil
+	return avail, sys - released, nil
 }
 
 func (v *VMWriter) monitor() {
@@ -242,7 +250,10 @@ func (v *VMWriter) post(body []byte) error {
 		case v.gzip:
 			req.Header.Set("Content-Encoding", "gzip")
 		}
+		t0 := time.Now()
 		resp, err := v.client.Do(req)
+		v.PostTime.Add(int64(time.Since(t0)))
+		v.WireBytes.Add(int64(len(payload)))
 		if err != nil {
 			last = err
 			slog.Warn("import request failed, retrying", "attempt", attempt+1, "err", err)

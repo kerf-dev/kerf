@@ -41,6 +41,12 @@ type Options struct {
 	Step time.Duration
 	// Clusters limits the run to these cluster names (all when empty).
 	Clusters []string
+	// Start fixes the first sample (live mode: continue an earlier backfill); Days is then ignored.
+	Start time.Time
+	// Anchor is the time scenario offsets (age, rollouts, stepAt) are measured back from.
+	// Default: the end. Live mode keeps the backfill's end as anchor, so extending the timeline
+	// reproduces the past exactly and only appends.
+	Anchor time.Time
 }
 
 // Generator holds an expanded scenario.
@@ -48,7 +54,16 @@ type Generator struct {
 	Scenario *Scenario
 	Timeline Timeline
 	Clusters []*ClusterModel
+	anchor   int // sample index of Options.Anchor
 }
+
+// Anchor returns the time scenario offsets are measured back from.
+func (g *Generator) Anchor() time.Time {
+	return g.Timeline.Start.Add(time.Duration(g.anchor) * g.Timeline.Step)
+}
+
+// at returns the sample index d before the anchor.
+func (g *Generator) at(d time.Duration) int { return g.anchor - g.Timeline.steps(d) }
 
 // ClusterModel is an expanded cluster: nodes and fully specified workloads.
 type ClusterModel struct {
@@ -75,15 +90,34 @@ func New(sc *Scenario, opt Options) (*Generator, error) {
 	if opt.Step > 0 {
 		sc.Step = Duration(opt.Step)
 	}
-	if err := sc.Validate(); err != nil {
-		return nil, err
-	}
 	end := opt.End
 	if end.IsZero() {
 		end = time.Now()
 	}
+	step := sc.Step.D()
+	if !opt.Start.IsZero() {
+		if opt.Start.Truncate(step) != opt.Start || !end.After(opt.Start) {
+			return nil, fmt.Errorf("start %s must be aligned to the step and before the end", opt.Start)
+		}
+		sc.Days = math.Min(35, end.Sub(opt.Start).Hours()/24)
+	}
+	if err := sc.Validate(); err != nil {
+		return nil, err
+	}
 	window := time.Duration(sc.Days * float64(24*time.Hour))
-	g := &Generator{Scenario: sc, Timeline: NewTimeline(end, window, sc.Step.D())}
+	tl := NewTimeline(end, window, step)
+	if !opt.Start.IsZero() {
+		tl = Timeline{Start: opt.Start, Step: step, N: int(end.Truncate(step).Sub(opt.Start)/step) + 1}
+		window = tl.End().Sub(tl.Start)
+	}
+	g := &Generator{Scenario: sc, Timeline: tl, anchor: tl.N - 1}
+	if !opt.Anchor.IsZero() {
+		g.anchor = int(opt.Anchor.Sub(tl.Start) / step)
+		if g.anchor < 0 || g.anchor >= tl.N {
+			return nil, fmt.Errorf("anchor %s outside the timeline", opt.Anchor)
+		}
+		window = time.Duration(g.anchor) * step
+	}
 	for i := range sc.Clusters {
 		cs := &sc.Clusters[i]
 		if len(opt.Clusters) > 0 && !contains(opt.Clusters, cs.Name) {
@@ -282,7 +316,7 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 	r := newRand(seed, cm.Spec.Name, w.Namespace, w.Name, "workload")
 	wt := &WorkloadTrace{Cluster: cm, Spec: w}
 	if w.Age > 0 {
-		wt.Created = max(0, tl.N-1-tl.steps(w.Age.D()))
+		wt.Created = max(0, g.at(w.Age.D()))
 	}
 	// Workload-level shapes per container (shared by all pods: traffic is shared).
 	cpuShapes := make([][]float64, len(w.Containers))
@@ -296,14 +330,14 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 	// Releases: explicit rollouts plus step changes.
 	revStarts := []int{wt.Created}
 	for _, d := range w.Rollouts {
-		revStarts = append(revStarts, tl.N-1-tl.steps(d.D()))
+		revStarts = append(revStarts, g.at(d.D()))
 	}
 	for _, c := range w.Containers {
 		if c.CPU.StepFactor != 0 && c.CPU.StepAt > 0 {
-			revStarts = append(revStarts, tl.N-1-tl.steps(c.CPU.StepAt.D()))
+			revStarts = append(revStarts, g.at(c.CPU.StepAt.D()))
 		}
 		if c.Memory.StepFactor != 0 && c.Memory.StepAt > 0 {
-			revStarts = append(revStarts, tl.N-1-tl.steps(c.Memory.StepAt.D()))
+			revStarts = append(revStarts, g.at(c.Memory.StepAt.D()))
 		}
 	}
 	sort.Ints(revStarts)
@@ -344,10 +378,10 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 		}
 	}
 
-	podN := 0
-	newPod := func(start, end, rev int, node *Node, name, ownerKind, ownerName string) {
-		pr := newRand(seed, cm.Spec.Name, w.Namespace, w.Name, "pod", strconv.Itoa(podN))
-		podN++
+	// Each pod's random stream is keyed by its identity (slot and sequence, or Job), so a longer
+	// timeline only appends pods and never changes earlier ones.
+	newPod := func(key string, start, end, rev int, node *Node, name, ownerKind, ownerName string) {
+		pr := newRand(seed, cm.Spec.Name, w.Namespace, w.Name, "pod", key)
 		if node == nil {
 			node = cm.pickNode(pr)
 		}
@@ -355,7 +389,10 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 			Start: start, End: end, Revision: rev,
 			PodIP: fmt.Sprintf("10.%d.%d.%d", 100+pr.IntN(100), pr.IntN(256), 1+pr.IntN(254))}
 		for ci := range w.Containers {
-			p.Containers = append(p.Containers, g.simContainer(pr, w, ci, p, cpuShapes[ci], memShapes[ci], perPodLoad))
+			// Own stream per container: containers are simulated one after the other, so a shared
+			// stream would make the second depend on how long the first ran.
+			cr := newRand(seed, cm.Spec.Name, w.Namespace, w.Name, "pod", key, w.Containers[ci].Name)
+			p.Containers = append(p.Containers, g.simContainer(cr, w, ci, p, cpuShapes[ci], memShapes[ci], perPodLoad))
 		}
 		wt.Pods = append(wt.Pods, p)
 	}
@@ -388,7 +425,7 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 		for j := 0; j < slots; j++ {
 			sr := newRand(seed, cm.Spec.Name, w.Namespace, w.Name, "slot", strconv.Itoa(j))
 			cur := -1 // start index of current pod
-			curRev, deadline := -1, 0
+			curRev, deadline, seq := -1, 0, 0
 			var curNode *Node
 			flush := func(end int) {
 				if cur < 0 {
@@ -403,7 +440,8 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 				case KindDaemonSet:
 					name, ok, on = w.Name+"-"+sr.suffix(5), KindDaemonSet, w.Name
 				}
-				newPod(cur, end, curRev, curNode, name, ok, on)
+				newPod(fmt.Sprintf("%d/%d", j, seq), cur, end, curRev, curNode, name, ok, on)
+				seq++
 				cur = -1
 			}
 			for i := wt.Created; i < tl.N; i++ {
@@ -464,7 +502,7 @@ func (g *Generator) hpaReplicas(w *WorkloadSpec, shape []float64, wt *WorkloadTr
 	return per
 }
 
-func (g *Generator) cronJobs(w *WorkloadSpec, wt *WorkloadTrace, r *rnd, newPod func(start, end, rev int, node *Node, name, ok, on string)) {
+func (g *Generator) cronJobs(w *WorkloadSpec, wt *WorkloadTrace, r *rnd, newPod func(key string, start, end, rev int, node *Node, name, ok, on string)) {
 	tl := g.Timeline
 	every, off, dur := w.Schedule.Every.D(), w.Schedule.Offset.D(), w.Schedule.Duration.D()
 	day := tl.Start.Truncate(24 * time.Hour)
@@ -473,12 +511,13 @@ func (g *Generator) cronJobs(w *WorkloadSpec, wt *WorkloadTrace, r *rnd, newPod 
 		if t.Before(created) {
 			continue
 		}
-		start := int(t.Sub(tl.Start) / tl.Step)
-		n := max(1, int(float64(dur)*r.uniform(0.8, 1.2)/float64(tl.Step)))
-		end := min(tl.N, start+n)
 		job := fmt.Sprintf("%s-%d", w.Name, t.Unix()/60)
+		jr := newRand(g.Scenario.Seed, wt.Cluster.Spec.Name, w.Namespace, job)
+		start := int(t.Sub(tl.Start) / tl.Step)
+		n := max(1, int(float64(dur)*jr.uniform(0.8, 1.2)/float64(tl.Step)))
+		end := min(tl.N, start+n)
 		wt.Owners = append(wt.Owners, Owner{Name: job, Start: start, End: end})
-		newPod(start, end, 0, nil, job+"-"+r.suffix(5), "Job", job)
+		newPod(job, start, end, 0, nil, job+"-"+jr.suffix(5), "Job", job)
 	}
 }
 
@@ -553,9 +592,9 @@ func (g *Generator) shape(s Signal, r *rnd) []float64 {
 	if s.StepFactor != 0 {
 		at := s.StepAt.D()
 		if at == 0 {
-			at = time.Duration(tl.N/2) * tl.Step
+			at = time.Duration(g.anchor/2) * tl.Step
 		}
-		stepAt = tl.N - 1 - tl.steps(at)
+		stepAt = g.at(at)
 	}
 	stepMin := tl.Step.Minutes()
 	for i := range out {
@@ -574,14 +613,17 @@ func (g *Generator) shape(s Signal, r *rnd) []float64 {
 		out[i] = math.Max(v, base*0.02)
 	}
 	if s.SpikesPerDay > 0 {
-		days := float64(tl.N) * stepMin / 1440
-		n := r.poisson(s.SpikesPerDay * days)
+		// Spikes are drawn day by day in time order, so extending the timeline keeps them.
+		perDay := max(1, int(1440/stepMin))
 		width := max(1, int(s.SpikeMinutes/stepMin))
-		for k := 0; k < n; k++ {
-			at := r.IntN(tl.N)
-			m := s.SpikeMult * r.uniform(0.8, 1.2)
-			for d := 0; d < width && at+d < tl.N; d++ {
-				out[at+d] *= m
+		for d0 := 0; d0 < tl.N; d0 += perDay {
+			n := r.poisson(s.SpikesPerDay)
+			for k := 0; k < n; k++ {
+				at := d0 + r.IntN(perDay)
+				m := s.SpikeMult * r.uniform(0.8, 1.2)
+				for d := 0; d < width && at+d < tl.N; d++ {
+					out[at+d] *= m
+				}
 			}
 		}
 	}

@@ -743,3 +743,51 @@ func TestDescribeExpectations(t *testing.T) {
 		}
 	}
 }
+
+// TestExtendIsSeamless: extending an anchored timeline (live mode) must reproduce every earlier
+// sample exactly, so continuing a backfill never rewrites history or resets counters.
+func TestExtendIsSeamless(t *testing.T) {
+	load := func(end time.Time) *Generator {
+		sc, err := LoadScenario("../scenarios/fleet-small.yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		g, err := New(sc, Options{Start: testEnd.Add(-3 * 24 * time.Hour), Anchor: testEnd, End: end, Clusters: []string{"synth-a"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return g
+	}
+	base := load(testEnd)
+	longer := load(testEnd.Add(7 * time.Hour))
+	if longer.Timeline.N != base.Timeline.N+7*60 || longer.Timeline.Start != base.Timeline.Start {
+		t.Fatalf("timelines %+v %+v", base.Timeline, longer.Timeline)
+	}
+	clip := func(g *Generator, n int) []*Series {
+		var out []*Series
+		for _, s := range collect(t, g) {
+			if c := clipSeries(s, 0, n); c != nil {
+				out = append(out, c)
+			}
+		}
+		return out
+	}
+	a, b := clip(base, base.Timeline.N), clip(longer, base.Timeline.N)
+	if len(a) != len(b) || digest(a) != digest(b) {
+		t.Fatalf("extending the timeline changed history: %d vs %d series", len(a), len(b))
+	}
+	// The default fleet too (spikes, rollouts, evictions, cron jobs).
+	sc, _ := LoadScenario("../scenarios/fleet-default.yaml")
+	g1, _ := New(sc, Options{Start: testEnd.Add(-2 * 24 * time.Hour), Anchor: testEnd, End: testEnd, Clusters: []string{"synth-b"}})
+	sc2, _ := LoadScenario("../scenarios/fleet-default.yaml")
+	g2, _ := New(sc2, Options{Start: testEnd.Add(-2 * 24 * time.Hour), Anchor: testEnd, End: testEnd.Add(90 * time.Minute), Clusters: []string{"synth-b"}})
+	if digest(clip(g1, g1.Timeline.N)) != digest(clip(g2, g1.Timeline.N)) {
+		t.Fatal("fleet-default: extending the timeline changed history")
+	}
+}
+
+func clipSeries(s *Series, from, to int) *Series {
+	var out *Series
+	Clip(func(c *Series) error { out = c; return nil }, from, to)(s)
+	return out
+}
