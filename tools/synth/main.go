@@ -41,6 +41,10 @@ func main() {
 		err = describe(os.Args[2:])
 	case "delete":
 		err = deleteCmd(os.Args[2:])
+	case "verify":
+		err = verify(os.Args[2:])
+	case "live":
+		err = live(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -61,6 +65,8 @@ commands:
   backfill   generate a scenario and import it into VictoriaMetrics (/api/v1/import)
   fixtures   write per-workload JSON fixtures (testdata/series) for unit tests
   describe   print what a scenario expands to (nodes, workloads, volume); --manifest writes ground truth
+  live       keep a backfilled scenario current: append new samples every minute (seamless continuation)
+  verify     check with PromQL that a backfilled scenario is in VictoriaMetrics with the expected shapes
   delete     delete all series of synthetic clusters (synth-*) from VictoriaMetrics
 
 run "synth <command> -h" for flags`)
@@ -136,14 +142,15 @@ func backfill(args []string) error {
 	c.register(fs, "tools/synth/scenarios/fleet-default.yaml")
 	vmURL := fs.String("vm-url", "http://localhost:18428", "VictoriaMetrics base URL")
 	replace := fs.Bool("replace", false, "delete existing series of the scenario's clusters first")
-	workers := fs.Int("workers", 6, "concurrent import requests")
+	workers := fs.Int("workers", 8, "concurrent import requests")
 	parallel := fs.Int("parallel", 4, "workloads simulated concurrently")
 	gz := fs.Bool("gzip", false, "gzip import requests")
 	format := fs.String("format", "remote-write", "remote-write (/api/v1/write) or json (/api/v1/import)")
 	batch := fs.Int("batch-kib", 2048, "import request size in KiB")
-	maxRSS := fs.Float64("max-vm-memory", 0.75, "pause while VictoriaMetrics heap in use is above this fraction of its memory limit (negative: off)")
+	maxRSS := fs.Float64("max-vm-memory", 0.8, "pause while VictoriaMetrics' Go memory is above this fraction of its memory limit (negative: off)")
 	dry := fs.Bool("dry-run", false, "generate and count, do not import")
-	chunk := fs.Duration("chunk", 48*time.Hour, "import in time order, this much history at a time (0: whole window per series)")
+	follow := fs.Bool("follow", false, "after the backfill, keep appending samples like `synth live`")
+	chunk := fs.Duration("chunk", 0, "import in time order, this much history at a time (0: whole window per series)")
 	fs.Parse(args)
 
 	g, err := c.generator()
@@ -236,9 +243,13 @@ func backfill(args []string) error {
 	attrs := []any{"workloads", total / chunks, "chunks", chunks, "seriesChunks", nSeries.Load(), "samples", nSamples.Load(), "elapsed", el.Round(time.Millisecond),
 		"samplesPerSec", int(float64(nSamples.Load()) / el.Seconds())}
 	if vw != nil {
-		attrs = append(attrs, "importedMiB", vw.Bytes.Load()>>20, "pausedForVMMemory", time.Duration(vw.Paused.Load()).Round(time.Second))
+		attrs = append(attrs, "importedMiB", vw.Bytes.Load()>>20, "wireMiB", vw.WireBytes.Load()>>20,
+			"pausedForVMMemory", time.Duration(vw.Paused.Load()).Round(time.Second), "requestTime", time.Duration(vw.PostTime.Load()).Round(time.Second))
 	}
 	slog.Info("backfill done", attrs...)
+	if *follow && !*dry {
+		return runLive(g.Scenario, *vmURL, liveState{start: tl.Start, anchor: g.Anchor(), last: tl.End(), seed: g.Scenario.Seed}, time.Minute)
+	}
 	return nil
 }
 
@@ -268,7 +279,16 @@ func fixtures(args []string) error {
 	out := fs.String("out", "testdata/series", "output directory")
 	bucket := fs.Duration("bucket", synth.FixtureBucket, "fixture resolution")
 	all := fs.Bool("all", false, "include generated fleet workloads (default: only workloads listed explicitly)")
+	clean := fs.Bool("clean", false, "remove existing *.json fixtures in --out first")
 	fs.Parse(args)
+	if *clean {
+		old, _ := filepath.Glob(filepath.Join(*out, "*.json"))
+		for _, f := range old {
+			if err := os.Remove(f); err != nil {
+				return err
+			}
+		}
+	}
 	if c.end == "" {
 		c.end = synth.FixtureEnd.Format(time.RFC3339) // fixed so fixtures are reproducible
 	}

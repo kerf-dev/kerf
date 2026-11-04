@@ -19,15 +19,29 @@ The generator refuses other names and never touches `ro-*` series.
 | Nodes | m6i.xlarge on-demand + c6a.2xlarge spot, eu-west-1a/b/c | c6a.2xlarge on-demand + m6i.xlarge spot |
 | Namespaces | payments, cards, ledger, onboarding, notifications, risk, platform | same |
 
-The window is 30 days at 60s resolution and ends at the time of the last backfill. **The data does not
-keep flowing.** Refresh it (wipes `synth-a`/`synth-b` first) when it gets stale:
+The history is 30 days at 60s resolution. **Live mode** (a background process started by
+`make synth-backfill` / `make synth-live`) then appends a new sample every minute, continuing the
+same simulation seamlessly (same pods, no counter resets), so `synth-a`/`synth-b` behave like live
+clusters: instant queries at "now" see current pods, requests and usage. Without live mode the data
+simply stops at the backfill time and goes stale within minutes.
 
 ```bash
-make synth-backfill                      # default fleet, 30 days up to now
+make synth-backfill                      # wipe synth-a/synth-b, backfill 30 days up to now (~4.5 min), start live mode
+make synth-live-status                   # is live mode running? last log lines
+make synth-live / make synth-live-stop   # (re)start / stop live mode
+make synth-verify                        # PromQL checks of what is in VictoriaMetrics
 make synth-backfill SYNTH_DAYS=14        # shorter window
 make synth-backfill-small                # the pattern scenario instead (see below)
-make synth-delete                        # remove all synthetic series
+make synth-delete                        # stop live mode, remove all synthetic series
 ```
+
+Live mode keeps its binary, a copy of the scenario, its pid and its log in
+`~/.cache/resource-optimizer/synth-live/` so it keeps running when this worktree goes away. It reads
+where to continue from VictoriaMetrics (`synth_scenario_start_timestamp_seconds`,
+`synth_scenario_anchor_timestamp_seconds`, the last `kube_node_labels` sample), so it can be stopped
+and restarted at any time and fills the gap. Each tick re-simulates the fleet (~4 s of CPU per
+minute). If it is not running (e.g. after a reboot), run `make synth-live`; after VictoriaMetrics
+data loss, run `make synth-backfill`.
 
 Profiles in the default mix (weights): over-provisioned 50, right-sized 14, throttled 8,
 oom-prone 5, hpa-coupled 8, jvm 8, batch 7, plus modifiers: 4% created in the last 3 days
@@ -116,6 +130,8 @@ sum by (cluster, namespace, workload) (
 ```bash
 go run ./tools/synth backfill --scenario tools/synth/scenarios/fleet-default.yaml --vm-url http://localhost:18428 --replace
 go run ./tools/synth backfill --scenario tools/synth/scenarios/fleet-small.yaml --cluster synth-a --workload synth-flat-0
+go run ./tools/synth live --scenario tools/synth/scenarios/fleet-default.yaml          # foreground live mode
+go run ./tools/synth verify --scenario tools/synth/scenarios/fleet-default.yaml
 go run ./tools/synth describe --scenario tools/synth/scenarios/fleet-default.yaml --manifest /tmp/fleet.json
 go run ./tools/synth fixtures --out testdata/series
 go run ./tools/synth delete --vm-url http://localhost:18428
@@ -124,7 +140,8 @@ go run ./tools/synth delete --vm-url http://localhost:18428
 Common flags: `--days`, `--seed` (deterministic: same seed + same end time = same data), `--end`
 (RFC3339, default now), `--step`, `--cluster`, `--namespace`, `--workload`.
 
-`backfill` flags: `--replace` (delete the scenario's clusters first), `--format remote-write|json`
+`backfill` flags: `--replace` (delete the scenario's clusters first), `--follow` (continue as
+`live` afterwards), `--format remote-write|json`
 (default remote-write to `/api/v1/write`; `json` uses `/api/v1/import`), `--workers`, `--parallel`,
 `--batch-kib`, `--chunk` (import in time order, N of history at a time), `--max-vm-memory`
 (pause while VictoriaMetrics' heap is above this fraction of its memory limit), `--dry-run`.
@@ -195,12 +212,25 @@ stabilization window) and split the load across pods. Memory-metric HPAs also sc
 `testdata/series/*.json` are pre-aggregated 5-minute fixtures of `fleet-small.yaml`'s pattern workloads
 for unit tests. See `testdata/series/README.md`.
 
-## Volume and VictoriaMetrics memory
+## Volume, speed and VictoriaMetrics memory
 
-The default fleet is ~157k series / ~1.03B samples. Remote write is ~3× faster for VictoriaMetrics
-to ingest than JSON import. The shared VictoriaMetrics needed its memory limit raised from 768Mi to
-3Gi for backfills (it was OOM-killed at 768Mi). `backfill` watches `go_memstats_heap_inuse_bytes`
-on `/metrics` and pauses while it is above `--max-vm-memory` (default 75%) of
-`vm_available_memory_bytes`. VictoriaMetrics keeps its own caches up to 60%, so lower values stall
-the import. After importing it calls `/internal/force_flush` and `/internal/resetRollupResultCache`
-so cached query results don't hide the new history.
+The default fleet is ~157k series / ~1.03B samples (both clusters, 30 days). Measured on the shared
+k3d environment (VictoriaMetrics v1.155 single node, 3Gi limit): **4m35s** end to end with
+`make synth-backfill` (3.8M samples/s); `fleet-small` takes ~40s.
+
+- Prometheus remote write (`/api/v1/write`, protobuf + snappy) is the default: ~3× faster for
+  VictoriaMetrics to ingest than JSON lines (`--format json`, `/api/v1/import`).
+- Time-ordered chunks (`--chunk 48h`) were measured slower; the default sends each series' whole
+  window at once.
+- Memory guard: `backfill` reads `/metrics` every 300ms and pauses while the memory held by
+  VictoriaMetrics' Go runtime (`go_memstats_sys_bytes - go_memstats_heap_released_bytes`) is above
+  `--max-vm-memory` (default 80%) of `vm_available_memory_bytes`. RSS is not used: it includes
+  mmapped data files that the kernel reclaims first. VictoriaMetrics keeps up to 60% for its own
+  caches, so values below ~0.7 stall the import. During the default backfill it peaked at ~1.9GB of 3GB.
+- The shared VictoriaMetrics was OOM-killed at its original 768Mi limit by backfills of a few
+  million samples; it now runs with 3Gi.
+- Every `--replace` leaves the deleted series in VictoriaMetrics' index until retention rotates it
+  (35d), so avoid re-backfilling in a loop.
+
+After importing, `backfill` calls `/internal/force_flush` and `/internal/resetRollupResultCache` so
+cached query results don't hide the new history.
