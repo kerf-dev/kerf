@@ -7,8 +7,9 @@ import { defineConfig, loadEnv } from 'vite'
 // Modes:
 //   mock  (`npm run dev`, `make web-dev`)       – MSW serves the API in the browser, no hub needed.
 //   live  (`npm run dev:live`, `make web-dev-live`) – /v1 is proxied to a real hub (default
-//         http://localhost:18080, the WO-04 NodePort). RO_HUB_TOKEN, if set, is added as the bearer
-//         token by the dev proxy, mirroring what nginx does in production; it never reaches the browser.
+//         http://localhost:18080, the WO-04 NodePort). Like nginx in production: requests with the
+//         `ro_session` cookie go through as the logged-in user; without it, RO_HUB_TOKEN (if set) is
+//         added as the read-only bearer token. The token never reaches the browser.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const hub = env.RO_HUB_URL || 'http://localhost:18080'
@@ -26,7 +27,13 @@ export default defineConfig(({ mode }) => {
               '/v1/': {
                 target: hub,
                 changeOrigin: true,
-                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                configure: (proxy) => {
+                  proxy.on('proxyReq', (req, incoming) => {
+                    req.removeHeader('authorization')
+                    const session = /(?:^|;\s*)ro_session=/.test(incoming.headers.cookie ?? '')
+                    if (!session && token) req.setHeader('Authorization', `Bearer ${token}`)
+                  })
+                },
               },
             }
           : undefined,

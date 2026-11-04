@@ -1,6 +1,23 @@
 # Rendered at container start by the nginx image's envsubst step (/etc/nginx/templates → conf.d).
-# Variables: HUB_UPSTREAM (host:port of the hub API), HUB_TOKEN (set from HUB_TOKEN_FILE by
-# /docker-entrypoint.d/05-hub-token.envsh), NGINX_LOCAL_RESOLVERS (from /etc/resolv.conf).
+# Variables: HUB_UPSTREAM (host:port of the hub API), HUB_ANON_AUTHORIZATION (set by
+# /docker-entrypoint.d/05-hub-token.envsh: "Bearer <ui token>" when anonymous read access is on, else
+# empty), NGINX_LOCAL_RESOLVERS (from /etc/resolv.conf). Only variables defined in the environment are
+# substituted, so nginx variables like $cookie_ro_session stay as they are.
+
+# Authentication (D-023, docs/contracts/admin.md §3):
+# - With a session cookie the browser is a logged-in user: forward only `ro_session` and send no
+#   bearer token, so the hub sees exactly that user and role.
+# - Without one, add the read-only `ui` token (anonymous viewer) if ANONYMOUS_READ is on; otherwise
+#   send nothing and the hub answers 401, which sends the UI to its login page.
+# Whatever the browser sends in Authorization is never forwarded.
+map $cookie_ro_session $hub_authorization {
+    ""      "${HUB_ANON_AUTHORIZATION}";
+    default "";
+}
+map $cookie_ro_session $hub_cookie {
+    ""      "";
+    default "ro_session=$cookie_ro_session";
+}
 
 server_tokens off;
 gzip on;
@@ -24,9 +41,11 @@ server {
         return 200 "ok\n";
     }
 
-    # Hub API. The UI is read-only, so only GET/HEAD are forwarded.
+    # Hub API, including /v1/auth/* (login sets the HttpOnly session cookie) and the admin writes
+    # (X-CSRF-Token and If-Match are forwarded as sent).
     location /v1/ {
-        limit_except GET HEAD { deny all; }
+        limit_except GET HEAD POST PUT PATCH DELETE { deny all; }
+        client_max_body_size 1m;
 
         # Resolve the hub at request time (it may start after this pod) and do not normalise the URI:
         # `$request_uri` is the raw request line, so a workload id's `%2F` reaches the hub undecoded
@@ -39,10 +58,10 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Connection "";
         proxy_set_header Host $hub_upstream;
-        # The `ui` token lives only here (Secret mounted into this pod); the browser never sees it and
-        # anything the browser sends in Authorization or Cookie is replaced/dropped.
-        proxy_set_header Authorization "Bearer ${HUB_TOKEN}";
-        proxy_set_header Cookie "";
+        # The `ui` token lives only here (Secret mounted into this pod); the browser never sees it. An
+        # empty value drops the header, so the browser's own Authorization never reaches the hub.
+        proxy_set_header Authorization $hub_authorization;
+        proxy_set_header Cookie $hub_cookie;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_connect_timeout 5s;

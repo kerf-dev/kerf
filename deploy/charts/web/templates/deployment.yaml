@@ -29,6 +29,8 @@ spec:
               value: {{ .Values.hub.upstream | quote }}
             - name: HUB_TOKEN_FILE
               value: /etc/resource-optimizer/hub-token/token
+            - name: ANONYMOUS_READ
+              value: {{ .Values.auth.anonymousRead | quote }}
           ports:
             - name: http
               containerPort: 80

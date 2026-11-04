@@ -1,5 +1,6 @@
 /**
- * Visual capture of every page in light and dark mode. Skipped unless SCREENSHOTS_DIR is set:
+ * Visual capture of every page in light and dark mode.
+ * The admin area is captured signed in as admin (operator for workload actions and bulk edits). Skipped unless SCREENSHOTS_DIR is set:
  *   make web-screenshots   (or: SCREENSHOTS_DIR=$PWD/../docs/screenshots npx playwright test screenshots)
  */
 import { expect, test } from '@playwright/test'
@@ -60,4 +61,140 @@ for (const [name, path] of [
     await page.waitForTimeout(900)
     await page.screenshot({ path: `${dir}/${name}-tablet.png`, fullPage: true })
   })
+}
+
+// ---------------------------------------------------------------- admin area (WO-22)
+
+async function signIn(page: import('@playwright/test').Page, user: string) {
+  await page.goto('/login')
+  await page.evaluate(() => localStorage.removeItem('ro-mock-session'))
+  await page.goto('/login')
+  await page.getByLabel('Username').fill(user)
+  await page.getByLabel('Password', { exact: true }).fill('dev-password')
+  await page.getByTestId('login-submit').click()
+  await expect(page.getByTestId('user-menu')).toBeVisible()
+}
+
+async function policyId(page: import('@playwright/test').Page, name: string) {
+  return page.evaluate(async (n) => {
+    const r = (await (await fetch('/v1/admin/policies')).json()) as { items: { id: string; name: string }[] }
+    return r.items.find((p) => p.name === n)!.id
+  }, name)
+}
+
+async function settle(page: import('@playwright/test').Page) {
+  await expect(page.locator('main')).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  await expect(page.locator('main [aria-busy=true], main .animate-pulse')).toHaveCount(0, { timeout: 30_000 })
+  await page.waitForTimeout(700)
+}
+
+type Shot = {
+  name: string
+  user?: string
+  path: string | ((page: import('@playwright/test').Page) => Promise<string>)
+  act?: (page: import('@playwright/test').Page) => Promise<void>
+  themes?: readonly ('light' | 'dark')[]
+  tablet?: boolean
+  full?: boolean
+}
+
+const adminShots: Shot[] = [
+  { name: 'login', path: '/login' },
+  { name: 'admin-automation', user: 'admin', path: '/admin', tablet: true },
+  { name: 'admin-policies', user: 'admin', path: '/admin/policies' },
+  {
+    name: 'admin-policy-editor',
+    user: 'admin',
+    path: async (p) => `/admin/policies/${await policyId(p, 'payments-autopilot')}`,
+    tablet: true,
+  },
+  {
+    name: 'admin-policy-history',
+    user: 'admin',
+    path: async (p) => `/admin/policies/${await policyId(p, 'payments-autopilot')}?tab=history`,
+  },
+  {
+    name: 'admin-simulator',
+    user: 'admin',
+    path: '/admin/policies?tab=simulator&workload=prod-eu-west-1%2Fpayments%2FDeployment%2Fcheckout-api',
+  },
+  { name: 'admin-defaults', user: 'admin', path: '/admin/defaults' },
+  {
+    name: 'admin-defaults-preview',
+    user: 'admin',
+    path: '/admin/defaults',
+    themes: ['light'],
+    full: false,
+    act: async (p) => {
+      await p.getByTestId('field-memory-mode').getByRole('radio', { name: 'Off' }).click()
+      await p.getByTestId('save').click()
+      await expect(p.getByTestId('impact-preview')).toBeVisible()
+    },
+  },
+  { name: 'admin-recommender', user: 'admin', path: '/admin/recommender' },
+  { name: 'admin-pricing', user: 'admin', path: '/admin/pricing' },
+  { name: 'admin-datasources', user: 'admin', path: '/admin/datasources' },
+  { name: 'admin-access', user: 'admin', path: '/admin/access' },
+  { name: 'admin-audit', user: 'admin', path: '/admin/audit' },
+  { name: 'cluster-readiness', user: 'admin', path: '/clusters/prod-us-east-1?tab=readiness', tablet: true },
+  { name: 'cluster-agent', user: 'admin', path: '/clusters/dr-eu-central-1?tab=agent' },
+  {
+    name: 'cluster-wizard',
+    user: 'admin',
+    path: '/clusters/new',
+    act: async (p) => {
+      await p.getByLabel('Cluster name').fill('staging-eu-west-1')
+      await p.getByTestId('wizard-next').click()
+      await p.getByTestId('test-datasource').click()
+      await expect(p.getByTestId('datasource-test-result')).toBeVisible()
+    },
+  },
+  {
+    name: 'workload-automation',
+    user: 'operator',
+    path: '/workloads/prod-eu-west-1/payments/Deployment/checkout-api',
+  },
+  {
+    name: 'opportunities-bulk',
+    user: 'operator',
+    path: '/opportunities?namespace=payments',
+    themes: ['light'],
+    full: false,
+    act: async (p) => {
+      for (const i of [0, 1, 2]) await p.getByTestId('select-row').nth(i).click()
+      await p.getByTestId('bulk-set-mode').click()
+      await p.getByTestId('bulk-cpu').getByRole('radio', { name: 'Auto-patch' }).click()
+      await expect(p.getByTestId('impact-preview')).toBeVisible()
+    },
+  },
+]
+
+for (const s of adminShots) {
+  for (const theme of s.themes ?? (['light', 'dark'] as const)) {
+    test(`${s.name} (${theme})`, async ({ page }) => {
+      test.skip(!dir, 'set SCREENSHOTS_DIR to capture')
+      test.slow()
+      await page.emulateMedia({ colorScheme: theme })
+      if (s.user) await signIn(page, s.user)
+      await page.goto(typeof s.path === 'string' ? s.path : await s.path(page))
+      if (s.path !== '/login') await settle(page)
+      else await page.waitForTimeout(500)
+      if (s.act) {
+        await s.act(page)
+        await page.waitForTimeout(600)
+      }
+      await page.screenshot({ path: `${dir}/${s.name}-${theme}.png`, fullPage: s.full ?? true })
+    })
+  }
+  if (s.tablet)
+    test(`${s.name} (tablet)`, async ({ page }) => {
+      test.skip(!dir, 'set SCREENSHOTS_DIR to capture')
+      test.slow()
+      await page.setViewportSize({ width: 820, height: 1180 })
+      if (s.user) await signIn(page, s.user)
+      await page.goto(typeof s.path === 'string' ? s.path : await s.path(page))
+      await settle(page)
+      await page.screenshot({ path: `${dir}/${s.name}-tablet.png`, fullPage: true })
+    })
 }

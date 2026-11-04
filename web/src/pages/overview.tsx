@@ -14,6 +14,7 @@ import type { RiskFlag, Summary, WorkloadRow } from '@/api/types'
 import { Chart } from '@/components/charts/chart'
 import { alpha, axisStyle, baseOption, useChartColors } from '@/components/charts/theme'
 import { Change, Confidence, KindBadge, MODE_INFO, PHASE_INFO, RISK_INFO, Savings } from '@/components/domain'
+import { ReadinessBanner } from '@/components/admin/readiness-banner'
 import { EmptyState, ErrorState, PageHeader } from '@/components/states'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -110,6 +111,7 @@ export function OverviewPage() {
           </Button>
         }
       />
+      <ReadinessBanner />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SavingsTile summary={s?.fleet} />

@@ -1,15 +1,30 @@
 #!/bin/sh
 # Sourced by the nginx image entrypoint before templates are rendered. Reads the hub `ui` token from
-# the mounted Secret into HUB_TOKEN so envsubst can put it in the proxy config. An unset token still
-# renders (the hub then answers 401 and the UI shows "Not authorized").
+# the mounted Secret and, when anonymous read access is on (ANONYMOUS_READ, default true), exports
+# HUB_ANON_AUTHORIZATION="Bearer <token>" for requests without a session cookie. With
+# ANONYMOUS_READ=false (or no token) it is empty: the hub answers 401 and the UI asks for a login.
 token_file="${HUB_TOKEN_FILE:-/etc/resource-optimizer/hub-token/token}"
 if [ -z "${HUB_TOKEN:-}" ] && [ -r "$token_file" ]; then
   HUB_TOKEN="$(tr -d '\r\n' < "$token_file")"
 fi
 if [ -z "${HUB_TOKEN:-}" ]; then
-  echo "05-hub-token: no hub token at $token_file; /v1 requests will be unauthenticated" >&2
+  echo "05-hub-token: no hub token at $token_file; requests without a session will be unauthenticated" >&2
 fi
 case "$HUB_TOKEN" in
   *[!A-Za-z0-9._~+/=-]*) echo "05-hub-token: token contains unexpected characters, refusing to start" >&2; exit 1 ;;
 esac
-export HUB_TOKEN="${HUB_TOKEN:-}"
+case "${ANONYMOUS_READ:-true}" in
+  true|1|yes) anon=1 ;;
+  false|0|no) anon=0 ;;
+  *) echo "05-hub-token: ANONYMOUS_READ must be true or false, got '${ANONYMOUS_READ}'" >&2; exit 1 ;;
+esac
+if [ "$anon" = 1 ] && [ -n "${HUB_TOKEN:-}" ]; then
+  HUB_ANON_AUTHORIZATION="Bearer ${HUB_TOKEN}"
+else
+  HUB_ANON_AUTHORIZATION=""
+  if [ "$anon" = 0 ]; then
+    echo "05-hub-token: anonymous read access disabled; every page needs a login" >&2
+  fi
+fi
+export HUB_ANON_AUTHORIZATION
+unset HUB_TOKEN

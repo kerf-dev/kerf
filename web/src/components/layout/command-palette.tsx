@@ -13,7 +13,8 @@ import {
 } from '@/components/ui/command'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { workloadPath } from '@/lib/workload-id'
-import { NAV } from './app-shell'
+import { useAuth } from '@/api/auth'
+import { NAV, visibleAdminNav } from './app-shell'
 
 export function CommandPalette({
   open,
@@ -22,6 +23,7 @@ export function CommandPalette({
   open: boolean
   onOpenChange: (o: boolean) => void
 }) {
+  const auth = useAuth()
   const [q, setQ] = useState('')
   const dq = useDeferredValue(q.trim())
   const navigate = useNavigate()
@@ -90,8 +92,8 @@ export function CommandPalette({
             {!dq ? (
               <>
                 <CommandGroup heading="Go to">
-                  {NAV.map((n) => (
-                    <CommandItem key={n.to} value={n.to} onSelect={() => go(n.to)}>
+                  {[...NAV, ...visibleAdminNav(auth)].map((n) => (
+                    <CommandItem key={n.to} value={`${n.label} ${n.to}`} onSelect={() => go(n.to)}>
                       <n.icon />
                       {n.label}
                       <CornerDownLeftIcon className="ml-auto size-3 opacity-50" />
