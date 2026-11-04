@@ -1,5 +1,8 @@
+# syntax=docker/dockerfile:1.7
 # Build context: repository root (see dev/scripts/tilt-deploy.sh and make/pricing.mk).
-FROM golang:1.27-alpine AS build
+# Multi-arch (D-028, WO-18c): the Go stage runs on the build host and cross-compiles for the target
+# platform, so `docker buildx build --platform linux/amd64,linux/arm64` needs no emulation.
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 COPY go.mod go.sum ./
@@ -9,7 +12,9 @@ COPY api/v1alpha1/ api/v1alpha1/
 COPY internal/hub/hubapi/ internal/hub/hubapi/
 COPY internal/hub/datasource/ internal/hub/datasource/
 COPY internal/pricing/ internal/pricing/
+ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w" -o /out/pricing ./cmd/pricing
 
 FROM gcr.io/distroless/static-debian12:nonroot
