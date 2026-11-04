@@ -73,31 +73,38 @@ function DatasourceCard({
           >
             {test.isPending ? <Loader2Icon className="animate-spin" /> : <FlaskConicalIcon />} Test
           </Button>
-          <Button size="sm" variant="ghost" onClick={onEdit} aria-label={`Edit ${d.name}`}>
-            <PencilIcon />
-          </Button>
-          <Tooltip
-            content={
-              d.builtIn
-                ? 'The built-in datasource cannot be deleted.'
-                : d.usedBy.length
-                  ? 'Rebind its clusters first.'
-                  : null
-            }
-          >
-            <span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={onDelete}
-                disabled={d.builtIn || d.usedBy.length > 0}
-                aria-label={`Delete ${d.name}`}
-                className="text-destructive hover:text-destructive"
+          {d.builtIn ? (
+            // The hub manages `local` from its own configuration (prometheusURL) and answers
+            // 409 builtin to any edit or delete.
+            <Tooltip content="Configured by the hub (its prometheusURL setting); change it in the hub chart values.">
+              <span
+                className="inline-flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground"
+                data-testid="builtin-note"
               >
-                <Trash2Icon />
+                <LockIcon className="size-3.5" /> Managed by the hub
+              </span>
+            </Tooltip>
+          ) : (
+            <>
+              <Button size="sm" variant="ghost" onClick={onEdit} aria-label={`Edit ${d.name}`}>
+                <PencilIcon />
               </Button>
-            </span>
-          </Tooltip>
+              <Tooltip content={d.usedBy.length ? 'Rebind its clusters first.' : null}>
+                <span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={onDelete}
+                    disabled={d.usedBy.length > 0}
+                    aria-label={`Delete ${d.name}`}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2Icon />
+                  </Button>
+                </span>
+              </Tooltip>
+            </>
+          )}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5 border-t bg-muted/20 px-5 py-2.5 text-xs">

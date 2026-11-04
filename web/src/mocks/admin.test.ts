@@ -259,7 +259,7 @@ describe('policies', () => {
     expect(
       eu.items.find((i: { name: string }) => i.name === 'payments-autopilot').matchedWorkloads,
     ).toBeGreaterThan(0)
-    expectProblem(await call('GET', P('00000000-0000-4000-8000-000000000000')), 404, 'policy_not_found')
+    expectProblem(await call('GET', P('00000000-0000-4000-8000-000000000000')), 404, 'not_found')
   })
 
   it('create, validate, gate, update, delete, revert', async () => {
@@ -491,7 +491,7 @@ describe('workload override and approve once', () => {
   it('override lifecycle', async () => {
     const w = approvable()
     const url = `/v1/workloads/${enc(w.id)}/override`
-    expectProblem(await call('GET', url), 404, 'override_not_found')
+    expectProblem(await call('GET', url), 404, 'not_found')
     expectProblem(
       await call('PUT', url, { body: { spec: { cpu: { mode: 'off' } }, reason: 'x' } }),
       403,
@@ -537,7 +537,7 @@ describe('workload override and approve once', () => {
     expect((await call('DELETE', url, { body: { reason: 'back to team policy' }, ifMatch: 2 })).status).toBe(
       204,
     )
-    expectProblem(await call('GET', url), 404, 'override_not_found')
+    expectProblem(await call('GET', url), 404, 'not_found')
     const h = await call('GET', `/v1/workloads/${enc(w.id)}/history`)
     expectValid('WorkloadHistory', h.json)
     expect(h.json.configChanges.map((c: { action: string }) => c.action)).toEqual([
@@ -730,7 +730,16 @@ describe('clusters, automation, readiness', () => {
     for (const c of ['prod-eu-west-1', 'prod-us-east-1', 'dr-eu-central-1']) {
       const r = await call('GET', `/v1/clusters/${c}/readiness`)
       expectValid('ClusterReadiness', r.json)
-      expect(r.json.checks).toHaveLength(33)
+      // Connected agents report every check; without an agent, its checks have no row (hub semantics)
+      // and the blocking ones are listed in blockedBy.
+      if (c === 'dr-eu-central-1') {
+        expect(r.json.checks.length).toBeLessThan(33)
+        expect(r.json.blockedBy).toEqual(
+          expect.arrayContaining(['agent.connected', 'agent.version', 'rbac.read']),
+        )
+        expect(r.json.checks.map((x: { id: string }) => x.id)).not.toContain('agent.version')
+        expect(r.json.summary.unknown).toBeGreaterThan(0)
+      } else expect(r.json.checks).toHaveLength(33)
       states[c] = r.json.state
       const h = await call('GET', `/v1/clusters/${c}/readiness/history`)
       expectValid('ReadinessHistory', h.json)
@@ -762,7 +771,7 @@ describe('clusters, automation, readiness', () => {
     timing.recheckMs = 0
     const done = (await call('GET', '/v1/clusters/prod-us-east-1/readiness')).json
     expect(done.recheckRequestedAt).toBeUndefined()
-    expectProblem(await call('GET', '/v1/clusters/nope/readiness'), 404, 'cluster_not_found')
+    expectProblem(await call('GET', '/v1/clusters/nope/readiness'), 404, 'not_found')
   })
 
   it('register a cluster: token once, install snippets, agent connects, delete', async () => {
@@ -784,6 +793,22 @@ describe('clusters, automation, readiness', () => {
       400,
       'invalid_cluster',
     )
+    // Hub codes for bindings (WO-25): unknown datasource vs. an invalid binding.
+    expectProblem(
+      await call('POST', '/v1/admin/clusters', {
+        body: { ...body, metrics: { ...body.metrics, datasourceId: 'nope' } },
+      }),
+      400,
+      'unknown_datasource',
+    )
+    expectProblem(
+      await call('POST', '/v1/admin/clusters', {
+        body: { ...body, metrics: { ...body.metrics, clusterLabel: 'bad-label' } },
+      }),
+      400,
+      'invalid_metrics',
+    )
+    expectProblem(await call('GET', '/v1/admin/datasources/nope'), 404, 'not_found')
     const r = await call('POST', '/v1/admin/clusters', { body })
     expect(r.status).toBe(201)
     expectValid('ClusterCreated', r.json)
@@ -834,7 +859,7 @@ describe('clusters, automation, readiness', () => {
       (await call('DELETE', '/v1/admin/clusters/staging-eu-west-1', { body: { reason: 'gone' }, ifMatch: v }))
         .status,
     ).toBe(204)
-    expectProblem(await call('GET', '/v1/admin/clusters/staging-eu-west-1'), 404, 'cluster_not_found')
+    expectProblem(await call('GET', '/v1/admin/clusters/staging-eu-west-1'), 404, 'not_found')
     const toks = (await call('GET', '/v1/admin/tokens?includeRevoked=true&cluster=staging-eu-west-1')).json
     expect(toks.items[0].revokedAt).toBeTruthy()
   })
@@ -935,7 +960,7 @@ describe('tokens, users, audit, datasources', () => {
       (await call('DELETE', '/v1/admin/users/carol', { body: { reason: 'left' }, ifMatch: carol.version }))
         .status,
     ).toBe(204)
-    expectProblem(await call('GET', '/v1/admin/users/nobody'), 404, 'user_not_found')
+    expectProblem(await call('GET', '/v1/admin/users/nobody'), 404, 'not_found')
   })
 
   it('config audit: filters and paging', async () => {
@@ -1032,6 +1057,14 @@ describe('tokens, users, audit, datasources', () => {
     )
     expectProblem(
       await call('DELETE', '/v1/admin/datasources/local', { body: { reason: 'x' }, ifMatch: local.version }),
+      409,
+      'builtin',
+    )
+    expectProblem(
+      await call('PUT', '/v1/admin/datasources/local', {
+        body: { name: 'local', type: 'victoriametrics', url: 'http://x:8428', reason: 'x' },
+        ifMatch: local.version,
+      }),
       409,
       'builtin',
     )
