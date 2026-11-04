@@ -7,7 +7,9 @@
 #   values      deploy/charts/<component>/values-dev.yaml and values-<cluster>.yaml, if present
 #   image       first existing of cmd/<component>/Dockerfile, build/<component>/Dockerfile,
 #               build/<component>.Dockerfile, or a root Dockerfile taking --build-arg COMPONENT=<component>;
-#               build context is the repo root. Without one the chart's default image is used.
+#               build context is the repo root. A self-contained app (e.g. web/) may instead have
+#               <component>/Dockerfile, built with <component>/ as context.
+#               Without one the chart's default image is used.
 #   overrides   image.repository, image.tag, and clusterName=<cluster> are set on every install
 #   namespace   $RO_NAMESPACE (default resource-optimizer)
 . "$(dirname "$0")/lib.sh"
@@ -18,10 +20,13 @@ chart="$ROOT/deploy/charts/$name"
 ns="${RO_NAMESPACE:-resource-optimizer}"
 [[ -d "$chart" ]] || { log "deploy/charts/$name does not exist yet, skipping"; exit 0; }
 
-dockerfile="" build_args=""
+dockerfile="" build_args="" context="$ROOT"
 for cand in "$ROOT/cmd/$name/Dockerfile" "$ROOT/build/$name/Dockerfile" "$ROOT/build/$name.Dockerfile"; do
   if [[ -f "$cand" ]]; then dockerfile="$cand"; break; fi
 done
+if [[ -z "$dockerfile" && -f "$ROOT/$name/Dockerfile" ]]; then
+  dockerfile="$ROOT/$name/Dockerfile"; context="$ROOT/$name"
+fi
 if [[ -z "$dockerfile" && -f "$ROOT/Dockerfile" ]]; then
   dockerfile="$ROOT/Dockerfile"; build_args="--build-arg COMPONENT=$name"
 fi
@@ -32,7 +37,7 @@ if [[ -n "$dockerfile" ]]; then
   image="resource-optimizer/$name"
   log "building $image:$tag from ${dockerfile#"$ROOT/"}"
   # shellcheck disable=SC2086
-  docker build -f "$dockerfile" $build_args -t "localhost:$REGISTRY_PORT/$image:$tag" "$ROOT"
+  docker build -f "$dockerfile" $build_args -t "localhost:$REGISTRY_PORT/$image:$tag" "$context"
   docker push "localhost:$REGISTRY_PORT/$image:$tag" >/dev/null
   set_args=(--set-string "image.repository=k3d-$REGISTRY:$REGISTRY_PORT/$image" --set-string "image.tag=$tag")
 else

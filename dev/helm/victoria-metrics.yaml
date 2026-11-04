@@ -10,7 +10,7 @@ server:
     search.maxUniqueTimeseries: "1000000"
   persistentVolume:
     enabled: true
-    size: 4Gi
+    size: 10Gi  # ~2.1 GiB after the 30-day synth backfill; each --replace re-import adds up to ~1 GiB
   resources:
     requests:
       cpu: 100m

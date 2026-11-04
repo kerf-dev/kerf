@@ -44,7 +44,7 @@ The root `Makefile` includes `make/*.mk`; until it exists use `make -f make/dev.
 | Grafana | http://localhost:13000 (anonymous admin, or `admin`/`admin`) | `grafana.monitoring.svc:80` (hub) |
 | Postgres | `postgres://ro:ro@localhost:15432/resource_optimizer?sslmode=disable` | `postgres.postgres.svc:5432` (hub), Secret `postgres/postgres` has `DATABASE_URL` |
 | Hub API (reserved for WO-04, NodePort 30080 on the hub) | http://localhost:18080 | `hub-api.hub.svc:8080` (spokes) |
-| Pricing metrics (reserved for WO-03, NodePort 30090 on the hub) | http://localhost:19090 | – |
+| Web UI (WO-14, NodePort 30090 on the hub) | http://localhost:19090 | – |
 | Argo CD (spoke-1) | http://localhost:18090 (`admin`/`admin123`) | `argocd-server.argocd.svc` |
 | Git server (spoke-1) | `git://localhost:19418/workloads.git` | `git://git-server.git-server.svc.cluster.local/workloads.git` |
 | Image registry | push `localhost:5005/<repo>:<tag>` | pull `k3d-ro-registry:5005/<repo>:<tag>` |

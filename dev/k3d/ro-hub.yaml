@@ -29,7 +29,7 @@ ports:
     nodeFilters: [server:0:direct]
   - port: 127.0.0.1:18080:30080 # reserved: hub API (WO-04)
     nodeFilters: [server:0:direct]
-  - port: 127.0.0.1:19090:30090 # reserved: pricing metrics (WO-03)
+  - port: 127.0.0.1:19090:30090 # web UI (WO-14); pricing is ClusterIP only
     nodeFilters: [server:0:direct]
 options:
   k3d:
