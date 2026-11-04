@@ -69,6 +69,16 @@ Hub and agents main-5d25dd7, web main-cbc813c, both spokes AutomationReady at th
 | 1 | PASS — every test (3 skips: JVM memory on swap nodes, KSM without the flag, the sweep helper) | 17m59s |
 | 2 (back to back) | PASS — same | 16m38s |
 | final 1 (main-1e72c9e merged, 12:37) | 2 failures: `TestApproveOnce` (approval superseded, test race, fixed in a713fd7), `TestWebhook/webhook_down…` (agent drift-repair bug above) | 14m06s |
+| final 2a (a713fd7, 12:52) | PASS (two approvals superseded and approved again) | 14m43s |
+| final 2b (back to back) | `TestApproveOnceArgoCD`: a suite-triggered run 32 s after the approved apply gave a newer recommendation with other values; the agent ended the D-027 hold as designed and Argo CD started self-healing. Fixed in 4b508d5 (recomputes held for the whole test; a newer recommendation with other values ends the self-heal check) | 14m37s |
+| **final 3a** (4b508d5, 13:22 UTC) | **PASS** — all tests (skips: JVM memory on swap nodes, KSM without the flag, the sweep helper); approvals superseded once each and approved again | **16m10s** |
+| **final 3b** (back to back) | **PASS** | **14m06s** |
+
+Final `make e2e && make e2e` on 4b508d5 (origin/main 98c1edd merged; hub, web and agents main-1e72c9e):
+30m16s wall for the pair, each run 14–16 min. Afterwards: no `e2e-*` hub policies or pauses, no e2e
+namespaces or CRs, only `helm` (and `k3s`) field managers on the agent ClusterRole, token Secret,
+webhook and kube-state-metrics on both spokes, both spokes AutomationReady (ro-spoke-2 recovers
+~20 s after a run: the hub-outage scenario ends last).
 
 `make e2e && make e2e`: 34 min wall in total; each run is well under 30 min (go test 1072 s and
 984 s). The longest test is still WO-09's `TestHubUnreachable` (its outage plus waiting for the
@@ -94,6 +104,10 @@ has only a soft delete.
   "new id **and** different values" rule for the approve-once hold). The suite now holds its own
   recompute requests during that window and logs "KNOWN AGENT BUG" when the hub's periodic run still
   lands in it; it does not hide the failure.
+- **D-027 hold is short on a busy hub**: the agent released the approved field 32 s after the
+  apply because a recommender run issued a newer recommendation with other values (WO-21b's rule).
+  On Argo CD apps with self-heal, approved values then last until the next run whose values differ
+  (in production: usually the next daily run). Working as designed; worth stating in the approve UI.
 - **Approvals are superseded by every recommender run** (by design: only the latest recommendation
   can be approved). With the suite's recompute requests every 2 minutes, `TestApproveOnce` lost
   its approval to a run between the approval and the agent's next pull (first final run). The
