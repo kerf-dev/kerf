@@ -139,7 +139,9 @@ func TestDiscoveryTargetsError(t *testing.T) {
 // memBindings and memDS are small in-memory stand-ins for the hub tables.
 type memBindings map[string]hubapi.MetricsBinding
 
-func (m memBindings) Bindings(context.Context) (map[string]hubapi.MetricsBinding, error) { return m, nil }
+func (m memBindings) Bindings(context.Context) (map[string]hubapi.MetricsBinding, error) {
+	return m, nil
+}
 
 type memDS struct{ recs map[string]datasource.Record }
 
@@ -160,7 +162,7 @@ func (m *memDS) DeleteDatasource(context.Context, string, int, hubapi.Actor) err
 	return nil
 }
 func (m *memDS) UsedBy(context.Context) (map[string][]string, error) { return nil, nil }
-func (m *memDS) UpsertLocal(context.Context, string) error            { return nil }
+func (m *memDS) UpsertLocal(context.Context, string) error           { return nil }
 
 func TestRegistryTargets(t *testing.T) {
 	remote := &recordingVM{
