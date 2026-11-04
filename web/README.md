@@ -1,4 +1,4 @@
-# resource-optimizer web UI (WO-14)
+# resource-optimizer web UI (WO-14, WO-22)
 
 The primary interface for platform and FinOps teams (D-014): where the savings are, why each
 recommendation was made, and what automation did.
@@ -10,6 +10,24 @@ recommendation was made, and what automation did.
 | **Workload** `/workloads/<cluster>/<namespace>/<kind>/<name>` | Current vs. recommended per container, usage charts (usage, P95/P99, request, limit, recommendation), "Why this recommendation" (statistic → headroom → rounding → limit rule), confidence and data coverage, risk flags explained, effective modes and the policy that set them, history timeline. |
 | **Clusters** `/clusters`                                      | Agent heartbeat, version, coverage, auto-patch/blocked counts and savings per cluster.                                                                                                                                                                                                              |
 | **Activity** `/activity`                                      | Audit log across clusters with type, cluster, namespace, workload and time filters, plus a volume chart.                                                                                                                                                                                            |
+
+**Admin area (WO-22, D-022…D-025).** Signed-in operators and admins also get:
+
+| Page                                                          | What it does                                                                                                                                                                                                                   | Role                            |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| **Automation** `/admin`                                       | Pause / resume per cluster and fleet-wide (reason, auto-resume), sync and readiness per cluster                                                                                                                                | operator (resume `prod`: admin) |
+| **Policies** `/admin/policies`                                | Hub + Git policies (badges), editor with selector builder and live match list, effective-policy simulator, version history with diff and revert, YAML export                                                                   | view: operator, edit: admin     |
+| **Defaults** `/admin/defaults`                                | Global defaults form with built-in hints and an impact preview before saving                                                                                                                                                   | admin                           |
+| **Clusters** `/clusters/<name>`, `/clusters/new`              | Readiness checklist with remediations and re-check, cluster defaults, agent token create/rotate/revoke (shown once), install snippets (Helm / values / Argo CD), onboarding wizard with a metrics test before any agent exists | viewer / operator / admin       |
+| **Recommender**, **Pricing**, **Metrics sources**, **Access** | Profiles + Recompute now; discounts and fixed rates; datasources with test; users and API tokens                                                                                                                               | admin                           |
+| **Audit** `/admin/audit`                                      | Every config change with actor, reason and a before/after diff                                                                                                                                                                 | operator                        |
+
+Write actions in existing pages: the workload **Automation** card (override modes/strategy/profile,
+Exclude, Clear override, Approve once, "why these modes"), bulk **Set mode… / Exclude** in Opportunities
+(with count and savings impact), and an Overview banner for clusters with blocking readiness failures.
+Every write asks for a reason (audit log), sends `If-Match` (a `412` shows "someone else changed this"
+with Reload), and asks to type the cluster name for `prod` clusters. Admins can override
+`409 cluster_not_automation_ready` with an audited checkbox.
 
 Press <kbd>⌘K</kbd> anywhere to search workloads and namespaces. Light, dark and system themes.
 
@@ -23,7 +41,8 @@ make deploy-web     # build + push localhost:5005/resource-optimizer/web, helm i
 ```
 
 In mock mode, the **Mock API** menu in the top bar switches to an empty fleet, a slow hub or a failing
-hub. Use it to check empty, loading and error states.
+hub, and between anonymous read-only access and "login required". Mock users: `admin`, `operator`,
+`viewer` (password `dev-password`; `sam` must change the password, `dana` is disabled).
 
 ## How it fits together
 
@@ -32,13 +51,19 @@ hub. Use it to check empty, loading and error states.
   and TanStack Query hooks (`src/api/queries.ts`).
 - **Workload ids** travel as one URL-encoded path segment (`/` → `%2F`). The client guards this. UI routes
   use the readable `/workloads/<cluster>/<ns>/<kind>/<name>` form (`src/lib/workload-id.ts`).
-- **Mock API** (`src/mocks/`) is a deterministic, seeded fleet. `handlers.test.ts` validates every mock
+- **Mock API** (`src/mocks/`) is a deterministic, seeded fleet, including the admin endpoints (session,
+  roles, CSRF, If-Match, readiness, preview). `handlers.test.ts` and `admin.test.ts` validate every mock
   response against `hub.yaml` with a JSON Schema validator, so the UI built on the mocks matches the real hub.
   The service worker is preferred. Where service workers are unavailable, it falls back to patching `fetch`.
-- **No token in the browser.** The browser only talks to its own origin. In production, nginx proxies
-  `/v1/` to the hub and adds `Authorization: Bearer <ui token>` from a mounted Secret. Only GET/HEAD are
-  forwarded, cookies are dropped, and the raw `$request_uri` is passed through so `%2F` is never decoded.
-  In live dev mode, the Vite proxy does the same with `RO_HUB_TOKEN`.
+- **Sign-in (D-023).** `POST /v1/auth/login` sets the HttpOnly `ro_session` cookie; `GET /v1/me` gives
+  the role and the CSRF token, which the client sends as `X-CSRF-Token` on writes (`src/api/auth.ts`).
+  A `401` on `/v1/me` means login required; `authMethod: token` means anonymous read-only.
+- **No token in the browser.** The browser only talks to its own origin. nginx proxies `/v1/` (all
+  methods): with a `ro_session` cookie it forwards only that cookie and no bearer token; without one it adds
+  `Authorization: Bearer <ui token>` from a mounted Secret when `auth.anonymousRead` is on (default), or
+  nothing (the UI then asks for a login). Whatever the browser sends in `Authorization` is dropped, and the
+  raw `$request_uri` is passed through so `%2F` is never decoded. In live dev mode the Vite proxy does the
+  same with `RO_HUB_TOKEN`.
 
 ## Production image and chart
 
@@ -49,6 +74,8 @@ hub. Use it to check empty, loading and error states.
   - `hub.upstream` is the hub Service's host:port. It must be fully qualified, because nginx resolves it at
     request time and does not apply search domains.
   - `token.existingSecret` / `token.value` supply the `ui` token.
+  - `auth.anonymousRead` (default `true`): without a session the UI is read-only via the `ui` token;
+    `false` requires a login for every page.
   - `values-dev.yaml` sets NodePort 30090 (host port 19090 on k3d) and the hub's dev `ui` token.
 
 ## Stack

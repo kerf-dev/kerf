@@ -1,6 +1,8 @@
 import {
   ActivityIcon,
   ArrowRightIcon,
+  PlusIcon,
+  WrenchIcon,
   BotIcon,
   CpuIcon,
   MemoryStickIcon,
@@ -10,7 +12,10 @@ import {
   SparklesIcon,
 } from 'lucide-react'
 import { Link } from 'react-router'
+import { useAuth } from '@/api/auth'
 import { useClusters, useSummary } from '@/api/queries'
+import { EnvBadge, PausedBadge } from '@/components/admin/common'
+import { ReadinessBadge } from '@/components/admin/readiness'
 import type { ClusterInfo, ClusterSummary } from '@/api/types'
 import { EmptyState, ErrorState, PageHeader } from '@/components/states'
 import { Button } from '@/components/ui/button'
@@ -53,6 +58,7 @@ const STATUS = {
 } as const
 
 export default function ClustersPage() {
+  const auth = useAuth()
   const clusters = useClusters()
   const summary = useSummary()
   const items = clusters.data?.items ?? []
@@ -64,10 +70,10 @@ export default function ClustersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Clusters"
-        description="Agent health, coverage and savings per cluster."
+        description="Agent health, readiness, coverage and savings per cluster."
         actions={
           clusters.data ? (
-            <div className="flex items-center gap-2 text-[13px]">
+            <div className="flex flex-wrap items-center gap-2 text-[13px]">
               {(Object.keys(counts) as (keyof typeof counts)[]).map((k) =>
                 counts[k] ? (
                   <span
@@ -83,6 +89,13 @@ export default function ClustersPage() {
                   </span>
                 ) : null,
               )}
+              {auth.can('admin') ? (
+                <Button asChild size="sm" className="ml-1" data-testid="add-cluster">
+                  <Link to="/clusters/new">
+                    <PlusIcon /> Add cluster
+                  </Link>
+                </Button>
+              ) : null}
             </div>
           ) : null
         }
@@ -104,6 +117,15 @@ export default function ClustersPage() {
             title="No clusters registered"
             description="Register a cluster in the hub and install the agent with its token. It appears here after the first heartbeat."
             className="py-20"
+            action={
+              auth.can('admin') ? (
+                <Button asChild size="sm">
+                  <Link to="/clusters/new">
+                    <PlusIcon /> Add cluster
+                  </Link>
+                </Button>
+              ) : undefined
+            }
           />
         </Card>
       ) : (
@@ -206,9 +228,15 @@ function ClusterCard({
     <Card className="overflow-hidden">
       <div className="flex items-start justify-between gap-3 border-b px-5 py-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ServerIcon className="size-4 text-muted-foreground" />
-            <h2 className="truncate font-semibold tracking-tight">{c.name}</h2>
+            <h2 className="truncate font-semibold tracking-tight">
+              <Link to={`/clusters/${encodeURIComponent(c.name)}`} className="hover:underline">
+                {c.name}
+              </Link>
+            </h2>
+            <EnvBadge env={c.environment} />
+            <PausedBadge paused={c.paused} fleet={c.paused && !c.automation?.paused} />
           </div>
           {c.description ? (
             <p className="mt-1 truncate text-[13px] text-muted-foreground">{c.description}</p>
@@ -238,6 +266,19 @@ function ClusterCard({
         </Tooltip>
       </div>
       <CardContent className="space-y-4 py-4">
+        {c.readiness ? (
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="cluster-readiness">
+            <ReadinessBadge summary={c.readiness} />
+            {c.readiness.blocking || c.readiness.warnings ? (
+              <Link
+                to={`/clusters/${encodeURIComponent(c.name)}?tab=readiness`}
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                <WrenchIcon className="size-3" /> Fix
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
           <span className="text-muted-foreground">
             Heartbeat{' '}

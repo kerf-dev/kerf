@@ -22,6 +22,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { api, unwrap } from '@/api/client'
+import { useAuth } from '@/api/auth'
 import { useClusters, useFacets, useWorkloads } from '@/api/queries'
 import {
   MODES,
@@ -56,12 +57,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Checkbox } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { download, workloadsToCsv } from '@/lib/csv'
 import { formatBytes, formatCores, formatNumber, relativeTime, parseQuantity } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { workloadPath } from '@/lib/workload-id'
+import { BulkBar } from './opportunities-bulk'
+
+interface TableMeta {
+  selectable: boolean
+  selected: Map<string, WorkloadRow>
+  toggle: (w: WorkloadRow) => void
+  togglePage: (on: boolean) => void
+  pageState: boolean | 'indeterminate'
+}
 
 type SortKey = 'savings' | 'confidence' | 'name'
 const PAGE_SIZES = [25, 50, 100] as const
@@ -195,6 +206,9 @@ export default function OpportunitiesPage() {
   const [cursors, setCursors] = useState<string[]>([])
   const [exporting, setExporting] = useState(false)
   const [vis, setVis] = useColumnVisibility()
+  const auth = useAuth()
+  const selectable = auth.can('operator')
+  const [selected, setSelected] = useState<Map<string, WorkloadRow>>(new Map())
 
   // Debounce free-text inputs into the URL.
   useEffect(() => {
@@ -288,27 +302,57 @@ export default function OpportunitiesPage() {
     () => [
       col.display({
         id: 'workload',
-        header: 'Workload',
+        header: ({ table }) => {
+          const m = table.options.meta as TableMeta
+          return (
+            <span className="inline-flex items-center gap-3">
+              {m.selectable ? (
+                <Checkbox
+                  checked={m.pageState}
+                  onCheckedChange={(v) => m.togglePage(v === true)}
+                  aria-label="Select all on this page"
+                  data-testid="select-page"
+                />
+              ) : null}
+              Workload
+            </span>
+          )
+        },
         enableSorting: true,
         meta: { sortKey: 'name' },
-        cell: ({ row: { original: w } }) => (
-          <div className="min-w-0 py-0.5">
-            <div className="flex items-center gap-1.5">
-              <Link
-                to={workloadPath(w.id)}
-                tabIndex={-1}
-                onClick={(e) => e.stopPropagation()}
-                className="truncate font-medium hover:underline"
-              >
-                {w.name}
-              </Link>
-              <KindBadge kind={w.kind} />
+        cell: ({ row: { original: w }, table }) => {
+          const m = table.options.meta as TableMeta
+          return (
+            <div className="flex min-w-0 items-center gap-3 py-0.5">
+              {m.selectable ? (
+                <Checkbox
+                  checked={m.selected.has(w.id)}
+                  onCheckedChange={() => m.toggle(w)}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  aria-label={`Select ${w.name}`}
+                  data-testid="select-row"
+                />
+              ) : null}
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <Link
+                    to={workloadPath(w.id)}
+                    tabIndex={-1}
+                    onClick={(e) => e.stopPropagation()}
+                    className="truncate font-medium hover:underline"
+                  >
+                    {w.name}
+                  </Link>
+                  <KindBadge kind={w.kind} />
+                </div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {w.namespace} · {w.cluster}
+                </div>
+              </div>
             </div>
-            <div className="truncate text-xs text-muted-foreground">
-              {w.namespace} · {w.cluster}
-            </div>
-          </div>
-        ),
+          )
+        },
       }),
       col.accessor('cluster', {
         header: 'Cluster',
@@ -411,6 +455,31 @@ export default function OpportunitiesPage() {
     enableSortingRemoval: false,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (r) => r.id,
+    meta: {
+      selectable,
+      selected,
+      toggle: (w: WorkloadRow) =>
+        setSelected((m) => {
+          const n = new Map(m)
+          if (n.has(w.id)) n.delete(w.id)
+          else n.set(w.id, w)
+          return n
+        }),
+      togglePage: (on: boolean) =>
+        setSelected((m) => {
+          const n = new Map(m)
+          for (const w of list.data?.items ?? []) {
+            if (on) n.set(w.id, w)
+            else n.delete(w.id)
+          }
+          return n
+        }),
+      pageState: (() => {
+        const page = list.data?.items ?? []
+        const k = page.filter((w) => selected.has(w.id)).length
+        return k === 0 ? false : k === page.length ? true : 'indeterminate'
+      })(),
+    } satisfies TableMeta,
   })
 
   const activeFilters =
@@ -758,6 +827,7 @@ export default function OpportunitiesPage() {
           </div>
         ) : null}
       </Card>
+      <BulkBar selected={selected} onClear={() => setSelected(new Map())} />
     </div>
   )
 }
