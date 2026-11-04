@@ -2,6 +2,8 @@
 
 PRICING_IMAGE ?= localhost:5005/resource-optimizer/pricing
 PRICING_TAG   ?= dev-$(shell date +%Y%m%d-%H%M%S)
+# Expand once: a recursive $(shell date) would give docker push and helm different tags.
+PRICING_TAG   := $(PRICING_TAG)
 PRICING_VM_URL ?= http://localhost:18428
 
 .PHONY: build-pricing test-pricing run-pricing docker-pricing deploy-pricing lint-pricing-chart
