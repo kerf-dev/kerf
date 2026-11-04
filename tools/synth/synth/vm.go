@@ -111,7 +111,11 @@ func NewVMWriter(vmURL string, tl Timeline, opt VMOptions) *VMWriter {
 // before an OOM kill.
 func (v *VMWriter) memory() (avail, used float64, err error) {
 	c := &http.Client{Timeout: 3 * time.Second}
-	resp, err := c.Get(v.base + "/metrics")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, v.base+"/metrics", nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	resp, err := c.Do(req)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -228,8 +232,12 @@ func (v *VMWriter) post(body []byte) error {
 	} else if v.gzip {
 		var zb bytes.Buffer
 		zw, _ := gzip.NewWriterLevel(&zb, gzip.BestSpeed)
-		zw.Write(body)
-		zw.Close()
+		if _, err := zw.Write(body); err != nil {
+			return err
+		}
+		if err := zw.Close(); err != nil {
+			return err
+		}
 		payload = zb.Bytes()
 	}
 	var last error
@@ -238,7 +246,7 @@ func (v *VMWriter) post(body []byte) error {
 			time.Sleep(time.Duration(attempt*attempt) * time.Second)
 		}
 		v.waitMemory()
-		req, err := http.NewRequest(http.MethodPost, v.url, bytes.NewReader(payload))
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, v.url, bytes.NewReader(payload))
 		if err != nil {
 			return err
 		}

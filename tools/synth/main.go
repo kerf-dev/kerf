@@ -151,7 +151,9 @@ func backfill(args []string) error {
 	dry := fs.Bool("dry-run", false, "generate and count, do not import")
 	follow := fs.Bool("follow", false, "after the backfill, keep appending samples like `synth live`")
 	chunk := fs.Duration("chunk", 0, "import in time order, this much history at a time (0: whole window per series)")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 
 	g, err := c.generator()
 	if err != nil {
@@ -280,7 +282,9 @@ func fixtures(args []string) error {
 	bucket := fs.Duration("bucket", synth.FixtureBucket, "fixture resolution")
 	all := fs.Bool("all", false, "include generated fleet workloads (default: only workloads listed explicitly)")
 	clean := fs.Bool("clean", false, "remove existing *.json fixtures in --out first")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	if *clean {
 		old, _ := filepath.Glob(filepath.Join(*out, "*.json"))
 		for _, f := range old {
@@ -356,7 +360,9 @@ func describe(args []string) error {
 	var c common
 	c.register(fs, "tools/synth/scenarios/fleet-default.yaml")
 	manifest := fs.String("manifest", "", "write the expanded workload list with expectations as JSON")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	g, err := c.generator()
 	if err != nil {
 		return err
@@ -398,7 +404,7 @@ func describe(args []string) error {
 	var series, samples atomic.Int64
 	var mu sync.Mutex
 	byName := map[string][2]int64{}
-	count := func(s *synth.Series) error {
+	count := func(s *synth.Series) error { //nolint:unparam // must match synth.Emit
 		series.Add(1)
 		samples.Add(int64(s.Len))
 		mu.Lock()
@@ -408,7 +414,9 @@ func describe(args []string) error {
 		return nil
 	}
 	for _, cm := range g.Clusters {
-		g.EmitNodes(cm, count)
+		if err := g.EmitNodes(cm, count); err != nil {
+			return err
+		}
 	}
 	if err := g.Each(4, func(wt *synth.WorkloadTrace) error { return g.EmitWorkload(wt, count) }); err != nil {
 		return err
@@ -434,7 +442,9 @@ func deleteCmd(args []string) error {
 	vmURL := fs.String("vm-url", "http://localhost:18428", "VictoriaMetrics base URL")
 	var clusters stringList
 	fs.Var(&clusters, "cluster", "synthetic clusters to delete (default synth-a,synth-b)")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	if len(clusters) == 0 {
 		clusters = stringList{"synth-a", "synth-b"}
 	}
