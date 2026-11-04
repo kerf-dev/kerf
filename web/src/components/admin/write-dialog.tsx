@@ -122,7 +122,7 @@ export function WriteDialog({
               <DialogDescription className="sr-only">Confirm the change</DialogDescription>
             )}
           </div>
-          <div className="flex flex-col gap-4 px-5 py-4">
+          <div className="@container flex flex-col gap-4 px-5 py-4">
             {children}
             <WriteError
               error={error}

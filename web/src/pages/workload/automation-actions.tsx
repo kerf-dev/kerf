@@ -49,6 +49,8 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
   const clusters = useClusters()
   const cluster = clusters.data?.items.find((c) => c.name === w.cluster)
   const prod = cluster?.environment === 'prod'
+  // Git-only clusters get no hub policies (D-022), so a hub override would never apply there.
+  const gitOnly = cluster?.policySource === 'git'
   const ready = !cluster?.readiness || cluster.readiness.state === 'AutomationReady'
   const [open, setOpen] = useState<Kind | null>(null)
   const [draft, setDraft] = useState<RightsizingPolicySpec>({})
@@ -160,23 +162,45 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
       ) : null}
       {can ? (
         <div className="grid grid-cols-2 gap-2">
-          <Button size="sm" variant="outline" onClick={() => setOpen('override')} data-testid="set-override">
-            <PencilIcon /> {w.override ? 'Edit override' : 'Override'}
-          </Button>
-          {w.override ? (
-            <Button size="sm" variant="outline" onClick={() => setOpen('clear')} data-testid="clear-override">
-              <Undo2Icon /> Clear override
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setOpen('exclude')}
-              disabled={w.modes.cpu === 'off' && w.modes.memory === 'off'}
-              data-testid="exclude"
+          {gitOnly ? (
+            <p
+              className="col-span-2 rounded-md bg-muted/60 px-2.5 py-2 text-xs text-muted-foreground"
+              data-testid="git-only"
             >
-              <BanIcon /> Exclude
-            </Button>
+              {w.cluster} takes its policies from Git: set modes there (a RightsizingPolicy or workload
+              annotations). Approve once still works.
+            </p>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setOpen('override')}
+                data-testid="set-override"
+              >
+                <PencilIcon /> {w.override ? 'Edit override' : 'Override'}
+              </Button>
+              {w.override ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setOpen('clear')}
+                  data-testid="clear-override"
+                >
+                  <Undo2Icon /> Clear override
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setOpen('exclude')}
+                  disabled={w.modes.cpu === 'off' && w.modes.memory === 'off'}
+                  data-testid="exclude"
+                >
+                  <BanIcon /> Exclude
+                </Button>
+              )}
+            </>
           )}
           <Tooltip content={approveWhyNot}>
             <span className="col-span-2">
@@ -251,7 +275,7 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
       >
         {open === 'override' ? (
           <div className="grid gap-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 @lg:grid-cols-2">
               <ModeField
                 label="CPU mode"
                 value={draft.cpu?.mode}

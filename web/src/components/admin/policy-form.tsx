@@ -237,8 +237,10 @@ function ModesSection(c: Ctx) {
       title="Modes and strategy"
       description="Audit only recommends; auto-patch applies changes within the guardrails. CPU and memory are set separately."
     >
-      <div className="grid gap-4">
-        <div className="grid gap-4 md:grid-cols-2">
+      {/* Container queries: the form column is narrow on tablets and with the sidebar open, so the mode
+          controls stack by the width they actually get, not the viewport. */}
+      <div className="@container grid gap-4">
+        <div className="grid gap-4 @xl:grid-cols-2">
           <ModeField
             label="CPU mode"
             value={c.value.cpu?.mode}
@@ -256,7 +258,7 @@ function ModesSection(c: Ctx) {
             testId="field-memory-mode"
           />
         </div>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 @xl:grid-cols-3">
           <SelectRow
             c={c}
             path="apply.strategy"
@@ -294,7 +296,7 @@ function LimitsSection(c: Ctx) {
   const limits = getIn(c.value, 'cpu.limits') ?? getIn(c.inherited, 'cpu.limits')
   return (
     <FormSection title="Limits" description="How limits follow the new requests.">
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 @xl:grid-cols-3">
         <SelectRow
           c={c}
           path="cpu.limits"
@@ -314,7 +316,7 @@ function LimitsSection(c: Ctx) {
             suffix="×"
           />
         ) : (
-          <div className="hidden sm:block" />
+          <div className="hidden @xl:block" />
         )}
         <SelectRow
           c={c}
@@ -337,7 +339,7 @@ function GuardrailsSection(c: Ctx) {
       title="Guardrails"
       description="Limits on what auto-patch may change. A policy change never bypasses them."
     >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 @md:grid-cols-2 @3xl:grid-cols-3">
         <TextRow
           c={c}
           path="guardrails.learningPeriod"
@@ -360,7 +362,7 @@ function RollbackSection(c: Ctx) {
       title="Rollback"
       description="After a change, watch the workload and roll back when it degrades."
     >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 @md:grid-cols-2 @3xl:grid-cols-4">
         <TextRow c={c} path="guardrails.rollback.watchDuration" label="Watch for" />
         <TextRow
           c={c}
@@ -379,7 +381,7 @@ function RollbackSection(c: Ctx) {
 function HpaJvmSection(c: Ctx & { hpa: boolean; jvm: boolean }) {
   return (
     <FormSection title="HPA and JVM" description="Coordinate with autoscalers; detect fixed JVM heaps.">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 @md:grid-cols-2 @3xl:grid-cols-4">
         {c.hpa ? (
           <>
             <SelectRow
@@ -515,7 +517,7 @@ function WindowEditor({
         </div>
       </div>
       {c.errors[path] ? <p className="mb-2 text-xs text-destructive">{c.errors[path]}</p> : null}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 @xl:grid-cols-3">
         {recurring ? (
           <>
             <Field label="Schedule (cron)" error={err('schedule')} hint="minute hour day month weekday">

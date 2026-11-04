@@ -270,3 +270,41 @@ test.describe('readiness', () => {
     await expect(page.getByTestId('check-rbac.resize')).toContainText('ClusterRole rules to add')
   })
 })
+
+test.describe('WO-22b polish', () => {
+  test('mode controls fit at ~800 px content width', async ({ page }) => {
+    await page.setViewportSize({ width: 1060, height: 900 })
+    await login(page, 'admin', '/admin/defaults')
+    for (const [id, name] of [
+      ['field-cpu-mode', 'CPU mode'],
+      ['field-memory-mode', 'Memory mode'],
+    ] as const) {
+      const group = page.getByTestId(id).getByRole('radiogroup', { name })
+      const g = (await group.boundingBox())!
+      const auto = (await page.getByTestId(id).getByRole('radio', { name: 'Auto-patch' }).boundingBox())!
+      expect(auto.x + auto.width).toBeLessThanOrEqual(g.x + g.width + 0.5)
+      expect(auto.height).toBeLessThan(34) // one line, not wrapped
+    }
+    const cpu = (await page.getByTestId('field-cpu-mode').boundingBox())!
+    const mem = (await page.getByTestId('field-memory-mode').boundingBox())!
+    // side by side without overlap, or stacked
+    expect(cpu.x + cpu.width <= mem.x + 1 || mem.y >= cpu.y + cpu.height - 1).toBe(true)
+  })
+
+  test('/admin/clusters redirects to the clusters pages', async ({ page }) => {
+    await login(page, 'admin', '/admin/clusters')
+    await expect(page).toHaveURL(/\/clusters$/)
+    await page.goto('/admin/clusters/prod-eu-west-1')
+    await expect(page).toHaveURL(/\/clusters\/prod-eu-west-1$/)
+  })
+
+  test('Git-only clusters are read-only for policy edits', async ({ page }) => {
+    await login(page, 'admin', '/clusters/dr-eu-central-1?tab=settings')
+    await expect(page.getByText(/Not sent to the Git-only cluster dr-eu-central-1/)).toBeVisible()
+    await expect(page.getByTestId('field-cpu-mode').getByRole('radio', { name: 'Off' })).toBeDisabled()
+    await page.goto('/admin/policies/new')
+    await expect(
+      page.getByRole('group', { name: 'Clusters' }).getByRole('button', { name: /dr-eu-central-1/ }),
+    ).toBeDisabled()
+  })
+})

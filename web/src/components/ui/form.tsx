@@ -141,7 +141,7 @@ export function FormSection({
         ) : null}
         {aside}
       </div>
-      <div className="min-w-0">{children}</div>
+      <div className="@container min-w-0">{children}</div>
     </section>
   )
 }

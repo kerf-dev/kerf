@@ -175,6 +175,20 @@ export const useInstallSnippet = (
     enabled: !!cluster,
   })
 
+/**
+ * Clusters whose policies come only from Git (`policySource: git`, D-022): the hub sends them no
+ * policies, so policy edits (defaults, policies, overrides) do not reach them and are shown read-only.
+ */
+export function useGitOnlyClusters() {
+  const q = useQuery({
+    queryKey: ['clusters'],
+    queryFn: () => unwrap(api.GET('/v1/clusters')),
+    refetchInterval: 30_000,
+  })
+  const names = (q.data?.items ?? []).filter((c) => c.policySource === 'git').map((c) => c.name)
+  return { names, has: (c: string) => names.includes(c), loaded: !!q.data }
+}
+
 // ---------------------------------------------------------------- writes
 
 /** All writes funnel through here so every page refreshes whatever it shows after a change. */
