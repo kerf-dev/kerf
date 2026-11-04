@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/tomer1983/resource-optimizer/internal/hub/config"
 	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
 	"github.com/tomer1983/resource-optimizer/internal/hub/store"
 	"github.com/tomer1983/resource-optimizer/internal/recommender"
@@ -35,6 +37,68 @@ type Job struct {
 	// Per cluster, guarded by mu: the last accepted regular run and since when runs look incomplete.
 	baseline   map[string]clusterBaseline
 	incomplete map[string]time.Time
+
+	// The admin settings in effect for the current run (WO-20), guarded by mu.
+	cur            config.Recommender
+	pricing        hubapi.PricingSettings
+	pricingVersion int
+
+	resetOnce sync.Once
+	reset     chan time.Duration // a new run interval from PUT /v1/admin/settings/recommender
+}
+
+// baseRecommender is the recommender configuration of the hub configuration file (settings
+// version 0).
+func (j *Job) baseRecommender() config.Recommender {
+	return config.Recommender{Config: j.Engine.Cfg, Interval: j.Cfg.Recommender.Interval.D(), Retention: j.Cfg.History.Retention.D()}
+}
+
+// loadSettings reads the recommender and pricing settings sections (hot reload: every run uses
+// the stored ones). A section that fails to load or apply keeps the configuration file's values.
+func (j *Job) loadSettings(ctx context.Context) (config.Recommender, hubapi.PricingSettings, int) {
+	rec := j.baseRecommender()
+	var pricing hubapi.PricingSettings
+	pv := 0
+	if d, err := j.Store.GetSettings(ctx, hubapi.SettingsRecommender); err != nil {
+		j.Log.WarnContext(ctx, "recommender settings", "err", err)
+	} else if d.Version > 0 {
+		var v hubapi.RecommenderSettings
+		if err := json.Unmarshal(d.Value, &v); err != nil {
+			j.Log.WarnContext(ctx, "recommender settings", "version", d.Version, "err", err)
+		} else if applied, errs := config.ApplyRecommender(rec, v); errs != nil {
+			j.Log.WarnContext(ctx, "recommender settings ignored", "version", d.Version, "errors", errs)
+		} else {
+			rec = applied
+		}
+	}
+	if d, err := j.Store.GetSettings(ctx, hubapi.SettingsPricing); err != nil {
+		j.Log.WarnContext(ctx, "pricing settings", "err", err)
+	} else if d.Version > 0 {
+		if err := json.Unmarshal(d.Value, &pricing); err != nil {
+			j.Log.WarnContext(ctx, "pricing settings", "version", d.Version, "err", err)
+		} else {
+			pv = d.Version
+		}
+	}
+	return rec, pricing, pv
+}
+
+func (j *Job) resetChan() chan time.Duration {
+	j.resetOnce.Do(func() { j.reset = make(chan time.Duration, 1) })
+	return j.reset
+}
+
+// SetInterval changes the interval of the regular runs (from the next tick on).
+func (j *Job) SetInterval(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	ch := j.resetChan()
+	select {
+	case <-ch:
+	default:
+	}
+	ch <- d
 }
 
 type clusterBaseline struct{ inventory, withRequests int }
@@ -69,13 +133,18 @@ func (j *Job) Loop(ctx context.Context) {
 	} else if len(plan.Missing) > 0 || len(plan.Stale) > 0 {
 		j.Log.InfoContext(ctx, "backfill planned", "runs", len(plan.Missing), "replacing", len(plan.Stale))
 	}
-	t := time.NewTicker(rc.Interval.D())
+	rec, _, _ := j.loadSettings(ctx)
+	t := time.NewTicker(rec.Interval)
 	defer t.Stop()
+	reset := j.resetChan()
 	for {
 		if plan != nil && (len(plan.Missing) > 0 || len(plan.Stale) > 0) {
 			select {
 			case <-ctx.Done():
 				return
+			case d := <-reset:
+				j.Log.InfoContext(ctx, "recommender interval changed", "interval", d)
+				t.Reset(d)
 			case <-t.C:
 				if err := j.RunOnce(ctx, j.now(), false); err != nil {
 					j.Log.ErrorContext(ctx, "recommender run failed", "err", err)
@@ -88,6 +157,9 @@ func (j *Job) Loop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case d := <-reset:
+			j.Log.InfoContext(ctx, "recommender interval changed", "interval", d)
+			t.Reset(d)
 		case <-t.C:
 			if err := j.RunOnce(ctx, j.now(), false); err != nil {
 				j.Log.ErrorContext(ctx, "recommender run failed", "err", err)
@@ -239,6 +311,7 @@ func (j *Job) RunOnce(ctx context.Context, asOf time.Time, backfill bool) error 
 // runLocked is RunOnce with j.mu held, for one cluster (only) or all ("").
 func (j *Job) runLocked(ctx context.Context, runID uuid.UUID, asOf time.Time, backfill bool, only string) error {
 	start := time.Now()
+	j.cur, j.pricing, j.pricingVersion = j.loadSettings(ctx)
 	if err := j.Store.StartRun(ctx, runID, asOf, backfill); err != nil {
 		return err
 	}
@@ -293,7 +366,7 @@ func (j *Job) runLocked(ctx context.Context, runID uuid.UUID, asOf time.Time, ba
 		"clusters", len(clusters), "duration", time.Since(start).Round(time.Millisecond))
 	if !backfill {
 		h := j.Cfg.History
-		if n, perr := j.Store.PruneHistory(ctx, j.now(), h.FullResolution.D(), h.Retention.D()); perr != nil {
+		if n, perr := j.Store.PruneHistory(ctx, j.now(), h.FullResolution.D(), j.cur.Retention); perr != nil {
 			j.Log.WarnContext(ctx, "history prune", "err", perr)
 		} else if n > 0 {
 			j.Log.InfoContext(ctx, "history pruned", "recommendations", n)
@@ -313,6 +386,11 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 	// Load only as much history as the profiles in use need (the default profile plus any profile
 	// an agent reported for this cluster).
 	eng := *j.Engine
+	eng.Cfg = j.cur.Config
+	pricing, pv := j.pricing, j.pricingVersion
+	eng.AdjustPricing = func(cluster string, p recommender.Pricing) recommender.Pricing {
+		return config.AdjustPricing(pricing, pv, cluster, p)
+	}
 	eng.ProfilesInUse = func(string) []string {
 		var names []string
 		for _, s := range reported {
@@ -357,6 +435,14 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 	}
 	if err := j.Store.InsertRecommendations(ctx, runID, ids, cluster, res.Results); err != nil {
 		return err
+	}
+	if !backfill {
+		// Approve-once grants apply to one recommendation; a newer one supersedes them (D-024).
+		if n, err := j.Store.SupersedeStaleApprovals(ctx, cluster, j.now()); err != nil {
+			j.Log.WarnContext(ctx, "supersede approvals", "cluster", cluster, "err", err)
+		} else if n > 0 {
+			j.Log.InfoContext(ctx, "approvals superseded by new recommendations", "cluster", cluster, "approvals", n)
+		}
 	}
 	if !backfill {
 		// The stored total is what GET /v1/summary shows for the cluster from now on (live

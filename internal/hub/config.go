@@ -55,6 +55,7 @@ type Config struct {
 	TokenCacheTTL Duration `json:"tokenCacheTTL"`
 
 	DevSeed     DevSeed           `json:"devSeed"`
+	Auth        AuthConfig        `json:"auth"`
 	Recommender RecommenderConfig `json:"recommender"`
 	History     HistoryConfig     `json:"history"`
 }
@@ -69,6 +70,75 @@ type DevSeed struct {
 	TokensDir string `json:"tokensDir"`
 	// Tokens are inline tokens by the same keys (used when TokensDir is empty, e.g. go run).
 	Tokens map[string]string `json:"tokens"`
+	// Users are local users created when missing (passwords from the chart's dev values).
+	Users []DevUser `json:"users"`
+	// UsersFile is a YAML list of more DevUser (the chart mounts Secret hub-dev-users there).
+	UsersFile string `json:"usersFile"`
+}
+
+// DevUser is a seeded local user (development only).
+type DevUser struct {
+	Username    string `json:"username"`
+	DisplayName string `json:"displayName"`
+	Role        string `json:"role"`
+	Password    string `json:"password"`
+}
+
+// AuthConfig configures local users and browser sessions (D-023).
+type AuthConfig struct {
+	// CookieSecure sets the Secure attribute of the session cookie (default true; false only for
+	// plain-HTTP development).
+	CookieSecure *bool `json:"cookieSecure"`
+	// SessionTTL is the lifetime of a browser session (default 12h).
+	SessionTTL Duration `json:"sessionTTL"`
+	// BcryptCost of new password hashes (minimum and default 12).
+	BcryptCost int `json:"bcryptCost"`
+	// MaxFailedLogins locks an account after that many consecutive failures (default 5, 0 = never)
+	// for LockoutDuration (default 15m).
+	MaxFailedLogins *int     `json:"maxFailedLogins"`
+	LockoutDuration Duration `json:"lockoutDuration"`
+	// LoginRateLimit is the number of login attempts per minute per client address and per
+	// username (default 10).
+	LoginRateLimit int `json:"loginRateLimit"`
+	// BootstrapAdmin is created on a database without users (D-023). The password comes from
+	// PasswordFile (a mounted Secret) or env HUB_BOOTSTRAP_ADMIN_PASSWORD.
+	BootstrapAdmin BootstrapAdmin `json:"bootstrapAdmin"`
+}
+
+// BootstrapAdmin is the initial admin.
+type BootstrapAdmin struct {
+	Username     string `json:"username"`
+	PasswordFile string `json:"passwordFile"`
+}
+
+func (a AuthConfig) cookieSecure() bool { return a.CookieSecure == nil || *a.CookieSecure }
+
+func (a AuthConfig) sessionTTL() time.Duration {
+	if a.SessionTTL.D() <= 0 {
+		return 12 * time.Hour
+	}
+	return a.SessionTTL.D()
+}
+
+func (a AuthConfig) maxFailedLogins() int {
+	if a.MaxFailedLogins == nil {
+		return 5
+	}
+	return *a.MaxFailedLogins
+}
+
+func (a AuthConfig) lockoutDuration() time.Duration {
+	if a.LockoutDuration.D() <= 0 {
+		return 15 * time.Minute
+	}
+	return a.LockoutDuration.D()
+}
+
+func (a AuthConfig) loginRateLimit() int {
+	if a.LoginRateLimit <= 0 {
+		return 10
+	}
+	return a.LoginRateLimit
 }
 
 // HistoryConfig controls recommendation history pruning.

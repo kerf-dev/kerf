@@ -138,7 +138,13 @@ func clusterSavings(views []*store.WorkloadView) hubapi.Savings {
 
 // listClusters serves GET /v1/clusters.
 func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
-	clusters, err := s.Store.Clusters(r.Context())
+	s.expirePauses(r)
+	clusters, err := s.Store.ClusterRows(r.Context(), false)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	automation, err := s.Store.Automations(r.Context())
 	if err != nil {
 		s.internal(w, r, err)
 		return
@@ -182,6 +188,15 @@ func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
 		if cc := counts[c.Name]; cc != nil {
 			ci.Counts = *cc
 		}
+		// Admin area (D-022) and readiness (D-025).
+		ca, err := s.clusterAdmin(r, c, automation)
+		if err != nil {
+			s.internal(w, r, err)
+			return
+		}
+		paused := ca.Paused
+		ci.Environment, ci.Owner, ci.PolicySource, ci.Paused = ca.Environment, ca.Owner, ca.PolicySource, &paused
+		ci.Automation, ci.ConfigSync, ci.Readiness = &ca.Automation, &ca.Agent, &ca.Readiness
 		out.Items = append(out.Items, ci)
 	}
 	writeJSON(w, out)
@@ -478,6 +493,10 @@ func (s *Server) getWorkload(w http.ResponseWriter, r *http.Request) {
 		Modes: v.Modes(), Phase: v.Phase(), FirstSeenAt: &v.FirstSeenAt, LastSeenAt: &v.LastSeenAt,
 		Recommendation: v.Rec, Status: v.Status,
 	}
+	if err := s.approvalAndOverride(r, &d, v.Key); err != nil {
+		s.internal(w, r, err)
+		return
+	}
 	writeJSON(w, d)
 }
 
@@ -511,7 +530,12 @@ func (s *Server) getWorkloadHistory(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, err)
 		return
 	}
-	writeJSON(w, hubapi.WorkloadHistory{WorkloadID: v.Key.ID(), Recommendations: recs, Events: events})
+	changes, err := s.workloadConfigChanges(r, v.Key, from, to, limit)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	writeJSON(w, hubapi.WorkloadHistory{WorkloadID: v.Key.ID(), Recommendations: recs, Events: events, ConfigChanges: changes})
 }
 
 // getSavingsTrend serves GET /v1/savings/trend.

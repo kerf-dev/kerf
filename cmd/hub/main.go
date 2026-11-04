@@ -62,6 +62,15 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 		}
 	}
 
+	if err := hub.BootstrapUsers(ctx, st, cfg, log); err != nil {
+		return err
+	}
+	if n, err := st.PruneSessions(ctx, time.Now().Add(-7*24*time.Hour)); err != nil {
+		log.Warn("prune sessions", "err", err)
+	} else if n > 0 {
+		log.Info("old sessions pruned", "sessions", n)
+	}
+
 	prom := recommender.NewPromClient(cfg.PrometheusURL, cfg.PrometheusTimeout.D())
 	metrics := hub.NewMetrics()
 	srv := &hub.Server{Cfg: cfg, Store: st, Prom: prom, RecCfg: recCfg, Metrics: metrics, Log: log}

@@ -8,6 +8,11 @@ data:
     {{- $cfg := deepCopy .Values.config }}
     {{- $_ := set $cfg "migrationsDir" "/migrations" }}
     {{- if .Values.devSeed.enabled }}
-    {{- $_ := set $cfg "devSeed" (dict "enabled" true "clusters" .Values.devSeed.clusters "tokensDir" "/etc/hub/dev-tokens") }}
+    {{- $_ := set $cfg "devSeed" (dict "enabled" true "clusters" .Values.devSeed.clusters "tokensDir" "/etc/hub/dev-tokens" "usersFile" "/etc/hub/dev-users/users.yaml") }}
     {{- end }}
+    {{- $auth := omit .Values.auth "bootstrapAdmin" }}
+    {{- if include "hub.bootstrapSecret" . }}
+    {{- $_ := set $auth "bootstrapAdmin" (dict "username" .Values.auth.bootstrapAdmin.username "passwordFile" "/etc/hub/bootstrap-admin/password") }}
+    {{- end }}
+    {{- $_ := set $cfg "auth" $auth }}
     {{- toYaml $cfg | nindent 4 }}

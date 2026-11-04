@@ -27,6 +27,9 @@ type Engine struct {
 	// the window (a backfill before the series existed, or a gap); ok false keeps the configured
 	// default rates (WO-04d).
 	PricingFallback func(ctx context.Context, cluster string, end time.Time) (p Pricing, ok bool)
+	// AdjustPricing applies the hub's pricing settings (discounts, fixed rates) to the cluster's
+	// rates before savings are computed (WO-20); nil leaves them unchanged.
+	AdjustPricing func(cluster string, p Pricing) Pricing
 }
 
 // ClusterResult is the outcome of one cluster in a run.
@@ -76,8 +79,11 @@ func (e *Engine) RunCluster(ctx context.Context, cluster string, end time.Time, 
 	}
 	if d.Pricing.Fallback() && e.PricingFallback != nil {
 		if p, ok := e.PricingFallback(ctx, cluster, d.End); ok {
-			d.Pricing = p
+			d.Pricing = p.Base()
 		}
+	}
+	if e.AdjustPricing != nil {
+		d.Pricing = e.AdjustPricing(cluster, d.Pricing)
 	}
 	res := &ClusterResult{Cluster: cluster, End: d.End, Pricing: d.Pricing}
 	for _, k := range d.SortedKeys() {

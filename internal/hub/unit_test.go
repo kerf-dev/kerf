@@ -693,8 +693,11 @@ func TestCORS(t *testing.T) {
 				t.Errorf("next called = %v, want %v", rr.Body.String() == "next", tc.wantNext)
 			}
 			if tc.wantACAO != "" {
-				if h.Get("Vary") != "Origin" || h.Get("Access-Control-Expose-Headers") != "ETag" {
+				if h.Get("Vary") != "Origin" || h.Get("Access-Control-Expose-Headers") != "ETag, Retry-After" {
 					t.Errorf("Vary/Expose: %v", h)
+				}
+				if wantCred := tc.origins[0] != "*"; (h.Get("Access-Control-Allow-Credentials") == "true") != wantCred {
+					t.Errorf("Allow-Credentials = %q, want %v", h.Get("Access-Control-Allow-Credentials"), wantCred)
 				}
 			} else if len(h.Values("Access-Control-Allow-Methods"))+len(h.Values("Access-Control-Expose-Headers")) > 0 {
 				t.Errorf("CORS headers for disallowed origin: %v", h)
@@ -703,6 +706,9 @@ func TestCORS(t *testing.T) {
 				if !strings.Contains(h.Get("Access-Control-Allow-Methods"), tc.reqMethod) ||
 					!strings.Contains(h.Get("Access-Control-Allow-Headers"), "Authorization") ||
 					!strings.Contains(h.Get("Access-Control-Allow-Headers"), "If-None-Match") ||
+					!strings.Contains(h.Get("Access-Control-Allow-Headers"), "If-Match") ||
+					!strings.Contains(h.Get("Access-Control-Allow-Headers"), "X-CSRF-Token") ||
+					!strings.Contains(h.Get("Access-Control-Allow-Methods"), "PATCH") ||
 					h.Get("Access-Control-Max-Age") == "" {
 					t.Errorf("preflight headers: %v", h)
 				}

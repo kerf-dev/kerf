@@ -12,3 +12,9 @@ app.kubernetes.io/name: hub
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- define "hub.dbSecret" -}}{{ default (printf "%s-db" (include "hub.fullname" .)) .Values.database.existingSecret }}{{- end -}}
+{{- /* Secret with the bootstrap admin's password ("" = none). */ -}}
+{{- define "hub.bootstrapSecret" -}}
+{{- if .Values.auth.bootstrapAdmin.existingSecret -}}{{ .Values.auth.bootstrapAdmin.existingSecret }}
+{{- else if .Values.auth.bootstrapAdmin.password -}}{{ include "hub.fullname" . }}-bootstrap-admin
+{{- end -}}
+{{- end -}}

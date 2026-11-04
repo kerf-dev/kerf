@@ -16,6 +16,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/tomer1983/resource-optimizer/internal/hub/auth"
 	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
 	"github.com/tomer1983/resource-optimizer/internal/hub/store"
 	"github.com/tomer1983/resource-optimizer/internal/recommender"
@@ -34,10 +35,12 @@ type Server struct {
 	// Now is the clock (tests).
 	Now func() time.Time
 
-	mu         sync.Mutex
-	tokens     map[string]tokenEntry
-	heartbeats map[string]time.Time
-	ready      bool
+	mu          sync.Mutex
+	tokens      map[string]tokenEntry
+	heartbeats  map[string]time.Time
+	ready       bool
+	ipLimiter   *auth.Limiter
+	userLimiter *auth.Limiter
 }
 
 type tokenEntry struct {
@@ -70,25 +73,89 @@ func (s *Server) now() time.Time {
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	agent := []string{hubapi.RoleAgent}
-	ui := []string{hubapi.RoleUI}
-	route := func(pattern string, roles []string, h http.HandlerFunc) {
-		name := pattern
-		mux.Handle(pattern, s.instrument(name, s.authenticate(roles, h)))
+	route := func(pattern string, a access, h http.HandlerFunc) {
+		mux.Handle(pattern, s.instrument(pattern, s.authenticate(a, h)))
 	}
-	route("GET /v1/clusters/{cluster}/recommendations", agent, s.listRecommendations)
-	route("POST /v1/clusters/{cluster}/workload-status", agent, s.reportWorkloadStatus)
-	route("POST /v1/clusters/{cluster}/events", agent, s.reportEvents)
-	route("GET /v1/audit", []string{hubapi.RoleAgent, hubapi.RoleUI}, s.queryAudit)
-	route("GET /v1/summary", ui, s.getSummary)
-	route("GET /v1/clusters", ui, s.listClusters)
-	route("GET /v1/workloads", ui, s.listWorkloads)
-	route("GET /v1/workloads/facets", ui, s.getWorkloadFacets)
-	route("GET /v1/workloads/{id}", ui, s.getWorkload)
-	route("GET /v1/workloads/{id}/usage", ui, s.getWorkloadUsage)
-	route("GET /v1/workloads/{id}/history", ui, s.getWorkloadHistory)
-	route("GET /v1/savings/trend", ui, s.getSavingsTrend)
-	route("POST /v1/admin/recompute", []string{hubapi.RoleAdmin}, s.recompute)
+	// Agent.
+	route("GET /v1/clusters/{cluster}/recommendations", accessAgent, s.listRecommendations)
+	route("POST /v1/clusters/{cluster}/workload-status", accessAgent, s.reportWorkloadStatus)
+	route("POST /v1/clusters/{cluster}/events", accessAgent, s.reportEvents)
+	route("GET /v1/clusters/{cluster}/config", accessAgent, s.getClusterConfig)
+	route("GET /v1/audit", accessAudit, s.queryAudit)
+	// UI (read).
+	route("GET /v1/summary", accessViewer, s.getSummary)
+	route("GET /v1/clusters", accessViewer, s.listClusters)
+	route("GET /v1/workloads", accessViewer, s.listWorkloads)
+	route("GET /v1/workloads/facets", accessViewer, s.getWorkloadFacets)
+	route("GET /v1/workloads/{id}", accessViewer, s.getWorkload)
+	route("GET /v1/workloads/{id}/usage", accessViewer, s.getWorkloadUsage)
+	route("GET /v1/workloads/{id}/history", accessViewer, s.getWorkloadHistory)
+	route("GET /v1/savings/trend", accessViewer, s.getSavingsTrend)
+	route("POST /v1/admin/recompute", accessAdmin, s.recompute)
+	// Auth (D-023).
+	mux.Handle("POST /v1/auth/login", s.instrument("POST /v1/auth/login", http.HandlerFunc(s.login)))
+	route("POST /v1/auth/logout", accessSession, s.logout)
+	route("GET /v1/me", accessViewer, s.getMe)
+	route("POST /v1/me/password", accessSession, s.changeOwnPassword)
+	// Settings.
+	route("GET /v1/admin/settings", accessViewer, s.getSettings)
+	route("GET /v1/admin/settings/recommender", accessViewer, s.getRecommenderSettings)
+	route("PUT /v1/admin/settings/recommender", accessAdmin, s.putRecommenderSettings)
+	route("GET /v1/admin/settings/pricing", accessViewer, s.getPricingSettings)
+	route("PUT /v1/admin/settings/pricing", accessAdmin, s.putPricingSettings)
+	route("GET /v1/admin/settings/{section}/versions", accessViewer, s.listSettingsVersions)
+	// Policies (D-022).
+	route("GET /v1/admin/policies", accessViewer, s.listPolicies)
+	route("POST /v1/admin/policies", accessAdmin, s.createPolicy)
+	route("GET /v1/admin/policies/{policyId}", accessViewer, s.getPolicy)
+	route("PUT /v1/admin/policies/{policyId}", accessAdmin, s.updatePolicy)
+	route("DELETE /v1/admin/policies/{policyId}", accessAdmin, s.deletePolicy)
+	route("GET /v1/admin/policies/{policyId}/versions", accessViewer, s.listPolicyVersions)
+	route("POST /v1/admin/policies/{policyId}/revert", accessAdmin, s.revertPolicy)
+	route("GET /v1/admin/policy-inventory", accessViewer, s.getPolicyInventory)
+	route("POST /v1/admin/preview", accessOperator, s.previewPolicyChange)
+	route("GET /v1/workloads/{id}/effective-policy", accessViewer, s.getEffectivePolicy)
+	route("GET /v1/workloads/{id}/override", accessViewer, s.getWorkloadOverride)
+	route("PUT /v1/workloads/{id}/override", accessOperator, s.putWorkloadOverride)
+	route("DELETE /v1/workloads/{id}/override", accessOperator, s.deleteWorkloadOverride)
+	route("POST /v1/workloads/{id}/approve", accessOperator, s.approveRecommendation)
+	// Clusters and automation.
+	route("POST /v1/admin/clusters", accessAdmin, s.createCluster)
+	route("GET /v1/admin/clusters/{cluster}", accessViewer, s.getClusterAdmin)
+	route("PATCH /v1/admin/clusters/{cluster}", accessAdmin, s.updateCluster)
+	route("DELETE /v1/admin/clusters/{cluster}", accessAdmin, s.deleteCluster)
+	route("PUT /v1/clusters/{cluster}/automation", accessOperator, s.setClusterAutomation)
+	route("GET /v1/admin/automation", accessViewer, s.getFleetAutomation)
+	route("PUT /v1/admin/automation", accessOperator, s.setFleetAutomation)
+	// Tokens and users.
+	route("GET /v1/admin/tokens", accessAdmin, s.listTokens)
+	route("POST /v1/admin/tokens", accessAdmin, s.createToken)
+	route("DELETE /v1/admin/tokens/{tokenId}", accessAdmin, s.revokeToken)
+	route("GET /v1/admin/users", accessAdmin, s.listUsers)
+	route("POST /v1/admin/users", accessAdmin, s.createUser)
+	route("GET /v1/admin/users/{username}", accessAdmin, s.getUser)
+	route("PATCH /v1/admin/users/{username}", accessAdmin, s.updateUser)
+	route("DELETE /v1/admin/users/{username}", accessAdmin, s.deleteUser)
+	route("POST /v1/admin/users/{username}/reset-password", accessAdmin, s.resetUserPassword)
+	route("GET /v1/audit/config", accessViewer, s.queryConfigAudit)
+	// Onboarding and readiness (D-025): WO-25.
+	for _, rt := range []struct {
+		pattern string
+		a       access
+	}{
+		{"GET /v1/admin/datasources", accessViewer},
+		{"POST /v1/admin/datasources", accessAdmin},
+		{"GET /v1/admin/datasources/{datasourceId}", accessViewer},
+		{"PUT /v1/admin/datasources/{datasourceId}", accessAdmin},
+		{"DELETE /v1/admin/datasources/{datasourceId}", accessAdmin},
+		{"POST /v1/admin/datasources/{datasourceId}/test", accessAdmin},
+		{"GET /v1/clusters/{cluster}/readiness", accessViewer},
+		{"POST /v1/clusters/{cluster}/readiness/recheck", accessOperator},
+		{"GET /v1/clusters/{cluster}/readiness/history", accessViewer},
+		{"GET /v1/admin/clusters/{cluster}/install", accessAdmin},
+	} {
+		route(rt.pattern, rt.a, notImplemented)
+	}
 
 	mux.Handle("GET /metrics", promhttp.HandlerFor(s.Metrics.Registry, promhttp.HandlerOpts{}))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok\n")) })
@@ -120,10 +187,14 @@ func (s *Server) cors(next http.Handler) http.Handler {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Add("Vary", "Origin")
-			h.Set("Access-Control-Expose-Headers", "ETag")
+			// Sessions (D-023): credentials only for explicitly listed origins, never for "*".
+			if allowed[origin] {
+				h.Set("Access-Control-Allow-Credentials", "true")
+			}
+			h.Set("Access-Control-Expose-Headers", "ETag, Retry-After")
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
-				h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-				h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, If-None-Match")
+				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+				h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, If-None-Match, If-Match, "+hubapi.CSRFHeader)
 				h.Set("Access-Control-Max-Age", "600")
 				w.WriteHeader(http.StatusNoContent)
 				return
@@ -163,75 +234,6 @@ func (s *Server) instrument(route string, next http.Handler) http.Handler {
 		s.Metrics.observeRequest(route, sw.code, time.Since(start))
 		s.Log.DebugContext(r.Context(), "request", "method", r.Method, "path", r.URL.Path, "status", sw.code, "duration", time.Since(start))
 	})
-}
-
-// authenticate checks the bearer token and its role. Agent tokens are additionally restricted to
-// their cluster for /v1/clusters/{cluster}/... routes; unknown clusters are 404.
-func (s *Server) authenticate(roles []string, next http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		raw, ok := strings.CutPrefix(auth, "Bearer ")
-		if !ok || strings.TrimSpace(raw) == "" {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="resource-optimizer"`)
-			writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "Missing bearer token.")
-			return
-		}
-		tok, err := s.lookupToken(r.Context(), strings.TrimSpace(raw))
-		if errors.Is(err, store.ErrNotFound) {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="resource-optimizer", error="invalid_token"`)
-			writeProblem(w, r, http.StatusUnauthorized, "invalid_token", "Unknown, expired or revoked token.")
-			return
-		}
-		if err != nil {
-			s.internal(w, r, err)
-			return
-		}
-		if tok.Role != hubapi.RoleAdmin && !hubapi.Contains(roles, tok.Role) {
-			writeProblem(w, r, http.StatusForbidden, "role_forbidden", "Token role "+tok.Role+" may not use this endpoint.")
-			return
-		}
-		if cluster := r.PathValue("cluster"); cluster != "" {
-			if tok.Role == hubapi.RoleAgent && tok.Cluster != cluster {
-				writeProblem(w, r, http.StatusForbidden, "cluster_forbidden", "Token is not allowed to access cluster "+cluster+".")
-				return
-			}
-			exists, err := s.Store.ClusterExists(r.Context(), cluster)
-			if err != nil {
-				s.internal(w, r, err)
-				return
-			}
-			if !exists {
-				writeProblem(w, r, http.StatusNotFound, "cluster_not_found", "Unknown cluster "+cluster+".")
-				return
-			}
-		}
-		if tok.Role == hubapi.RoleAgent {
-			s.heartbeat(r.Context(), tok.Cluster, "")
-		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, tok)))
-	})
-}
-
-func (s *Server) lookupToken(ctx context.Context, raw string) (store.Token, error) {
-	key := string(store.HashToken(raw))
-	now := s.now()
-	s.mu.Lock()
-	if e, ok := s.tokens[key]; ok && now.Before(e.expires) {
-		s.mu.Unlock()
-		return e.tok, nil
-	}
-	s.mu.Unlock()
-	tok, err := s.Store.LookupToken(ctx, raw)
-	if err != nil {
-		return tok, err
-	}
-	s.mu.Lock()
-	if s.tokens == nil {
-		s.tokens = map[string]tokenEntry{}
-	}
-	s.tokens[key] = tokenEntry{tok: tok, expires: now.Add(s.Cfg.TokenCacheTTL.D())}
-	s.mu.Unlock()
-	return tok, nil
 }
 
 // heartbeat records the agent's last request, at most every 15 s per cluster unless the agent
@@ -281,6 +283,11 @@ func (s *Server) recompute(w http.ResponseWriter, r *http.Request) {
 	id, at, coalesced := s.Job.Trigger(context.WithoutCancel(r.Context()), cluster)
 	s.Log.InfoContext(r.Context(), "recompute requested", "run", id, "cluster", cluster, "coalesced", coalesced)
 	writeJSONStatus(w, http.StatusAccepted, hubapi.RecomputeAccepted{RunID: id.String(), Cluster: cluster, RequestedAt: at.UTC(), Coalesced: coalesced})
+}
+
+// notImplemented answers routes of later work-orders (D-025, WO-25).
+func notImplemented(w http.ResponseWriter, r *http.Request) {
+	writeProblem(w, r, http.StatusNotImplemented, hubapi.CodeNotImplemented, "Not implemented yet (WO-25).")
 }
 
 // writeJSON writes a 200 JSON response.

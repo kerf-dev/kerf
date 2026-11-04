@@ -59,6 +59,9 @@ the table above.
 | `service.type` / `service.nodePort` | `ClusterIP` / – | dev: `NodePort` 30080 |
 | `database.url` or `database.existingSecret` | – | Postgres URL, passed as `HUB_DATABASE_URL` |
 | `devSeed.enabled`, `.clusters`, `.tokens` | `false` | dev seed and Secret `hub-dev-tokens` |
+| `devSeed.users` | `[]` | local users created when missing (Secret `hub-dev-users`); dev: `viewer`, `operator`, `admin` with the passwords in values-dev.yaml |
+| `auth.cookieSecure`, `.sessionTTL`, `.maxFailedLogins`, `.lockoutDuration` | `true`, `12h`, `5`, `15m` | browser sessions (D-023); dev: `cookieSecure: false` (plain HTTP) |
+| `auth.bootstrapAdmin.username`, `.password` or `.existingSecret`/`.existingSecretKey` | `admin`, – | initial admin, created only on a database without users |
 | `config` | see values.yaml | the hub config file (`internal/hub/config.go`): `prometheusURL`, `corsOrigins`, `agentStaleAfter`, `recommender.*`, `history.*` |
 
 Recommender settings under `config.recommender` (all optional; defaults in `internal/recommender/config.go`):
@@ -71,6 +74,19 @@ refused as incomplete metrics), `step`, `rateWindow`, `riskWindow`, `inventoryLo
 memoryPercentile, memoryPeakWindow, cpuHeadroom, memoryBuffer}`.
 History: `history.fullResolution` keeps every run, older recommendations are thinned to one per
 workload and day, `history.retention` deletes the rest (the latest per workload is always kept).
+
+Settings stored through the admin API (`PUT /v1/admin/settings/recommender|pricing`) override
+`config.recommender.interval`, the profiles and `history.retention` from the next run on (the
+interval at once); without stored settings the config file applies.
+
+## Log in (admin area, WO-20)
+
+```bash
+curl -s -c jar -H 'Content-Type: application/json' -d '{"username":"admin","password":"ro-dev-admin-pass"}' localhost:18080/v1/auth/login
+# writes need the csrfToken of the login response:
+curl -s -b jar -H "X-CSRF-Token: <csrfToken>" -H 'If-Match: "0"' -H 'Content-Type: application/json' -X PUT \
+  -d '{"value": {...}, "reason": "..."}' localhost:18080/v1/admin/settings/recommender
+```
 
 ## Recompute now
 
