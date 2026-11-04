@@ -343,7 +343,13 @@ Resume `{"paused": false, "reason": "…"}`: on a `prod` cluster only an admin (
 `PUT /v1/admin/automation` (operator to pause, admin to resume) → the fleet `Automation`.
 
 `GET /v1/clusters` gains the optional fields `environment`, `owner`, `policySource`, `paused`,
-`automation` and `configSync`.
+`automation`, `configSync` and `readiness`.
+
+Onboarding (D-025) adds `provider`, `region` and the metrics binding `metrics` to the cluster
+schemas. It also adds `readiness` to `ClusterAdmin`, the install snippet
+`GET /v1/admin/clusters/{c}/install`, and the auto-patch gating (`409
+cluster_not_automation_ready`, admin `overrideReadiness`). All of it is specified in
+**`docs/contracts/readiness.md`**.
 
 ### Agent
 
@@ -404,12 +410,13 @@ or disabling the last enabled admin gives `409 last_admin`.
 ```
 `GET /v1/audit` (workload events) is unchanged and never returns `config_changed`.
 
-## 6. Storage (migrations 0007 – 0009)
+## 6. Storage (migrations 0007 – 0010)
 
 | Migration | Tables / columns |
 |---|---|
 | `0007_admin_policies_settings` | `settings`, `settings_versions`, `policies` (reserved names, priority bands, one live global default / cluster default per cluster / override per workload, unique live names), `policy_versions`, `clusters` + `environment, owner, policy_source, version, updated_at, updated_by, deleted_at, config_pulled_at, applied_config_version, policy_inventory, policy_inventory_at`, `cluster_automation` (`scope` = cluster or `*` for the fleet) |
 | `0008_users_sessions` | `users` (bcrypt `password_hash`, role, disabled, must_change_password, failed_logins, locked_until, soft delete), `sessions` (`id_sha256`, `csrf_token`, expiry, revoke), `api_tokens` + `last_used_at, created_by, revoked_by` |
+| `0010_onboarding_readiness` | `datasources` (`local` built-in, encrypted `auth_secret`), `cluster_metrics_bindings`, `clusters` + `provider, region`, `cluster_readiness`, `readiness_checks`, `readiness_history`; config audit targets `datasource`, `readiness` (see `docs/contracts/readiness.md`) |
 | `0009_approvals_config_events` | `workload_approvals` (one open per workload), `audit_events`: type `config_changed`; `cluster, namespace, workload_kind, workload_name` nullable for it only (`audit_events_shape_check`); + `actor, target_type, target_id, target_name, version, before, after` |
 
 All are idempotent (`IF NOT EXISTS`, drop-then-add constraints) and have down migrations. **The

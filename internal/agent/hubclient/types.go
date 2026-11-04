@@ -41,6 +41,8 @@ var schemaTypes = map[string]any{
 	"ConfigFlags":         ConfigFlags{},
 	"ConfigApproval":      ConfigApproval{},
 	"PolicyInventoryItem": PolicyInventoryItem{},
+	"ReadinessCheck":      ReadinessCheck{},
+	"AgentCapability":     AgentCapability{},
 
 	// RightsizingPolicy spec as sent in ConfigPolicy.spec: the CRD types (api/v1alpha1).
 	"RightsizingPolicySpec": v1alpha1.RightsizingPolicySpec{},
@@ -218,6 +220,10 @@ type WorkloadStatusBatch struct {
 	// PolicyInventory: nil = unchanged since the last report (omitted); non-nil, even empty =
 	// the complete inventory. Send it with full batches.
 	PolicyInventory []PolicyInventoryItem `json:"policyInventory,omitempty"`
+	// Capabilities and Checks are the self-checks (D-025): nil = unchanged (omitted); non-nil =
+	// the complete set. Send them at start, every 10 minutes and after a recheck.
+	Capabilities []AgentCapability `json:"capabilities,omitempty"`
+	Checks       []ReadinessCheck  `json:"checks,omitempty"`
 }
 
 // ContainerChange is the before/after of one container in an event.
@@ -290,6 +296,9 @@ type ClusterConfig struct {
 	Policies      []ConfigPolicy   `json:"policies"`
 	Flags         ConfigFlags      `json:"flags"`
 	Approvals     []ConfigApproval `json:"approvals"`
+	// HubVersion and MinAgentVersion feed the agent.version self-check (D-025).
+	HubVersion      string `json:"hubVersion,omitempty"`
+	MinAgentVersion string `json:"minAgentVersion,omitempty"`
 }
 
 // ConfigPolicy is one hub-managed policy. The CR gets name Name, label
@@ -314,6 +323,9 @@ type ConfigFlags struct {
 	PauseReason string     `json:"pauseReason,omitempty"`
 	PausedAt    *time.Time `json:"pausedAt,omitempty"`
 	ResumeAt    *time.Time `json:"resumeAt,omitempty"`
+	// Recheck: re-run the self-checks if RecheckRequestedAt is newer than the last run (D-025).
+	Recheck            bool       `json:"recheck,omitempty"`
+	RecheckRequestedAt *time.Time `json:"recheckRequestedAt,omitempty"`
 }
 
 // ConfigApproval is an approve-once grant (D-024): apply RecommendationID of Workload once, as if
@@ -363,3 +375,29 @@ const (
 	DetailApprovedBy = "approvedBy"
 	DetailPauseScope = "pauseScope"
 )
+
+// ReadinessCheck is one self-check result (D-025, docs/contracts/readiness.md). Fill ID, Category,
+// Severity, Source ("agent") and Gates from the catalog in api/v1alpha1/readiness.
+type ReadinessCheck struct {
+	ID              string            `json:"id"`
+	Category        string            `json:"category"`
+	Severity        string            `json:"severity"`
+	Source          string            `json:"source"`
+	Gates           string            `json:"gates,omitempty"`
+	Status          string            `json:"status"`
+	Message         string            `json:"message"`
+	Remediation     string            `json:"remediation,omitempty"`
+	RemediationType string            `json:"remediationType,omitempty"`
+	DocsURL         string            `json:"docsURL,omitempty"`
+	CheckedAt       time.Time         `json:"checkedAt"`
+	Details         map[string]string `json:"details,omitempty"`
+}
+
+// AgentCapability is the RBAC self-check of one capability (readiness.Capability*). Missing lists
+// the ClusterRole rules to add, each as JSON.
+type AgentCapability struct {
+	Name    string   `json:"name"`
+	Granted bool     `json:"granted"`
+	Missing []string `json:"missing,omitempty"`
+	Message string   `json:"message,omitempty"`
+}

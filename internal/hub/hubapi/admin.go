@@ -165,7 +165,7 @@ const (
 )
 
 // ConfigTargetTypes lists the ConfigTargetType enum.
-var ConfigTargetTypes = []string{TargetSettings, TargetPolicy, TargetWorkloadOverride, TargetApproval, TargetCluster, TargetAutomation, TargetToken, TargetUser}
+var ConfigTargetTypes = []string{TargetSettings, TargetPolicy, TargetWorkloadOverride, TargetApproval, TargetCluster, TargetAutomation, TargetToken, TargetUser, TargetDatasource, TargetReadiness}
 
 // Config actions (ConfigAction, docs/contracts/events.md).
 const (
@@ -196,6 +196,7 @@ var ConfigActions = []string{
 	ActionOverrideSet, ActionOverrideCleared, ActionWorkloadApproved, ActionClusterCreated, ActionClusterUpdated,
 	ActionClusterDeleted, ActionAutomationPaused, ActionAutomationResumed, ActionTokenCreated, ActionTokenRevoked,
 	ActionUserCreated, ActionUserUpdated, ActionUserDeleted, ActionPasswordReset,
+	ActionDatasourceCreated, ActionDatasourceUpdated, ActionDatasourceDeleted, ActionReadinessChanged,
 }
 
 // Actor is who made a change.
@@ -409,6 +410,8 @@ type PolicyInput struct {
 	Clusters    []string                       `json:"clusters,omitempty"`
 	Spec        v1alpha1.RightsizingPolicySpec `json:"spec"`
 	Reason      string                         `json:"reason"`
+	// OverrideReadiness (admin only) allows auto-patch on clusters that are not AutomationReady (D-025).
+	OverrideReadiness bool `json:"overrideReadiness,omitempty"`
 }
 
 // PolicyDraft is a policy for the impact preview.
@@ -600,6 +603,10 @@ type ClusterAdmin struct {
 	Paused          bool                    `json:"paused"`
 	Agent           AgentConfigSync         `json:"agent"`
 	PolicyInventory *ClusterPolicyInventory `json:"policyInventory,omitempty"`
+	Provider        string                  `json:"provider,omitempty"`
+	Region          string                  `json:"region,omitempty"`
+	Metrics         MetricsBinding          `json:"metrics"`
+	Readiness       ReadinessSummary        `json:"readiness"`
 }
 
 // ClusterCreate is the body of POST /v1/admin/clusters.
@@ -610,8 +617,11 @@ type ClusterCreate struct {
 	Owner        string `json:"owner,omitempty"`
 	PolicySource string `json:"policySource,omitempty"`
 	// CreateAgentToken defaults to true when absent.
-	CreateAgentToken *bool  `json:"createAgentToken,omitempty"`
-	Reason           string `json:"reason"`
+	CreateAgentToken *bool           `json:"createAgentToken,omitempty"`
+	Provider         string          `json:"provider,omitempty"`
+	Region           string          `json:"region,omitempty"`
+	Metrics          *MetricsBinding `json:"metrics,omitempty"`
+	Reason           string          `json:"reason"`
 }
 
 // ClusterCreated is its response.
@@ -622,11 +632,14 @@ type ClusterCreated struct {
 
 // ClusterUpdate is the body of PATCH /v1/admin/clusters/{cluster}; nil fields are unchanged.
 type ClusterUpdate struct {
-	Description  *string `json:"description,omitempty"`
-	Environment  *string `json:"environment,omitempty"`
-	Owner        *string `json:"owner,omitempty"`
-	PolicySource *string `json:"policySource,omitempty"`
-	Reason       string  `json:"reason"`
+	Description  *string         `json:"description,omitempty"`
+	Environment  *string         `json:"environment,omitempty"`
+	Owner        *string         `json:"owner,omitempty"`
+	PolicySource *string         `json:"policySource,omitempty"`
+	Provider     *string         `json:"provider,omitempty"`
+	Region       *string         `json:"region,omitempty"`
+	Metrics      *MetricsBinding `json:"metrics,omitempty"`
+	Reason       string          `json:"reason"`
 }
 
 // ClusterConfig is the response of GET /v1/clusters/{cluster}/config (agent).
@@ -638,6 +651,9 @@ type ClusterConfig struct {
 	Policies      []ConfigPolicy   `json:"policies"`
 	Flags         ConfigFlags      `json:"flags"`
 	Approvals     []ConfigApproval `json:"approvals"`
+	// HubVersion and MinAgentVersion feed the agent's agent.version check (D-025).
+	HubVersion      string `json:"hubVersion,omitempty"`
+	MinAgentVersion string `json:"minAgentVersion,omitempty"`
 }
 
 // ConfigPolicy is one hub-managed policy to materialise as a CR.
@@ -657,6 +673,9 @@ type ConfigFlags struct {
 	PauseReason string     `json:"pauseReason,omitempty"`
 	PausedAt    *time.Time `json:"pausedAt,omitempty"`
 	ResumeAt    *time.Time `json:"resumeAt,omitempty"`
+	// Recheck: re-run the agent self-checks if RecheckRequestedAt is newer than the last run.
+	Recheck            bool       `json:"recheck,omitempty"`
+	RecheckRequestedAt *time.Time `json:"recheckRequestedAt,omitempty"`
 }
 
 // ConfigApproval is an approve-once grant sent to the agent.
@@ -674,6 +693,8 @@ type ApprovalRequest struct {
 	RecommendationID string     `json:"recommendationID"`
 	Reason           string     `json:"reason"`
 	ExpiresAt        *time.Time `json:"expiresAt,omitempty"`
+	// OverrideReadiness (admin only) allows auto-patch on clusters that are not AutomationReady (D-025).
+	OverrideReadiness bool `json:"overrideReadiness,omitempty"`
 }
 
 // Approval is an approve-once grant.
@@ -695,6 +716,8 @@ type WorkloadOverrideInput struct {
 	Description string                         `json:"description,omitempty"`
 	Spec        v1alpha1.RightsizingPolicySpec `json:"spec"`
 	Reason      string                         `json:"reason"`
+	// OverrideReadiness (admin only) allows auto-patch on clusters that are not AutomationReady (D-025).
+	OverrideReadiness bool `json:"overrideReadiness,omitempty"`
 }
 
 // PolicyLayer is one layer of the precedence chain.

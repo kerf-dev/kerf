@@ -133,6 +133,8 @@ shape differs from a workload event: it is served by `GET /v1/audit/config` (sch
 | `AutomationPaused` / `AutomationResumed` | `automation` | pause / resume of a cluster (`id` = cluster) or the fleet (`id` = `*`); an auto-resume at `resumeAt` has actor type `system` |
 | `TokenCreated` / `TokenRevoked` | `token` | API token create / revoke |
 | `UserCreated` / `UserUpdated` / `UserDeleted` / `PasswordReset` | `user` | local user changes |
+| `DatasourceCreated` / `DatasourceUpdated` / `DatasourceDeleted` | `datasource` | metrics datasource changes (D-025; never secrets) |
+| `ReadinessChanged` | `readiness` (`id` = cluster) | the cluster's readiness state changed (actor type `system`, `before`/`after` = `{"state": …}`, `docs/contracts/readiness.md`) |
 
 `before`/`after` hold the target's API representation and never contain password hashes, passwords
 or token values. Login attempts are not configuration changes and are not recorded here.

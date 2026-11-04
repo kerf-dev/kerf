@@ -284,6 +284,9 @@ type WorkloadStatusBatch struct {
 	ConfigVersion string `json:"configVersion,omitempty"`
 	// PolicyInventory is nil when unchanged; non-nil (possibly empty) is the full inventory.
 	PolicyInventory []PolicyInventoryItem `json:"policyInventory,omitempty"`
+	// Capabilities and Checks are the agent self-checks (D-025): nil = unchanged.
+	Capabilities []AgentCapability `json:"capabilities,omitempty"`
+	Checks       []ReadinessCheck  `json:"checks,omitempty"`
 }
 
 // ContainerChange is a change of one container's resources.
@@ -414,6 +417,8 @@ type ClusterInfo struct {
 	Paused       *bool            `json:"paused,omitempty"`
 	Automation   *Automation      `json:"automation,omitempty"`
 	ConfigSync   *AgentConfigSync `json:"configSync,omitempty"`
+	// Readiness (D-025).
+	Readiness *ReadinessSummary `json:"readiness,omitempty"`
 }
 
 // ClusterList is the response of GET /v1/clusters.

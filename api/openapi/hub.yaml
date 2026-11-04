@@ -1069,6 +1069,8 @@ paths:
         that does not start with `ro-` and a priority from 1 to 899999. The spec is validated like
         the CRD (code `invalid_policy`, `detail` lists the fields). Records a `config_changed`
         audit event (`PolicyCreated`).
+        Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
       parameters:
         - $ref: '#/components/parameters/CSRFToken'
       requestBody:
@@ -1132,6 +1134,8 @@ paths:
       description: |
         Stores a new version; `type` cannot change (`400`, code `type_immutable`). Agents pick the
         change up on their next config pull. Records `PolicyUpdated`.
+        Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
       parameters:
         - $ref: '#/components/parameters/IfMatch'
         - $ref: '#/components/parameters/CSRFToken'
@@ -1662,6 +1666,8 @@ paths:
         Setting a mode to `auto-patch` on a cluster with environment `prod` needs an admin (`403`,
         code `admin_required`). "Exclude" is an override with both modes `off`. Records
         `OverrideSet`.
+        Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
       parameters:
         - $ref: '#/components/parameters/IfMatchOptional'
         - $ref: '#/components/parameters/CSRFToken'
@@ -1689,6 +1695,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/WorkloadNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '412':
           $ref: '#/components/responses/PreconditionFailed'
         '428':
@@ -1742,6 +1750,8 @@ paths:
         that recommendation once, with all guardrails, as if the `audit` resources were
         `auto-patch`, and emits `applied` with reason `ApprovedOnce`; the workload stays in
         `audit`. A new approval replaces an earlier unconsumed one. Records `WorkloadApproved`.
+        On a cluster that is not `AutomationReady`: `409`, code `cluster_not_automation_ready`,
+        unless an admin sends `overrideReadiness: true` (D-025).
       parameters:
         - $ref: '#/components/parameters/CSRFToken'
       requestBody:
@@ -2160,6 +2170,339 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/datasources:
+    get:
+      tags: [admin]
+      operationId: listDatasources
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Metrics datasources (D-025)
+      description: Includes the built-in `local` datasource. Secrets are never returned.
+      responses:
+        '200':
+          description: Datasources, ordered by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasourceList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [admin]
+      operationId: createDatasource
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Add a metrics datasource
+      description: |
+        Secret auth fields are write-only: stored encrypted, never returned. Records
+        `DatasourceCreated` (without secrets).
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasourceInput'
+      responses:
+        '201':
+          description: Created.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Datasource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/datasources/{datasourceId}:
+    parameters:
+      - $ref: '#/components/parameters/DatasourceID'
+    get:
+      tags: [admin]
+      operationId: getDatasource
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: One datasource
+      responses:
+        '200':
+          description: Datasource.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Datasource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+    put:
+      tags: [admin]
+      operationId: updateDatasource
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Replace a datasource
+      description: |
+        Omitted secret fields keep their stored values; `clearSecrets: true` removes them. The
+        built-in `local` datasource only accepts `timeout` and `maxPoints` changes (`400`, code
+        `builtin`). Records `DatasourceUpdated`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasourceInput'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Datasource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+    delete:
+      tags: [admin]
+      operationId: deleteDatasource
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Delete a datasource
+      description: |
+        Soft delete. `409` with code `datasource_in_use` while a cluster is bound to it, `builtin`
+        for `local`. Records `DatasourceDeleted`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeReason'
+      responses:
+        '204':
+          description: Deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/admin/datasources/{datasourceId}/test:
+    parameters:
+      - $ref: '#/components/parameters/DatasourceID'
+    post:
+      tags: [admin]
+      operationId: testDatasource
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Run the metrics checks against a datasource now
+      description: |
+        Runs `datasource.reachable` and, with `binding`, every hub metrics check for that binding
+        (before any agent exists; the onboarding wizard's "Test"). Nothing is stored or audited.
+        Returns `200` also when checks fail; `ok` is true when no blocking check failed.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasourceTestRequest'
+      responses:
+        '200':
+          description: Check results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasourceTestResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+  /v1/clusters/{cluster}/readiness:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [ui]
+      operationId: getClusterReadiness
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Readiness state and check results of a cluster (D-025)
+      description: |
+        The latest result of every check (hub metrics checks and agent self-checks), the state they
+        imply and what blocks the next state. Checks never run yet have status `unknown`.
+      responses:
+        '200':
+          description: Readiness.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterReadiness'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/clusters/{cluster}/readiness/recheck:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    post:
+      tags: [ui]
+      operationId: recheckClusterReadiness
+      security:
+        - sessionAuth: [operator]
+        - bearerAuth: [admin]
+      summary: Re-run the readiness checks now
+      description: |
+        Queues the hub metrics checks and sets the recheck flag in the cluster's config, so the
+        agent re-runs its self-checks on its next pull. Results appear in
+        `GET /v1/clusters/{cluster}/readiness` as they arrive. Not audited.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '202':
+          description: Re-check queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecheckAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/clusters/{cluster}/readiness/history:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [ui]
+      operationId: getClusterReadinessHistory
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: State transitions and check status changes
+      description: Only changes are stored (a check's status or the state), newest first.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/Continue'
+      responses:
+        '200':
+          description: History.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessHistory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/clusters/{cluster}/install:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [admin]
+      operationId: getClusterInstall
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Agent install instructions for a cluster
+      description: |
+        Rendered for this cluster and hub URL. The token value is never included: the snippet
+        references the Secret `resource-optimizer-agent-token` (key `token`); the value is shown
+        once when the token is created. Also returns the Argo CD `ignoreDifferences` snippet for
+        `argocd-cm` (D-006).
+      parameters:
+        - name: format
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/InstallFormat'
+        - name: webhook
+          in: query
+          description: Include the webhook install.
+          schema:
+            type: boolean
+            default: false
+        - name: certManager
+          in: query
+          description: Webhook certificates from cert-manager (otherwise self-signed).
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Install instructions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallSnippet'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     bearerAuth:
@@ -2198,6 +2541,13 @@ components:
       in: header
       required: false
       description: ETag (`"<version>"`) of the object being changed; checked when given (`412` if stale).
+      schema:
+        type: string
+    DatasourceID:
+      name: datasourceId
+      in: path
+      required: true
+      description: '`local` or a UUID.'
       schema:
         type: string
     PolicyID:
@@ -2338,6 +2688,12 @@ components:
             $ref: '#/components/schemas/Problem'
     PolicyNotFound:
       description: Unknown policy id.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    DatasourceNotFound:
+      description: Unknown datasource id.
       content:
         application/problem+json:
           schema:
@@ -2749,6 +3105,21 @@ components:
             last report", an empty array means "none".
           items:
             $ref: '#/components/schemas/PolicyInventoryItem'
+        capabilities:
+          type: array
+          description: |
+            Agent self-check of its RBAC per capability (D-025). Absent = unchanged; present = all
+            capabilities.
+          items:
+            $ref: '#/components/schemas/AgentCapability'
+        checks:
+          type: array
+          description: |
+            Agent self-check results (source `agent`, docs/contracts/readiness.md). Absent =
+            unchanged; present = every agent check. Sent at start, every 10 minutes and after a
+            recheck.
+          items:
+            $ref: '#/components/schemas/ReadinessCheck'
         items:
           type: array
           maxItems: 1000
@@ -3101,6 +3472,8 @@ components:
             - $ref: '#/components/schemas/Automation'
         configSync:
           $ref: '#/components/schemas/AgentConfigSync'
+        readiness:
+          $ref: '#/components/schemas/ReadinessSummary'
         counts:
           type: object
           required: [workloads, withRecommendation, autoPatch, blocked]
@@ -4043,6 +4416,11 @@ components:
             $ref: '#/components/schemas/ClusterName'
         spec:
           $ref: '#/components/schemas/RightsizingPolicySpec'
+        overrideReadiness:
+          type: boolean
+          description: |
+            Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+            audited with the change.
         reason:
           $ref: '#/components/schemas/ReasonText'
     PolicyDraft:
@@ -4402,7 +4780,7 @@ components:
           description: '`appliedConfigVersion = configVersion`.'
     ClusterAdmin:
       type: object
-      required: [name, description, owner, policySource, version, automation, paused, agent]
+      required: [name, description, owner, policySource, version, automation, paused, agent, metrics, readiness]
       properties:
         name:
           $ref: '#/components/schemas/ClusterName'
@@ -4439,6 +4817,18 @@ components:
           $ref: '#/components/schemas/AgentConfigSync'
         policyInventory:
           $ref: '#/components/schemas/ClusterPolicyInventory'
+        provider:
+          type: string
+          maxLength: 64
+          description: Informational, e.g. `aws`.
+        region:
+          type: string
+          maxLength: 64
+          description: Informational.
+        metrics:
+          $ref: '#/components/schemas/MetricsBinding'
+        readiness:
+          $ref: '#/components/schemas/ReadinessSummary'
     ClusterCreate:
       type: object
       required: [name, environment, reason]
@@ -4457,6 +4847,18 @@ components:
           allOf:
             - $ref: '#/components/schemas/ClusterPolicySource'
           default: both
+        provider:
+          type: string
+          maxLength: 64
+          description: Informational, e.g. `aws`.
+        region:
+          type: string
+          maxLength: 64
+          description: Informational.
+        metrics:
+          description: 'Default: datasource `local`, label `cluster`, value = the cluster name.'
+          allOf:
+            - $ref: '#/components/schemas/MetricsBinding'
         createAgentToken:
           type: boolean
           default: true
@@ -4484,6 +4886,16 @@ components:
           maxLength: 128
         policySource:
           $ref: '#/components/schemas/ClusterPolicySource'
+        provider:
+          type: string
+          maxLength: 64
+          description: Informational, e.g. `aws`.
+        region:
+          type: string
+          maxLength: 64
+          description: Informational.
+        metrics:
+          $ref: '#/components/schemas/MetricsBinding'
         reason:
           $ref: '#/components/schemas/ReasonText'
     ClusterConfig:
@@ -4513,6 +4925,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ConfigApproval'
+        hubVersion:
+          type: string
+          description: For the agent's `agent.version` check.
+        minAgentVersion:
+          type: string
+          description: Oldest agent version this hub supports (`agent.version` check).
     ConfigPolicy:
       type: object
       required: [id, name, type, version, priority, spec]
@@ -4555,6 +4973,14 @@ components:
           type: string
           format: date-time
           description: Informational; the hub ends the pause, the agent does not.
+        recheck:
+          type: boolean
+          description: |
+            A readiness re-check is pending (D-025): the agent re-runs its self-checks if
+            `recheckRequestedAt` is newer than its last run, and reports them in the next batch.
+        recheckRequestedAt:
+          type: string
+          format: date-time
     ConfigApproval:
       type: object
       description: |
@@ -4595,6 +5021,11 @@ components:
           type: string
           format: date-time
           description: Default 24 h from now; at most 7 days.
+        overrideReadiness:
+          type: boolean
+          description: |
+            Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+            audited with the change.
     Approval:
       type: object
       required: [id, workloadId, recommendationID, approvedBy, approvedAt, expiresAt, reason, state]
@@ -4640,6 +5071,11 @@ components:
           maxLength: 1024
         spec:
           $ref: '#/components/schemas/RightsizingPolicySpec'
+        overrideReadiness:
+          type: boolean
+          description: |
+            Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+            audited with the change.
         reason:
           $ref: '#/components/schemas/ReasonText'
     LayerSource:
@@ -4726,7 +5162,7 @@ components:
             type: string
     ConfigTargetType:
       type: string
-      enum: [settings, policy, workload-override, approval, cluster, automation, token, user]
+      enum: [settings, policy, workload-override, approval, cluster, automation, token, user, datasource, readiness]
     ConfigAction:
       type: string
       description: CamelCase action of a configuration change (`docs/contracts/events.md`).
@@ -4750,6 +5186,10 @@ components:
         - UserUpdated
         - UserDeleted
         - PasswordReset
+        - DatasourceCreated
+        - DatasourceUpdated
+        - DatasourceDeleted
+        - ReadinessChanged
     ConfigTarget:
       type: object
       required: [type, id]
@@ -4811,6 +5251,447 @@ components:
             $ref: '#/components/schemas/ConfigChange'
         continue:
           type: string
+    DatasourceType:
+      type: string
+      enum: [prometheus, victoriametrics, thanos, mimir, amp]
+    DatasourceAuthType:
+      type: string
+      enum: [none, bearer, basic, sigv4, mtls]
+    DatasourceSigV4:
+      type: object
+      description: AWS SigV4 (Amazon Managed Prometheus); credentials come from IRSA / Pod Identity.
+      required: [region]
+      properties:
+        region:
+          type: string
+        service:
+          type: string
+          default: aps
+        roleARN:
+          type: string
+          description: Role to assume; absent = the hub's own identity.
+    DatasourceTLSInput:
+      type: object
+      properties:
+        caCert:
+          type: string
+          description: PEM; not secret, returned as `caConfigured`.
+        clientCert:
+          type: string
+          description: PEM (mTLS).
+        clientKey:
+          type: string
+          writeOnly: true
+          description: PEM (mTLS). Write-only.
+        insecureSkipVerify:
+          type: boolean
+    DatasourceAuthInput:
+      type: object
+      description: |
+        Secret fields (`token`, `password`, `tls.clientKey`) are write-only. On update, omitted
+        secret fields keep the stored values.
+      required: [type]
+      properties:
+        type:
+          $ref: '#/components/schemas/DatasourceAuthType'
+        token:
+          type: string
+          writeOnly: true
+          description: For `bearer`.
+        username:
+          type: string
+          description: For `basic`.
+        password:
+          type: string
+          writeOnly: true
+          description: For `basic`.
+        sigv4:
+          $ref: '#/components/schemas/DatasourceSigV4'
+        tls:
+          $ref: '#/components/schemas/DatasourceTLSInput'
+    DatasourceAuthInfo:
+      type: object
+      description: The stored auth without secrets.
+      required: [type, secretConfigured]
+      properties:
+        type:
+          $ref: '#/components/schemas/DatasourceAuthType'
+        username:
+          type: string
+        sigv4:
+          $ref: '#/components/schemas/DatasourceSigV4'
+        secretConfigured:
+          type: boolean
+          description: A token, password or client key is stored.
+        caConfigured:
+          type: boolean
+        clientCertConfigured:
+          type: boolean
+        insecureSkipVerify:
+          type: boolean
+    DatasourceInput:
+      type: object
+      required: [name, type, url, reason]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$'
+        type:
+          $ref: '#/components/schemas/DatasourceType'
+        url:
+          type: string
+          format: uri
+          description: Query base URL (`/api/v1/query` is appended).
+        auth:
+          $ref: '#/components/schemas/DatasourceAuthInput'
+        clearSecrets:
+          type: boolean
+          description: On update, remove the stored secrets.
+        headers:
+          type: object
+          description: Extra request headers, e.g. `X-Scope-OrgID`. Not secret.
+          additionalProperties:
+            type: string
+        timeout:
+          $ref: '#/components/schemas/Duration'
+        maxPoints:
+          type: integer
+          minimum: 100
+          description: Most points per series per query; the recommender chunks queries to fit.
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    Datasource:
+      type: object
+      required: [id, name, type, url, builtIn, auth, headers, usedBy, version]
+      properties:
+        id:
+          type: string
+          description: '`local` for the built-in datasource, otherwise a UUID.'
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/DatasourceType'
+        url:
+          type: string
+        builtIn:
+          type: boolean
+        auth:
+          $ref: '#/components/schemas/DatasourceAuthInfo'
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        timeout:
+          $ref: '#/components/schemas/Duration'
+        maxPoints:
+          type: integer
+        usedBy:
+          type: array
+          description: Clusters bound to it.
+          items:
+            $ref: '#/components/schemas/ClusterName'
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          $ref: '#/components/schemas/Actor'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          $ref: '#/components/schemas/Actor'
+    DatasourceList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Datasource'
+    MetricsJobNames:
+      type: object
+      description: Scrape job names, only used to make diagnoses precise.
+      properties:
+        cadvisor:
+          type: array
+          items:
+            type: string
+        kubeStateMetrics:
+          type: array
+          items:
+            type: string
+    MetricsBinding:
+      type: object
+      description: |
+        Where a cluster's metrics are (D-025). Every query uses
+        `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the
+        registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster
+        Prometheus). Defaults: `local`, `cluster`, the cluster name.
+      required: [datasourceId, clusterLabel]
+      properties:
+        datasourceId:
+          type: string
+        clusterLabel:
+          type: string
+          pattern: '^([a-zA-Z_][a-zA-Z0-9_]*)?$'
+        clusterLabelValue:
+          type: string
+          description: Default the cluster name.
+        extraMatchers:
+          type: array
+          maxItems: 16
+          items:
+            type: string
+            pattern: '^[a-zA-Z_][a-zA-Z0-9_]*(=|!=|=~|!~)"([^"\\]|\\.)*"$'
+            examples: ['env="prod"']
+        jobNames:
+          $ref: '#/components/schemas/MetricsJobNames'
+    DatasourceTestRequest:
+      type: object
+      properties:
+        binding:
+          $ref: '#/components/schemas/MetricsBinding'
+    DatasourceTestResult:
+      type: object
+      required: [ok, checks]
+      properties:
+        ok:
+          type: boolean
+          description: No blocking check failed.
+        latencyMs:
+          type: integer
+          minimum: 0
+        found:
+          type: object
+          description: What the binding's matchers found.
+          properties:
+            containerSeries:
+              type: integer
+              minimum: 0
+            pods:
+              type: integer
+              minimum: 0
+            nodes:
+              type: integer
+              minimum: 0
+        labelValues:
+          type: array
+          description: Existing values of the cluster label (suggestions when it does not match).
+          items:
+            type: string
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessCheck'
+    ReadinessState:
+      type: string
+      description: Each state includes the ones before it (docs/contracts/readiness.md).
+      enum: [Registered, AgentConnected, MetricsOK, ReadyAudit, AutomationReady]
+    ReadinessSeverity:
+      type: string
+      enum: [blocking, warning, info]
+    ReadinessStatus:
+      type: string
+      enum: [pass, warn, fail, unknown]
+    ReadinessCategory:
+      type: string
+      enum: [datasource, metrics, pricing, agent, rbac, apply, webhook, nodes, integration, policy]
+    ReadinessCheckID:
+      type: string
+      description: Stable check id from the catalog (docs/contracts/readiness.md, api/v1alpha1/readiness).
+      pattern: '^[a-z]+\.[a-z0-9-]+$'
+      examples: [metrics.ksm-owners, rbac.resize]
+    ReadinessCheck:
+      type: object
+      required: [id, category, severity, source, status, message, checkedAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ReadinessCheckID'
+        category:
+          $ref: '#/components/schemas/ReadinessCategory'
+        severity:
+          $ref: '#/components/schemas/ReadinessSeverity'
+        source:
+          type: string
+          enum: [hub, agent]
+        gates:
+          description: For blocking checks, the state that needs this check to pass.
+          allOf:
+            - $ref: '#/components/schemas/ReadinessState'
+        status:
+          $ref: '#/components/schemas/ReadinessStatus'
+        message:
+          type: string
+          maxLength: 2048
+        remediation:
+          type: string
+          description: Exact command or values snippet that fixes it.
+        remediationType:
+          type: string
+          enum: [command, yaml, text]
+        docsURL:
+          type: string
+        checkedAt:
+          type: string
+          format: date-time
+        details:
+          type: object
+          additionalProperties:
+            type: string
+    AgentCapability:
+      type: object
+      description: Result of the SelfSubjectAccessReviews of one capability (check `rbac.<name>`).
+      required: [name, granted]
+      properties:
+        name:
+          type: string
+          enum: [read, resize, rollout, hpa, evict, policies, events]
+        granted:
+          type: boolean
+        missing:
+          type: array
+          description: ClusterRole rules to add, each as JSON (`{"apiGroups":[…],"resources":[…],"verbs":[…]}`).
+          items:
+            type: string
+        message:
+          type: string
+    ReadinessSummary:
+      type: object
+      required: [state, blocking, warnings]
+      properties:
+        state:
+          $ref: '#/components/schemas/ReadinessState'
+        blocking:
+          type: integer
+          minimum: 0
+          description: Blocking checks not passing.
+        warnings:
+          type: integer
+          minimum: 0
+          description: Warning checks with status warn or fail.
+        checkedAt:
+          type: string
+          format: date-time
+    ClusterReadiness:
+      type: object
+      required: [cluster, state, summary, checks]
+      properties:
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        state:
+          $ref: '#/components/schemas/ReadinessState'
+        stateSince:
+          type: string
+          format: date-time
+        checkedAt:
+          type: string
+          format: date-time
+          description: Newest result.
+        summary:
+          type: object
+          required: [blocking, warnings, unknown]
+          properties:
+            blocking:
+              type: integer
+              minimum: 0
+            warnings:
+              type: integer
+              minimum: 0
+            unknown:
+              type: integer
+              minimum: 0
+        nextState:
+          description: Absent at AutomationReady.
+          allOf:
+            - $ref: '#/components/schemas/ReadinessState'
+        blockedBy:
+          type: array
+          description: Ids of the blocking checks that keep the cluster from `nextState`.
+          items:
+            $ref: '#/components/schemas/ReadinessCheckID'
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentCapability'
+        recheckRequestedAt:
+          type: string
+          format: date-time
+          description: Present while a re-check is pending.
+        checks:
+          type: array
+          description: One result per catalog check, in catalog order.
+          items:
+            $ref: '#/components/schemas/ReadinessCheck'
+    RecheckAccepted:
+      type: object
+      required: [requestedAt, hubChecks, agentRecheck]
+      properties:
+        requestedAt:
+          type: string
+          format: date-time
+        hubChecks:
+          type: boolean
+          description: Hub metrics checks queued.
+        agentRecheck:
+          type: boolean
+          description: Recheck flag set in the cluster config.
+    ReadinessHistoryEntry:
+      type: object
+      required: [time, kind]
+      properties:
+        time:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          enum: [state, check]
+        fromState:
+          $ref: '#/components/schemas/ReadinessState'
+        toState:
+          $ref: '#/components/schemas/ReadinessState'
+        checkId:
+          $ref: '#/components/schemas/ReadinessCheckID'
+        fromStatus:
+          $ref: '#/components/schemas/ReadinessStatus'
+        toStatus:
+          $ref: '#/components/schemas/ReadinessStatus'
+        message:
+          type: string
+    ReadinessHistory:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessHistoryEntry'
+        continue:
+          type: string
+    InstallFormat:
+      type: string
+      enum: [helm, values, argocd]
+    InstallSnippet:
+      type: object
+      required: [format, content, filename, argocdIgnoreDifferences]
+      properties:
+        format:
+          $ref: '#/components/schemas/InstallFormat'
+        content:
+          type: string
+          description: Shell commands (`helm`), a values file (`values`) or an Application manifest (`argocd`).
+        filename:
+          type: string
+          examples: [install.sh, values.yaml, application.yaml]
+        argocdIgnoreDifferences:
+          type: string
+          description: Snippet for `argocd-cm` so Argo CD ignores fields owned by `resource-optimizer` (D-006).
+        notes:
+          type: array
+          items:
+            type: string
     Problem:
       type: object
       description: |
