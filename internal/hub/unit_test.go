@@ -1,8 +1,11 @@
 package hub
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -886,4 +889,22 @@ func (ms metricSet) find(name string, want map[string]string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// A request canceled by the client is not an error and gets no 500 body.
+func TestInternalClientCanceled(t *testing.T) {
+	var buf strings.Builder
+	s := &Server{Log: slog.New(slog.NewTextHandler(&buf, nil))}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rr := httptest.NewRecorder()
+	s.internal(rr, httptest.NewRequest(http.MethodGet, "/v1/summary", nil).WithContext(ctx), fmt.Errorf("query: %w", context.Canceled))
+	if rr.Body.Len() != 0 || strings.Contains(buf.String(), "ERROR") {
+		t.Errorf("canceled request: body %q log %q", rr.Body.String(), buf.String())
+	}
+	rr = httptest.NewRecorder()
+	s.internal(rr, httptest.NewRequest(http.MethodGet, "/v1/summary", nil), errors.New("boom"))
+	if rr.Code != http.StatusInternalServerError || !strings.Contains(buf.String(), "ERROR") {
+		t.Errorf("real error: %d %q", rr.Code, buf.String())
+	}
 }

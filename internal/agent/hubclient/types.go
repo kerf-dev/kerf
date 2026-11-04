@@ -18,6 +18,7 @@ var schemaTypes = map[string]any{
 	"Savings":                 Savings{},
 	"DataCoverage":            DataCoverage{},
 	"WorkloadRecommendation":  WorkloadRecommendation{},
+	"RecommendationPricing":   RecommendationPricing{},
 	"RecommendationList":      RecommendationList{},
 	"EffectiveModes":          EffectiveModes{},
 	"WorkloadStatus":          WorkloadStatus{},
@@ -109,6 +110,15 @@ type WorkloadRecommendation struct {
 	RiskFlags         []string                  `json:"riskFlags"`
 	MonthlySavingsUSD Savings                   `json:"monthlySavingsUSD"`
 	DataCoverage      DataCoverage              `json:"dataCoverage"`
+	// Pricing are the rates behind MonthlySavingsUSD (D-016); informational, unused by the agent.
+	Pricing *RecommendationPricing `json:"pricing,omitempty"`
+}
+
+// RecommendationPricing are the hourly rates the hub used for savings (D-016).
+type RecommendationPricing struct {
+	Source           string  `json:"source"`
+	CPUCoreHourUSD   float64 `json:"cpuCoreHourUSD"`
+	MemoryGiBHourUSD float64 `json:"memoryGiBHourUSD"`
 }
 
 // RecommendationList is one page of recommendations.

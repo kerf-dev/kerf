@@ -145,11 +145,26 @@ type ResourceExplanation struct {
 
 // ContainerExplanation explains why the values were recommended.
 type ContainerExplanation struct {
-	Profile      string               `json:"profile"`
-	StrategyName string               `json:"strategyName"`
-	Window       string               `json:"window"`
-	CPU          *ResourceExplanation `json:"cpu,omitempty"`
-	Memory       *ResourceExplanation `json:"memory,omitempty"`
+	Profile           string               `json:"profile"`
+	StrategyName      string               `json:"strategyName"`
+	Window            string               `json:"window"`
+	CPU               *ResourceExplanation `json:"cpu,omitempty"`
+	Memory            *ResourceExplanation `json:"memory,omitempty"`
+	ConfidenceFactors *ConfidenceFactors   `json:"confidenceFactors,omitempty"`
+}
+
+// ConfidenceFactor is one weighted term of a container's confidence.
+type ConfidenceFactor struct {
+	Score  float64 `json:"score"`
+	Weight float64 `json:"weight"`
+}
+
+// ConfidenceFactors explain a container's confidence: sum of score x weight (D-016).
+type ConfidenceFactors struct {
+	Coverage   ConfidenceFactor `json:"coverage"`
+	Samples    ConfidenceFactor `json:"samples"`
+	Variance   ConfidenceFactor `json:"variance"`
+	Confidence float64          `json:"confidence"`
 }
 
 // ContainerRecommendation is the recommendation for one container.
@@ -187,6 +202,20 @@ type WorkloadRecommendation struct {
 	RiskFlags         []string                  `json:"riskFlags"`
 	MonthlySavingsUSD Savings                   `json:"monthlySavingsUSD"`
 	DataCoverage      DataCoverage              `json:"dataCoverage"`
+	Pricing           *RecommendationPricing    `json:"pricing,omitempty"`
+}
+
+// Pricing sources (RecommendationPricing.source).
+const (
+	PricingSourceMetrics = "metrics"
+	PricingSourceDefault = "default"
+)
+
+// RecommendationPricing are the rates used for a recommendation's savings (D-016).
+type RecommendationPricing struct {
+	Source           string  `json:"source"`
+	CPUCoreHourUSD   float64 `json:"cpuCoreHourUSD"`
+	MemoryGiBHourUSD float64 `json:"memoryGiBHourUSD"`
 }
 
 // WithoutExplanations returns a copy whose containers carry no explanation.
@@ -392,6 +421,22 @@ type WorkloadList struct {
 	Items    []WorkloadRow `json:"items"`
 	Total    int           `json:"total"`
 	Continue string        `json:"continue,omitempty"`
+}
+
+// FacetCount is one value of a facet.
+type FacetCount struct {
+	Value string `json:"value"`
+	Count int    `json:"count"`
+}
+
+// WorkloadFacets is the response of GET /v1/workloads/facets.
+type WorkloadFacets struct {
+	Total      int          `json:"total"`
+	Clusters   []FacetCount `json:"clusters"`
+	Namespaces []FacetCount `json:"namespaces"`
+	Kinds      []FacetCount `json:"kinds"`
+	Modes      []FacetCount `json:"modes"`
+	RiskFlags  []FacetCount `json:"riskFlags"`
 }
 
 // WorkloadDetail is the response of GET /v1/workloads/{id}.
