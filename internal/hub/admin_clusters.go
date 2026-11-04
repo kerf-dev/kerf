@@ -12,6 +12,7 @@ import (
 	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
 	"github.com/tomer1983/resource-optimizer/internal/hub/auth"
 	"github.com/tomer1983/resource-optimizer/internal/hub/config"
+	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
 	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
 	"github.com/tomer1983/resource-optimizer/internal/hub/store"
 )
@@ -69,6 +70,9 @@ func (s *Server) clusterConfig(r *http.Request, c store.ClusterRow) (hubapi.Clus
 	if cfg.Approvals, err = s.Store.PendingApprovals(r.Context(), c.Name, s.now()); err != nil {
 		return cfg, err
 	}
+	if err := s.readinessFlags(r.Context(), &cfg); err != nil {
+		return cfg, err
+	}
 	cfg.ConfigVersion = config.Version(cfg)
 	return cfg, nil
 }
@@ -111,6 +115,13 @@ func (s *Server) clusterAdmin(r *http.Request, c store.ClusterRow, all map[strin
 	}
 	if c.Binding != nil {
 		out.Metrics = *c.Binding
+	}
+	if s.Onb != nil {
+		sum, err := s.readinessSummary(r.Context(), c.Name)
+		if err != nil {
+			return out, err
+		}
+		out.Readiness = sum
 	}
 	if out.Readiness.State == "" {
 		out.Readiness.State = "Registered"
@@ -156,6 +167,13 @@ func validEnum(w http.ResponseWriter, r *http.Request, field, v string, allowed 
 func validBinding(w http.ResponseWriter, r *http.Request, b *hubapi.MetricsBinding) bool {
 	if b == nil {
 		return true
+	}
+	if err := datasource.ValidateBinding(*b); err != nil {
+		badRequest(w, r, "invalid_metrics", "metrics: "+err.Error())
+		return false
+	}
+	for i, m := range b.ExtraMatchers {
+		b.ExtraMatchers[i], _ = datasource.NormalizeMatcher(m)
 	}
 	if b.DatasourceID == "" {
 		badRequest(w, r, "invalid_metrics", "metrics.datasourceId is required.")
@@ -217,6 +235,7 @@ func (s *Server) createCluster(w http.ResponseWriter, r *http.Request) {
 	if res.Token != nil {
 		out.AgentToken = &hubapi.TokenCreated{Token: *res.Token, Value: value}
 	}
+	s.triggerChecks(in.Name)
 	s.Log.InfoContext(r.Context(), "cluster registered", "cluster", in.Name, "by", PrincipalFrom(r.Context()).Actor().Name)
 	setETag(w, res.Cluster.Version)
 	writeJSONStatus(w, http.StatusCreated, out)
@@ -252,6 +271,9 @@ func (s *Server) updateCluster(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.storeError(w, r, err, "cluster")
 		return
+	}
+	if in.Metrics != nil {
+		s.triggerChecks(c.Name)
 	}
 	s.writeClusterAdmin(w, r, c, http.StatusOK)
 }
@@ -370,11 +392,11 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &in) || !validReason(w, r, in.Reason) {
 		return
 	}
-	if !validEnum(w, r, "role", in.Role, hubapi.RoleAgent, hubapi.RoleUI, hubapi.RoleAdmin) {
+	if !validEnum(w, r, "role", in.Role, hubapi.RoleAgent, hubapi.RoleUI, hubapi.RoleAdmin, hubapi.RolePricing) {
 		return
 	}
 	if (in.Role == hubapi.RoleAgent) != (in.Cluster != "") {
-		badRequest(w, r, "invalid_cluster", "An agent token needs a cluster; ui and admin tokens have none.")
+		badRequest(w, r, "invalid_cluster", "An agent token needs a cluster; ui, admin and pricing tokens have none.")
 		return
 	}
 	if in.Cluster != "" && !s.knownClusters(w, r, []string{in.Cluster}) {

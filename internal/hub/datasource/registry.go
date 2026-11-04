@@ -308,7 +308,7 @@ func (r *Registry) Create(ctx context.Context, in hubapi.DatasourceInput, actor 
 		return hubapi.Datasource{}, err
 	}
 	rec.ID = uuid.NewString()
-	rec.Secret, err = r.Cipher.Seal(rec.ID, sec)
+	rec.Secret, err = r.seal(rec.ID, sec)
 	if err != nil {
 		return hubapi.Datasource{}, err
 	}
@@ -333,7 +333,7 @@ func (r *Registry) Update(ctx context.Context, id string, ifMatch int, in hubapi
 	if prev.Version != ifMatch {
 		return before, after, ErrVersionConflict
 	}
-	prevSec, err := r.Cipher.Open(id, prev.Secret)
+	prevSec, err := r.open(id, prev.Secret)
 	if err != nil {
 		return before, after, err
 	}
@@ -343,7 +343,7 @@ func (r *Registry) Update(ctx context.Context, id string, ifMatch int, in hubapi
 	}
 	rec.ID, rec.Version, rec.CreatedAt, rec.CreatedBy = id, prev.Version+1, prev.CreatedAt, prev.CreatedBy
 	rec.UpdatedAt, rec.UpdatedBy = r.now(), &actor
-	if rec.Secret, err = r.Cipher.Seal(id, sec); err != nil {
+	if rec.Secret, err = r.seal(id, sec); err != nil {
 		return before, after, err
 	}
 	if err := r.Repo.UpdateDatasource(ctx, rec); err != nil {
@@ -393,7 +393,7 @@ func (r *Registry) Config(ctx context.Context, id string) (Config, error) {
 }
 
 func (r *Registry) config(rec Record) (Config, error) {
-	sec, err := r.Cipher.Open(rec.ID, rec.Secret)
+	sec, err := r.open(rec.ID, rec.Secret)
 	if err != nil {
 		return Config{}, err
 	}
@@ -435,6 +435,29 @@ func (r *Registry) Client(ctx context.Context, id string) (Config, *http.Client,
 	r.cache[id] = cachedClient{version: rec.Version, cfg: cfg, hc: hc}
 	r.mu.Unlock()
 	return cfg, hc, nil
+}
+
+// ErrNoCipher: a datasource secret is set but the hub has no secrets encryption key.
+var ErrNoCipher = &ValidationError{Problems: []string{"the hub has no datasource secrets key configured (onboarding.secretsKeyFile): only auth none and sigv4 are possible"}}
+
+func (r *Registry) seal(id string, s Secrets) ([]byte, error) {
+	if s.Empty() {
+		return nil, nil
+	}
+	if r.Cipher == nil {
+		return nil, ErrNoCipher
+	}
+	return r.Cipher.Seal(id, s)
+}
+
+func (r *Registry) open(id string, blob []byte) (Secrets, error) {
+	if len(blob) == 0 {
+		return Secrets{}, nil
+	}
+	if r.Cipher == nil {
+		return Secrets{}, ErrNoCipher
+	}
+	return r.Cipher.Open(id, blob)
 }
 
 func (r *Registry) invalidate(id string) {

@@ -62,6 +62,29 @@ config:
   history:
     fullResolution: 168h
     retention: 2160h
+  # Cluster onboarding and readiness (D-025, internal/hub/config.go OnboardingConfig).
+  onboarding:
+    # Readiness docs links: <docsBaseURL>/readiness#<check id>.
+    docsBaseURL: ""
+    checkInterval: 1h
+    agentPullInterval: 1m
+    minAgentVersion: ""
+    # Install snippets: the hub URL as agents reach it and the chart references
+    # (oci://registry/path/<chart>, <repo URL>|<chart>, or a local chart path).
+    hubURL: ""
+    agentChart: ""
+    webhookChart: ""
+    chartVersion: ""
+
+# Datasource secrets (bearer tokens, passwords, mTLS keys) are encrypted at rest with this key
+# (D-025). create: the chart generates a random key once and keeps it (helm.sh/resource-policy:
+# keep); back the Secret up. Or point existingSecret at your own Secret (32 bytes, base64 or hex,
+# one key per line; the first encrypts, the others still decrypt during a rotation).
+onboarding:
+  secretsKey:
+    create: true
+    existingSecret: ""
+    existingSecretKey: key
 
 resources:
   requests:

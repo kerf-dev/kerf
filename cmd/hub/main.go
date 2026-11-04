@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tomer1983/resource-optimizer/internal/hub"
+	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
 	"github.com/tomer1983/resource-optimizer/internal/hub/store"
 	"github.com/tomer1983/resource-optimizer/internal/recommender"
 )
@@ -78,9 +79,21 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	if strategy == nil {
 		strategy = recommender.PercentileStrategy{}
 	}
+	var cipher *datasource.Cipher
+	if cfg.Onboarding.SecretsKeyFile != "" {
+		if cipher, err = datasource.LoadCipher(cfg.Onboarding.SecretsKeyFile); err != nil {
+			return err
+		}
+	} else {
+		log.Warn("no datasource secrets key (onboarding.secretsKeyFile): datasources with bearer, basic or mTLS auth cannot be created")
+	}
+	if err := srv.InitOnboarding(ctx, cipher); err != nil {
+		return err
+	}
+	source := &recommender.Source{Q: prom, Cfg: recCfg, Binder: srv.Onb.Bind.ForRecommender}
 	job := &hub.Job{
 		Store:   st,
-		Engine:  &recommender.Engine{Loader: &recommender.Source{Q: prom, Cfg: recCfg}, Cfg: recCfg, Strategy: strategy},
+		Engine:  &recommender.Engine{Loader: source, Cfg: recCfg, Strategy: strategy},
 		Metrics: metrics, Cfg: cfg, Log: log,
 	}
 	srv.Job = job
@@ -96,6 +109,7 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 		errc <- httpSrv.ListenAndServe()
 	}()
 	go job.Loop(ctx)
+	go srv.RunReadiness(ctx)
 	go metrics.RefreshLoop(ctx, st, time.Minute, log)
 
 	select {

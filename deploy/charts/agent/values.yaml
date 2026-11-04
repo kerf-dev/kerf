@@ -86,6 +86,12 @@ health:
   # Empty disables throttling-based rollback unless cadvisorFallback is on.
   metricsURL: http://victoria-metrics.hub.svc:8428
   minThrottlingWindow: 2m
+  # The cluster's metrics binding at metricsURL (D-025): label clusterLabel = clusterLabelValue
+  # (default: clusterName; clusterLabel "" = no cluster matcher) plus extra PromQL matchers such as
+  # 'env="prod"'. The hub's install snippet fills these from the cluster's binding.
+  clusterLabel: cluster
+  clusterLabelValue: ""
+  extraMatchers: []
   # Read throttling from the kubelets' cAdvisor endpoints when metricsURL fails (offline hub).
   # Adds `get nodes/proxy` to the ClusterRole: that permission reaches every kubelet API, so it is
   # off by default.
@@ -98,6 +104,27 @@ health:
 onDelete:
   maxPodDeletesPerRun: 1
   settle: 30s
+
+# Readiness self-checks (D-025): RBAC per capability, CRDs, in-place resize, webhook, Argo CD,
+# nodes, clock skew. They run at start, every interval and when the hub asks for a re-check, and
+# are reported with the workload status.
+selfCheck:
+  enabled: true
+  interval: 10m
+  # Create a pod with dryRun=All to see the webhook mutate it. Adds `create pods` to the
+  # ClusterRole (no pod is ever persisted, but the permission is broad), so it is off by default.
+  webhookDryRun: false
+  # MutatingWebhookConfiguration of the webhook chart; empty = found by its webhook name.
+  webhookConfigName: ""
+  docsBaseURL: ""
+  argocd:
+    # Read argocd-cm (only that ConfigMap, a Role in the Argo CD namespace) to check that Argo CD
+    # ignores the agent's fields (D-006). The Role is created only when the namespace exists at
+    # install time (Helm lookup); set force: true when rendering without cluster access (e.g. Argo
+    # CD renders the chart) and the namespace exists.
+    enabled: true
+    namespace: argocd
+    force: false
 
 replicas: 1
 leaderElection: false

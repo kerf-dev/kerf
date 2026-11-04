@@ -1097,6 +1097,80 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/internal/metrics-bindings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Metrics binding of every registered cluster (pricing service)
+     * @description The binding of every registered, not deleted cluster (D-025, D-026). `bound` is false for a
+     *     cluster without a stored binding: its metrics are in datasource `local` with label `cluster`
+     *     = its name. Never contains datasource secrets. An `admin` token may call it too.
+     */
+    get: operations['listMetricsBindings']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/internal/datasources/{datasourceId}/api/v1/query': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    /**
+     * Instant PromQL query against a datasource (pricing service)
+     * @description Runs the query against the datasource with the datasource's auth and headers, which never
+     *     leave the hub (D-026), and returns the datasource's response unchanged (the Prometheus
+     *     HTTP API `/api/v1/query` format, including its errors and status code). Only `query`,
+     *     `time` and `timeout` are forwarded. POST with a form body is accepted too.
+     */
+    get: operations['proxyInstantQuery']
+    put?: never
+    /** Instant PromQL query against a datasource (form body) */
+    post: operations['proxyInstantQueryPost']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/internal/datasources/{datasourceId}/api/v1/query_range': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    /**
+     * Range PromQL query against a datasource (pricing service)
+     * @description As the instant query, for `/api/v1/query_range`: `query`, `start`, `end`, `step` and
+     *     `timeout` are forwarded.
+     */
+    get: operations['proxyRangeQuery']
+    put?: never
+    /** Range PromQL query against a datasource (form body) */
+    post: operations['proxyRangeQueryPost']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/clusters/{cluster}/readiness': {
     parameters: {
       query?: never
@@ -1824,10 +1898,11 @@ export interface components {
      */
     UserRole: 'viewer' | 'operator' | 'admin'
     /**
-     * @description Role of an API (machine) token (D-012); unchanged by the admin area.
+     * @description Role of an API (machine) token (D-012). `pricing` (D-026) is the pricing service: only
+     *     `/v1/internal/*` (metrics bindings and the datasource query proxy); no cluster.
      * @enum {string}
      */
-    TokenRole: 'agent' | 'ui' | 'admin'
+    TokenRole: 'agent' | 'ui' | 'admin' | 'pricing'
     /** @example alice */
     Username: string
     /** @description At least 8 characters; at most 72 bytes (bcrypt). */
@@ -2798,6 +2873,36 @@ export interface components {
       cadvisor?: string[]
       kubeStateMetrics?: string[]
     }
+    /** @description A cluster's metrics binding for the pricing service (D-026). */
+    ClusterMetricsBinding: {
+      cluster: string
+      binding: components['schemas']['MetricsBinding']
+      /** @description false = no stored binding (datasource local, label cluster = the name). */
+      bound: boolean
+    }
+    MetricsBindingList: {
+      items: components['schemas']['ClusterMetricsBinding'][]
+    }
+    PromQueryForm: {
+      query: string
+      time?: string
+      start?: string
+      end?: string
+      step?: string
+      timeout?: string
+    }
+    /** @description Prometheus HTTP API response (`status`, `data`, `errorType`, `error`), passed through. */
+    PromQueryResponse: {
+      /** @enum {string} */
+      status: 'success' | 'error'
+      data?: {
+        [key: string]: unknown
+      }
+      errorType?: string
+      error?: string
+    } & {
+      [key: string]: unknown
+    }
     /**
      * @description Where a cluster's metrics are (D-025). Every query uses
      *     `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the
@@ -2978,6 +3083,24 @@ export interface components {
     }
   }
   responses: {
+    /** @description The datasource could not be reached. */
+    BadGateway: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/problem+json': components['schemas']['Problem']
+      }
+    }
+    /** @description The datasource's Prometheus HTTP API response, unchanged (also for its own errors). */
+    PromQueryResult: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/json': components['schemas']['PromQueryResponse']
+      }
+    }
     /** @description The request is malformed or fails validation. */
     BadRequest: {
       headers: {
@@ -3105,6 +3228,8 @@ export interface components {
     IfMatch: string
     /** @description ETag (`"<version>"`) of the object being changed; checked when given (`412` if stale). */
     IfMatchOptional: string
+    /** @description PromQL expression. */
+    PromQuery: string
     /** @description `local` or a UUID. */
     DatasourceID: string
     PolicyID: string
@@ -5060,6 +5185,128 @@ export interface operations {
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
       404: components['responses']['DatasourceNotFound']
+    }
+  }
+  listMetricsBindings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Bindings by cluster. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MetricsBindingList']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  proxyInstantQuery: {
+    parameters: {
+      query: {
+        /** @description PromQL expression. */
+        query: components['parameters']['PromQuery']
+        time?: string
+        timeout?: string
+      }
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: components['responses']['PromQueryResult']
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+      502: components['responses']['BadGateway']
+    }
+  }
+  proxyInstantQueryPost: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/x-www-form-urlencoded': components['schemas']['PromQueryForm']
+      }
+    }
+    responses: {
+      200: components['responses']['PromQueryResult']
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+      502: components['responses']['BadGateway']
+    }
+  }
+  proxyRangeQuery: {
+    parameters: {
+      query: {
+        /** @description PromQL expression. */
+        query: components['parameters']['PromQuery']
+        start?: string
+        end?: string
+        step?: string
+        timeout?: string
+      }
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: components['responses']['PromQueryResult']
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+      502: components['responses']['BadGateway']
+    }
+  }
+  proxyRangeQueryPost: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/x-www-form-urlencoded': components['schemas']['PromQueryForm']
+      }
+    }
+    responses: {
+      200: components['responses']['PromQueryResult']
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+      502: components['responses']['BadGateway']
     }
   }
   getClusterReadiness: {
