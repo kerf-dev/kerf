@@ -42,7 +42,9 @@ import { PauseDialog } from '@/components/admin/pause-dialog'
 import { PolicySpecForm } from '@/components/admin/policy-form'
 import {
   checkTitle,
+  isPending,
   isProblem,
+  withPending,
   ReadinessBadge,
   ReadinessChecklist,
   ReadinessStepper,
@@ -77,7 +79,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 function OverviewTab({ c }: { c: ClusterAdmin }) {
   const readiness = useReadiness(c.name)
   const r = readiness.data
-  const problems = (r?.checks ?? []).filter(isProblem)
+  const all = r ? withPending(r.checks, r.blockedBy) : []
+  const problems = all.filter(isProblem)
+  const pending = all.filter(isPending).length
   const inv = c.policyInventory?.items ?? []
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -117,7 +121,13 @@ function OverviewTab({ c }: { c: ClusterAdmin }) {
                   </li>
                 ))}
               </ul>
-            ) : r ? (
+            ) : null}
+            {r && pending ? (
+              <p className="text-[13px] text-muted-foreground" data-testid="readiness-pending">
+                {pending} blocking check{pending === 1 ? '' : 's'} not reported yet
+                {r.nextState ? ` (needed for ${STATE_INFO[r.nextState].label})` : ''}.
+              </p>
+            ) : r && !problems.length ? (
               <p className="text-[13px] text-muted-foreground">Every check passes.</p>
             ) : null}
           </CardContent>
@@ -263,6 +273,7 @@ function ReadinessTab({ cluster }: { cluster: string }) {
                   {r.nextState && r.blockedBy?.length
                     ? ` · ${r.blockedBy.length} blocking check(s) before ${STATE_INFO[r.nextState].label}`
                     : ''}
+                  {r.summary.unknown ? ` · ${r.summary.unknown} not reported yet` : ''}
                 </div>
               </div>
               {r.recheckRequestedAt ? (
@@ -291,7 +302,7 @@ function ReadinessTab({ cluster }: { cluster: string }) {
             <ReadinessStepper state={r.state} nextState={r.nextState} blockedBy={r.blockedBy} />
           </CardContent>
         </Card>
-        <ReadinessChecklist checks={r.checks} capabilities={r.capabilities} />
+        <ReadinessChecklist checks={r.checks} capabilities={r.capabilities} blockedBy={r.blockedBy} />
       </div>
       <Card className="h-fit">
         <CardHeader className="pb-2">

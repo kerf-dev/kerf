@@ -148,7 +148,7 @@ function VerifyStep({ cluster }: { cluster: string }) {
         </div>
       </div>
       <ReadinessStepper state={r.state} nextState={r.nextState} blockedBy={r.blockedBy} />
-      <ReadinessChecklist checks={r.checks} capabilities={r.capabilities} />
+      <ReadinessChecklist checks={r.checks} capabilities={r.capabilities} blockedBy={r.blockedBy} />
     </div>
   )
 }
