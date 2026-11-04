@@ -89,6 +89,7 @@ type wlSpec struct {
 	containers []ctrSpec
 	replicas   float64
 	days       float64 // days of samples before end
+	hpa        *recommender.HPA
 }
 
 // fakeLoader returns synthetic cluster data. Current requests grow by 50 % per day before
@@ -140,7 +141,7 @@ func (l *fakeLoader) Load(_ context.Context, cluster string, end time.Time, wind
 			continue
 		}
 		n := int(w.days * 24 * float64(time.Hour/fakeStep))
-		rw := &recommender.RawWorkload{Key: w.key, Containers: map[string]*recommender.RawContainer{}, HasRequests: true}
+		rw := &recommender.RawWorkload{Key: w.key, Containers: map[string]*recommender.RawContainer{}, HasRequests: true, HPA: w.hpa}
 		for i := 0; i < n; i++ {
 			rw.Pods = append(rw.Pods, recommender.Sample{T: end.Add(-time.Duration(n-1-i) * fakeStep), V: w.replicas})
 		}

@@ -258,13 +258,30 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	type hpaKey struct{ ns, name string }
 	hpaTargets := map[hpaKey]Labels{}
 	hpaMetrics := map[hpaKey][]string{}
+	hpaUtil := map[hpaKey]map[string]float64{}
+	hpaMin, hpaMax, hpaPeak := map[hpaKey]float64{}, map[hpaKey]float64{}, map[hpaKey]float64{}
 	instantQ("hpa", q.HPAInfo(cfg.InventoryLookback), func(r VectorSample) {
 		hpaTargets[hpaKey{r.Labels["namespace"], r.Labels["horizontalpodautoscaler"]}] = r.Labels
 	})
 	instantQ("hpaMetrics", q.HPAMetrics(cfg.InventoryLookback), func(r VectorSample) {
 		k := hpaKey{r.Labels["namespace"], r.Labels["horizontalpodautoscaler"]}
-		hpaMetrics[k] = append(hpaMetrics[k], r.Labels["metric_name"]+"/"+r.Labels["metric_target_type"])
+		name, typ := r.Labels["metric_name"], r.Labels["metric_target_type"]
+		hpaMetrics[k] = append(hpaMetrics[k], name+"/"+typ)
+		if typ == "utilization" {
+			if hpaUtil[k] == nil {
+				hpaUtil[k] = map[string]float64{}
+			}
+			hpaUtil[k][name] = r.Sample.V
+		}
 	})
+	hpaNum := func(name, query string, dst map[hpaKey]float64) {
+		instantQ(name, query, func(r VectorSample) {
+			dst[hpaKey{r.Labels["namespace"], r.Labels["horizontalpodautoscaler"]}] = r.Sample.V
+		})
+	}
+	hpaNum("hpaMin", q.HPAReplicaBounds("min", cfg.InventoryLookback), hpaMin)
+	hpaNum("hpaMax", q.HPAReplicaBounds("max", cfg.InventoryLookback), hpaMax)
+	hpaNum("hpaPeak", q.HPAPeakReplicas(window), hpaPeak)
 	var cpuRate, memRate, nodes float64
 	cpuAvg, cpuCount := q.Pricing("ro_cpu_core_hourly_cost_usd", time.Hour)
 	memAvg, _ := q.Pricing("ro_memory_gib_hourly_cost_usd", time.Hour)
@@ -294,7 +311,7 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 		if w := d.Workloads[wk]; w != nil {
 			ms := hpaMetrics[k]
 			sort.Strings(ms)
-			w.HPA = &HPA{Name: k.name, Metrics: ms}
+			w.HPA = &HPA{Name: k.name, Metrics: ms, Targets: hpaUtil[k], MinReplicas: hpaMin[k], MaxReplicas: hpaMax[k], PeakReplicas: hpaPeak[k]}
 		}
 	}
 	d.Pricing = Pricing{CPUCoreHour: cfg.DefaultCPUCoreHourUSD, MemoryGiBHour: cfg.DefaultMemoryGiBHourUSD, Source: PricingSourceDefault}

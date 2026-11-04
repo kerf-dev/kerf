@@ -36,7 +36,7 @@ re-read on every request. The Secret is optional: without it the hub answers 401
 | pods/resize | patch | in-place resize (D-007) |
 | nodes | get list watch | swap / unsupported-node detection |
 | nodes/proxy | get (only with `health.cadvisorFallback`) | throttling from kubelet cAdvisor when the hub metrics are unreachable; reaches every kubelet API, hence off by default |
-| autoscaling horizontalpodautoscalers | get list watch | HPA coupling (D-011) |
+| autoscaling horizontalpodautoscalers | get list watch (+ patch unless readOnly) | HPA coupling (D-011); target set by HPA coordination (WO-11) |
 | rightsizingpolicies | get list watch | policy resolution |
 | rightsizingrecommendations (+ /status) | get list watch create update patch delete | the agent's record per workload |
 | events (core and events.k8s.io) | create patch | Kubernetes Events on RightsizingRecommendations |

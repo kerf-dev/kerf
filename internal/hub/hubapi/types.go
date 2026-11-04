@@ -207,6 +207,8 @@ type WorkloadRecommendation struct {
 	MonthlySavingsUSD Savings                   `json:"monthlySavingsUSD"`
 	DataCoverage      DataCoverage              `json:"dataCoverage"`
 	Pricing           *RecommendationPricing    `json:"pricing,omitempty"`
+	// HPA is the HPA coordination (WO-11) of hpa-coupled workloads.
+	HPA *HPACoordination `json:"hpa,omitempty"`
 }
 
 // Pricing sources (RecommendationPricing.source).
@@ -580,3 +582,22 @@ type RecomputeAccepted struct {
 	RequestedAt time.Time `json:"requestedAt"`
 	Coalesced   bool      `json:"coalesced"`
 }
+
+// HPACoordination is WorkloadRecommendation.hpa (WO-11).
+type HPACoordination struct {
+	Name              string `json:"name"`
+	Metric            string `json:"metric"`
+	CurrentTarget     int    `json:"currentTarget"`
+	RecommendedTarget int    `json:"recommendedTarget,omitempty"`
+	MinReplicas       *int   `json:"minReplicas,omitempty"`
+	MaxReplicas       *int   `json:"maxReplicas,omitempty"`
+	SkipReason        string `json:"skipReason,omitempty"`
+}
+
+// HPA skip reasons (HPACoordination.skipReason).
+const (
+	HPASkipMaxReplicas      = "max-replicas-reached"
+	HPASkipUnsupported      = "unsupported-metrics"
+	HPASkipMissingRequest   = "missing-request"
+	HPASkipTargetOutOfRange = "target-out-of-bounds"
+)

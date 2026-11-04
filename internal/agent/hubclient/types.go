@@ -19,6 +19,7 @@ var schemaTypes = map[string]any{
 	"DataCoverage":            DataCoverage{},
 	"WorkloadRecommendation":  WorkloadRecommendation{},
 	"RecommendationPricing":   RecommendationPricing{},
+	"HPACoordination":         HPACoordination{},
 	"RecommendationList":      RecommendationList{},
 	"EffectiveModes":          EffectiveModes{},
 	"WorkloadStatus":          WorkloadStatus{},
@@ -113,6 +114,20 @@ type WorkloadRecommendation struct {
 	DataCoverage      DataCoverage              `json:"dataCoverage"`
 	// Pricing are the rates behind MonthlySavingsUSD (D-016); informational, unused by the agent.
 	Pricing *RecommendationPricing `json:"pricing,omitempty"`
+	// HPA is the HPA coordination of hpa-coupled workloads (WO-11).
+	HPA *HPACoordination `json:"hpa,omitempty"`
+}
+
+// HPACoordination is the hub's HPA target recommendation (WO-11). Without RecommendedTarget
+// (SkipReason set) the requests of Metric must not change.
+type HPACoordination struct {
+	Name              string `json:"name"`
+	Metric            string `json:"metric"`
+	CurrentTarget     int32  `json:"currentTarget"`
+	RecommendedTarget int32  `json:"recommendedTarget,omitempty"`
+	MinReplicas       *int32 `json:"minReplicas,omitempty"`
+	MaxReplicas       *int32 `json:"maxReplicas,omitempty"`
+	SkipReason        string `json:"skipReason,omitempty"`
 }
 
 // RecommendationPricing are the hourly rates the hub used for savings (D-016).

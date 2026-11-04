@@ -203,6 +203,9 @@ func (w *Watcher) finishRollback(ctx context.Context, rsr *v1alpha1.RightsizingR
 		return client.IgnoreNotFound(err)
 	}
 	b := &breach{reason: c.Reason, resources: rolledBackResources(rsr, c.Reason), message: c.Message}
+	if err := apply.RestoreHPA(ctx, w.Client, w.Reader, rsr, b.resources); err != nil { // WO-11; no-op once restored
+		return err
+	}
 	restored := RestoreTargets(rsr.Spec.Containers, rsr.Status.Previous, b.resources)
 	live, err := w.liveMatches(ctx, rsr, obj, restored, b.resources)
 	if err != nil {
@@ -305,6 +308,11 @@ func (w *Watcher) restore(ctx context.Context, rsr *v1alpha1.RightsizingRecommen
 		}
 		if err := apply.ApplyTemplate(ctx, w.Client, obj, kind, restored, own, ann); err != nil {
 			w.emitFailed(rsr, obj, fmt.Errorf("restore pod template: %w", err))
+			return err
+		}
+		// The HPA target changed together with the requests goes back with them (WO-11).
+		if err := apply.RestoreHPA(ctx, w.Client, w.Reader, rsr, b.resources); err != nil {
+			w.emitFailed(rsr, obj, fmt.Errorf("restore HPA target: %w", err))
 			return err
 		}
 	}
