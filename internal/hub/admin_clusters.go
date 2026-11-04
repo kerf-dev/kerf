@@ -292,7 +292,7 @@ func (s *Server) deleteCluster(w http.ResponseWriter, r *http.Request) {
 		s.storeError(w, r, err, "cluster")
 		return
 	}
-	s.forgetTokens()
+	s.forgetTokens(r.Context())
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -439,7 +439,7 @@ func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request) {
 		s.storeError(w, r, err, "token")
 		return
 	}
-	s.forgetTokens()
+	s.forgetTokens(r.Context())
 	writeJSON(w, t)
 }
 

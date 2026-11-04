@@ -40,7 +40,8 @@ func (s *Server) InitOnboarding(ctx context.Context, cipher *datasource.Cipher) 
 	hc := &http.Client{Timeout: 30 * time.Second}
 	gauges := readiness.NewGauges()
 	if s.Metrics != nil && s.Metrics.Registry != nil {
-		if err := gauges.Register(s.Metrics.Registry); err != nil {
+		// Database state: exported by the leader only (WO-18a).
+		if err := gauges.Register(s.Metrics.LeaderOnly()); err != nil {
 			return err
 		}
 	}
@@ -68,21 +69,44 @@ func (s *Server) InitOnboarding(ctx context.Context, cipher *datasource.Cipher) 
 const RecheckTimeout = 15 * time.Minute
 
 // RunReadiness runs the hourly metrics checks and, every minute, the cheap hub checks
-// (agent.connected, metrics.recommendations). It blocks until ctx is done.
+// (agent.connected, metrics.recommendations), the re-check expiry and the readiness gauges (from
+// the database: other replicas store agent self-checks too). It blocks until ctx is done and
+// the runner stopped. Leader only (WO-18a).
 func (s *Server) RunReadiness(ctx context.Context) {
 	if s.Onb == nil {
 		return
 	}
-	go s.Onb.Runner.Run(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); s.Onb.Runner.Run(ctx) }()
+	defer func() { <-done }()
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 	for {
 		s.refreshAgentChecks(ctx)
+		s.refreshReadinessGauges(ctx)
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 		}
+	}
+}
+
+// refreshReadinessGauges sets ro_cluster_readiness* of every registered cluster from the
+// database and drops the series of deregistered ones.
+func (s *Server) refreshReadinessGauges(ctx context.Context) {
+	names, err := s.clusterNames(ctx)
+	if err == nil {
+		err = s.Onb.Readiness.Refresh(ctx, names)
+	}
+	if err != nil {
+		if ctx.Err() == nil {
+			s.Log.WarnContext(ctx, "readiness: refresh gauges", "err", err)
+		}
+		return
+	}
+	if g := s.Onb.Readiness.Gauges; g != nil {
+		g.Retain(names)
 	}
 }
 
@@ -263,6 +287,13 @@ func (s *Server) triggerChecks(clusters ...string) {
 		return
 	}
 	for _, c := range clusters {
+		if s.Coord != nil && !s.Coord.IsLeader() {
+			// The leader runs the checks (WO-18a).
+			if err := s.Store.Notify(context.Background(), store.NotifyReadinessPrefix+c); err != nil {
+				s.Log.Warn("notify readiness trigger", "cluster", c, "err", err)
+			}
+			continue
+		}
 		s.Onb.Runner.Trigger(c)
 	}
 }
