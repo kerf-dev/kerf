@@ -1,0 +1,55 @@
+# StatefulSet with updateStrategy OnDelete: a template change only takes effect when a pod is deleted.
+apiVersion: v1
+kind: Service
+metadata:
+  name: statefulset-ondelete
+  labels:
+    app: statefulset-ondelete
+spec:
+  clusterIP: None
+  selector:
+    app: statefulset-ondelete
+  ports:
+    - name: placeholder
+      port: 8080
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: statefulset-ondelete
+  labels:
+    app: statefulset-ondelete
+spec:
+  serviceName: statefulset-ondelete
+  replicas: 2
+  updateStrategy:
+    type: OnDelete
+  selector:
+    matchLabels:
+      app: statefulset-ondelete
+  template:
+    metadata:
+      labels:
+        app: statefulset-ondelete
+    spec:
+      containers:
+        - name: app
+          image: colinianking/stress-ng:77b17fb95ec2f00e1c2ac2a8a20fe799150d8bd5
+          args: ["--cpu", "1", "--cpu-load", "2", "--vm", "1", "--vm-bytes", "16M", "--vm-hang", "0", "--timeout", "0"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 96Mi
+            limits:
+              memory: 192Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 64Mi

@@ -1,0 +1,42 @@
+# Source of the small Java program used by jvm-maxram and jvm-xmx (run with JDK single-file launch).
+# Keeps LIVE_MB of long-lived byte arrays and churns CHURN_MB_PER_SEC of garbage, so heap and RSS look
+# like a real service: a stable live set plus allocation pressure.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jvm-app
+  labels:
+    app: jvm-app
+data:
+  Load.java: |
+    import java.lang.management.ManagementFactory;
+    import java.util.ArrayDeque;
+
+    public class Load {
+        public static void main(String[] args) throws Exception {
+            int liveMb = Integer.parseInt(System.getenv().getOrDefault("LIVE_MB", "48"));
+            int churnMbPerSec = Integer.parseInt(System.getenv().getOrDefault("CHURN_MB_PER_SEC", "8"));
+            ArrayDeque<byte[]> live = new ArrayDeque<>();
+            for (int i = 0; i < liveMb; i++) live.add(touch(new byte[1 << 20]));
+            System.out.printf("started: maxHeap=%dMiB live=%dMiB churn=%dMiB/s args=%s%n",
+                Runtime.getRuntime().maxMemory() >> 20, liveMb, churnMbPerSec,
+                ManagementFactory.getRuntimeMXBean().getInputArguments());
+            long sink = 0;
+            for (long tick = 0; ; tick++) {
+                for (int i = 0; i < churnMbPerSec; i++) sink += touch(new byte[1 << 20])[0];
+                live.poll();
+                live.add(touch(new byte[1 << 20]));
+                if (tick % 60 == 0) {
+                    Runtime rt = Runtime.getRuntime();
+                    System.out.printf("heap used=%dMiB committed=%dMiB max=%dMiB (%d)%n",
+                        (rt.totalMemory() - rt.freeMemory()) >> 20, rt.totalMemory() >> 20, rt.maxMemory() >> 20, sink);
+                }
+                Thread.sleep(1000);
+            }
+        }
+
+        static byte[] touch(byte[] b) {
+            for (int i = 0; i < b.length; i += 4096) b[i] = 1;
+            return b;
+        }
+    }

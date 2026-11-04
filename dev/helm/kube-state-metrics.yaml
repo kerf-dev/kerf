@@ -1,0 +1,27 @@
+# prometheus-community/kube-state-metrics on every spoke, namespace monitoring. Service kube-state-metrics:8080.
+fullnameOverride: kube-state-metrics
+# vmagent scrapes KSM through its own static job; without this the Service annotation would make the
+# annotated-services job scrape it a second time and duplicate every kube_* series.
+prometheusScrape: false
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+# Expose the node labels pricing (WO-03) needs on kube_node_labels, and the workload `app` label.
+metricLabelsAllowlist:
+  - nodes=[node.kubernetes.io/instance-type,karpenter.sh/capacity-type,topology.kubernetes.io/region,topology.kubernetes.io/zone]
+  - pods=[app]
+  - deployments=[app]
+  - statefulsets=[app]
+  - daemonsets=[app]
+  - cronjobs=[app]
+
+prometheus:
+  monitor:
+    enabled: false
+selfMonitor:
+  enabled: false

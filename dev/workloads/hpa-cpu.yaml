@@ -1,0 +1,49 @@
+# CPU-utilization HPA: ~40m per pod against a 100m request (40%), target 60%, so it settles at
+# minReplicas. spec.replicas is deliberately absent so Argo CD does not fight the HPA.
+# Guardrail case: hpa-coupled, audit-only until WO-11 (D-011).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hpa-cpu
+  labels:
+    app: hpa-cpu
+spec:
+  selector:
+    matchLabels:
+      app: hpa-cpu
+  template:
+    metadata:
+      labels:
+        app: hpa-cpu
+    spec:
+      containers:
+        - name: app
+          image: colinianking/stress-ng:77b17fb95ec2f00e1c2ac2a8a20fe799150d8bd5
+          args: ["--cpu", "1", "--cpu-load", "4", "--timeout", "0"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-cpu
+  labels:
+    app: hpa-cpu
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hpa-cpu
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60

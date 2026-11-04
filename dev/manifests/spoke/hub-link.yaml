@@ -1,0 +1,64 @@
+# Spoke -> hub link. Applied to every spoke by dev/scripts/up.sh with HUB_IP replaced by the hub
+# node's address on the shared Docker network `ro-dev` (k3d keeps node IPs stable across restarts).
+# Spoke components reach hub services by stable in-cluster names, the way they would reach a real
+# hub endpoint in EKS:
+#   http://victoria-metrics.hub.svc:8428   -> hub VictoriaMetrics (NodePort 30428)
+#   http://hub-api.hub.svc:8080            -> hub API (WO-04, expected on hub NodePort 30080)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hub
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-metrics
+  namespace: hub
+spec:
+  ports:
+    - name: http
+      port: 8428
+      targetPort: 30428
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: victoria-metrics-hub
+  namespace: hub
+  labels:
+    kubernetes.io/service-name: victoria-metrics
+    endpointslice.kubernetes.io/managed-by: dev.resource-optimizer
+addressType: IPv4
+ports:
+  - name: http
+    port: 30428
+    protocol: TCP
+endpoints:
+  - addresses: ["HUB_IP"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hub-api
+  namespace: hub
+spec:
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 30080
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: hub-api-hub
+  namespace: hub
+  labels:
+    kubernetes.io/service-name: hub-api
+    endpointslice.kubernetes.io/managed-by: dev.resource-optimizer
+addressType: IPv4
+ports:
+  - name: http
+    port: 30080
+    protocol: TCP
+endpoints:
+  - addresses: ["HUB_IP"]

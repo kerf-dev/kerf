@@ -1,0 +1,72 @@
+# argo/argo-cd on ro-spoke-1, namespace argocd. UI/API over plain http on NodePort 30080 -> http://localhost:18090
+# Minimal footprint: no dex, no notifications, no ApplicationSet controller, single replicas.
+global:
+  domain: localhost:18090
+
+crds:
+  install: true
+  keep: false
+
+configs:
+  params:
+    server.insecure: true
+  secret:
+    # dev only: admin / admin123
+    argocdServerAdminPassword: "$2a$10$IY3HzK07ITQLWi82DVVN0ObhxILHvsZ3kx66blLKUlCJjnML3YWNO"
+    argocdServerAdminPasswordMtime: "2026-11-04T00:00:00Z"
+  cm:
+    timeout.reconciliation: 60s
+    timeout.reconciliation.jitter: 10s
+    # D-006: fields owned by the resource-optimizer agent (server-side apply field manager) never
+    # count as drift, for every resource kind. Applications must also set RespectIgnoreDifferences=true
+    # so a sync does not overwrite those fields (see dev/manifests/spoke-1/argocd-app.yaml).
+    resource.customizations.ignoreDifferences.all: |
+      managedFieldsManagers:
+        - resource-optimizer
+
+dex:
+  enabled: false
+notifications:
+  enabled: false
+applicationSet:
+  replicas: 0
+
+controller:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+repoServer:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+server:
+  service:
+    type: NodePort
+    nodePortHttp: 30080
+    nodePortHttps: 30443
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+redis:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+redisSecretInit:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
