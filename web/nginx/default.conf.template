@@ -1,4 +1,5 @@
-# Rendered at container start by the nginx image's envsubst step (/etc/nginx/templates → conf.d).
+# Rendered at container start by the nginx image's envsubst step (/etc/nginx/templates/conf.d → /tmp/conf.d,
+# see nginx.conf).
 # Variables: HUB_UPSTREAM (host:port of the hub API), HUB_ANON_AUTHORIZATION (set by
 # /docker-entrypoint.d/05-hub-token.envsh: "Bearer <ui token>" when anonymous read access is on, else
 # empty), NGINX_LOCAL_RESOLVERS (from /etc/resolv.conf). Only variables defined in the environment are
@@ -30,7 +31,7 @@ gzip_types text/plain text/css application/json application/javascript applicati
 log_format ro '$remote_addr [$time_local] "$request_method $uri" $status $body_bytes_sent $request_time "$http_user_agent"';
 
 server {
-    listen 80 default_server;
+    listen 8080 default_server;
     server_name _;
     root /usr/share/nginx/html;
     access_log /var/log/nginx/access.log ro;
