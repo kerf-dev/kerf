@@ -43,14 +43,14 @@ func (j *Job) Loop(ctx context.Context) {
 			for i := rc.Backfill.Runs; i >= 1; i-- {
 				asOf := j.now().Add(-time.Duration(i) * rc.Backfill.Every.D())
 				if err := j.RunOnce(ctx, asOf, true); err != nil {
-					j.Log.Warn("backfill run failed", "asOf", asOf, "err", err)
+					j.Log.WarnContext(ctx, "backfill run failed", "asOf", asOf, "err", err)
 				}
 			}
 		}
 	}
 	if rc.RunOnStart == nil || *rc.RunOnStart {
 		if err := j.RunOnce(ctx, j.now(), false); err != nil {
-			j.Log.Error("recommender run failed", "err", err)
+			j.Log.ErrorContext(ctx, "recommender run failed", "err", err)
 		}
 	}
 	t := time.NewTicker(rc.Interval.D())
@@ -61,7 +61,7 @@ func (j *Job) Loop(ctx context.Context) {
 			return
 		case <-t.C:
 			if err := j.RunOnce(ctx, j.now(), false); err != nil {
-				j.Log.Error("recommender run failed", "err", err)
+				j.Log.ErrorContext(ctx, "recommender run failed", "err", err)
 			}
 		}
 	}
@@ -87,7 +87,7 @@ func (j *Job) RunOnce(ctx context.Context, asOf time.Time, backfill bool) error 
 	for _, c := range clusters {
 		if err := j.runCluster(ctx, runID, c.Name, asOf, backfill); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", c.Name, err))
-			j.Log.Error("recommender cluster failed", "cluster", c.Name, "err", err)
+			j.Log.ErrorContext(ctx, "recommender cluster failed", "cluster", c.Name, "err", err)
 			_ = j.Store.RecordRunCluster(ctx, store.RunCluster{RunID: runID, Cluster: c.Name, AsOf: asOf, Status: "failed", Error: err.Error()})
 			continue
 		}
@@ -110,18 +110,18 @@ func (j *Job) RunOnce(ctx context.Context, asOf time.Time, backfill bool) error 
 	}
 	j.Metrics.runs.WithLabelValues(status).Inc()
 	j.Metrics.runDuration.Observe(time.Since(start).Seconds())
-	j.Log.Info("recommender run finished", "run", runID, "asOf", asOf.UTC(), "backfill", backfill, "status", status,
+	j.Log.InfoContext(ctx, "recommender run finished", "run", runID, "asOf", asOf.UTC(), "backfill", backfill, "status", status,
 		"clusters", len(clusters), "duration", time.Since(start).Round(time.Millisecond))
 	if !backfill {
 		h := j.Cfg.History
 		if n, perr := j.Store.PruneHistory(ctx, j.now(), h.FullResolution.D(), h.Retention.D()); perr != nil {
-			j.Log.Warn("history prune", "err", perr)
+			j.Log.WarnContext(ctx, "history prune", "err", perr)
 		} else if n > 0 {
-			j.Log.Info("history pruned", "recommendations", n)
+			j.Log.InfoContext(ctx, "history pruned", "recommendations", n)
 		}
 	}
 	if rerr := j.Metrics.Refresh(ctx, j.Store); rerr != nil {
-		j.Log.Warn("metrics refresh", "err", rerr)
+		j.Log.WarnContext(ctx, "metrics refresh", "err", rerr)
 	}
 	return err
 }
@@ -177,14 +177,14 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 		fb := 0.0
 		if res.Pricing.Fallback() {
 			fb = 1
-			j.Log.Warn("no pricing series for cluster; savings use the default rate", "cluster", cluster,
+			j.Log.WarnContext(ctx, "no pricing series for cluster; savings use the default rate", "cluster", cluster,
 				"cpuCoreHourUSD", res.Pricing.CPUCoreHour, "memoryGiBHourUSD", res.Pricing.MemoryGiBHour)
 		}
 		j.Metrics.pricingFB.WithLabelValues(cluster).Set(fb)
 		j.Metrics.lastRun.WithLabelValues(cluster).Set(float64(j.now().Unix()))
 		j.Metrics.clusterRecs.WithLabelValues(cluster).Set(float64(len(res.Results)))
 	}
-	j.Log.Info("recommender cluster done", "cluster", cluster, "asOf", res.End, "workloads", len(res.Inventory),
+	j.Log.InfoContext(ctx, "recommender cluster done", "cluster", cluster, "asOf", res.End, "workloads", len(res.Inventory),
 		"recommendations", len(res.Results), "pricing", res.Pricing.Source, "savingsUSD", math.Round(savings.Total*100)/100)
 	return nil
 }

@@ -133,7 +133,7 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if v := recover(); v != nil {
-				s.Log.Error("panic", "path", r.URL.Path, "panic", v, "stack", string(debug.Stack()))
+				s.Log.ErrorContext(r.Context(), "panic", "path", r.URL.Path, "panic", v, "stack", string(debug.Stack()))
 				writeProblem(w, r, http.StatusInternalServerError, "internal", "Internal error.")
 			}
 		}()
@@ -157,7 +157,7 @@ func (s *Server) instrument(route string, next http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w, code: 200}
 		next.ServeHTTP(sw, r)
 		s.Metrics.observeRequest(route, sw.code, time.Since(start))
-		s.Log.Debug("request", "method", r.Method, "path", r.URL.Path, "status", sw.code, "duration", time.Since(start))
+		s.Log.DebugContext(r.Context(), "request", "method", r.Method, "path", r.URL.Path, "status", sw.code, "duration", time.Since(start))
 	})
 }
 
@@ -246,15 +246,16 @@ func (s *Server) heartbeat(ctx context.Context, cluster, version string) {
 	s.heartbeats[cluster] = now
 	s.mu.Unlock()
 	if err := s.Store.Heartbeat(ctx, cluster, version); err != nil {
-		s.Log.Warn("heartbeat", "cluster", cluster, "err", err)
+		s.Log.WarnContext(ctx, "heartbeat", "cluster", cluster, "err", err)
 	}
 }
 
 // ---- responses ----
 
-func writeJSON(w http.ResponseWriter, code int, v any) {
+// writeJSON writes a 200 JSON response.
+func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
+	w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	_ = enc.Encode(v)
 }
@@ -272,7 +273,7 @@ func badRequest(w http.ResponseWriter, r *http.Request, code, detail string) {
 }
 
 func (s *Server) internal(w http.ResponseWriter, r *http.Request, err error) {
-	s.Log.Error("request failed", "path", r.URL.Path, "err", err)
+	s.Log.ErrorContext(r.Context(), "request failed", "path", r.URL.Path, "err", err)
 	writeProblem(w, r, http.StatusInternalServerError, "internal", "Internal error.")
 }
 

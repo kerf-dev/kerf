@@ -406,7 +406,7 @@ func TestPromClientRangeShrinksChunksOnMemoryLimit(t *testing.T) {
 		end, _ := strconv.ParseFloat(r.Form.Get("end"), 64)
 		points := (end-start)/step + 1
 		if points > 100 {
-			w.WriteHeader(422)
+			w.WriteHeader(http.StatusUnprocessableEntity)
 			_, _ = w.Write([]byte(`{"status":"error","errorType":"422","error":"not enough memory for processing max(x)"}`))
 			return
 		}

@@ -58,7 +58,7 @@ func (s *Server) getSummary(w http.ResponseWriter, r *http.Request) {
 	for i := range out.Clusters {
 		roundSummary(&out.Clusters[i].Summary)
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, out)
 }
 
 func newSummary() hubapi.Summary {
@@ -161,7 +161,7 @@ func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Items = append(out.Items, ci)
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, out)
 }
 
 // listWorkloads serves GET /v1/workloads.
@@ -221,7 +221,7 @@ func (s *Server) listWorkloads(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, r, "invalid_order", "order must be asc or desc.")
 		return
 	}
-	limit, err := intParam(q.Get("limit"), 50, 1, 500)
+	limit, err := intParam(q.Get("limit"), 50, 500)
 	if err != nil {
 		badRequest(w, r, "invalid_limit", err.Error())
 		return
@@ -306,7 +306,7 @@ func (s *Server) listWorkloads(w http.ResponseWriter, r *http.Request) {
 	if end < len(rows) {
 		out.Continue = encodeCursor(cursor{Offset: end, Q: queryKey.Encode()})
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, out)
 }
 
 func workloadRow(v *store.WorkloadView) hubapi.WorkloadRow {
@@ -356,7 +356,7 @@ func (s *Server) getWorkload(w http.ResponseWriter, r *http.Request) {
 		Modes: v.Modes(), Phase: v.Phase(), FirstSeenAt: &v.FirstSeenAt, LastSeenAt: &v.LastSeenAt,
 		Recommendation: v.Rec, Status: v.Status,
 	}
-	writeJSON(w, http.StatusOK, d)
+	writeJSON(w, d)
 }
 
 // getWorkloadHistory serves GET /v1/workloads/{id}/history.
@@ -371,7 +371,7 @@ func (s *Server) getWorkloadHistory(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, r, "invalid_time_range", err.Error())
 		return
 	}
-	limit, err := intParam(q.Get("limit"), 100, 1, 1000)
+	limit, err := intParam(q.Get("limit"), 100, 1000)
 	if err != nil {
 		badRequest(w, r, "invalid_limit", err.Error())
 		return
@@ -389,7 +389,7 @@ func (s *Server) getWorkloadHistory(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, hubapi.WorkloadHistory{WorkloadID: v.Key.ID(), Recommendations: recs, Events: events})
+	writeJSON(w, hubapi.WorkloadHistory{WorkloadID: v.Key.ID(), Recommendations: recs, Events: events})
 }
 
 // getSavingsTrend serves GET /v1/savings/trend.
@@ -460,7 +460,7 @@ func (s *Server) getSavingsTrend(w http.ResponseWriter, r *http.Request) {
 	} else {
 		out.Series = append(out.Series, hubapi.SavingsSeries{Points: pointsFor(names)})
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, out)
 }
 
 // timeRange applies the defaults: to = now, from = to - 7d.
@@ -505,5 +505,7 @@ func chooseStep(s string, from, to time.Time) (time.Duration, error) {
 			return d, nil
 		}
 	}
-	return niceSteps[len(niceSteps)-1], nil
+	// Longer than the largest nice step allows: whole days giving at most 1000 points.
+	days := (span/1000 + 24*time.Hour - 1) / (24 * time.Hour)
+	return days * 24 * time.Hour, nil
 }

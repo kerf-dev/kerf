@@ -196,9 +196,10 @@ func (q Queries) HPAMetrics(lookback time.Duration) string {
 		lastOver(lookback)("kube_horizontalpodautoscaler_spec_target_metric"+q.sel()))
 }
 
-// Pricing returns the average hourly rate and node count of a pricing series in the cluster.
+// Pricing returns the average hourly rate over the cluster's nodes and the node count.
 func (q Queries) Pricing(metric string, lookback time.Duration) (avg, count string) {
-	inner := lastOver(lookback)(metric + q.sel())
+	// max by node first: a pricing rollout briefly exposes two series per node (WO-03 hand-over).
+	inner := fmt.Sprintf("max by (cluster, node) (%s)", lastOver(lookback)(metric+q.sel()))
 	return fmt.Sprintf("avg by (cluster) (%s)", inner), fmt.Sprintf("count by (cluster) (%s)", inner)
 }
 

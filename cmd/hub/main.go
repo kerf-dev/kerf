@@ -109,7 +109,7 @@ func openStore(ctx context.Context, url string, log *slog.Logger) (*store.Store,
 			return st, nil
 		}
 		lastErr = err
-		log.Warn("waiting for postgres", "err", err)
+		log.WarnContext(ctx, "waiting for postgres", "err", err)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

@@ -212,15 +212,6 @@ func (s *Store) UpsertInventory(ctx context.Context, cluster string, inv []recom
 	return ids, tx.Commit(ctx)
 }
 
-// EnsureWorkload returns the id of a workload, creating it when an agent reports it first.
-func ensureWorkload(ctx context.Context, q pgx.Tx, k hubapi.WorkloadKey) (int64, error) {
-	var id int64
-	err := q.QueryRow(ctx, `INSERT INTO workloads (cluster, namespace, kind, name) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (cluster, namespace, kind, name) DO UPDATE SET cluster = excluded.cluster RETURNING id`,
-		k.Cluster, k.Namespace, k.Kind, k.Name).Scan(&id)
-	return id, err
-}
-
 // ---- recommendations ----
 
 // InsertRecommendations stores one history row per result.
@@ -357,9 +348,9 @@ func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*Workloa
 		ws.workload_id IS NOT NULL, ws.recommendation_id, ws.policy, ws.cpu_mode, ws.cpu_mode_source, ws.memory_mode, ws.memory_mode_source,
 		ws.strategy, ws.settings, ws.phase, ws.reason, ws.message, ws.live, ws.applied_at, ws.observed_at
 		FROM workloads w
-		LEFT JOIN LATERAL (SELECT * FROM recommendations rr WHERE rr.workload_id = w.id ORDER BY rr.generated_at DESC LIMIT 1) r ON true
+		LEFT JOIN LATERAL (SELECT * FROM recommendations rr WHERE rr.workload_id = w.id ORDER BY rr.generated_at DESC, rr.id DESC LIMIT 1) r ON true
 		LEFT JOIN workload_status ws ON ws.workload_id = w.id
-		WHERE `+where+` ORDER BY w.cluster, w.namespace, w.kind, w.name`, args...)
+		WHERE `+where+` ORDER BY w.cluster COLLATE "C", w.namespace COLLATE "C", w.kind COLLATE "C", w.name COLLATE "C"`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +425,7 @@ func utc(t *time.Time) *time.Time {
 // RecommendationHistory returns a workload's recommendations in [from, to), newest first.
 func (s *Store) RecommendationHistory(ctx context.Context, workloadID int64, ref hubapi.WorkloadRef, from, to time.Time, limit int) ([]hubapi.WorkloadRecommendation, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+recColumns+` FROM recommendations r
-		WHERE r.workload_id = $1 AND r.generated_at >= $2 AND r.generated_at < $3 ORDER BY r.generated_at DESC LIMIT $4`,
+		WHERE r.workload_id = $1 AND r.generated_at >= $2 AND r.generated_at < $3 ORDER BY r.generated_at DESC, r.id DESC LIMIT $4`,
 		workloadID, from, to, limit)
 	if err != nil {
 		return nil, err
@@ -464,17 +455,18 @@ type RecommendedPoint struct {
 // RecommendationSteps returns the recommendations of a workload that were current in [from, to]:
 // the latest one before from plus all inside, oldest first.
 func (s *Store) RecommendationSteps(ctx context.Context, workloadID int64, from, to time.Time) ([]RecommendedPoint, error) {
-	rows, err := s.Pool.Query(ctx, `(SELECT generated_at, containers FROM recommendations WHERE workload_id = $1 AND generated_at < $2 ORDER BY generated_at DESC LIMIT 1)
+	rows, err := s.Pool.Query(ctx, `(SELECT generated_at, containers, id FROM recommendations WHERE workload_id = $1 AND generated_at < $2 ORDER BY generated_at DESC, id DESC LIMIT 1)
 		UNION ALL
-		(SELECT generated_at, containers FROM recommendations WHERE workload_id = $1 AND generated_at >= $2 AND generated_at <= $3)
-		ORDER BY 1`, workloadID, from, to)
+		(SELECT generated_at, containers, id FROM recommendations WHERE workload_id = $1 AND generated_at >= $2 AND generated_at <= $3)
+		ORDER BY 1, 3`, workloadID, from, to)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (RecommendedPoint, error) {
 		var p RecommendedPoint
 		var c []byte
-		if err := r.Scan(&p.At, &c); err != nil {
+		var id uuid.UUID
+		if err := r.Scan(&p.At, &c, &id); err != nil {
 			return p, err
 		}
 		return p, json.Unmarshal(c, &p.Containers)
@@ -487,10 +479,10 @@ func (s *Store) RecommendationSteps(ctx context.Context, workloadID int64, from,
 func (s *Store) PruneHistory(ctx context.Context, now time.Time, fullResolution, retention time.Duration) (int64, error) {
 	tag, err := s.Pool.Exec(ctx, `DELETE FROM recommendations r
 		WHERE r.generated_at < $1
-		  AND r.id NOT IN (SELECT DISTINCT ON (workload_id) id FROM recommendations ORDER BY workload_id, generated_at DESC)
+		  AND r.id NOT IN (SELECT DISTINCT ON (workload_id) id FROM recommendations ORDER BY workload_id, generated_at DESC, id DESC)
 		  AND (r.generated_at < $2 OR r.id NOT IN (
 		        SELECT DISTINCT ON (workload_id, date_trunc('day', generated_at)) id FROM recommendations
-		        WHERE generated_at < $1 ORDER BY workload_id, date_trunc('day', generated_at), generated_at DESC))`,
+		        WHERE generated_at < $1 ORDER BY workload_id, date_trunc('day', generated_at), generated_at DESC, id DESC))`,
 		now.Add(-fullResolution), now.Add(-retention))
 	if err != nil {
 		return 0, err
@@ -605,12 +597,9 @@ func (s *Store) UpsertStatuses(ctx context.Context, cluster string, items []huba
 		return err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	// One statement per item (workload upsert + status upsert), all sent in one batch.
+	batch := &pgx.Batch{}
 	for _, it := range items {
-		k := hubapi.WorkloadKey{Cluster: cluster, Namespace: it.Workload.Namespace, Kind: it.Workload.Kind, Name: it.Workload.Name}
-		wid, err := ensureWorkload(ctx, tx, k)
-		if err != nil {
-			return err
-		}
 		settings := []byte("{}")
 		if it.Settings != nil {
 			settings, _ = json.Marshal(it.Settings)
@@ -623,19 +612,23 @@ func (s *Store) UpsertStatuses(ctx context.Context, cluster string, items []huba
 		if it.ObservedAt != nil {
 			observed = *it.ObservedAt
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO workload_status (workload_id, recommendation_id, policy, cpu_mode, cpu_mode_source, memory_mode,
-			memory_mode_source, strategy, settings, phase, reason, message, live, applied_at, observed_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now())
+		batch.Queue(`WITH w AS (
+				INSERT INTO workloads (cluster, namespace, kind, name) VALUES ($1, $2, $3, $4)
+				ON CONFLICT (cluster, namespace, kind, name) DO UPDATE SET cluster = excluded.cluster RETURNING id)
+			INSERT INTO workload_status (workload_id, recommendation_id, policy, cpu_mode, cpu_mode_source, memory_mode,
+				memory_mode_source, strategy, settings, phase, reason, message, live, applied_at, observed_at, updated_at)
+			SELECT w.id, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, now() FROM w
 			ON CONFLICT (workload_id) DO UPDATE SET recommendation_id = excluded.recommendation_id, policy = excluded.policy,
 				cpu_mode = excluded.cpu_mode, cpu_mode_source = excluded.cpu_mode_source, memory_mode = excluded.memory_mode,
 				memory_mode_source = excluded.memory_mode_source, strategy = excluded.strategy, settings = excluded.settings,
 				phase = excluded.phase, reason = excluded.reason, message = excluded.message, live = excluded.live,
 				applied_at = excluded.applied_at, observed_at = excluded.observed_at, updated_at = now()`,
-			wid, nullUUID(it.RecommendationID), it.Policy, it.Modes.CPU, nullStr(it.Modes.CPUSource), it.Modes.Memory,
+			cluster, it.Workload.Namespace, it.Workload.Kind, it.Workload.Name,
+			nullUUID(it.RecommendationID), it.Policy, it.Modes.CPU, nullStr(it.Modes.CPUSource), it.Modes.Memory,
 			nullStr(it.Modes.MemorySource), nullStr(it.Strategy), settings, it.Phase, it.Reason, it.Message, live, it.AppliedAt, observed)
-		if err != nil {
-			return err
-		}
+	}
+	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
