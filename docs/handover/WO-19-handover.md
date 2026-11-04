@@ -1,8 +1,13 @@
-# WO-19 hand-over (admin area contract)
+# WO-19 hand-over (admin area + cluster onboarding contract)
 
-Branch `wo-19-admin-contract` (pushed, no PR). The contract only: no hub, agent or web behaviour
-changed. Full flow, rules and an example for every endpoint: **`docs/contracts/admin.md`**.
-Schemas: `api/openapi/hub.yaml`.
+Branch `wo-19-admin-contract` (pushed, no PR; `origin/main` merged in). The contract only: no hub,
+agent or web behaviour changed. It covers two plans:
+- **Admin area** (`docs/plans/admin-area.md`, D-022/D-023/D-024): flow, rules and an example for
+  every endpoint in **`docs/contracts/admin.md`**.
+- **Cluster onboarding, metrics sources and readiness** (`docs/plans/cluster-onboarding.md`, D-025,
+  for WO-25): **`docs/contracts/readiness.md`** (see the section at the end).
+
+Schemas for both: `api/openapi/hub.yaml`.
 
 ## Deviations from the work-order text (decided here, please confirm)
 1. **Auth paths are `/v1/auth/login` and `/v1/auth/logout`, not `/auth/*`**: the web nginx
@@ -159,3 +164,95 @@ make ci                                          # build vet lint test verify-ge
 cd web && npm run gen:api:check && npm run typecheck
 RO_TEST_DATABASE_URL=postgres://… go test ./internal/hub/...   # existing DB tests on 0001-0009
 ```
+
+## Onboarding, metrics sources and readiness (D-025, added for WO-25)
+
+Spec: `docs/contracts/readiness.md`. Plan: `docs/plans/cluster-onboarding.md`.
+
+**Check catalog: new package `api/v1alpha1/readiness`**
+- `State*`, `Severity*`, `Status*`, `Source*`, `Category*`, `Capability*`, the `Check*` ids
+- `Catalog` (id, category, severity, source, the state a blocking check gates, capability, title)
+- `Lookup`, `ComputeState`
+
+Tests keep the catalog, the table in `readiness.md` and the spec enums in sync. Check ids are a
+pattern (`^[a-z]+\.[a-z0-9-]+$`), not an OpenAPI enum, so new checks don't widen a TS union. Every
+row of plan §4 has an id, and I added two the state machine needs:
+- `agent.connected` (hub: first pull → AgentConnected)
+- `metrics.recommendations` (hub: recommendations produced → ReadyAudit)
+
+RBAC per capability: `rbac.read` gates AgentConnected; `rbac.resize|rollout|hpa|evict|policies|events`
+gate AutomationReady.
+
+**OpenAPI** (lint clean):
+
+| Operation | Path | Lowest role |
+|---|---|---|
+| listDatasources, createDatasource, getDatasource, updateDatasource, deleteDatasource | /v1/admin/datasources[/{datasourceId}] | viewer / admin |
+| testDatasource | POST /v1/admin/datasources/{datasourceId}/test (body optional `{binding}`) | admin |
+| getClusterReadiness | GET /v1/clusters/{cluster}/readiness | viewer |
+| recheckClusterReadiness | POST /v1/clusters/{cluster}/readiness/recheck → 202 | operator |
+| getClusterReadinessHistory | GET /v1/clusters/{cluster}/readiness/history | viewer |
+| getClusterInstall | GET /v1/admin/clusters/{cluster}/install?format=helm\|values\|argocd&webhook&certManager | admin |
+
+New schemas:
+- datasources: `Datasource`, `DatasourceInput` (secrets `token`, `password`, `tls.clientKey` are
+  `writeOnly`, kept when omitted on update, removed with `clearSecrets`), `DatasourceAuthInfo`
+  (never secrets, only `secretConfigured`), `DatasourceTestRequest`, `DatasourceTestResult`
+- `MetricsBinding` (`datasourceId`, `clusterLabel` with `""` = no matcher, `clusterLabelValue`,
+  `extraMatchers`, `jobNames`)
+- readiness: `ReadinessCheck` (id, category, severity, source, gates, status, message, remediation,
+  remediationType, docsURL, checkedAt, details), `AgentCapability`, `ReadinessSummary`,
+  `ClusterReadiness` (with nextState and blockedBy), `ReadinessHistory`, `RecheckAccepted`
+- `InstallSnippet` (content, filename, argocdIgnoreDifferences; references the Secret
+  `resource-optimizer-agent-token`, never the token)
+
+Additive fields on existing schemas:
+- `ClusterInfo.readiness`
+- `ClusterAdmin.metrics/readiness/provider/region`
+- `ClusterCreate`/`ClusterUpdate.metrics/provider/region`
+- `WorkloadStatusBatch.capabilities[]/checks[]` (absent = unchanged)
+- `ClusterConfig.hubVersion/minAgentVersion`
+- `ConfigFlags.recheck/recheckRequestedAt`
+- `overrideReadiness` on `PolicyInput`, `WorkloadOverrideInput` and `ApprovalRequest`
+- config actions `DatasourceCreated/Updated/Deleted`, `ReadinessChanged`; targets `datasource`,
+  `readiness`
+
+Gating: a write that sets `auto-patch` (or approve-once) for a cluster that is not `AutomationReady`
+answers `409 cluster_not_automation_ready`. An admin can override it with
+`overrideReadiness: true`; an operator sending that flag gets `403 admin_required`.
+
+**Metrics** (`docs/contracts/metrics.md`):
+- `ro_cluster_readiness{cluster,check,severity}`: 1 = pass, 0 = warn/fail/unknown
+- `ro_cluster_readiness_state{cluster,state}`
+
+**Migration `0010_onboarding_readiness.sql`**
+- `datasources` (id `local` or UUID; `built_in` only for `local`; encrypted `auth_secret`)
+- `cluster_metrics_bindings` (no row = `local` / `cluster` / name)
+- `clusters.provider/region`
+- `cluster_readiness` (state, recheck_requested_at, capabilities)
+- `readiness_checks` (latest per cluster and check)
+- `readiness_history` (changes only)
+- audit target types `datasource`, `readiness`
+
+Verified up → re-up → down → up, the 10..7 down/up chain, negative constraint checks, and the
+existing hub/store DB tests on 0001–0010.
+
+**Go types**
+- hubapi: `internal/hub/hubapi/onboarding.go` (types, `LocalDatasourceID`,
+  `DefaultMetricsBinding`, `Code*`, `Install*`, `AgentTokenSecretName/Key`)
+- hubclient: `ReadinessCheck`, `AgentCapability`, the batch/config/flags fields
+- Spec tests cover all of it.
+
+**For WO-25**
+- Hub:
+  - upsert datasource `local` at start-up from `prometheusURL`
+  - a cluster without a binding row keeps today's behaviour
+  - compute the state with `readiness.ComputeState` over all results (hub + agent)
+  - record a history row and a `ReadinessChanged` config audit entry on every state change
+  - clear `recheck_requested_at` when agent checks newer than it arrive
+  - export the two gauges
+  - enforce the gating in WO-20's policy, override and approve handlers (coordinate with WO-20)
+- Agent: run the agent-source checks, send `capabilities` and `checks` with the catalog's
+  category, severity and gates.
+- Web: wizard (datasource test before any agent), readiness badge from `ClusterInfo.readiness`,
+  Readiness tab, `overrideReadiness` prompt for admins on `409 cluster_not_automation_ready`.

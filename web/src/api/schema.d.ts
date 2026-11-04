@@ -543,6 +543,8 @@ export interface paths {
      *     that does not start with `ro-` and a priority from 1 to 899999. The spec is validated like
      *     the CRD (code `invalid_policy`, `detail` lists the fields). Records a `config_changed`
      *     audit event (`PolicyCreated`).
+     *     Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
      */
     post: operations['createPolicy']
     delete?: never
@@ -569,6 +571,8 @@ export interface paths {
      * Replace a hub-managed policy
      * @description Stores a new version; `type` cannot change (`400`, code `type_immutable`). Agents pick the
      *     change up on their next config pull. Records `PolicyUpdated`.
+     *     Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
      */
     put: operations['updatePolicy']
     post?: never
@@ -822,6 +826,8 @@ export interface paths {
      *     Setting a mode to `auto-patch` on a cluster with environment `prod` needs an admin (`403`,
      *     code `admin_required`). "Exclude" is an override with both modes `off`. Records
      *     `OverrideSet`.
+     *     Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
      */
     put: operations['putWorkloadOverride']
     post?: never
@@ -855,6 +861,8 @@ export interface paths {
      *     that recommendation once, with all guardrails, as if the `audit` resources were
      *     `auto-patch`, and emits `applied` with reason `ApprovedOnce`; the workload stays in
      *     `audit`. A new approval replaces an earlier unconsumed one. Records `WorkloadApproved`.
+     *     On a cluster that is not `AutomationReady`: `409`, code `cluster_not_automation_ready`,
+     *     unless an admin sends `overrideReadiness: true` (D-025).
      */
     post: operations['approveRecommendation']
     delete?: never
@@ -1000,6 +1008,185 @@ export interface paths {
      *     AND.
      */
     get: operations['queryConfigAudit']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/datasources': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Metrics datasources (D-025)
+     * @description Includes the built-in `local` datasource. Secrets are never returned.
+     */
+    get: operations['listDatasources']
+    put?: never
+    /**
+     * Add a metrics datasource
+     * @description Secret auth fields are write-only: stored encrypted, never returned. Records
+     *     `DatasourceCreated` (without secrets).
+     */
+    post: operations['createDatasource']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/datasources/{datasourceId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    /** One datasource */
+    get: operations['getDatasource']
+    /**
+     * Replace a datasource
+     * @description Omitted secret fields keep their stored values; `clearSecrets: true` removes them. The
+     *     built-in `local` datasource only accepts `timeout` and `maxPoints` changes (`400`, code
+     *     `builtin`). Records `DatasourceUpdated`.
+     */
+    put: operations['updateDatasource']
+    post?: never
+    /**
+     * Delete a datasource
+     * @description Soft delete. `409` with code `datasource_in_use` while a cluster is bound to it, `builtin`
+     *     for `local`. Records `DatasourceDeleted`.
+     */
+    delete: operations['deleteDatasource']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/datasources/{datasourceId}/test': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Run the metrics checks against a datasource now
+     * @description Runs `datasource.reachable` and, with `binding`, every hub metrics check for that binding
+     *     (before any agent exists; the onboarding wizard's "Test"). Nothing is stored or audited.
+     *     Returns `200` also when checks fail; `ok` is true when no blocking check failed.
+     */
+    post: operations['testDatasource']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/clusters/{cluster}/readiness': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /**
+     * Readiness state and check results of a cluster (D-025)
+     * @description The latest result of every check (hub metrics checks and agent self-checks), the state they
+     *     imply and what blocks the next state. Checks never run yet have status `unknown`.
+     */
+    get: operations['getClusterReadiness']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/clusters/{cluster}/readiness/recheck': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Re-run the readiness checks now
+     * @description Queues the hub metrics checks and sets the recheck flag in the cluster's config, so the
+     *     agent re-runs its self-checks on its next pull. Results appear in
+     *     `GET /v1/clusters/{cluster}/readiness` as they arrive. Not audited.
+     */
+    post: operations['recheckClusterReadiness']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/clusters/{cluster}/readiness/history': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /**
+     * State transitions and check status changes
+     * @description Only changes are stored (a check's status or the state), newest first.
+     */
+    get: operations['getClusterReadinessHistory']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/clusters/{cluster}/install': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /**
+     * Agent install instructions for a cluster
+     * @description Rendered for this cluster and hub URL. The token value is never included: the snippet
+     *     references the Secret `resource-optimizer-agent-token` (key `token`); the value is shown
+     *     once when the token is created. Also returns the Argo CD `ignoreDifferences` snippet for
+     *     `argocd-cm` (D-006).
+     */
+    get: operations['getClusterInstall']
     put?: never
     post?: never
     delete?: never
@@ -1277,6 +1464,17 @@ export interface components {
        *     last report", an empty array means "none".
        */
       policyInventory?: components['schemas']['PolicyInventoryItem'][]
+      /**
+       * @description Agent self-check of its RBAC per capability (D-025). Absent = unchanged; present = all
+       *     capabilities.
+       */
+      capabilities?: components['schemas']['AgentCapability'][]
+      /**
+       * @description Agent self-check results (source `agent`, docs/contracts/readiness.md). Absent =
+       *     unchanged; present = every agent check. Sent at start, every 10 minutes and after a
+       *     recheck.
+       */
+      checks?: components['schemas']['ReadinessCheck'][]
       items: components['schemas']['WorkloadStatus'][]
     }
     ContainerChange: {
@@ -1477,6 +1675,7 @@ export interface components {
       /** @description The cluster's own pause state. */
       automation?: components['schemas']['Automation']
       configSync?: components['schemas']['AgentConfigSync']
+      readiness?: components['schemas']['ReadinessSummary']
       counts: {
         workloads: number
         withRecommendation: number
@@ -1967,6 +2166,11 @@ export interface components {
       description?: string
       clusters?: components['schemas']['ClusterName'][]
       spec: components['schemas']['RightsizingPolicySpec']
+      /**
+       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+       *     audited with the change.
+       */
+      overrideReadiness?: boolean
       reason: components['schemas']['ReasonText']
     }
     /** @description A policy as in `PolicyInput`, without reason, for `POST /v1/admin/preview`. */
@@ -2185,6 +2389,12 @@ export interface components {
       paused: boolean
       agent: components['schemas']['AgentConfigSync']
       policyInventory?: components['schemas']['ClusterPolicyInventory']
+      /** @description Informational, e.g. `aws`. */
+      provider?: string
+      /** @description Informational. */
+      region?: string
+      metrics: components['schemas']['MetricsBinding']
+      readiness: components['schemas']['ReadinessSummary']
     }
     ClusterCreate: {
       name: components['schemas']['ClusterName']
@@ -2193,6 +2403,12 @@ export interface components {
       owner?: string
       /** @default both */
       policySource: components['schemas']['ClusterPolicySource']
+      /** @description Informational, e.g. `aws`. */
+      provider?: string
+      /** @description Informational. */
+      region?: string
+      /** @description Default: datasource `local`, label `cluster`, value = the cluster name. */
+      metrics?: components['schemas']['MetricsBinding']
       /** @default true */
       createAgentToken: boolean
       reason: components['schemas']['ReasonText']
@@ -2206,6 +2422,11 @@ export interface components {
       environment?: components['schemas']['Environment']
       owner?: string
       policySource?: components['schemas']['ClusterPolicySource']
+      /** @description Informational, e.g. `aws`. */
+      provider?: string
+      /** @description Informational. */
+      region?: string
+      metrics?: components['schemas']['MetricsBinding']
       reason: components['schemas']['ReasonText']
     }
     ClusterConfig: {
@@ -2222,6 +2443,10 @@ export interface components {
       policies: components['schemas']['ConfigPolicy'][]
       flags: components['schemas']['ConfigFlags']
       approvals: components['schemas']['ConfigApproval'][]
+      /** @description For the agent's `agent.version` check. */
+      hubVersion?: string
+      /** @description Oldest agent version this hub supports (`agent.version` check). */
+      minAgentVersion?: string
     }
     ConfigPolicy: {
       /**
@@ -2254,6 +2479,13 @@ export interface components {
        * @description Informational; the hub ends the pause, the agent does not.
        */
       resumeAt?: string
+      /**
+       * @description A readiness re-check is pending (D-025): the agent re-runs its self-checks if
+       *     `recheckRequestedAt` is newer than its last run, and reports them in the next batch.
+       */
+      recheck?: boolean
+      /** Format: date-time */
+      recheckRequestedAt?: string
     }
     /**
      * @description An approve-once grant (D-024). The agent applies the recommendation `recommendationID` of the
@@ -2284,6 +2516,11 @@ export interface components {
        * @description Default 24 h from now; at most 7 days.
        */
       expiresAt?: string
+      /**
+       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+       *     audited with the change.
+       */
+      overrideReadiness?: boolean
     }
     Approval: {
       /** Format: uuid */
@@ -2317,6 +2554,11 @@ export interface components {
     WorkloadOverrideInput: {
       description?: string
       spec: components['schemas']['RightsizingPolicySpec']
+      /**
+       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+       *     audited with the change.
+       */
+      overrideReadiness?: boolean
       reason: components['schemas']['ReasonText']
     }
     /**
@@ -2382,7 +2624,16 @@ export interface components {
     }
     /** @enum {string} */
     ConfigTargetType:
-      'settings' | 'policy' | 'workload-override' | 'approval' | 'cluster' | 'automation' | 'token' | 'user'
+      | 'settings'
+      | 'policy'
+      | 'workload-override'
+      | 'approval'
+      | 'cluster'
+      | 'automation'
+      | 'token'
+      | 'user'
+      | 'datasource'
+      | 'readiness'
     /**
      * @description CamelCase action of a configuration change (`docs/contracts/events.md`).
      * @enum {string}
@@ -2407,6 +2658,10 @@ export interface components {
       | 'UserUpdated'
       | 'UserDeleted'
       | 'PasswordReset'
+      | 'DatasourceCreated'
+      | 'DatasourceUpdated'
+      | 'DatasourceDeleted'
+      | 'ReadinessChanged'
     ConfigTarget: {
       type: components['schemas']['ConfigTargetType']
       /**
@@ -2444,6 +2699,269 @@ export interface components {
     ConfigChangeList: {
       items: components['schemas']['ConfigChange'][]
       continue?: string
+    }
+    /** @enum {string} */
+    DatasourceType: 'prometheus' | 'victoriametrics' | 'thanos' | 'mimir' | 'amp'
+    /** @enum {string} */
+    DatasourceAuthType: 'none' | 'bearer' | 'basic' | 'sigv4' | 'mtls'
+    /** @description AWS SigV4 (Amazon Managed Prometheus); credentials come from IRSA / Pod Identity. */
+    DatasourceSigV4: {
+      region: string
+      /** @default aps */
+      service: string
+      /** @description Role to assume; absent = the hub's own identity. */
+      roleARN?: string
+    }
+    DatasourceTLSInput: {
+      /** @description PEM; not secret, returned as `caConfigured`. */
+      caCert?: string
+      /** @description PEM (mTLS). */
+      clientCert?: string
+      /** @description PEM (mTLS). Write-only. */
+      clientKey?: string
+      insecureSkipVerify?: boolean
+    }
+    /**
+     * @description Secret fields (`token`, `password`, `tls.clientKey`) are write-only. On update, omitted
+     *     secret fields keep the stored values.
+     */
+    DatasourceAuthInput: {
+      type: components['schemas']['DatasourceAuthType']
+      /** @description For `bearer`. */
+      token?: string
+      /** @description For `basic`. */
+      username?: string
+      /** @description For `basic`. */
+      password?: string
+      sigv4?: components['schemas']['DatasourceSigV4']
+      tls?: components['schemas']['DatasourceTLSInput']
+    }
+    /** @description The stored auth without secrets. */
+    DatasourceAuthInfo: {
+      type: components['schemas']['DatasourceAuthType']
+      username?: string
+      sigv4?: components['schemas']['DatasourceSigV4']
+      /** @description A token, password or client key is stored. */
+      secretConfigured: boolean
+      caConfigured?: boolean
+      clientCertConfigured?: boolean
+      insecureSkipVerify?: boolean
+    }
+    DatasourceInput: {
+      name: string
+      type: components['schemas']['DatasourceType']
+      /**
+       * Format: uri
+       * @description Query base URL (`/api/v1/query` is appended).
+       */
+      url: string
+      auth?: components['schemas']['DatasourceAuthInput']
+      /** @description On update, remove the stored secrets. */
+      clearSecrets?: boolean
+      /** @description Extra request headers, e.g. `X-Scope-OrgID`. Not secret. */
+      headers?: {
+        [key: string]: string
+      }
+      timeout?: components['schemas']['Duration']
+      /** @description Most points per series per query; the recommender chunks queries to fit. */
+      maxPoints?: number
+      reason: components['schemas']['ReasonText']
+    }
+    Datasource: {
+      /** @description `local` for the built-in datasource, otherwise a UUID. */
+      id: string
+      name: string
+      type: components['schemas']['DatasourceType']
+      url: string
+      builtIn: boolean
+      auth: components['schemas']['DatasourceAuthInfo']
+      headers: {
+        [key: string]: string
+      }
+      timeout?: components['schemas']['Duration']
+      maxPoints?: number
+      /** @description Clusters bound to it. */
+      usedBy: components['schemas']['ClusterName'][]
+      version: number
+      /** Format: date-time */
+      createdAt?: string
+      createdBy?: components['schemas']['Actor']
+      /** Format: date-time */
+      updatedAt?: string
+      updatedBy?: components['schemas']['Actor']
+    }
+    DatasourceList: {
+      items: components['schemas']['Datasource'][]
+    }
+    /** @description Scrape job names, only used to make diagnoses precise. */
+    MetricsJobNames: {
+      cadvisor?: string[]
+      kubeStateMetrics?: string[]
+    }
+    /**
+     * @description Where a cluster's metrics are (D-025). Every query uses
+     *     `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the
+     *     registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster
+     *     Prometheus). Defaults: `local`, `cluster`, the cluster name.
+     */
+    MetricsBinding: {
+      datasourceId: string
+      clusterLabel: string
+      /** @description Default the cluster name. */
+      clusterLabelValue?: string
+      extraMatchers?: string[]
+      jobNames?: components['schemas']['MetricsJobNames']
+    }
+    DatasourceTestRequest: {
+      binding?: components['schemas']['MetricsBinding']
+    }
+    DatasourceTestResult: {
+      /** @description No blocking check failed. */
+      ok: boolean
+      latencyMs?: number
+      /** @description What the binding's matchers found. */
+      found?: {
+        containerSeries?: number
+        pods?: number
+        nodes?: number
+      }
+      /** @description Existing values of the cluster label (suggestions when it does not match). */
+      labelValues?: string[]
+      checks: components['schemas']['ReadinessCheck'][]
+    }
+    /**
+     * @description Each state includes the ones before it (docs/contracts/readiness.md).
+     * @enum {string}
+     */
+    ReadinessState: 'Registered' | 'AgentConnected' | 'MetricsOK' | 'ReadyAudit' | 'AutomationReady'
+    /** @enum {string} */
+    ReadinessSeverity: 'blocking' | 'warning' | 'info'
+    /** @enum {string} */
+    ReadinessStatus: 'pass' | 'warn' | 'fail' | 'unknown'
+    /** @enum {string} */
+    ReadinessCategory:
+      | 'datasource'
+      | 'metrics'
+      | 'pricing'
+      | 'agent'
+      | 'rbac'
+      | 'apply'
+      | 'webhook'
+      | 'nodes'
+      | 'integration'
+      | 'policy'
+    /**
+     * @description Stable check id from the catalog (docs/contracts/readiness.md, api/v1alpha1/readiness).
+     * @example metrics.ksm-owners
+     * @example rbac.resize
+     */
+    ReadinessCheckID: string
+    ReadinessCheck: {
+      id: components['schemas']['ReadinessCheckID']
+      category: components['schemas']['ReadinessCategory']
+      severity: components['schemas']['ReadinessSeverity']
+      /** @enum {string} */
+      source: 'hub' | 'agent'
+      /** @description For blocking checks, the state that needs this check to pass. */
+      gates?: components['schemas']['ReadinessState']
+      status: components['schemas']['ReadinessStatus']
+      message: string
+      /** @description Exact command or values snippet that fixes it. */
+      remediation?: string
+      /** @enum {string} */
+      remediationType?: 'command' | 'yaml' | 'text'
+      docsURL?: string
+      /** Format: date-time */
+      checkedAt: string
+      details?: {
+        [key: string]: string
+      }
+    }
+    /** @description Result of the SelfSubjectAccessReviews of one capability (check `rbac.<name>`). */
+    AgentCapability: {
+      /** @enum {string} */
+      name: 'read' | 'resize' | 'rollout' | 'hpa' | 'evict' | 'policies' | 'events'
+      granted: boolean
+      /** @description ClusterRole rules to add, each as JSON (`{"apiGroups":[…],"resources":[…],"verbs":[…]}`). */
+      missing?: string[]
+      message?: string
+    }
+    ReadinessSummary: {
+      state: components['schemas']['ReadinessState']
+      /** @description Blocking checks not passing. */
+      blocking: number
+      /** @description Warning checks with status warn or fail. */
+      warnings: number
+      /** Format: date-time */
+      checkedAt?: string
+    }
+    ClusterReadiness: {
+      cluster: components['schemas']['ClusterName']
+      state: components['schemas']['ReadinessState']
+      /** Format: date-time */
+      stateSince?: string
+      /**
+       * Format: date-time
+       * @description Newest result.
+       */
+      checkedAt?: string
+      summary: {
+        blocking: number
+        warnings: number
+        unknown: number
+      }
+      /** @description Absent at AutomationReady. */
+      nextState?: components['schemas']['ReadinessState']
+      /** @description Ids of the blocking checks that keep the cluster from `nextState`. */
+      blockedBy?: components['schemas']['ReadinessCheckID'][]
+      capabilities?: components['schemas']['AgentCapability'][]
+      /**
+       * Format: date-time
+       * @description Present while a re-check is pending.
+       */
+      recheckRequestedAt?: string
+      /** @description One result per catalog check, in catalog order. */
+      checks: components['schemas']['ReadinessCheck'][]
+    }
+    RecheckAccepted: {
+      /** Format: date-time */
+      requestedAt: string
+      /** @description Hub metrics checks queued. */
+      hubChecks: boolean
+      /** @description Recheck flag set in the cluster config. */
+      agentRecheck: boolean
+    }
+    ReadinessHistoryEntry: {
+      /** Format: date-time */
+      time: string
+      /** @enum {string} */
+      kind: 'state' | 'check'
+      fromState?: components['schemas']['ReadinessState']
+      toState?: components['schemas']['ReadinessState']
+      checkId?: components['schemas']['ReadinessCheckID']
+      fromStatus?: components['schemas']['ReadinessStatus']
+      toStatus?: components['schemas']['ReadinessStatus']
+      message?: string
+    }
+    ReadinessHistory: {
+      items: components['schemas']['ReadinessHistoryEntry'][]
+      continue?: string
+    }
+    /** @enum {string} */
+    InstallFormat: 'helm' | 'values' | 'argocd'
+    InstallSnippet: {
+      format: components['schemas']['InstallFormat']
+      /** @description Shell commands (`helm`), a values file (`values`) or an Application manifest (`argocd`). */
+      content: string
+      /**
+       * @example install.sh
+       * @example values.yaml
+       * @example application.yaml
+       */
+      filename: string
+      /** @description Snippet for `argocd-cm` so Argo CD ignores fields owned by `resource-optimizer` (D-006). */
+      argocdIgnoreDifferences: string
+      notes?: string[]
     }
     /**
      * @description RFC 9457 problem details; the single error schema for every endpoint. `code` is a stable
@@ -2561,6 +3079,15 @@ export interface components {
         'application/problem+json': components['schemas']['Problem']
       }
     }
+    /** @description Unknown datasource id. */
+    DatasourceNotFound: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/problem+json': components['schemas']['Problem']
+      }
+    }
     /** @description Unknown username. */
     UserNotFound: {
       headers: {
@@ -2578,6 +3105,8 @@ export interface components {
     IfMatch: string
     /** @description ETag (`"<version>"`) of the object being changed; checked when given (`412` if stale). */
     IfMatchOptional: string
+    /** @description `local` or a UUID. */
+    DatasourceID: string
     PolicyID: string
     Username: components['schemas']['Username']
     PageLimit: number
@@ -3944,6 +4473,7 @@ export interface operations {
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
       404: components['responses']['WorkloadNotFound']
+      409: components['responses']['Conflict']
       412: components['responses']['PreconditionFailed']
       428: components['responses']['PreconditionRequired']
     }
@@ -4338,6 +4868,321 @@ export interface operations {
       400: components['responses']['BadRequest']
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
+    }
+  }
+  listDatasources: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Datasources, ordered by name. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DatasourceList']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  createDatasource: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DatasourceInput']
+      }
+    }
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Datasource']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
+    }
+  }
+  getDatasource: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Datasource. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Datasource']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+    }
+  }
+  updateDatasource: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DatasourceInput']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Datasource']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  deleteDatasource: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeReason']
+      }
+    }
+    responses: {
+      /** @description Deleted. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  testDatasource: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['DatasourceTestRequest']
+      }
+    }
+    responses: {
+      /** @description Check results. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DatasourceTestResult']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+    }
+  }
+  getClusterReadiness: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Readiness. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClusterReadiness']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  recheckClusterReadiness: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Re-check queued. */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RecheckAccepted']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  getClusterReadinessHistory: {
+    parameters: {
+      query?: {
+        /** @description Inclusive start. Default `to` minus 7 days. */
+        from?: components['parameters']['From']
+        /** @description Exclusive end. Default now. */
+        to?: components['parameters']['To']
+        limit?: components['parameters']['PageLimit']
+        /** @description Token from a previous page's `continue` field. */
+        continue?: components['parameters']['Continue']
+      }
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description History. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ReadinessHistory']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  getClusterInstall: {
+    parameters: {
+      query: {
+        format: components['schemas']['InstallFormat']
+        /** @description Include the webhook install. */
+        webhook?: boolean
+        /** @description Webhook certificates from cert-manager (otherwise self-signed). */
+        certManager?: boolean
+      }
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Install instructions. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InstallSnippet']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
     }
   }
 }

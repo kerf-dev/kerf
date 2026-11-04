@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"slices"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
 )
 
 // schemaTypes maps components/schemas names to the Go types that mirror them.
@@ -129,6 +131,27 @@ var schemaTypes = map[string]any{
 	"ConfigChange":               ConfigChange{},
 	"ConfigChangeList":           ConfigChangeList{},
 
+	// WO-19 onboarding and readiness (D-025)
+	"DatasourceSigV4":       DatasourceSigV4{},
+	"DatasourceTLSInput":    DatasourceTLSInput{},
+	"DatasourceAuthInput":   DatasourceAuthInput{},
+	"DatasourceAuthInfo":    DatasourceAuthInfo{},
+	"DatasourceInput":       DatasourceInput{},
+	"Datasource":            Datasource{},
+	"DatasourceList":        DatasourceList{},
+	"MetricsJobNames":       MetricsJobNames{},
+	"MetricsBinding":        MetricsBinding{},
+	"DatasourceTestRequest": DatasourceTestRequest{},
+	"DatasourceTestResult":  DatasourceTestResult{},
+	"ReadinessCheck":        ReadinessCheck{},
+	"AgentCapability":       AgentCapability{},
+	"ReadinessSummary":      ReadinessSummary{},
+	"ClusterReadiness":      ClusterReadiness{},
+	"RecheckAccepted":       RecheckAccepted{},
+	"ReadinessHistoryEntry": ReadinessHistoryEntry{},
+	"ReadinessHistory":      ReadinessHistory{},
+	"InstallSnippet":        InstallSnippet{},
+
 	// RightsizingPolicy spec: the CRD types are the Go mirror (api/v1alpha1).
 	"RightsizingPolicySpec": v1alpha1.RightsizingPolicySpec{},
 	"PolicySelector":        v1alpha1.PolicySelector{},
@@ -168,6 +191,55 @@ var enumLists = map[string][]string{
 	"Environment":         {EnvironmentProd, EnvironmentNonProd},
 	"SettingsSection":     {SettingsRecommender, SettingsPricing},
 	"TokenRole":           {RoleAgent, RoleUI, RoleAdmin},
+	"ReadinessState":      readinessStates(),
+	"ReadinessStatus":     readinessStatuses(),
+	"ReadinessCategory":   readinessCategories(),
+	"DatasourceType":      {DatasourcePrometheus, DatasourceVictoriaMetrics, DatasourceThanos, DatasourceMimir, DatasourceAMP},
+	"DatasourceAuthType":  {AuthNone, AuthBearer, AuthBasic, AuthSigV4, AuthMTLS},
+	"InstallFormat":       {InstallHelm, InstallValues, InstallArgoCD},
+}
+
+func readinessStates() (out []string) {
+	for _, s := range readiness.States {
+		out = append(out, string(s))
+	}
+	return out
+}
+
+func readinessStatuses() (out []string) {
+	for _, s := range readiness.Statuses {
+		out = append(out, string(s))
+	}
+	return out
+}
+
+func readinessCategories() (out []string) {
+	for _, s := range readiness.Categories {
+		out = append(out, string(s))
+	}
+	return out
+}
+
+// TestReadinessCatalogInSpec checks the catalog against the spec: severities, sources, gates and
+// capability names are values of the spec's enums, and ids match ReadinessCheckID.
+func TestReadinessCatalogInSpec(t *testing.T) {
+	doc := loadSpec(t)
+	enum := func(name string) []string { return doc.Components.Schemas[name].Enum }
+	idRE := regexp.MustCompile(`^[a-z]+\.[a-z0-9-]+$`)
+	for _, c := range readiness.Catalog {
+		if !idRE.MatchString(c.ID) || !slices.Contains(enum("ReadinessSeverity"), string(c.Severity)) ||
+			(c.Gates != "" && !slices.Contains(enum("ReadinessState"), string(c.Gates))) {
+			t.Errorf("catalog entry %s does not fit the spec", c.ID)
+		}
+	}
+	var caps []string
+	for _, c := range readiness.Capabilities {
+		caps = append(caps, string(c))
+	}
+	got := doc.Components.Schemas["AgentCapability"].Properties["name"].Enum
+	if !slices.Equal(got, caps) {
+		t.Errorf("AgentCapability.name enum %v, catalog %v", got, caps)
+	}
 }
 
 type schema struct {
@@ -322,6 +394,11 @@ func TestAdminPathsInSpec(t *testing.T) {
 		"get /v1/admin/users", "post /v1/admin/users", "get /v1/admin/users/{username}",
 		"patch /v1/admin/users/{username}", "delete /v1/admin/users/{username}",
 		"post /v1/admin/users/{username}/reset-password", "get /v1/audit/config",
+		"get /v1/admin/datasources", "post /v1/admin/datasources", "get /v1/admin/datasources/{datasourceId}",
+		"put /v1/admin/datasources/{datasourceId}", "delete /v1/admin/datasources/{datasourceId}",
+		"post /v1/admin/datasources/{datasourceId}/test", "get /v1/clusters/{cluster}/readiness",
+		"post /v1/clusters/{cluster}/readiness/recheck", "get /v1/clusters/{cluster}/readiness/history",
+		"get /v1/admin/clusters/{cluster}/install",
 	}
 	for _, w := range want {
 		m, p, _ := strings.Cut(w, " ")
