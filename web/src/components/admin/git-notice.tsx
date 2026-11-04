@@ -10,7 +10,7 @@ export function GitOnlyNotice({ clusters, what = 'This change' }: { clusters: st
       icon={GitBranchIcon}
       title={`Not sent to ${clusters.length === 1 ? 'the Git-only cluster' : 'Git-only clusters'} ${clusters.join(', ')}`}
     >
-      {what} does not reach {clusters.length === 1 ? 'it' : 'them'}: {clusters.length === 1 ? 'its' : 'their'}{' '}
+      {what} will not reach {clusters.length === 1 ? 'it' : 'them'}: {clusters.length === 1 ? 'its' : 'their'}{' '}
       policies are managed in Git (policy source “Git only”). Use Export YAML and commit the policy there.
     </Callout>
   )
