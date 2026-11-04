@@ -44,8 +44,11 @@ web-e2e: $(WEB_DIR)/node_modules ## Playwright smoke tests against the mock API.
 web-build: $(WEB_DIR)/node_modules ## Production build into web/dist.
 	cd $(WEB_DIR) && npm run build
 
-web-screenshots: $(WEB_DIR)/node_modules ## Capture every page in light and dark mode into web/screenshots/.
-	cd $(WEB_DIR) && mkdir -p screenshots && SCREENSHOTS_DIR=$(CURDIR)/$(WEB_DIR)/screenshots npx playwright test screenshots
+WEB_SCREENSHOTS_DIR ?= docs/screenshots
+
+web-screenshots: $(WEB_DIR)/node_modules ## Capture every page (light, dark, tablet) from the mock API into docs/screenshots/.
+	mkdir -p $(WEB_SCREENSHOTS_DIR)
+	cd $(WEB_DIR) && SCREENSHOTS_DIR=$(abspath $(WEB_SCREENSHOTS_DIR)) npx playwright test screenshots
 
 web-verify: web-check-api web-lint web-typecheck web-test web-build web-e2e ## Everything under WO-14 "Verification" except docker.
 
