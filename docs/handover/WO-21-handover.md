@@ -271,3 +271,104 @@ recommendation ids); the agent hook is `approvedHold`.
   Cleanup: Application deleted (cascade), `e2e/wo21b-live` removed from Git (1825e99), namespace
   and policy deleted, agent rolled back to helm revision 20 (`main-9325962`, as deployed by the
   orchestrator).
+
+## WO-21c: drift repair across recommendation ids
+
+Branch `wo-21c-drift-repair` from origin/main 266ebb3. Changed: `internal/agent/controller`
+only (`reconciler.go`, new `drift_test.go`).
+
+**Bug.** Drift repair (`keepLive`) ran only while `status.appliedRecommendationID` equalled the
+current recommendation id. The hub issues a new id on every run, also with the same values. That
+new id evaluated to `skipped/NoSignificantChange` and never reached `keepLive`, so drift repair
+stopped at the next hub run. E2E symptom: `TestWebhook/webhook_down_does_not_block_pod_creation`
+failed when a hub run landed between the apply and the drift check.
+
+**Behaviour now** (`decide()`, workload Applied with at least one auto-patch resource):
+- **Same id:** as before, `keepLive`.
+- **New id, guardrailed targets within the tolerance (5%) of the applied values:** the id is
+  *adopted*.
+  - "Guardrailed targets": the values the guardrails would set.
+  - The comparison uses every auto-patch resource; a resource that became auto-patch after the
+    change has no applied value and goes through the normal path.
+  - What adoption does:
+    - `spec.source` (id, generatedAt, confidence, riskFlags) and `status.appliedRecommendationID`
+      become the new recommendation's.
+    - `appliedAt` and the cooldown are unchanged.
+    - No `applied` event.
+    - `skipped/NoSignificantChange` is still reported once (D-017), as before. Its reason stays in
+      the Blocked condition, so a restarted agent does not repeat it.
+  - Then `keepLive`.
+  - The spec update bumps the generation. The status (observedGeneration) is written in the same
+    reconcile, so the webhook ignores the RSR only between those two requests.
+- **New id outside the tolerance:** normal path (guardrails, cooldown, apply).
+  - New: while that change is **blocked or skipped** (cooldown, low confidence, hub unreachable,
+    HPA, stale …), the applied values stay live, and `keepLive` keeps repairing drift.
+  - Before, the same-id branch already repaired regardless of the guardrail outcome.
+  - Pause and freeze still stop repair (`keepLive` returns early, as before).
+  - A deferred change replaces the spec (phase Deferred), as before.
+- **After a rollback (WO-08):** the agent waits ("rolled back; waiting for a new recommendation")
+  when the id is the rolled-back one, **or** when the new id's guardrailed targets equal the
+  rolled-back values (spec) for every resource it would change.
+  - Different values go through the guardrails as before (rollback cooldown on decreases).
+  - Related fix: a skipped or blocked decision in phase RolledBack no longer overwrites the RSR
+    spec. It keeps the rolled-back values and id. Before, a cooldown-blocked new recommendation
+    was written into the spec, and the "same id" check then refused that recommendation for good
+    after the cooldown.
+- **Approve once (D-027):**
+  - Audit-only approved workloads: nothing is adopted (no auto-patch resource). The hold logic
+    from WO-21b already compares values, so a new id with the same values keeps the hold.
+  - Mixed (cpu auto-patch, memory approved): the adoption keeps the `ApprovedOnce` marker and the
+    hold.
+- **HPA:** `keepLive` → `keepHPA` as before; the adoption leaves `spec.hpa` and the containers
+  unchanged.
+
+**Why guardrailed targets, not raw values.** The applied spec holds guardrailed values (clamped
+by minimums and max change). Comparing the raw recommendation would:
+- miss a clamped change that stays the same;
+- adopt a recommendation that a changed policy would now apply differently (e.g. a new limits
+  profile), which then would never be applied.
+
+**Verification**
+- `make test-agent` all ok (controller 85.4%); `make lint` 0 issues; controller suite green 3×.
+- New envtests (`drift_test.go`), each table case on its own workload:
+  - `TestDriftRepairAcrossIDs` (in-place, cpu auto-patch; next run = same id / new id same
+    values / new id within tolerance / outside / outside during the cooldown). After the run, a
+    new pod with the template values (webhook down) is resized to the live values.
+    - Adoption: id in spec and status, observedGeneration current.
+    - Event counts: 1 applied (2 for outside), 1 skipped for an adopted new id.
+    - A third run with the same values emits nothing.
+  - `TestRollbackAcrossIDs` (rollout, cooldown 0 so only the new check protects; same id / new id
+    same / within tolerance / outside):
+    - the rolled-back values are not applied again, and the spec keeps them;
+    - outside: applied.
+  - `TestApprovedAcrossIDs` (audit + approve once; same / new id / tolerance / outside): hold
+    kept with the `ApprovedOnce` condition, released for different values.
+  - `TestApprovedMixedAdopt`: the adoption keeps `ApprovedOnce` and the hold; a forced Argo
+    revert of cpu is repaired; 1 applied event.
+  - Against the old reconciler, these cases fail: new id, tolerance, outside-cooldown, rollback
+    new id and tolerance, mixed.
+- Existing `TestSkippedWhileAppliedSurvivesRestart` (skipped once, also across a restart)
+  unchanged and green.
+- **Live, ro-spoke-1 (2026-11-04 13:22–13:29 UTC).**
+  - Setup:
+    - Agent `wo21c-71b8b69` (helm rev 29), real WO-20 hub.
+    - Namespace `wo21c-live`; policy `wo21c-live` (cpu auto-patch, memory audit, in-place,
+      learningPeriod 0, minConfidence 0, maxChangePercent 100).
+    - Deployment `drift` (stress-ng, 500m).
+  1. Recompute: `applied/RecommendationApplied` in place, 500m→15m, id A `…61cc44b60da0`.
+  2. Recompute: new id B `…bcaf24b7c016` with the same 15m. It was adopted:
+     - status and spec carry B; generation 2/2; `appliedAt` unchanged;
+     - Blocked condition `False/NoSignificantChange`;
+     - hub audit: one `skipped/NoSignificantChange`, no new `applied`.
+  3. A further hub run: id C `…28696aa7cb3a`, adopted (log "new recommendation advises the
+     live values: adopted"). The hub still has exactly 2 events for the workload (1 applied,
+     1 skipped) for 3 ids.
+  4. Scale 1→2: the webhook injected 15m into the new pod, stamped with id C. So the webhook
+     trusts the RSR after the adoption's generation bump.
+  5. Drift: the old pod was resized by hand to 500m (`pods/resize`). The agent resized it back to
+     15m within about 2 s, under id C ("resized pod to the applied values"), with 0 restarts.
+     Before this fix the applied id (A) no longer matched, so nothing would have repaired it.
+  - Cleanup: namespace and policy deleted.
+  - WO-24's second e2e run (`e2e-run-ac3e1d`) started seconds after this deploy, so it ran on
+    this branch's agent. Its log shows drift repair resizing a pod in `e2e-webhook-…`. The agent
+    was rolled back to helm rev 28 (`main-1e72c9e`) after that run.
