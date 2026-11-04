@@ -95,6 +95,11 @@ type RecommenderConfig struct {
 		Runs  int      `json:"runs"`
 		Every Duration `json:"every"`
 	} `json:"backfill"`
+	// IncompleteMetricsGrace: a regular run whose inventory, or number of workloads with request
+	// series, fell below half of the previous one is treated as incomplete metrics and not stored
+	// for up to this long (the previous results stay current); after that the drop is accepted
+	// as real (WO-04d). Default 30m; negative disables the check.
+	IncompleteMetricsGrace Duration `json:"incompleteMetricsGrace"`
 
 	Step                  *Duration `json:"step"`
 	RateWindow            *Duration `json:"rateWindow"`

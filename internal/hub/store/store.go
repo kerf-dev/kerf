@@ -572,20 +572,58 @@ type RunInfo struct {
 	ID     uuid.UUID
 	AsOf   time.Time
 	Status string
+	// RepricingNeeded: a cluster of the run used the default rates although the cluster's latest
+	// regular run had pricing series (WO-04d: backfills from before the series existed).
+	RepricingNeeded bool
 }
 
 // BackfillRuns lists the backfill runs, oldest first.
 func (s *Store) BackfillRuns(ctx context.Context) ([]RunInfo, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id, as_of, status FROM recommender_runs WHERE backfill ORDER BY as_of, id`)
+	rows, err := s.Pool.Query(ctx, `WITH latest AS (
+			SELECT DISTINCT ON (rc.cluster) rc.cluster, rc.pricing->>'source' AS source
+			FROM recommender_run_clusters rc JOIN recommender_runs r ON r.id = rc.run_id
+			WHERE NOT r.backfill AND rc.status = 'succeeded' ORDER BY rc.cluster, rc.finished_at DESC)
+		SELECT r.id, r.as_of, r.status, EXISTS (
+			SELECT 1 FROM recommender_run_clusters rc JOIN latest l ON l.cluster = rc.cluster
+			WHERE rc.run_id = r.id AND rc.status = 'succeeded' AND rc.pricing->>'source' = 'default' AND l.source = 'metrics')
+		FROM recommender_runs r WHERE r.backfill ORDER BY r.as_of, r.id`)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (RunInfo, error) {
 		var x RunInfo
-		err := r.Scan(&x.ID, &x.AsOf, &x.Status)
+		err := r.Scan(&x.ID, &x.AsOf, &x.Status, &x.RepricingNeeded)
 		x.AsOf = x.AsOf.UTC()
 		return x, err
 	})
+}
+
+// LastMetricsPricing returns the rates of the cluster's latest successful run since since whose
+// pricing came from the pricing series.
+func (s *Store) LastMetricsPricing(ctx context.Context, cluster string, since time.Time) (recommender.Pricing, bool, error) {
+	var b []byte
+	err := s.Pool.QueryRow(ctx, `SELECT rc.pricing FROM recommender_run_clusters rc
+		WHERE rc.cluster = $1 AND rc.status = 'succeeded' AND rc.finished_at >= $2 AND rc.pricing->>'source' = 'metrics'
+		ORDER BY rc.finished_at DESC LIMIT 1`, cluster, since).Scan(&b)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recommender.Pricing{}, false, nil
+	}
+	if err != nil {
+		return recommender.Pricing{}, false, err
+	}
+	var p recommender.Pricing
+	if err := json.Unmarshal(b, &p); err != nil || p.CPUCoreHour <= 0 || p.MemoryGiBHour <= 0 {
+		return recommender.Pricing{}, false, err
+	}
+	return p, true, nil
+}
+
+// LiveInventory returns the number of live workloads of a cluster that came from the inventory
+// (not only from agent reports).
+func (s *Store) LiveInventory(ctx context.Context, cluster string) (int, error) {
+	var n int
+	err := s.Pool.QueryRow(ctx, `SELECT count(*) FROM workloads WHERE cluster = $1 AND deleted_at IS NULL AND attributes <> '{}'::jsonb`, cluster).Scan(&n)
+	return n, err
 }
 
 // FirstRegularRun returns the as-of time of the first successful non-backfill run.
