@@ -16,10 +16,6 @@ import (
 	"github.com/tomer1983/resource-optimizer/internal/agent/workload"
 )
 
-// AnnotationAllowDisruption, set to "true" on a workload, allows changes that restart the only
-// pod of a single-replica workload (WO-13). Proposed for api/v1alpha1/wellknown.go.
-const AnnotationAllowDisruption = v1alpha1.Prefix + "allow-disruption"
-
 // Disruption describes how a workload tolerates its pods being restarted (WO-13, D-007).
 type Disruption struct {
 	// SingleReplica: a Deployment or StatefulSet with one replica, or a workload whose
@@ -32,7 +28,7 @@ type Disruption struct {
 	RolloutSafe bool
 	// RolloutWhy explains why a rollout is not safe.
 	RolloutWhy string
-	// Allowed: the workload opted in with AnnotationAllowDisruption.
+	// Allowed: the workload opted in with v1alpha1.AnnotationAllowDisruption.
 	Allowed bool
 	// PDBs are the names of the PodDisruptionBudgets that select the workload's pods.
 	PDBs []string
@@ -43,7 +39,7 @@ func (d *Disruption) Unsafe() bool { return d != nil && d.SingleReplica && !d.Al
 
 // AssessDisruption evaluates a workload against the PodDisruptionBudgets of its namespace.
 func AssessDisruption(obj client.Object, pdbs []policyv1.PodDisruptionBudget) Disruption {
-	d := Disruption{Allowed: strings.EqualFold(obj.GetAnnotations()[AnnotationAllowDisruption], "true")}
+	d := Disruption{Allowed: strings.EqualFold(obj.GetAnnotations()[v1alpha1.AnnotationAllowDisruption], "true")}
 	kind, _ := workload.KindOf(obj)
 	if kind == v1alpha1.KindCronJob {
 		// Every run starts new pods: nothing to disrupt.

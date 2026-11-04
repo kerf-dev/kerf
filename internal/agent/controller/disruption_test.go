@@ -19,8 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/apply"
-	"github.com/tomer1983/resource-optimizer/internal/agent/guardrails"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 )
 
@@ -50,22 +48,22 @@ func TestSingleReplicaRecreateBlocked(t *testing.T) {
 	}
 	setRec(recFor(name, "250m", "200Mi"))
 
-	eventually(t, 20*time.Second, "blocked", wantBlocked(name, guardrails.ReasonSingleReplicaUnsafe))
-	eventually(t, 5*time.Second, "blocked event", wantEvent(name, hubclient.EventBlocked, guardrails.ReasonSingleReplicaUnsafe))
+	eventually(t, 20*time.Second, "blocked", wantBlocked(name, v1alpha1.ReasonSingleReplicaUnsafe))
+	eventually(t, 5*time.Second, "blocked event", wantEvent(name, hubclient.EventBlocked, v1alpha1.ReasonSingleReplicaUnsafe))
 	r, _ := getRSR(name)
 	if c := meta.FindStatusCondition(r.Status.Conditions, v1alpha1.ConditionBlocked); !strings.Contains(c.Message, "Recreate") ||
-		!strings.Contains(c.Message, apply.AnnotationAllowDisruption) {
+		!strings.Contains(c.Message, v1alpha1.AnnotationAllowDisruption) {
 		t.Fatalf("Blocked message does not explain: %q", c.Message)
 	}
 	if d := getDeploy(t, name); cpuReq(d) != "500m" {
 		t.Fatalf("template patched despite the block: %s", cpuReq(d))
 	}
 	time.Sleep(time.Second)
-	if n := countEvents(name, hubclient.EventBlocked, guardrails.ReasonSingleReplicaUnsafe); n != 1 {
+	if n := countEvents(name, hubclient.EventBlocked, v1alpha1.ReasonSingleReplicaUnsafe); n != 1 {
 		t.Fatalf("blocked event emitted %d times, want once (D-017)", n)
 	}
 
-	annotate(t, &appsv1.Deployment{}, name, map[string]any{apply.AnnotationAllowDisruption: "true"})
+	annotate(t, &appsv1.Deployment{}, name, map[string]any{v1alpha1.AnnotationAllowDisruption: "true"})
 	eventually(t, 20*time.Second, "applied after opt-in", wantPhase(name, v1alpha1.PhaseApplied))
 	if d := getDeploy(t, name); cpuReq(d) != "250m" {
 		t.Fatalf("template after opt-in: %s", cpuReq(d))
@@ -94,8 +92,8 @@ func TestSingleReplicaFallbackRefused(t *testing.T) {
 		p.Status.Conditions = append(p.Status.Conditions, corev1.PodCondition{Type: corev1.PodResizePending, Status: corev1.ConditionTrue,
 			Reason: corev1.PodReasonInfeasible, Message: "Node didn't have enough capacity", LastTransitionTime: metav1.Now()})
 	})
-	eventually(t, 20*time.Second, "blocked", wantBlocked(name, guardrails.ReasonSingleReplicaUnsafe))
-	eventually(t, 5*time.Second, "blocked event", wantEvent(name, hubclient.EventBlocked, guardrails.ReasonSingleReplicaUnsafe))
+	eventually(t, 20*time.Second, "blocked", wantBlocked(name, v1alpha1.ReasonSingleReplicaUnsafe))
+	eventually(t, 5*time.Second, "blocked event", wantEvent(name, hubclient.EventBlocked, v1alpha1.ReasonSingleReplicaUnsafe))
 	if n := countEvents(name, hubclient.EventFallback, v1alpha1.ReasonResizeInfeasible); n != 0 {
 		t.Fatalf("fallback emitted although refused: %d", n)
 	}
@@ -282,7 +280,7 @@ func TestStatefulSetOnDelete(t *testing.T) {
 		}
 		return nil
 	})
-	eventually(t, 20*time.Second, "eviction refused by the PDB", wantEvent(name, hubclient.EventBlocked, guardrails.ReasonPodDisruptionBudget))
+	eventually(t, 20*time.Second, "eviction refused by the PDB", wantEvent(name, hubclient.EventBlocked, v1alpha1.ReasonPodDisruptionBudget))
 	rsr, err := getRSRKind(v1alpha1.KindStatefulSet, name)
 	if err != nil {
 		t.Fatal(err)
@@ -290,7 +288,7 @@ func TestStatefulSetOnDelete(t *testing.T) {
 	if rsr.Status.Phase != v1alpha1.PhaseApplied {
 		t.Fatalf("phase %s", rsr.Status.Phase)
 	}
-	if c := meta.FindStatusCondition(rsr.Status.Conditions, v1alpha1.ConditionBlocked); c == nil || c.Reason != guardrails.ReasonPodDisruptionBudget {
+	if c := meta.FindStatusCondition(rsr.Status.Conditions, v1alpha1.ConditionBlocked); c == nil || c.Reason != v1alpha1.ReasonPodDisruptionBudget {
 		t.Fatalf("Blocked condition does not explain the refused eviction: %+v", c)
 	}
 	if c := meta.FindStatusCondition(rsr.Status.Conditions, v1alpha1.ConditionApplied); c == nil || !strings.Contains(c.Message, "0 of 2 pod(s) updated") {
