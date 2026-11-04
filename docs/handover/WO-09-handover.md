@@ -31,8 +31,14 @@ Build tag `e2e`: `make test` / `go test ./...` never run it. Log: `bin/e2e.log`.
 | d1 (05:04) | + main/WO-12, JVM via MaxRAMPercentage | Argo app stuck Progressing: all scenarios at once overcommitted the 8-core spoke-1 node (pods Pending) → stopped | – |
 | **e1 (05:12)** | final (152fdd7): 250m test requests | **PASS** — all 15 tests (3 skip-by-design), recompute trigger live | **12.1 min** |
 | **e2 (05:25)** | final, back to back | **PASS** | **15.3 min** |
+| f1 (06:14) | main 6fbfeda (phase 3 merged, all components main-6fbfeda) | all pass except `TestInPlaceJVMMemory`: WO-13 blocks the single-replica RestartContainer resize (`SingleReplicaUnsafe`) before the swap check | 18.2 min |
+| f2 (06:33) | same, back to back | same single failure | 18.2 min |
+| **g1 (06:51)** | wo-09c-e2e (ed8fca4): scenario 3 with 2 replicas, new `TestSingleReplicaRestartIsBlocked` | **PASS** — 16 tests (3 skip-by-design) | **14.6 min** |
+| **g2 (07:06)** | same, back to back | **PASS** | **14.4 min** |
 
-e1 + e2 are the `make e2e && make e2e` check on main 0596898..ece1564 (WO-04b/07/08/12 merged, recompute deployed).
+e1 + e2 are the `make e2e && make e2e` check on main 0596898..ece1564 (WO-04b/07/08/12 merged, recompute
+deployed). g1 + g2 are the final check: main 6fbfeda (WO-10/10b/11/12/13/04d) with every component
+deployed from main, plus the test-side fix of wo-09c-e2e.
 
 No leftovers after the runs (namespaces, policies, Argo apps); the spoke-2 agent token and the
 webhook replicas are back to their originals. The killed run 3 left a directory `e2e/e2e-argocd-208b17/`
