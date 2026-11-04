@@ -1,0 +1,224 @@
+# Small scenario: one workload per signal pattern (named synth-<pattern>-0, with the ground truth a
+# correct recommender must reach) plus a few generated workloads, in both synthetic clusters.
+# Used by WO-04's verification and to generate testdata/series fixtures.
+#
+# workloadLabel: true adds a convenience `workload` label to cAdvisor series so the WO-02
+# verification query works directly. Real cAdvisor has no such label: never depend on it.
+name: fleet-small
+seed: 42
+days: 30
+step: 60s
+workloadLabel: true
+
+clusters:
+  - name: synth-a
+    nodePools:
+      - {instanceType: m6i.xlarge, capacityType: on-demand, count: 3}
+      - {instanceType: c6a.2xlarge, capacityType: spot, count: 2}
+    fleet: &fleet
+      workloads: 20
+      newWorkloads: 0.05
+      sidecars: 0.2
+      stepChanges: 0.1
+      daemonSets: 1
+    workloads: &patterns
+      - name: synth-flat-0
+        namespace: patterns
+        replicas: 2
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/flat:1.0.0
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {cpu: "2", memory: 1Gi}
+            cpu: {pattern: flat, base: 200m}
+            memory: {pattern: flat, base: 400Mi}
+        expect: {cpu: decrease, memory: decrease}
+
+      - name: synth-diurnal-0
+        namespace: patterns
+        replicas: 3
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/diurnal:1.0.0
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {memory: 512Mi}
+            cpu: {pattern: diurnal, base: 150m, diurnal: 0.6, peakHour: 12}
+            memory: {pattern: flat, base: 300Mi}
+        expect: {cpu: decrease, memory: decrease}
+
+      - name: synth-weekly-0
+        namespace: patterns
+        replicas: 2
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/weekly:1.0.0
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {cpu: "2", memory: 2Gi}
+            cpu: {pattern: weekly, base: 300m, diurnal: 0.5, weekend: 0.4}
+            memory: {pattern: flat, base: 600Mi}
+        expect: {cpu: decrease, memory: decrease}
+
+      - name: synth-spiky-0
+        namespace: patterns
+        replicas: 2
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/spiky:1.0.0
+            requests: {cpu: "2", memory: 2Gi}
+            cpu: {pattern: spiky, base: 200m, spikesPerDay: 8, spikeMult: 5, spikeMinutes: 5}
+            memory: {pattern: flat, base: 500Mi}
+        expect: {cpu: decrease, memory: decrease}
+
+      - name: synth-leak-0
+        namespace: patterns
+        replicas: 2
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/leak:1.0.0
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {memory: 512Mi}
+            cpu: {pattern: flat, base: 50m}
+            # 250Mi growing ~8.6%/h of base: OOMKilled at the 512Mi limit roughly every 12h.
+            memory: {pattern: leak, base: 250Mi, leakPerHour: 0.0856}
+        expect: {cpu: decrease, memory: increase, riskFlags: [oom-killed]}
+
+      - name: synth-step-0
+        namespace: patterns
+        replicas: 2
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/step:1.0.0
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {memory: 1Gi}
+            # Release 4 days before the end triples CPU (150m -> 450m).
+            cpu: {pattern: step, base: 150m, stepAt: 4d, stepFactor: 3}
+            memory: {pattern: flat, base: 400Mi}
+        expect: {cpu: decrease, memory: decrease}
+
+      - name: synth-sparse-0
+        namespace: patterns
+        kind: CronJob
+        schedule: {every: 1h, offset: 5m, duration: 10m}
+        containers:
+          - name: job
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/sparse:1.0.0
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {cpu: "1", memory: 1Gi}
+            cpu: {pattern: sparse, base: 700m}
+            memory: {pattern: leak, base: 250Mi, leakPerHour: 6}
+        expect: {cpu: any, memory: any, riskFlags: [short-lived]}
+
+      - name: synth-throttled-0
+        namespace: patterns
+        replicas: 2
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/throttled:1.0.0
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+            # Demand peaks at ~765m against a 500m limit: usage is capped, CFS throttling is high.
+            cpu: {pattern: throttled, base: 450m, diurnal: 0.7}
+            memory: {pattern: flat, base: 250Mi}
+        expect: {cpu: increase, memory: any, riskFlags: [throttled]}
+
+      - name: synth-hpa-0
+        namespace: patterns
+        replicas: 2
+        hpa: {min: 2, max: 8, metric: cpu, target: 70}
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/hpa:1.0.0
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {memory: 512Mi}
+            # Base is the per-pod demand at min replicas; the HPA adds pods at the daily peak.
+            cpu: {pattern: diurnal, base: 350m, diurnal: 0.8}
+            memory: {pattern: flat, base: 200Mi}
+        expect: {cpu: any, memory: any, riskFlags: [hpa-coupled]}
+
+      - name: synth-jvm-0
+        namespace: patterns
+        replicas: 2
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/jvm:1.0.0-temurin21-jre
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {cpu: "2", memory: 2Gi}
+            cpu: {pattern: diurnal, base: 150m, diurnal: 0.4, startupMult: 5, startupMinutes: 5}
+            memory: {pattern: sawtooth, base: 1500Mi, sawtooth: 0.1, sawtoothMinutes: 15}
+        rollouts: [9d, 3d]
+        expect: {cpu: decrease, memory: keep}
+
+      - name: synth-sidecar-0
+        namespace: patterns
+        replicas: 2
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/sidecar:1.0.0
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {memory: 512Mi}
+            cpu: {pattern: diurnal, base: 100m}
+            memory: {pattern: flat, base: 200Mi}
+          - name: envoy
+            image: docker.io/envoyproxy/envoy:v1.34.1
+            sidecar: true
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+            cpu: {pattern: diurnal, base: 15m}
+            memory: {pattern: flat, base: 60Mi}
+        expect: {cpu: decrease, memory: decrease, riskFlags: [sidecar]}
+
+      - name: synth-new-0
+        namespace: patterns
+        replicas: 2
+        age: 36h
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/new:1.0.0
+            requests: {cpu: 500m, memory: 512Mi}
+            cpu: {pattern: diurnal, base: 100m}
+            memory: {pattern: flat, base: 200Mi}
+        expect: {cpu: any, memory: any, riskFlags: [low-confidence]}
+
+      - name: synth-restarting-0
+        namespace: patterns
+        replicas: 2
+        containers:
+          - name: app
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/restarting:1.0.0
+            requests: {cpu: 500m, memory: 512Mi}
+            cpu: {pattern: flat, base: 100m}
+            memory: {pattern: flat, base: 200Mi}
+            crashEvery: 8h
+        expect: {cpu: decrease, memory: decrease, riskFlags: [restarting]}
+
+      - name: synth-daemon-0
+        namespace: patterns
+        kind: DaemonSet
+        containers:
+          - name: agent
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/daemon:1.0.0
+            requests: {cpu: 200m, memory: 256Mi}
+            limits: {memory: 512Mi}
+            cpu: {pattern: flat, base: 30m}
+            memory: {pattern: flat, base: 90Mi}
+        expect: {cpu: decrease, memory: decrease}
+
+      - name: synth-ledger-store-0
+        namespace: patterns
+        kind: StatefulSet
+        replicas: 3
+        containers:
+          - name: store
+            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/store:1.0.0
+            requests: {cpu: "2", memory: 4Gi}
+            limits: {memory: 4Gi}
+            cpu: {pattern: weekly, base: 300m}
+            memory: {pattern: flat, base: 2Gi}
+        expect: {cpu: decrease, memory: decrease}
+
+  - name: synth-b
+    nodePools:
+      - {instanceType: c6a.2xlarge, capacityType: on-demand, count: 2}
+      - {instanceType: m6i.xlarge, capacityType: spot, count: 3}
+    fleet: *fleet
+    workloads: *patterns
