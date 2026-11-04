@@ -88,6 +88,8 @@ const (
 	ReasonUnsupportedNode          = "UnsupportedNode"
 	ReasonRestartPolicyRequired    = "RestartPolicyRequired"
 	ReasonHubUnreachable           = "HubUnreachable"
+	// ReasonJVMFixedHeap: memory change refused on a JVM with a fixed -Xmx (WO-12).
+	ReasonJVMFixedHeap = "JVMFixedHeap"
 
 	// fallback
 	ReasonResizeInfeasible      = "ResizeInfeasible"

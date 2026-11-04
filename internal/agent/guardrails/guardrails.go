@@ -332,6 +332,16 @@ func targets(in Input, scope map[string]bool) ([]v1alpha1.ContainerRecommendatio
 			reqChanged := hasNewReq && (!hasCurReq || newReq.Cmp(curReq) != 0)
 			limChanged := hasNewLim != hasCurLim || (hasNewLim && newLim.Cmp(curLim) != 0)
 
+			// WO-12: memory of a JVM with a fixed -Xmx is audit-only.
+			if res == corev1.ResourceMemory && (reqChanged || limChanged) {
+				if msg, ok := workload.JVMFixedHeapRefusal(live.Container, eff.JVMDetect, flagged(in.Rec, rc, v1alpha1.RiskJVMFixedHeap)); ok {
+					refusals = append(refusals, Refusal{Container: rc.Name, Resource: r, Reason: v1alpha1.ReasonJVMFixedHeap, Message: msg})
+					newReq, hasNewReq = curReq.DeepCopy(), hasCurReq
+					newLim, hasNewLim = curLim.DeepCopy(), hasCurLim
+					reqChanged, limChanged = false, false
+				}
+			}
+
 			// D-007: memory of JVM/Python containers is bound at start-up; in-place needs RestartContainer.
 			if res == corev1.ResourceMemory && (reqChanged || limChanged) && in.Strategy == v1alpha1.StrategyInPlace &&
 				eff.JVMDetect && workload.HeapBound(live.Container) &&
