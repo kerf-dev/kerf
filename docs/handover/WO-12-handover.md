@@ -85,7 +85,9 @@ Branch `wo-12-jvm` (pushed, no PR), rebased on `origin/main` 828458d (WO-04c and
   and WO-12 each add a `0003`. Mine was applied to the shared DB first, at 04:27. `hub:wo11-1`
   (04:30) then skipped its `0003` and fails with "column r.hpa does not exist". I reported this to
   the hub session and the orchestrator; writing to the shared DB was not permitted for me.
-  Proposed order: 0003 jvm (already in the DB), 0004 hpa, 0005 windows.
+  Order agreed with the orchestrator: 0003 jvm (kept, already in the DB), 0004 hpa (WO-11), 0005
+  deferred windows (WO-10). The hub session fixes the live hub by renumbering and redeploying.
+  WO-12 does not redeploy the hub until WO-11's fix is live, nor the spokes during e2e runs.
 - **The live hub is no longer my build.** WO-11 redeployed it (`hub:wo11-1`). The JVM recommender
   code is live again only after main contains WO-12, or with a combined build.
 - **First hub deploy (04:11 UTC) was rolled back** at 04:21 to WO-04c's revision. Without the
