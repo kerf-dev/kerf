@@ -69,7 +69,7 @@ func (c *Cached) Price(ctx context.Context, k Key) (Price, error) {
 		return Price{}, err
 	case ok && e.err == nil:
 		if c.Log != nil {
-			c.Log.Warn("price refresh failed, serving stale price", "key", k.String(), "age", now.Sub(e.fetchedAt).String(), "err", err)
+			c.Log.WarnContext(ctx, "price refresh failed, serving stale price", "key", k.String(), "age", now.Sub(e.fetchedAt).String(), "err", err)
 		}
 		return e.price, nil
 	default:
