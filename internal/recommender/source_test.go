@@ -280,6 +280,11 @@ func TestSourceLoad(t *testing.T) {
 					if !w.HasRequests {
 						t.Errorf("%s HasRequests = false", k.ID())
 					}
+					// Live: request/limit series at the window end; the CronJob between runs has
+					// only the lookback ones.
+					if want := k != keyReport; w.Live != want {
+						t.Errorf("%s Live = %v, want %v", k.ID(), w.Live, want)
+					}
 				}
 				web := d.Workloads[keyWeb]
 				if app := web.Containers["app"]; len(app.CPU) != 14*288 || len(app.Memory) != 14*288 {

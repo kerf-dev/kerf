@@ -168,7 +168,14 @@ type Attributes struct {
 	AverageReplicas float64            `json:"averageReplicas"`
 	HPA             *recommender.HPA   `json:"hpa,omitempty"`
 	Used24h         map[string]float64 `json:"used24h,omitempty"` // cpu (cores), memory (bytes)
+	// Live: the workload had pods at the end of the latest regular run's data (WO-04e). Absent in
+	// attributes written before WO-04e, which count as live.
+	Live bool `json:"live"`
 }
+
+// liveSQL is true for a workload with pods in the latest metrics: Attributes.Live, or attributes
+// written before WO-04e. A workload only an agent reported (empty attributes) is not live.
+const liveSQL = `(attributes @> '{"live": true}'::jsonb OR (attributes <> '{}'::jsonb AND NOT attributes ? 'live'))`
 
 // UpsertInventory records the workloads found by a run. When markDeleted is true, live workloads
 // of the cluster that are not in inv get deleted_at = seenAt. Returns workload ids by key.
@@ -176,7 +183,10 @@ func (s *Store) UpsertInventory(ctx context.Context, cluster string, inv []recom
 	return s.UpsertInventoryAt(ctx, cluster, inv, seenAt, markDeleted, seenAt)
 }
 
-// UpsertInventoryAt is UpsertInventory for an inventory whose metrics end at dataEnd. A workload
+// UpsertInventoryAt is UpsertInventory for an inventory whose metrics end at dataEnd. A regular
+// run revives deleted workloads found in its inventory, except those deleted because the agent no
+// longer reports them (PruneAbsent) that have no pods now: the inventory spans the whole profile
+// window, so it still lists workloads deleted days ago. A workload
 // no inventory has seen yet (created by an agent status report, empty attributes) is only marked
 // deleted when it was reported before dataEnd: one reported after the run's data is kept until a
 // run can see it.
@@ -191,7 +201,7 @@ func (s *Store) UpsertInventoryAt(ctx context.Context, cluster string, inv []rec
 	for _, w := range inv {
 		attrs, _ := json.Marshal(Attributes{
 			Containers: w.Containers, AverageReplicas: w.AverageReplicas, HPA: w.HPA,
-			Used24h: map[string]float64{"cpu": w.Used24hCPU, "memory": w.Used24hMemory},
+			Used24h: map[string]float64{"cpu": w.Used24hCPU, "memory": w.Used24hMemory}, Live: w.Live,
 		})
 		k := w.Key
 		batch.Queue(`INSERT INTO workloads (cluster, namespace, kind, name, first_seen_at, last_seen_at, attributes)
@@ -199,9 +209,10 @@ func (s *Store) UpsertInventoryAt(ctx context.Context, cluster string, inv []rec
 			ON CONFLICT (cluster, namespace, kind, name) DO UPDATE SET
 				first_seen_at = least(workloads.first_seen_at, excluded.first_seen_at),
 				last_seen_at  = CASE WHEN $7 THEN greatest(workloads.last_seen_at, excluded.last_seen_at) ELSE workloads.last_seen_at END,
-				deleted_at    = CASE WHEN $7 THEN NULL ELSE workloads.deleted_at END,
+				deleted_at    = CASE WHEN $7 AND (workloads.deleted_by IS DISTINCT FROM 'agent' OR $8) THEN NULL ELSE workloads.deleted_at END,
+				deleted_by    = CASE WHEN $7 AND (workloads.deleted_by IS DISTINCT FROM 'agent' OR $8) THEN NULL ELSE workloads.deleted_by END,
 				attributes    = CASE WHEN $7 OR workloads.attributes = '{}'::jsonb THEN excluded.attributes ELSE workloads.attributes END
-			RETURNING id`, cluster, k.Namespace, k.Kind, k.Name, seenAt, attrs, markDeleted).QueryRow(func(r pgx.Row) error {
+			RETURNING id`, cluster, k.Namespace, k.Kind, k.Name, seenAt, attrs, markDeleted, w.Live).QueryRow(func(r pgx.Row) error {
 			var id int64
 			if err := r.Scan(&id); err != nil {
 				return err
@@ -218,7 +229,7 @@ func (s *Store) UpsertInventoryAt(ctx context.Context, cluster string, inv []rec
 		for _, id := range ids {
 			live = append(live, id)
 		}
-		if _, err := tx.Exec(ctx, `UPDATE workloads SET deleted_at = $2
+		if _, err := tx.Exec(ctx, `UPDATE workloads SET deleted_at = $2, deleted_by = 'metrics'
 			WHERE cluster = $1 AND deleted_at IS NULL AND NOT (id = ANY($3))
 			  AND (attributes <> '{}'::jsonb OR last_seen_at < $4)`, cluster, seenAt, live, dataEnd); err != nil {
 			return nil, err
@@ -741,25 +752,74 @@ func (s *Store) UpsertStatuses(ctx context.Context, cluster string, items []huba
 		if it.ObservedAt != nil {
 			observed = *it.ObservedAt
 		}
+		// A workload the agent reports exists: one PruneAbsent deleted is revived.
 		batch.Queue(`WITH w AS (
-				INSERT INTO workloads (cluster, namespace, kind, name) VALUES ($1, $2, $3, $4)
-				ON CONFLICT (cluster, namespace, kind, name) DO UPDATE SET cluster = excluded.cluster RETURNING id)
+				INSERT INTO workloads (cluster, namespace, kind, name, first_seen_at, last_seen_at) VALUES ($1, $2, $3, $4, $20, $20)
+				ON CONFLICT (cluster, namespace, kind, name) DO UPDATE SET
+					deleted_at = CASE WHEN workloads.deleted_by = 'agent' THEN NULL ELSE workloads.deleted_at END,
+					deleted_by = CASE WHEN workloads.deleted_by = 'agent' THEN NULL ELSE workloads.deleted_by END
+				RETURNING id)
 			INSERT INTO workload_status (workload_id, recommendation_id, policy, cpu_mode, cpu_mode_source, memory_mode,
 				memory_mode_source, strategy, settings, phase, reason, message, live, applied_at, observed_at, next_window, updated_at)
-			SELECT w.id, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, now() FROM w
+			SELECT w.id, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20 FROM w
 			ON CONFLICT (workload_id) DO UPDATE SET recommendation_id = excluded.recommendation_id, policy = excluded.policy,
 				cpu_mode = excluded.cpu_mode, cpu_mode_source = excluded.cpu_mode_source, memory_mode = excluded.memory_mode,
 				memory_mode_source = excluded.memory_mode_source, strategy = excluded.strategy, settings = excluded.settings,
 				phase = excluded.phase, reason = excluded.reason, message = excluded.message, live = excluded.live,
-				applied_at = excluded.applied_at, observed_at = excluded.observed_at, next_window = excluded.next_window, updated_at = now()`,
+				applied_at = excluded.applied_at, observed_at = excluded.observed_at, next_window = excluded.next_window, updated_at = $20`,
 			cluster, it.Workload.Namespace, it.Workload.Kind, it.Workload.Name,
 			nullUUID(it.RecommendationID), it.Policy, it.Modes.CPU, nullStr(it.Modes.CPUSource), it.Modes.Memory,
-			nullStr(it.Modes.MemorySource), nullStr(it.Strategy), settings, it.Phase, it.Reason, it.Message, live, it.AppliedAt, observed, it.NextWindow)
+			nullStr(it.Modes.MemorySource), nullStr(it.Strategy), settings, it.Phase, it.Reason, it.Message, live, it.AppliedAt, observed, it.NextWindow, now)
 	}
 	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// RecordPull records a recommendation pull by the cluster's agent at now and returns the two
+// pulls before it (nil when unknown). Pulls less than minGap after the last recorded one (pages
+// of one pull, retries) are not recorded; recorded is false then.
+func (s *Store) RecordPull(ctx context.Context, cluster string, now time.Time, minGap time.Duration) (last, prev *time.Time, recorded bool, err error) {
+	err = s.Pool.QueryRow(ctx, `WITH old AS (SELECT agent_pull_at, agent_prev_pull_at FROM clusters WHERE name = $1 FOR UPDATE)
+		UPDATE clusters c SET agent_prev_pull_at = old.agent_pull_at, agent_pull_at = $2::timestamptz
+		FROM old WHERE c.name = $1 AND (old.agent_pull_at IS NULL OR old.agent_pull_at <= $2::timestamptz - make_interval(secs => $3::float8))
+		RETURNING old.agent_pull_at, old.agent_prev_pull_at`, cluster, now, minGap.Seconds()).Scan(&last, &prev)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil, false, nil
+	}
+	return last, prev, err == nil, err
+}
+
+// PruneAbsent soft-deletes the live workloads of an agent-backed cluster that the agent no longer
+// reports (WO-04e). The agent sends a full status batch after every pull; last and prev are the
+// two pulls before the current one. A workload is deleted when
+//   - it was not reported since prev, so it is missing from the full batches after prev and last,
+//   - the full batch after last arrived (some workload of the cluster was reported since last),
+//   - it has no pods in the latest metrics (liveSQL) and existed before prev.
+//
+// It keeps its history, status and audit; a status report or pods in a later run revive it.
+// Returns the keys deleted.
+func (s *Store) PruneAbsent(ctx context.Context, cluster string, last, prev, now time.Time) ([]hubapi.WorkloadKey, error) {
+	rows, err := s.Pool.Query(ctx, `UPDATE workloads w SET deleted_at = $4, deleted_by = 'agent'
+		WHERE w.cluster = $1 AND w.deleted_at IS NULL AND w.first_seen_at < $3 AND NOT `+liveSQL+`
+		  AND NOT EXISTS (SELECT 1 FROM workload_status ws WHERE ws.workload_id = w.id AND ws.updated_at >= $3)
+		  AND EXISTS (SELECT 1 FROM workload_status ws JOIN workloads x ON x.id = ws.workload_id
+		              WHERE x.cluster = $1 AND ws.updated_at >= $2)
+		RETURNING w.namespace, w.kind, w.name`, cluster, last, prev, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []hubapi.WorkloadKey
+	for rows.Next() {
+		k := hubapi.WorkloadKey{Cluster: cluster}
+		if err := rows.Scan(&k.Namespace, &k.Kind, &k.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
 }
 
 // ReportedSettings returns the settings the agent reported per workload of a cluster.

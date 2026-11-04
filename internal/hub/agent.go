@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -34,6 +35,9 @@ func (s *Server) listRecommendations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ns := q.Get("namespace")
+	if TokenFrom(r.Context()).Role == hubapi.RoleAgent && q.Get("continue") == "" {
+		s.pruneAbsent(r.Context(), cluster)
+	}
 	views, err := s.Store.LoadWorkloads(r.Context(), store.WorkloadFilter{Cluster: cluster})
 	if err != nil {
 		s.internal(w, r, err)
@@ -76,6 +80,38 @@ func (s *Server) listRecommendations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, out)
+}
+
+// pullMinGap: requests closer than this to the last recorded pull are pages or retries of it.
+const pullMinGap = 10 * time.Second
+
+// pruneAbsent records a pull by the cluster's agent and soft-deletes the workloads missing from
+// the agent's last two full status batches that have no pods (WO-04e, Store.PruneAbsent). Errors
+// are logged: they never fail the pull.
+func (s *Server) pruneAbsent(ctx context.Context, cluster string) {
+	now := s.now()
+	last, prev, recorded, err := s.Store.RecordPull(ctx, cluster, now, pullMinGap)
+	if err != nil {
+		s.Log.WarnContext(ctx, "recording the agent pull failed", "cluster", cluster, "err", err)
+		return
+	}
+	if !recorded || last == nil || prev == nil {
+		return
+	}
+	keys, err := s.Store.PruneAbsent(ctx, cluster, *last, *prev, now)
+	if err != nil {
+		s.Log.WarnContext(ctx, "pruning workloads the agent no longer reports failed", "cluster", cluster, "err", err)
+		return
+	}
+	if len(keys) == 0 {
+		return
+	}
+	ids := make([]string, 0, min(len(keys), 20))
+	for _, k := range keys[:min(len(keys), 20)] {
+		ids = append(ids, k.ID())
+	}
+	s.Log.InfoContext(ctx, "workloads the agent no longer reports marked deleted", "cluster", cluster, "count", len(keys), "workloads", ids)
+	s.Metrics.markDirty()
 }
 
 func refKey(r hubapi.WorkloadRef) string { return r.Namespace + "\x00" + r.Kind + "\x00" + r.Name }
