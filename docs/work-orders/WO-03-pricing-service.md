@@ -2,7 +2,7 @@
 
 - **Phase / wave:** 1 / 1
 - **Depends on:** WO-00
-- **Owns:** `cmd/pricing/`, `internal/pricing/`, `deploy/charts/pricing/`, `make/pricing.mk`
+- **Owns:** `cmd/pricing/`, `internal/pricing/`, `deploy/charts/pricing/`, `make/pricing.mk`, `dev/prices.yaml`
 - **Decisions:** D-001, D-008
 
 ## Goal

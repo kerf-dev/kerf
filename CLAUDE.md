@@ -30,6 +30,19 @@ Operating loop: large task → Execution Plan with parallel tracks → one file 
 - Work on branch `wo-XX-<slug>` and open a PR to `main`; never push to `main` directly.
 - Go 1.24+, controller-runtime for Kubernetes code, `log/slog` for logging, table-driven tests.
 
+## Shared local environment (several tracks run at once)
+
+- Read `docs/handover/*.md` first: they hold the contract and environment conventions (ports, labels, IDs).
+- The k3d clusters `ro-hub`, `ro-spoke-1`, `ro-spoke-2` are shared and already running. Never run `dev-up`,
+  `dev-down`, `dev-reset`, delete clusters, or touch another component's Helm release or namespace objects.
+- Deploy only your component: build, push to `localhost:5005/resource-optimizer/<component>:<tag>`, `helm upgrade --install`
+  into namespace `resource-optimizer`. Do not run `tilt up` (several tracks would fight over its port).
+- Synthetic data (WO-02) uses cluster names `synth-a` and `synth-b`; never write synthetic series for the real `ro-*` clusters.
+- You may add Go dependencies to `go.mod`/`go.sum` (run `go mod tidy`); the orchestrator resolves conflicts at merge.
+- GitHub rejects pushes that touch `.github/workflows/` (token lacks `workflow` scope): put workflow files in
+  `ci/github-workflows/` instead. `gh` is not installed: push your branch, never push `main`, don't open PRs.
+- Toolchain: `export PATH="$HOME/sdk/go/bin:$HOME/go/bin:$HOME/sdk/node/bin:$HOME/.local/bin:$PATH"`.
+
 ## Repository layout
 
 ```

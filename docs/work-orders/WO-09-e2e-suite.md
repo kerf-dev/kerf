@@ -2,7 +2,7 @@
 
 - **Phase / wave:** 2 / 2
 - **Depends on:** WO-01, WO-04, WO-06, WO-07 merged (WO-08 scenarios added when it lands)
-- **Owns:** `test/e2e/`, `make/e2e.mk`, `.github/workflows/e2e.yaml`
+- **Owns:** `test/e2e/`, `make/e2e.mk`, `ci/github-workflows/e2e.yaml` (moved to `.github/workflows/` once a token with `workflow` scope exists)
 - **Decisions:** D-006, D-007, D-010
 
 ## Goal
