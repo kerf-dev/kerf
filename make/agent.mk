@@ -28,8 +28,7 @@ test-agent: agent-envtest ## Unit + envtest tests of the agent, with coverage.
 	  $(GO) test $(GOFLAGS) ./internal/agent/... -cover
 
 .PHONY: agent-sync-crds
-agent-sync-crds: ## Copy api/crds into the agent chart (run after `make generate`).
-	cp api/crds/*.yaml $(AGENT_CHART)/crds/
+agent-sync-crds: charts-sync ## Alias of `make charts-sync` (CRDs are chart templates since WO-18b).
 
 .PHONY: lint-agent-chart
 lint-agent-chart: ## helm lint the agent chart.
@@ -51,5 +50,5 @@ deploy-agent: docker-agent ## Build, push and helm-install the agent on every sp
 	done
 
 .PHONY: agent-crds
-agent-crds: ## Server-side apply the CRDs on every spoke (upgrades; Helm's crds/ only installs).
+agent-crds: ## Server-side apply the CRDs on every spoke (without a chart upgrade).
 	@for c in $(AGENT_CLUSTERS); do kubectl --context k3d-$$c apply --server-side --force-conflicts -f api/crds/; done
