@@ -1,0 +1,60 @@
+# resource-optimizer mutating admission webhook (WO-07). One release per spoke cluster,
+# namespace resource-optimizer. Needs cert-manager and the resource-optimizer CRDs (shipped by
+# the agent chart; this chart does not install CRDs).
+
+# Cluster name (informational; set by Tilt / dev scripts).
+clusterName: ""
+
+# Names default to the release name (release "webhook" -> Deployment/Service "webhook").
+fullnameOverride: ""
+
+image:
+  repository: localhost:5005/resource-optimizer/webhook
+  tag: dev
+  pullPolicy: IfNotPresent
+
+replicas: 2
+
+# Serving certificate from cert-manager. By default the chart creates a namespaced self-signed
+# Issuer; set issuerRef to use an existing (Cluster)Issuer instead. cert-manager's CA injector
+# writes the CA into the MutatingWebhookConfiguration.
+certManager:
+  issuerRef: {}
+  #  kind: ClusterIssuer
+  #  name: my-ca
+  duration: 8760h
+  renewBefore: 720h
+
+webhook:
+  # Ignore: a webhook outage never blocks pod creation (pods start with template values and
+  # the agent resizes them afterwards).
+  failurePolicy: Ignore
+  # API server timeout (1-30s; the handler only reads informer caches).
+  timeoutSeconds: 2
+  # Namespaces never sent to the webhook, in addition to kube-system and the release namespace.
+  # A namespace (or pod) labelled resource-optimizer.oz.io/skip-webhook=true is skipped too.
+  excludeNamespaces: []
+
+logLevel: info
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Spread replicas across nodes and zones (best effort: ScheduleAnyway).
+topologySpread:
+  enabled: true
+  whenUnsatisfiable: ScheduleAnyway
+
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
