@@ -28,7 +28,7 @@ Agent, policies, `auto-patch` with `in-place` and `rollout`, guardrails, rollbac
 
 Exit criterion: one non-prod EKS namespace on `auto-patch` for 2 weeks with no unplanned rollback.
 
-## Phase 3 – Smarter recommendations (work-orders not written yet)
+## Phase 3 – Smarter recommendations
 - WO-10 `deferred` strategy, maintenance and freeze windows
 - WO-11 HPA coordination (requests + HPA target in one change; lifts D-011)
 - WO-12 JVM detection and heap-aware memory recommendations

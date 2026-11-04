@@ -74,6 +74,7 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 		Engine:  &recommender.Engine{Loader: &recommender.Source{Q: prom, Cfg: recCfg}, Cfg: recCfg, Strategy: strategy},
 		Metrics: metrics, Cfg: cfg, Log: log,
 	}
+	srv.Job = job
 	if err := metrics.Refresh(ctx, st); err != nil {
 		log.Warn("initial metrics refresh", "err", err)
 	}

@@ -32,8 +32,25 @@ Branch `wo-04-hub`, pushed. Deployed to ro-hub, namespace `resource-optimizer`, 
   at the end of its bucket, `min(t+step, to)`. Every regular run stores per cluster exactly the total
   `GET /v1/summary` shows (same summation and rounding) and it takes effect when the run finishes, so
   with the default `to` the last point equals the summary per cluster and for the fleet (fleet savings
-  in the summary are the sum of the rounded cluster savings). The trend starts with the first run;
-  the dev values file backfills 7 daily runs on an empty database.
+  in the summary are the sum of the rounded cluster savings). The trend starts with the first run.
+- **Backfill (WO-04c)**: dev computes history from the stored metrics, one backfill run as of each UTC
+  midnight of the 29 days before the first regular run (within `history.retention`). The regular run
+  goes first; the backfill runs fill in between regular runs (one at a time, newest first), and
+  missing days are filled at every start. Backfill runs off that grid or failed (e.g. the 7 runs
+  computed by older versions as of the start time, while the synthetic data was being regenerated)
+  are deleted with their recommendations once the new ones are stored.
+- **Recompute (D-019, WO-04c)**: `POST /v1/admin/recompute[?cluster=]` (admin) queues a run and
+  returns `202 {runId, cluster?, requestedAt, coalesced}`. It runs as soon as no other run is in
+  progress, as of that moment (data up to the last full step, 5 min). Requests for the same scope
+  arriving while one is still queued get its id (`coalesced: true`). Done when the cluster's
+  `lastRecommenderRunAt` (`GET /v1/clusters`) passes `requestedAt`.
+- **Usage recommendation (WO-04c)**: `recommendation` is the step function of the recommendation
+  history, sampled on the same timestamps as `usage`/`request`/`limit` (VictoriaMetrics aligns range
+  queries to multiples of `step`, so the first point can precede `from`); no points before the
+  workload's first recommendation.
+- **Identical consecutive runs** are stored as separate recommendations (each run has its own id and
+  `generatedAt`, which agents and the freshness metric rely on); history older than
+  `history.fullResolution` is thinned to one per day. The UI collapses unchanged runs.
 - **D-016 additions (WO-04b)**: `GET /v1/workloads/facets` (same filters as `/v1/workloads`; each facet
   is counted without its own filter, `total` with all of them), `WorkloadRecommendation.pricing
   {source metrics|default, cpuCoreHourUSD, memoryGiBHourUSD}` on every recommendation shape (absent on
@@ -42,7 +59,8 @@ Branch `wo-04-hub`, pushed. Deployed to ro-hub, namespace `resource-optimizer`, 
 - **Dashboards (WO-05)**: hub series per docs/contracts/metrics.md, plus `ro_recommender_*` operational
   series: `runs_total{status}`, `run_duration_seconds`, `last_success_timestamp_seconds{cluster}`,
   `pricing_fallback{cluster}` (1 = default rate used), `recommendations{cluster}`;
-  `ro_hub_http_requests_total{route,code}`. `ro_actions_total` carries `cluster` like every hub series.
+  `ro_hub_http_requests_total{route,code}`. `ro_actions_total` carries the workload labels (`cluster`,
+  `namespace`, `workload_kind`, `workload`) like every hub series (WO-04c).
 
 ## Recommender
 - PromQL only (`internal/recommender/queries.go`, canonical pod→workload joins); usage = per-step max

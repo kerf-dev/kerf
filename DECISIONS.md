@@ -95,3 +95,7 @@ unchanged (one per action).
 Local k3d only: the hub's dev tokens live in `deploy/charts/hub/values-dev.yaml`; each spoke's agent gets the
 matching one from `deploy/charts/agent/values-<cluster>.yaml` with `tokenSecret.create: true`, so `make deploy-agent`
 and Tilt connect agents without manual Secret handling. Real clusters use an externally managed Secret (create: false).
+
+## D-019 Admin recompute trigger — Accepted (2026-11-04)
+`POST /v1/admin/recompute` (role `admin`, optional `?cluster=`) starts a recommender run immediately and returns
+202 with the run id. Used by the e2e suite and operators; the scheduled interval is unchanged.

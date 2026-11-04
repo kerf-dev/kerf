@@ -421,6 +421,7 @@ func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*Workloa
 				st.Settings = &vs
 			}
 			_ = json.Unmarshal(sLive, &st.Live)
+			st.JVM = statusJVM(sSettings)
 			st.AppliedAt, st.ObservedAt = utc(sApplied), utc(sObserved)
 			v.Status = st
 		}
@@ -555,6 +556,58 @@ func (s *Store) RecordRunCluster(ctx context.Context, rc RunCluster) error {
 	return err
 }
 
+// RunInfo identifies a run.
+type RunInfo struct {
+	ID     uuid.UUID
+	AsOf   time.Time
+	Status string
+}
+
+// BackfillRuns lists the backfill runs, oldest first.
+func (s *Store) BackfillRuns(ctx context.Context) ([]RunInfo, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT id, as_of, status FROM recommender_runs WHERE backfill ORDER BY as_of, id`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (RunInfo, error) {
+		var x RunInfo
+		err := r.Scan(&x.ID, &x.AsOf, &x.Status)
+		x.AsOf = x.AsOf.UTC()
+		return x, err
+	})
+}
+
+// FirstRegularRun returns the as-of time of the first successful non-backfill run.
+func (s *Store) FirstRegularRun(ctx context.Context) (time.Time, bool, error) {
+	var t *time.Time
+	err := s.Pool.QueryRow(ctx, `SELECT min(as_of) FROM recommender_runs WHERE NOT backfill AND status IN ('succeeded', 'partial')`).Scan(&t)
+	if err != nil || t == nil {
+		return time.Time{}, false, err
+	}
+	return t.UTC(), true, nil
+}
+
+// DeleteRuns deletes runs with their per-cluster results and their recommendations, and returns
+// the number of recommendations deleted.
+func (s *Store) DeleteRuns(ctx context.Context, ids []uuid.UUID) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	tag, err := tx.Exec(ctx, `DELETE FROM recommendations WHERE run_id = ANY($1)`, ids)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM recommender_runs WHERE id = ANY($1)`, ids); err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), tx.Commit(ctx)
+}
+
 // HasSucceededRun reports whether any run succeeded (used to decide on a dev backfill).
 func (s *Store) HasSucceededRun(ctx context.Context) (bool, error) {
 	var ok bool
@@ -630,10 +683,7 @@ func (s *Store) UpsertStatuses(ctx context.Context, cluster string, items []huba
 	// One statement per item (workload upsert + status upsert), all sent in one batch.
 	batch := &pgx.Batch{}
 	for _, it := range items {
-		settings := []byte("{}")
-		if it.Settings != nil {
-			settings, _ = json.Marshal(it.Settings)
-		}
+		settings := statusSettings(it)
 		live := []byte("[]")
 		if it.Live != nil {
 			live, _ = json.Marshal(it.Live)

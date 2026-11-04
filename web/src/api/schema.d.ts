@@ -280,6 +280,35 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/admin/recompute': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Run the recommender now
+     * @description Queues a recommender run (D-019) for one cluster (`cluster`) or for all registered
+     *     clusters, and returns at once with the run id. The run starts as soon as no other run is
+     *     in progress; it uses usage data up to the last full recommender step (5 minutes by
+     *     default) before it starts, like a scheduled run. A request for the same scope that
+     *     arrives while an earlier one is still queued gets that run's id (`coalesced: true`)
+     *     instead of queuing another.
+     *
+     *     Completion is visible through the existing endpoints: `lastRecommenderRunAt` of the
+     *     cluster in `GET /v1/clusters` moves past `requestedAt`, and the agent endpoint returns
+     *     the new recommendations.
+     */
+    post: operations['recompute']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -301,11 +330,20 @@ export interface components {
     /**
      * @description `throttled`, `oom-killed`: the workload is under-provisioned; the recommendation is never
      *     a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only
-     *     (D-011). `low-confidence`: confidence below the hub threshold.
+     *     (D-011). `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
+     *     container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`); its memory is audit-only,
+     *     the agent never changes it (WO-12).
      * @enum {string}
      */
     RiskFlag:
-      'throttled' | 'oom-killed' | 'restarting' | 'hpa-coupled' | 'sidecar' | 'short-lived' | 'low-confidence'
+      | 'throttled'
+      | 'oom-killed'
+      | 'restarting'
+      | 'hpa-coupled'
+      | 'sidecar'
+      | 'short-lived'
+      | 'low-confidence'
+      | 'jvm-fixed-heap'
     /** @enum {string} */
     EventType: 'applied' | 'skipped' | 'blocked' | 'fallback' | 'rolled_back' | 'released' | 'failed'
     /** @enum {string} */
@@ -460,6 +498,31 @@ export interface components {
       appliedAt?: string
       /** Format: date-time */
       observedAt?: string
+      /**
+       * @description JVM containers detected by the agent with their heap settings (WO-12). Absent when JVM
+       *     detection is off (`RightsizingPolicy.spec.jvm.detect: false`) or no container is a JVM.
+       */
+      jvm?: components['schemas']['JVMContainer'][]
+    }
+    /**
+     * @description Heap settings of one JVM container, parsed from `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`,
+     *     `JAVA_OPTS`, the container command/args and `_JAVA_OPTIONS` (later sources win, as in the
+     *     JVM). A missing value means "not set" (JVM default).
+     */
+    JVMContainer: {
+      name: string
+      /** @description What identified the container as a JVM. */
+      detectedBy: ('image' | 'command' | 'env')[]
+      /** @description `-Xmx` / `-XX:MaxHeapSize`. */
+      maxHeap?: components['schemas']['Quantity']
+      /** @description `-Xms` / `-XX:InitialHeapSize`. */
+      initialHeap?: components['schemas']['Quantity']
+      /** @description `-XX:MaxRAMPercentage` (or 100 / `-XX:MaxRAMFraction`). */
+      maxRAMPercentage?: number
+      /** @description `-XX:MaxRAM`. */
+      maxRAM?: components['schemas']['Quantity']
+      /** @description Option variables set from a ConfigMap/Secret reference, which the agent does not read. */
+      unresolved?: string[]
     }
     WorkloadStatusBatch: {
       agentVersion?: string
@@ -538,6 +601,31 @@ export interface components {
       limitRule?: string
       /** @description Adjustments, e.g. "raised: throttled" or "kept current: oom-killed". */
       notes?: string[]
+      jvm?: components['schemas']['JVMExplanation']
+    }
+    /**
+     * @description How the JVM heap shaped the memory recommendation (WO-12), only on `memory` of JVM
+     *     containers. `heapSizing`: `fixed` (`-Xmx`; memory audit-only, flag `jvm-fixed-heap`),
+     *     `percentage` (`-XX:MaxRAMPercentage`, max heap follows the memory limit), `default` (no heap
+     *     flags: the JVM default of 25 % of the limit). `heapNeed` is the observed peak working set
+     *     capped at the current maximum heap; `floor` is the smallest memory that keeps the maximum
+     *     heap at or above `heapNeed` (percentage, default) or fits heap plus `nonHeap` (fixed).
+     */
+    JVMExplanation: {
+      /** @enum {string} */
+      heapSizing: 'fixed' | 'percentage' | 'default'
+      detectedBy: ('image' | 'command' | 'env')[]
+      /**
+       * @description `agent`: heap settings reported by the agent; `image`: only the image name was known (no agent report), JVM defaults assumed.
+       * @enum {string}
+       */
+      source?: 'agent' | 'image'
+      maxRAMPercentage?: number
+      maxHeapBefore?: components['schemas']['Quantity']
+      maxHeapAfter?: components['schemas']['Quantity']
+      heapNeed?: components['schemas']['Quantity']
+      nonHeap?: components['schemas']['Quantity']
+      floor?: components['schemas']['Quantity']
     }
     /** @description Why the values were recommended. Only returned by `GET /v1/workloads/{id}`. */
     ContainerExplanation: {
@@ -746,6 +834,22 @@ export interface components {
         cluster?: components['schemas']['ClusterName']
         points: components['schemas']['SavingsPoint'][]
       }[]
+    }
+    RecomputeAccepted: {
+      /**
+       * Format: uuid
+       * @description Id of the queued run (UUIDv7).
+       */
+      runId: string
+      /** @description The requested cluster; absent for a run over all clusters. */
+      cluster?: components['schemas']['ClusterName']
+      /**
+       * Format: date-time
+       * @description When the run was first requested (for a coalesced request, the earlier one).
+       */
+      requestedAt: string
+      /** @description True when an already queued run for the same scope was returned. */
+      coalesced: boolean
     }
     /**
      * @description RFC 9457 problem details; the single error schema for every endpoint. `code` is a stable
@@ -1236,6 +1340,33 @@ export interface operations {
       400: components['responses']['BadRequest']
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
+    }
+  }
+  recompute: {
+    parameters: {
+      query?: {
+        /** @description Only this cluster. Default all clusters. */
+        cluster?: components['schemas']['ClusterName']
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Run queued. */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RecomputeAccepted']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
     }
   }
 }

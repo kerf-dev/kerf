@@ -30,8 +30,9 @@ in `audit_events` (`db/migrations/0001_init.sql`), counts them in `ro_actions_to
 | `failed` | An API call needed for an action failed after retries. | `ApplyError`, `ResizeError`, `RollbackError`, `ReleaseError` |
 
 `skipped` and `blocked` are emitted **only on change** (D-017): once per (workload, type, reason)
-until the reason or the proposed values change, not on every loop iteration and not again just
-because the hub issued a new recommendation id for the same values. A change that is applied,
+until the reason or the proposed values change (the hub's recommended values, by more than the
+agent's tolerance, default 5 %), not on every loop iteration and not again just because the hub
+issued a new recommendation id for the same values. A change that is applied,
 rolled back or released starts over, so the next skip or block is reported again. Per-resource
 blocks inside an applied change (`Throttled`, `OOMKilled`, `RestartPolicyRequired`) follow the
 same rule per resource.
@@ -57,6 +58,7 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | `OutsideMaintenanceWindow` | Strategy `deferred` and no maintenance window is open. |
 | `UnsupportedNode` | In-place refused: node has swap or a static CPU/Memory Manager policy (D-007). |
 | `RestartPolicyRequired` | Memory change on a JVM/Python container whose `resizePolicy` is not `RestartContainer` and strategy is `in-place` (D-007). |
+| `JVMFixedHeap` | Memory change on a JVM container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`, detected live or flagged `jvm-fixed-heap` by the hub); memory is audit-only (WO-12). |
 | `HubUnreachable` | No fresh recommendation because the hub cannot be reached; nothing new is applied. |
 | `ResizeInfeasible` | Pod resize status `Infeasible`. |
 | `ResizeDeferredTimeout` | Pod resize stayed `Deferred` longer than `apply.fallbackAfter`. |

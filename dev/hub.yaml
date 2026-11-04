@@ -21,7 +21,7 @@ devSeed:
 recommender:
   interval: 5m
   backfill:
-    runs: 7
+    runs: 29
     every: 24h
 history:
   fullResolution: 6h
