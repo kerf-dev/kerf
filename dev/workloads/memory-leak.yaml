@@ -1,0 +1,42 @@
+# Memory leak: grows by ~512KiB/s until it hits the 128Mi limit and is OOMKilled (~4 min), then
+# restarts with kubelet back-off. CrashLoopBackOff/OOMKilled on this pod is intended.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-leak
+  labels:
+    app: memory-leak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memory-leak
+  template:
+    metadata:
+      labels:
+        app: memory-leak
+    spec:
+      containers:
+        - name: app
+          image: python:3.13.18-alpine3.23
+          env:
+            - name: LEAK_BYTES_PER_SEC
+              value: "524288"
+          command: ["python", "-u", "-c"]
+          args:
+            - |
+              import os, time
+              rate = int(os.environ["LEAK_BYTES_PER_SEC"])
+              leak = []
+              start = time.time()
+              while True:
+                  leak.append(b"\x01" * rate)  # touched pages, so RSS really grows
+                  if len(leak) % 30 == 0:
+                      print(f"leaked {len(leak) * rate / 2**20:.0f} MiB after {time.time() - start:.0f}s", flush=True)
+                  time.sleep(1)
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

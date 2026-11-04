@@ -1,0 +1,45 @@
+# JVM sized by -XX:MaxRAMPercentage=75 (via JAVA_TOOL_OPTIONS): max heap follows the memory limit.
+# Memory changes need a container restart to take effect (D-007), hence resizePolicy RestartContainer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jvm-maxram
+  labels:
+    app: jvm-maxram
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jvm-maxram
+  template:
+    metadata:
+      labels:
+        app: jvm-maxram
+    spec:
+      containers:
+        - name: app
+          image: eclipse-temurin:21.0.13_9-jdk-alpine-3.23
+          command: ["java", "/app/Load.java"]
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=75.0 -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+            - name: LIVE_MB
+              value: "64"
+          resizePolicy:
+            - resourceName: cpu
+              restartPolicy: NotRequired
+            - resourceName: memory
+              restartPolicy: RestartContainer
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: src
+              mountPath: /app
+      volumes:
+        - name: src
+          configMap:
+            name: jvm-app

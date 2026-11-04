@@ -1,0 +1,111 @@
+# Offline git server for Argo CD on ro-spoke-1 (namespace git-server).
+# On start, the init container turns ConfigMap `workloads-seed` (every file in dev/workloads/, created by
+# dev/scripts/sync-workloads.sh) into a single commit on branch main of the bare repo workloads.git.
+# git daemon serves it read/write (receive-pack enabled) at:
+#   in-cluster: git://git-server.git-server.svc.cluster.local/workloads.git
+#   from host:  git://localhost:19418/workloads.git   (push here to simulate a Git change)
+# Image: Argo CD's own image (already pulled on this cluster; its Ubuntu git ships git-daemon, alpine/git does not).
+# The repo lives in an emptyDir: restarting the pod re-seeds it from dev/workloads/.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: git-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: git-server
+  namespace: git-server
+spec:
+  type: NodePort
+  selector:
+    app: git-server
+  ports:
+    - name: git
+      port: 9418
+      targetPort: git
+      nodePort: 30418
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: git-server
+  namespace: git-server
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: git-server
+  template:
+    metadata:
+      labels:
+        app: git-server
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: seed
+          image: quay.io/argoproj/argocd:v3.5.7
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              export HOME=/tmp
+              rm -rf /srv/git/workloads.git /tmp/work
+              mkdir -p /tmp/work
+              cp -L /seed/* /tmp/work/
+              cd /tmp/work
+              git init -q -b main
+              git -c user.name=dev -c user.email=dev@resource-optimizer.local add -A
+              git -c user.name=dev -c user.email=dev@resource-optimizer.local commit -q -m "seed from dev/workloads"
+              git clone -q --bare /tmp/work /srv/git/workloads.git
+              git -C /srv/git/workloads.git log --oneline
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: seed
+              mountPath: /seed
+            - name: repos
+              mountPath: /srv/git
+      containers:
+        - name: git-daemon
+          image: quay.io/argoproj/argocd:v3.5.7
+          command: ["git"]
+          args:
+            - daemon
+            - --reuseaddr
+            - --verbose
+            - --export-all
+            - --enable=receive-pack
+            - --base-path=/srv/git
+            - --port=9418
+            - /srv/git
+          ports:
+            - name: git
+              containerPort: 9418
+          readinessProbe:
+            tcpSocket:
+              port: git
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: repos
+              mountPath: /srv/git
+      volumes:
+        - name: seed
+          configMap:
+            name: workloads-seed
+        - name: repos
+          emptyDir: {}

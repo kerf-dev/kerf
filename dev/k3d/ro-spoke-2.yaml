@@ -1,0 +1,48 @@
+# Spoke 2: kube-state-metrics, vmagent -> hub, cert-manager, metrics-server (HPA), sample workloads
+# applied directly (no Argo CD). The k3s image is passed from dev/versions.env (K3S_IMAGE).
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: ro-spoke-2
+servers: 1
+agents: 0
+kubeAPI:
+  hostIP: 127.0.0.1
+  hostPort: "16445"
+network: ro-dev
+registries:
+  use:
+    - k3d-ro-registry:5005        # images built by Tilt/e2e: push to localhost:5005
+    - k3d-ro-dockerio-cache:5000  # pull-through cache for docker.io, kept across dev-down
+  config: |
+    mirrors:
+      docker.io:
+        endpoint:
+          - http://k3d-ro-dockerio-cache:5000
+options:
+  k3d:
+    wait: true
+    timeout: 180s
+    disableLoadbalancer: true
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik,servicelb
+        nodeFilters: [server:*]
+      - arg: --disable-helm-controller
+        nodeFilters: [server:*]
+      - arg: --kubelet-arg=eviction-hard=imagefs.available<1%,nodefs.available<1%
+        nodeFilters: [server:*]
+      - arg: --kubelet-arg=eviction-minimum-reclaim=imagefs.available=1%,nodefs.available=1%
+        nodeFilters: [server:*]
+    nodeLabels:
+      - label: node.kubernetes.io/instance-type=c6a.2xlarge
+        nodeFilters: [server:*]
+      - label: karpenter.sh/capacity-type=spot
+        nodeFilters: [server:*]
+      - label: topology.kubernetes.io/region=eu-west-1
+        nodeFilters: [server:*]
+      - label: topology.kubernetes.io/zone=eu-west-1b
+        nodeFilters: [server:*]
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: false
