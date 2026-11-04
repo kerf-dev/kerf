@@ -53,6 +53,20 @@ logLevel: info
 # Example: ["resource-optimizer.oz.io/no-in-place=true", "node.kubernetes.io/cpu-manager-static"]
 unsupportedNodeSelectors: []
 
+# Health watch and rollback after every automatic change (WO-08). Thresholds and the watch
+# duration come from guardrails.rollback of the effective policy.
+health:
+  enabled: true
+  checkInterval: 15s
+  # Prometheus-compatible endpoint for the CPU throttling ratio (the hub's VictoriaMetrics).
+  # Empty disables throttling-based rollback unless cadvisorFallback is on.
+  metricsURL: http://victoria-metrics.hub.svc:8428
+  minThrottlingWindow: 2m
+  # Read throttling from the kubelets' cAdvisor endpoints when metricsURL fails (offline hub).
+  # Adds `get nodes/proxy` to the ClusterRole: that permission reaches every kubelet API, so it is
+  # off by default.
+  cadvisorFallback: false
+
 replicas: 1
 leaderElection: false
 

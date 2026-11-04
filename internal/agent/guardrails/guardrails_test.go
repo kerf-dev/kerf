@@ -116,6 +116,15 @@ func TestGuardrails(t *testing.T) {
 		{name: "cooldown after change", mut: func(in *Input) { in.LastAppliedAt = ago(time.Hour) }, outcome: Blocked, reason: v1alpha1.ReasonCooldown},
 		{name: "cooldown over", mut: func(in *Input) { in.LastAppliedAt = ago(25 * time.Hour) }, outcome: Apply, reason: v1alpha1.ReasonRecommendationApplied},
 		{name: "rollback blocks decreases", mut: func(in *Input) { in.RolledBackAt = ago(time.Hour) }, outcome: Blocked, reason: v1alpha1.ReasonCooldown},
+		{name: "memory rollback blocks memory decreases only", mut: func(in *Input) {
+			in.RolledBackAt = ago(time.Hour)
+			in.RolledBackResources = []string{"memory"}
+			in.Effective.MemoryMode = v1alpha1.ModeAudit
+		}, outcome: Apply, reason: v1alpha1.ReasonRecommendationApplied},
+		{name: "memory rollback blocks a memory decrease", mut: func(in *Input) {
+			in.RolledBackAt = ago(time.Hour)
+			in.RolledBackResources = []string{"memory"}
+		}, outcome: Blocked, reason: v1alpha1.ReasonCooldown},
 		{name: "rollback allows increases", mut: func(in *Input) {
 			in.RolledBackAt = ago(time.Hour)
 			in.Rec = rec("600m", "400Mi", "", "")
