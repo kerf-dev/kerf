@@ -12,6 +12,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
@@ -97,6 +98,9 @@ func webhookDown(t *testing.T, cl cluster) func() {
 			}
 			if err == nil {
 				t.Logf("webhook on %s scaled back to %d", cl.Name, orig)
+				if err := releaseFields(c, cl, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name}}); err != nil {
+					t.Errorf("%v (make e2e-unblock drops it)", err)
+				}
 				return
 			}
 			time.Sleep(time.Second)

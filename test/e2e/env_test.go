@@ -64,14 +64,20 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "e2e setup:", err)
 		os.Exit(1)
 	}
+	if err := markRun(); err != nil {
+		fmt.Fprintln(os.Stderr, "e2e setup:", err)
+		os.Exit(1)
+	}
 	if os.Getenv("E2E_KEEP") == "" {
 		if err := sweepHub(func(f string, a ...any) { fmt.Printf(f+"\n", a...) }); err != nil {
 			fmt.Fprintln(os.Stderr, "e2e setup: hub sweep:", err)
+			unmarkRun()
 			os.Exit(1)
 		}
 	}
 	code := m.Run()
 	logoutAll()
+	unmarkRun()
 	os.Exit(code)
 }
 
@@ -94,7 +100,7 @@ func newCluster(name, ctx string) (cluster, error) {
 	if err != nil {
 		return cluster{}, err
 	}
-	return cluster{Name: name, Context: ctx, C: c}, nil
+	return cluster{Name: name, Context: ctx, C: client.WithFieldOwner(c, suiteFieldManager)}, nil
 }
 
 func setup() error {

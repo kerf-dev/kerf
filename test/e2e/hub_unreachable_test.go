@@ -9,6 +9,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
@@ -60,6 +61,9 @@ func blockHub(t *testing.T, cl cluster) func() {
 			return
 		}
 		t.Logf("agent on %s reconnected to the hub (token restored)", cl.Name)
+		if err := releaseFields(c, cl, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name}}); err != nil {
+			t.Errorf("%v (make e2e-unblock drops it)", err)
+		}
 	}
 	t.Cleanup(restore)
 	return restore
