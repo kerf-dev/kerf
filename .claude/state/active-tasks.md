@@ -40,6 +40,12 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-22c | Readiness UI aligned with real hub | 4 | done | local_9fadb724 | wo-22c-readiness-align | – | |
 | WO-21c | Drift repair survives new recommendation ids | 4 | done | local_11de0a00 | wo-21c-drift-repair | – | found by WO-24 |
 | WO-24 | Admin: e2e (+ onboarding/readiness scenarios) | 4 | done | local_7697cfde | wo-24-admin-e2e | – | KSM scenario run with user OK: PASS |
+| WO-18 | EKS packaging (plan, D-028) | 5 | in-progress | orchestrator | – | – | tracks 18a–18e |
+| WO-18a | Hub HA (leader lock, migrate lock, recompute in DB) | 5 | in-progress | – | wo-18a-hub-ha | – | migration 0012 |
+| WO-18b | Production-grade component charts | 5 | in-progress | – | wo-18b-chart-hardening | – | |
+| WO-18c | Multi-arch images and release | 5 | in-progress | – | wo-18c-release | – | |
+| WO-18d | Umbrella chart + EKS guide | 5 | todo | – | wo-18d-umbrella | WO-18b | |
+| WO-18e | Staging install verification (ro-staging) | 5 | todo | – | wo-18e-staging | WO-18a/c/d | |
 
 ## Open questions for the user
 - Token with GitHub `workflow` scope needed to activate `ci/github-workflows/` (user, morning).
@@ -69,3 +75,4 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-04 WO-24 (admin + onboarding e2e; e2e-run markers; field-ownership cleanup) and WO-21c (drift repair adopts new ids within tolerance; rollback compares values; approve-once hold kept) merged (6237bfc). `make ci` green. Agents deployed at main-6237bfc. WO-24's pair before this merge: run 1 PASS 16m10s (spoke-1 on wo21c), run 2 PASS 14m06s (main-1e72c9e; spoke-1 agent restarted 33 s in by the WO-21c rollback, during setup). Final back-to-back on main (WO-24b, hold-off removed) started.
 - 2026-11-04 WO-24b merged: TestWebhook forces a new recommendation id before the drift check (no hold-off). Final `make e2e && make e2e` on main (agents main-6237bfc, hub/web main-1e72c9e): PASS 14m30s + 14m08s, 31 tests each. Skips: TestInPlaceJVMMemory (k3d swap, by design), TestReadinessKSMDown (needs user OK, RO_E2E_DISRUPTIVE=1). Phase-4 admin area + onboarding complete.
 - 2026-11-04 User approved the KSM scale-to-0 scenario. `TestReadinessKSMDown` (RO_E2E_DISRUPTIVE=1) alone on main: PASS 6m02s, but ro-spoke-2 stayed below AutomationReady ~9.5 min after it returned (hub metrics checks rerun only every checkInterval, 10m dev; the restore-time recheck came before KSM was scraped). Fixed in the test: it now restores KSM itself and rechecks every minute until AutomationReady. Rerun: PASS 8m37s (freshness fail after 6m22s, AutomationReady 2m15s after restore). KSM 1/1, no e2e field ownership left. Still opt-in.
+- 2026-11-04 User approved the WO-18 plan (D-028): audit in docs/work-orders/WO-18-eks-packaging.md. Migration 0012 assigned to WO-18a (recompute requests). Web nginx port 80→8080: WO-18c changes the image, WO-18b adds the chart value; orchestrator sets it at merge. Started 18a, 18b, 18c.

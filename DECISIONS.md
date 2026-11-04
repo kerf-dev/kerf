@@ -148,3 +148,17 @@ After an approve-once apply the agent keeps the `resource-optimizer` field manag
 `ignoreDifferences` (D-006) keeps protecting them from self-heal. Ownership is released (as for audit mode today) only
 when a newer recommendation arrives for the workload, the workload is excluded (mode `off`), or the approval is
 revoked. Without this, Argo CD with self-heal would silently revert every approved change.
+
+## D-028 Production packaging for EKS — Accepted (2026-11-04, user approved the WO-18 plan)
+- **One chart:** `deploy/charts/resource-optimizer` with `mode: hub | spoke | all`. The five component charts become its subcharts.
+- **Secrets:** come from AWS Secrets Manager through the External Secrets Operator (optional per secret); a plain `existingSecret` keeps working. The values schema rejects inline secrets unless `dev: true`.
+- **Database:** RDS PostgreSQL with `sslmode=verify-full`.
+- **Exposure:** the hub API sits behind an internal ALB, the web UI behind an ALB whose scheme is configurable, with ACM certificates.
+- **Agent → hub:** stays HTTPS plus the per-cluster bearer token. mTLS moves to a later work-order.
+- **Pricing's AWS access:** EKS Pod Identity, with IRSA as the fallback.
+- **Hub HA:** two or more replicas. A Postgres advisory-lock leader runs the background work (recommender, readiness, sweeps), every replica serves the API, migrations run under goose's session locker, and recompute requests are stored in the database.
+- **Images:** multi-arch (amd64, arm64).
+- **CRDs:** shipped as templates with `helm.sh/resource-policy: keep`.
+- **GitOps:** an Argo CD ApplicationSet with a cluster generator.
+
+Plan and audit: `docs/work-orders/WO-18-eks-packaging.md`.
