@@ -60,7 +60,7 @@ func RunDevSeed(ctx context.Context, st *store.Store, d DevSeed, log *slog.Logge
 		}
 		role, cluster := hubapi.RoleAgent, key
 		switch key {
-		case hubapi.RoleUI, hubapi.RoleAdmin:
+		case hubapi.RoleUI, hubapi.RoleAdmin, hubapi.RolePricing:
 			role, cluster = key, ""
 		default:
 			if err := st.EnsureCluster(ctx, key, "registered by dev seed"); err != nil {

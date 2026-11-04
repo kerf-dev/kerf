@@ -8,3 +8,9 @@ interval: 1m
 nodeLookback: 24h
 defaultRegion: eu-west-1
 logLevel: debug
+hub:
+  url: http://hub-api.hub.svc:8080
+  tokenSecret:
+    name: pricing-hub-token
+    create: true
+    token: ro-dev-pricing-5f0c3b7e9a1d24c86e13a0b2

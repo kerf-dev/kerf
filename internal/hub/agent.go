@@ -161,6 +161,11 @@ func (s *Server) reportWorkloadStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Agent self-checks (D-025); absent = unchanged.
+	if err := s.recordAgentChecks(r.Context(), cluster, batch); err != nil {
+		s.internal(w, r, err)
+		return
+	}
 	if batch.AgentVersion != "" {
 		s.heartbeat(r.Context(), cluster, batch.AgentVersion)
 	}

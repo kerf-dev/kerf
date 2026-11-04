@@ -38,7 +38,12 @@ func (s *Server) getWorkloadUsage(w http.ResponseWriter, r *http.Request) {
 	onlyContainer := q.Get("container")
 
 	key := v.Key
-	qb := recommender.Queries{Cluster: key.Cluster, RateWindow: s.RecCfg.RateWindow}
+	prom, binding, err := s.metricsFor(r.Context(), key.Cluster)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	qb := recommender.Queries{Cluster: key.Cluster, RateWindow: s.RecCfg.RateWindow, Binding: binding}
 	f := &recommender.Filter{Namespace: key.Namespace}
 	inner := s.RecCfg.Step
 	var usageQ, avgQ string
@@ -64,7 +69,7 @@ func (s *Server) getWorkloadUsage(w http.ResponseWriter, r *http.Request) {
 	g, ctx := errgroup.WithContext(r.Context())
 	run := func(query string, dst series, filterResource bool) {
 		g.Go(func() error {
-			res, err := s.Prom.Range(ctx, query, from, to, step)
+			res, err := prom.Range(ctx, query, from, to, step)
 			if err != nil {
 				return err
 			}

@@ -132,8 +132,11 @@ func TestMetricsCheckerHealthy(t *testing.T) {
 	if !rep.OK() || !rep.Reachable || rep.Found.ContainerSeries != 400 || rep.Found.Pods != 180 || rep.Found.Nodes != 2 {
 		t.Errorf("report %+v", rep)
 	}
-	// every datasource query selects the binding
+	// every datasource query selects the binding, with one selector per metric
 	for _, qs := range q.queries {
+		if strings.Contains(qs, "}{") {
+			t.Errorf("two selectors in a row: %s", qs)
+		}
 		if qs != "vector(1)" && !strings.Contains(qs, `k8s_cluster="prod", env="prod"`) {
 			t.Errorf("query without the binding: %s", qs)
 		}

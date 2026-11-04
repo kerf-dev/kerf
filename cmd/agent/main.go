@@ -23,11 +23,13 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
@@ -37,7 +39,9 @@ import (
 	"github.com/tomer1983/resource-optimizer/internal/agent/controller"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubstub"
+	"github.com/tomer1983/resource-optimizer/internal/agent/selfcheck"
 	"github.com/tomer1983/resource-optimizer/internal/agent/windows"
+	"github.com/tomer1983/resource-optimizer/internal/health"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
@@ -55,6 +59,68 @@ func main() {
 		slog.Error("agent", "err", err)
 		os.Exit(1)
 	}
+}
+
+// stringList is a repeatable string flag.
+type stringList []string
+
+func (l *stringList) String() string     { return strings.Join(*l, ";") }
+func (l *stringList) Set(v string) error { *l = append(*l, v); return nil }
+
+// metricsSelector is the cluster's metrics binding at --metrics-url; nil = label cluster = the
+// cluster name (before D-025).
+func metricsSelector(label, value string, extra []string) *health.MetricsSelector {
+	if label == "cluster" && value == "" && len(extra) == 0 {
+		return nil
+	}
+	return &health.MetricsSelector{Label: label, Value: value, Extra: extra}
+}
+
+// newSelfCheck starts the readiness self-checks (D-025): their results go with the next status
+// batch; the hub's recheck flag re-runs them.
+func newSelfCheck(mgr manager.Manager, hub *hubclient.Client, rep *controller.Reporter, puller *controller.Puller, cfg selfcheck.Config,
+	interval time.Duration, log *slog.Logger) (*selfcheck.Runner, error) {
+	c, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
+	if err != nil {
+		return nil, fmt.Errorf("self-check client: %w", err)
+	}
+	dc, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, fmt.Errorf("self-check discovery: %w", err)
+	}
+	var syncer *configsync.Syncer
+	if s, ok := puller.Config.(*configsync.Syncer); ok {
+		syncer = s
+	}
+	checker := &selfcheck.Checker{Client: c, Discovery: dc, Cfg: cfg, Inputs: func() selfcheck.Inputs {
+		var in selfcheck.Inputs
+		if syncer != nil {
+			if hc := syncer.State.Config(); hc != nil {
+				in.HubVersion, in.MinAgentVersion = hc.HubVersion, hc.MinAgentVersion
+			}
+		}
+		in.HubDate, in.LocalAt = hub.HubClock()
+		in.Namespaces, in.Excluded = rep.Coverage()
+		if in.Namespaces == 0 {
+			in.Excluded = nil // nothing reported yet
+		}
+		return in
+	}}
+	runner := &selfcheck.Runner{Checker: checker, Interval: interval, Log: log,
+		OnResult: func(res selfcheck.Result) { rep.SetSelfChecks(res.Capabilities, res.Checks) }}
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		// Let the first pull and reports happen, so version, clock and coverage are known.
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(15 * time.Second):
+		}
+		runner.Run(ctx)
+		return nil
+	})); err != nil {
+		return nil, err
+	}
+	return runner, nil
 }
 
 type labelSelectors []map[string]string
@@ -109,9 +175,22 @@ func run(args []string) error {
 		cadvisorFallback = fs.Bool("health-cadvisor-fallback", false, "read throttling from the kubelets' cAdvisor (needs nodes/proxy) when --metrics-url fails")
 		minThrottleWin   = fs.Duration("health-min-throttling-window", 2*time.Minute, "time after a change before throttling is evaluated")
 
+		metricsLabel      = fs.String("metrics-cluster-label", "cluster", "label selecting this cluster's series at --metrics-url (its metrics binding, D-025); empty = none")
+		metricsLabelValue = fs.String("metrics-cluster-label-value", "", "value of --metrics-cluster-label (default: --cluster-name)")
+		metricsExtra      stringList
+
+		selfCheck         = fs.Bool("self-check", true, "run the readiness self-checks and report them to the hub (D-025)")
+		selfCheckInterval = fs.Duration("self-check-interval", selfcheck.DefaultInterval, "how often the self-checks run (also at start and on the hub's recheck flag)")
+		webhookConfig     = fs.String("webhook-config-name", "", "MutatingWebhookConfiguration of the webhook (default: found by webhook name)")
+		webhookDryRun     = fs.Bool("self-check-webhook-dry-run", false, "dry-run create a pod to see the webhook mutate it (needs create pods)")
+		argocdNamespaces  stringList
+		docsBaseURL       = fs.String("docs-base-url", "", "base of the readiness docs links")
+
 		configSync    = fs.Bool("config-sync", true, "pull the hub config: hub-managed policies, pause and approve-once (D-022, WO-21)")
 		configStateCM = fs.String("config-state-configmap", "resource-optimizer-agent-config-state", "ConfigMap in $POD_NAMESPACE that persists the last hub config; empty disables persistence")
 	)
+	fs.Var(&metricsExtra, "metrics-extra-matcher", "extra PromQL label matcher for --metrics-url, e.g. env=\"prod\"; repeatable")
+	fs.Var(&argocdNamespaces, "argocd-namespace", "namespace searched for argocd-cm (default argocd); repeatable")
 	fs.Var(&unsupported, "unsupported-node-selector", "label selector (k=v,k2=v2; empty value = key exists) of nodes where in-place resize is not used; repeatable")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -205,6 +284,7 @@ func run(args []string) error {
 	}
 	if err := agent.SetupHealth(mgr, r, agent.HealthConfig{
 		Enabled: *healthEnabled, MetricsURL: *metricsURL, MetricsTokenFile: *metricsTokenFile,
+		MetricsSelector:  metricsSelector(*metricsLabel, *metricsLabelValue, metricsExtra),
 		CadvisorFallback: *cadvisorFallback, CheckInterval: *healthInterval, MinThrottlingWindow: *minThrottleWin,
 	}, log.With("component", "health")); err != nil {
 		return err
@@ -227,6 +307,18 @@ func run(args []string) error {
 			Namespace: ns, ConfigMap: *configStateCM, ReadOnly: *readOnly,
 			Inventory: rep.SetConfig,
 			Log:       log.With("component", "configsync"),
+		}
+	}
+	if *selfCheck {
+		runner, err := newSelfCheck(mgr, hub, rep, puller, selfcheck.Config{
+			AgentVersion: version, ReadOnly: *readOnly, WebhookConfigName: *webhookConfig, WebhookDryRun: *webhookDryRun,
+			ArgoCDNamespaces: argocdNamespaces, UnsupportedNodeSelectors: unsupported, DocsBase: *docsBaseURL,
+		}, *selfCheckInterval, log.With("component", "selfcheck"))
+		if err != nil {
+			return err
+		}
+		if syncer, ok := puller.Config.(*configsync.Syncer); ok {
+			syncer.Recheck = func(at time.Time) { runner.Recheck(at) }
 		}
 	}
 	if err := mgr.Add(puller); err != nil {

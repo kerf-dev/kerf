@@ -159,6 +159,43 @@ type Reporter struct {
 	// inventory = not known yet (omitted).
 	configVersion string
 	inventory     []hubclient.PolicyInventoryItem
+
+	// Self-checks (D-025): sent with the next batch after a run (pending) and with every full one.
+	capabilities []hubclient.AgentCapability
+	checks       []hubclient.ReadinessCheck
+	checksSet    bool
+	checksDirty  bool
+}
+
+// SetSelfChecks records a self-check run; the next status batch carries it.
+func (r *Reporter) SetSelfChecks(caps []hubclient.AgentCapability, checks []hubclient.ReadinessCheck) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.capabilities, r.checks, r.checksSet, r.checksDirty = caps, checks, true, true
+}
+
+// Coverage returns the namespaces of the reported workloads and those where every workload has
+// both modes off (excluded by policy or label): the policy.namespace-coverage self-check.
+func (r *Reporter) Coverage() (namespaces int, excluded []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	off := map[string]bool{}
+	for k, st := range r.statuses {
+		isOff := st.Modes.CPU == "off" && st.Modes.Memory == "off"
+		if v, ok := off[k.Namespace]; !ok {
+			off[k.Namespace] = isOff
+		} else {
+			off[k.Namespace] = v && isOff
+		}
+	}
+	excluded = []string{}
+	for ns, o := range off {
+		if o {
+			excluded = append(excluded, ns)
+		}
+	}
+	sort.Strings(excluded)
+	return len(off), excluded
 }
 
 // SetConfig records the hub config version the agent materialised and the policy inventory.
@@ -342,8 +379,13 @@ func (r *Reporter) flushStatuses(ctx context.Context, full bool) error {
 	if full && r.inventory != nil {
 		batch.PolicyInventory = r.matched(r.inventory)
 	}
+	sentChecks := r.checksSet && (full || r.checksDirty)
+	if sentChecks {
+		batch.Capabilities = append([]hubclient.AgentCapability{}, r.capabilities...)
+		batch.Checks = append([]hubclient.ReadinessCheck{}, r.checks...)
+	}
 	r.mu.Unlock()
-	if len(items) == 0 && batch.PolicyInventory == nil {
+	if len(items) == 0 && batch.PolicyInventory == nil && !sentChecks {
 		return nil
 	}
 	if err := r.hub.ReportWorkloadStatus(ctx, batch); err != nil {
@@ -354,6 +396,9 @@ func (r *Reporter) flushStatuses(ctx context.Context, full bool) error {
 	r.mu.Lock()
 	for _, k := range keys {
 		delete(r.dirty, k)
+	}
+	if sentChecks {
+		r.checksDirty = false
 	}
 	r.mu.Unlock()
 	return nil
