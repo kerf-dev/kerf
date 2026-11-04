@@ -28,7 +28,7 @@ const (
 func (s *Server) listRecommendations(w http.ResponseWriter, r *http.Request) {
 	cluster := r.PathValue("cluster")
 	q := r.URL.Query()
-	limit, err := intParam(q.Get("limit"), 0, 1, 5000)
+	limit, err := intParam(q.Get("limit"), 0, 5000)
 	if err != nil {
 		badRequest(w, r, "invalid_limit", err.Error())
 		return
@@ -75,7 +75,7 @@ func (s *Server) listRecommendations(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, out)
 }
 
 func refKey(r hubapi.WorkloadRef) string { return r.Namespace + "\x00" + r.Kind + "\x00" + r.Name }
@@ -115,7 +115,7 @@ func (s *Server) reportWorkloadStatus(w http.ResponseWriter, r *http.Request) {
 		s.heartbeat(r.Context(), cluster, batch.AgentVersion)
 	}
 	s.Metrics.markDirty()
-	writeJSON(w, http.StatusOK, hubapi.BatchResult{Accepted: len(batch.Items)})
+	writeJSON(w, hubapi.BatchResult{Accepted: len(batch.Items)})
 }
 
 // reportEvents serves POST /v1/clusters/{cluster}/events.
@@ -143,7 +143,7 @@ func (s *Server) reportEvents(w http.ResponseWriter, r *http.Request) {
 	for _, e := range stored {
 		s.Metrics.countAction(cluster, e)
 	}
-	writeJSON(w, http.StatusOK, hubapi.BatchResult{Accepted: len(batch.Items) - dups, Duplicates: &dups})
+	writeJSON(w, hubapi.BatchResult{Accepted: len(batch.Items) - dups, Duplicates: &dups})
 }
 
 // queryAudit serves GET /v1/audit.
@@ -191,7 +191,7 @@ func (s *Server) queryAudit(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, r, "invalid_order", "order must be asc or desc.")
 		return
 	}
-	if aq.Limit, err = intParam(q.Get("limit"), 100, 1, 1000); err != nil {
+	if aq.Limit, err = intParam(q.Get("limit"), 100, 1000); err != nil {
 		badRequest(w, r, "invalid_limit", err.Error())
 		return
 	}
@@ -213,7 +213,7 @@ func (s *Server) queryAudit(w http.ResponseWriter, r *http.Request) {
 		last := items[len(items)-1]
 		out.Continue = encodeCursor(cursor{Time: last.Time, ID: last.ID})
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, out)
 }
 
 // ---- validation ----
@@ -320,13 +320,14 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-func intParam(s string, def, minV, maxV int) (int, error) {
+// intParam parses an optional integer in [1, maxV].
+func intParam(s string, def, maxV int) (int, error) {
 	if s == "" {
 		return def, nil
 	}
 	v, err := strconv.Atoi(s)
-	if err != nil || v < minV || v > maxV {
-		return 0, fmt.Errorf("must be an integer between %d and %d", minV, maxV)
+	if err != nil || v < 1 || v > maxV {
+		return 0, fmt.Errorf("must be an integer between 1 and %d", maxV)
 	}
 	return v, nil
 }

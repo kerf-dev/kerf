@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -59,6 +60,7 @@ func (s *Server) getWorkloadUsage(w http.ResponseWriter, r *http.Request) {
 		c := l["container"]
 		return c, l["workload_kind"] == key.Kind && l["workload"] == key.Name && (onlyContainer == "" || c == onlyContainer)
 	}
+	var mu sync.Mutex
 	g, ctx := errgroup.WithContext(r.Context())
 	run := func(query string, dst series, filterResource bool) {
 		g.Go(func() error {
@@ -75,10 +77,13 @@ func (s *Server) getWorkloadUsage(w http.ResponseWriter, r *http.Request) {
 				for i, p := range sr.Samples {
 					pts[i] = hubapi.Point{float64(p.T.Unix()), p.V}
 				}
-				// Init and app containers are separate queries; never merge two series per name.
+				// Init and app containers are separate queries writing the same map; never merge two
+				// series per name.
+				mu.Lock()
 				if len(dst[c]) == 0 {
 					dst[c] = pts
 				}
+				mu.Unlock()
 			}
 			return nil
 		})
@@ -90,7 +95,7 @@ func (s *Server) getWorkloadUsage(w http.ResponseWriter, r *http.Request) {
 		run(qb.Resources("limits", init, 0, f), lim, true)
 	}
 	if err := g.Wait(); err != nil {
-		s.Log.Warn("usage query", "workload", key.ID(), "err", err)
+		s.Log.WarnContext(r.Context(), "usage query", "workload", key.ID(), "err", err)
 		writeProblem(w, r, http.StatusBadGateway, "metrics_unavailable", "Metrics backend query failed: "+err.Error())
 		return
 	}
@@ -130,7 +135,7 @@ func (s *Server) getWorkloadUsage(w http.ResponseWriter, r *http.Request) {
 			Recommendation: recommendationPoints(steps, n, resource, from, to, step),
 		})
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, out)
 }
 
 func nonNil(p []hubapi.Point) []hubapi.Point {
@@ -144,7 +149,7 @@ func nonNil(p []hubapi.Point) []hubapi.Point {
 func recommendationPoints(steps []storeStep, container, resource string, from, to time.Time, step time.Duration) []hubapi.Point {
 	pts := []hubapi.Point{}
 	i := -1
-	for t := from; !t.After(to); t = t.Add(step) {
+	for t := from; t.Before(to); t = t.Add(step) { // to is exclusive
 		for i+1 < len(steps) && !steps[i+1].At.After(t) {
 			i++
 		}

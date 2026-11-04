@@ -113,7 +113,7 @@ func (m *Metrics) RefreshLoop(ctx context.Context, st *store.Store, interval tim
 		case <-t.C:
 			if m.dirty.Load() || time.Since(m.lastRefresh) > interval {
 				if err := m.Refresh(ctx, st); err != nil {
-					log.Warn("metrics refresh", "err", err)
+					log.WarnContext(ctx, "metrics refresh", "err", err)
 				}
 			}
 		}

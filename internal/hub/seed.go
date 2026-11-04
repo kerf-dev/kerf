@@ -71,6 +71,6 @@ func RunDevSeed(ctx context.Context, st *store.Store, d DevSeed, log *slog.Logge
 			return err
 		}
 	}
-	log.Info("dev seed applied", "clusters", len(d.Clusters), "tokens", len(tokens))
+	log.InfoContext(ctx, "dev seed applied", "clusters", len(d.Clusters), "tokens", len(tokens))
 	return nil
 }
