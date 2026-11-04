@@ -349,3 +349,26 @@ by minimums and max change). Comparing the raw recommendation would:
     new id and tolerance, mixed.
 - Existing `TestSkippedWhileAppliedSurvivesRestart` (skipped once, also across a restart)
   unchanged and green.
+- **Live, ro-spoke-1 (2026-11-04 13:22–13:29 UTC).**
+  - Setup:
+    - Agent `wo21c-71b8b69` (helm rev 29), real WO-20 hub.
+    - Namespace `wo21c-live`; policy `wo21c-live` (cpu auto-patch, memory audit, in-place,
+      learningPeriod 0, minConfidence 0, maxChangePercent 100).
+    - Deployment `drift` (stress-ng, 500m).
+  1. Recompute: `applied/RecommendationApplied` in place, 500m→15m, id A `…61cc44b60da0`.
+  2. Recompute: new id B `…bcaf24b7c016` with the same 15m. It was adopted:
+     - status and spec carry B; generation 2/2; `appliedAt` unchanged;
+     - Blocked condition `False/NoSignificantChange`;
+     - hub audit: one `skipped/NoSignificantChange`, no new `applied`.
+  3. A further hub run: id C `…28696aa7cb3a`, adopted (log "new recommendation advises the
+     live values: adopted"). The hub still has exactly 2 events for the workload (1 applied,
+     1 skipped) for 3 ids.
+  4. Scale 1→2: the webhook injected 15m into the new pod, stamped with id C. So the webhook
+     trusts the RSR after the adoption's generation bump.
+  5. Drift: the old pod was resized by hand to 500m (`pods/resize`). The agent resized it back to
+     15m within about 2 s, under id C ("resized pod to the applied values"), with 0 restarts.
+     Before this fix the applied id (A) no longer matched, so nothing would have repaired it.
+  - Cleanup: namespace and policy deleted.
+  - WO-24's second e2e run (`e2e-run-ac3e1d`) started seconds after this deploy, so it ran on
+    this branch's agent. Its log shows drift repair resizing a pod in `e2e-webhook-…`. The agent
+    was rolled back to helm rev 28 (`main-1e72c9e`) after that run.
