@@ -1,6 +1,10 @@
 package v1alpha1
 
-import "strings"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+)
 
 // Identifiers (D-006, D-012).
 const (
@@ -51,7 +55,62 @@ const (
 	// LabelWebhookSkip with value "true" opts a pod (objectSelector) or a whole namespace
 	// (namespaceSelector) out of the mutating webhook.
 	LabelWebhookSkip = Prefix + "skip-webhook"
+
+	// LabelManagedBy marks RightsizingPolicy CRs the agent materialised from the hub config
+	// (value ManagedByHub, D-022). The agent creates, updates and deletes only CRs with this label;
+	// CRs without it (e.g. from Git) are never touched.
+	LabelManagedBy = Prefix + "managed-by"
+	// ManagedByHub is the LabelManagedBy value of hub-managed policies.
+	ManagedByHub = "hub"
 )
+
+// Annotations on hub-managed RightsizingPolicy CRs (D-022, docs/contracts/admin.md).
+const (
+	// AnnotationHubPolicyID is the hub policy id (UUID) a CR was materialised from.
+	AnnotationHubPolicyID = Prefix + "hub-policy-id"
+	// AnnotationHubVersion is the hub policy version (decimal integer) the CR holds.
+	AnnotationHubVersion = Prefix + "hub-version"
+	// AnnotationHubPolicyType is the hub policy type (HubPolicyType*). The agent layers
+	// global-default and cluster-default under the winning policy and workload-override above
+	// it, instead of letting them compete by priority.
+	AnnotationHubPolicyType = Prefix + "hub-policy-type"
+)
+
+// Hub policy types (AnnotationHubPolicyType values, hub API AdminPolicy.type).
+const (
+	HubPolicyTypeGlobalDefault    = "global-default"
+	HubPolicyTypeClusterDefault   = "cluster-default"
+	HubPolicyTypePolicy           = "policy"
+	HubPolicyTypeWorkloadOverride = "workload-override"
+)
+
+// Names of hub-managed policies the hub generates. User-named hub policies must not use the
+// ReservedNamePrefix.
+const (
+	ReservedNamePrefix        = "ro-"
+	GlobalDefaultsPolicyName  = "ro-global-defaults"
+	ClusterDefaultsPolicyName = "ro-cluster-defaults"
+	// OverridePolicyNamePrefix + 16 hex characters, see OverridePolicyName.
+	OverridePolicyNamePrefix = "ro-override-"
+)
+
+// Reserved priority bands of hub-managed policies. They also make an agent that does not know
+// AnnotationHubPolicyType degrade safely: defaults lose against every other policy, overrides win.
+const (
+	PriorityGlobalDefault    int32 = 0
+	PriorityClusterDefault   int32 = 10
+	PriorityPolicyMin        int32 = 1
+	PriorityPolicyMax        int32 = 899999
+	PriorityWorkloadOverride int32 = 900000
+	PriorityMax              int32 = 1000000
+)
+
+// OverridePolicyName returns the name of the hub workload-override policy of a workload:
+// OverridePolicyNamePrefix + the first 16 hex characters of sha256("<namespace>/<kind>/<name>").
+func OverridePolicyName(namespace string, kind WorkloadKind, name string) string {
+	sum := sha256.Sum256([]byte(namespace + "/" + string(kind) + "/" + name))
+	return OverridePolicyNamePrefix + hex.EncodeToString(sum[:])[:16]
+}
 
 // IndexTargetRef is the cache field index for RightsizingRecommendation by target workload.
 // Index value: TargetRefIndexValue(kind, name). Namespace is implied by the namespaced cache.
@@ -92,6 +151,9 @@ const (
 	ReasonUnsupportedNode          = "UnsupportedNode"
 	ReasonRestartPolicyRequired    = "RestartPolicyRequired"
 	ReasonHubUnreachable           = "HubUnreachable"
+	// ReasonPaused: automation of the cluster (or the fleet) is paused in the hub config; like a
+	// cluster-wide freeze, rollbacks still run (D-022).
+	ReasonPaused = "Paused"
 	// ReasonJVMFixedHeap: memory change refused on a JVM with a fixed -Xmx (WO-12).
 	ReasonJVMFixedHeap = "JVMFixedHeap"
 	// ReasonSingleReplicaUnsafe: single-replica workload and the change would leave it without a
@@ -121,4 +183,7 @@ const (
 
 	// applied
 	ReasonRecommendationApplied = "RecommendationApplied"
+	// ReasonApprovedOnce: a recommendation of a workload in audit mode was applied once because an
+	// operator approved it in the hub (D-024).
+	ReasonApprovedOnce = "ApprovedOnce"
 )
