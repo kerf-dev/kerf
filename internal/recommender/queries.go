@@ -2,8 +2,9 @@ package recommender
 
 import (
 	"fmt"
-	"strings"
 	"time"
+
+	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
 )
 
 // Queries builds the canonical PromQL of the hub (docs/contracts/metrics.md, section 4). Every
@@ -13,6 +14,9 @@ type Queries struct {
 	Cluster string
 	// RateWindow is the range of rate() and increase().
 	RateWindow time.Duration
+	// Binding selects the cluster's series in its datasource and relabels results to Cluster
+	// (D-025). nil = label cluster = Cluster, the queries before D-025 (byte-identical).
+	Binding *datasource.Matcher
 }
 
 // WorkloadLabels are the labels identifying a workload in query results.
@@ -24,11 +28,19 @@ type Filter struct {
 	Namespace string
 }
 
-func (q Queries) sel(extra ...string) string {
-	parts := []string{fmt.Sprintf("cluster=%q", q.Cluster)}
-	parts = append(parts, extra...)
-	return "{" + strings.Join(parts, ", ") + "}"
+func (q Queries) matcher() datasource.Matcher {
+	if q.Binding != nil {
+		return *q.Binding
+	}
+	return datasource.DefaultMatcher(q.Cluster)
 }
+
+// sel is the selector of the cluster's series plus extra matchers.
+func (q Queries) sel(extra ...string) string { return q.matcher().Sel(extra...) }
+
+// rel relabels a raw instant vector to the registered cluster name (identity without a binding).
+// Every raw vector goes through it before aggregation or joins.
+func (q Queries) rel(expr string) string { return q.matcher().Relabel(expr) }
 
 // containerSel filters real containers (no pod sandbox, no pod cgroup).
 func (q Queries) containerSel(f *Filter) string {
@@ -65,7 +77,7 @@ func (q Queries) PodWorkload(f *Filter, wrap func(string) string) string {
     )
   ),
   "workload_kind", "Deployment", "workload", ".*"
-)`, wrap("kube_pod_owner"+s(`owner_kind="ReplicaSet"`)), wrap("kube_replicaset_owner"+s(`owner_kind="Deployment"`)))
+)`, q.rel(wrap("kube_pod_owner"+s(`owner_kind="ReplicaSet"`))), q.rel(wrap("kube_replicaset_owner"+s(`owner_kind="Deployment"`))))
 	cron := fmt.Sprintf(`label_replace(
   max by (cluster, namespace, pod, workload) (
     label_replace(%s, "job_name", "$1", "owner_name", "(.*)")
@@ -75,13 +87,13 @@ func (q Queries) PodWorkload(f *Filter, wrap func(string) string) string {
     )
   ),
   "workload_kind", "CronJob", "workload", ".*"
-)`, wrap("kube_pod_owner"+s(`owner_kind="Job"`)), wrap("kube_job_owner"+s(`owner_kind="CronJob"`)))
+)`, q.rel(wrap("kube_pod_owner"+s(`owner_kind="Job"`))), q.rel(wrap("kube_job_owner"+s(`owner_kind="CronJob"`))))
 	direct := fmt.Sprintf(`max by (cluster, namespace, pod, workload_kind, workload) (
   label_replace(
     label_replace(%s, "workload", "$1", "owner_name", "(.*)"),
     "workload_kind", "$1", "owner_kind", "(.*)"
   )
-)`, wrap("kube_pod_owner"+s(`owner_kind=~"StatefulSet|DaemonSet"`)))
+)`, q.rel(wrap("kube_pod_owner"+s(`owner_kind=~"StatefulSet|DaemonSet"`))))
 	return "(\n" + dep + "\nor\n" + cron + "\nor\n" + direct + "\n)"
 }
 
@@ -99,15 +111,15 @@ func (q Queries) joinWith(agg, perPod string, wrap func(string) string) string {
 
 // CPUPerPod is the CPU usage in cores per pod and container.
 func (q Queries) CPUPerPod(f *Filter) string {
-	return fmt.Sprintf("sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total%s[%s]))",
-		q.containerSel(f), promDuration(q.RateWindow))
+	return fmt.Sprintf("sum by (cluster, namespace, pod, container) (%s)",
+		q.rel(fmt.Sprintf("rate(container_cpu_usage_seconds_total%s[%s])", q.containerSel(f), promDuration(q.RateWindow))))
 }
 
 // MemoryPerPod is the peak memory working set in bytes per pod and container within each step
 // (max_over_time over the step catches peaks between steps and short-lived pods).
 func (q Queries) MemoryPerPod(f *Filter, step time.Duration) string {
-	return fmt.Sprintf("max by (cluster, namespace, pod, container) (max_over_time(container_memory_working_set_bytes%s[%s]))",
-		q.containerSel(f), promDuration(step))
+	return fmt.Sprintf("max by (cluster, namespace, pod, container) (%s)",
+		q.rel(fmt.Sprintf("max_over_time(container_memory_working_set_bytes%s[%s])", q.containerSel(f), promDuration(step))))
 }
 
 // CPUUsage is the per-step CPU usage per workload and container; agg is max (what a per-pod
@@ -122,8 +134,9 @@ func (q Queries) MemoryUsage(agg string, f *Filter, step time.Duration) string {
 // ThrottleRatio is the CFS throttling ratio per workload and container (max across pods).
 func (q Queries) ThrottleRatio() string {
 	r := promDuration(q.RateWindow)
-	perPod := fmt.Sprintf("(\n  sum by (cluster, namespace, pod, container) (rate(container_cpu_cfs_throttled_periods_total%s[%s]))\n  / clamp_min(sum by (cluster, namespace, pod, container) (rate(container_cpu_cfs_periods_total%s[%s])), 1)\n)",
-		q.containerSel(nil), r, q.containerSel(nil), r)
+	perPod := fmt.Sprintf("(\n  sum by (cluster, namespace, pod, container) (%s)\n  / clamp_min(sum by (cluster, namespace, pod, container) (%s), 1)\n)",
+		q.rel(fmt.Sprintf("rate(container_cpu_cfs_throttled_periods_total%s[%s])", q.containerSel(nil), r)),
+		q.rel(fmt.Sprintf("rate(container_cpu_cfs_periods_total%s[%s])", q.containerSel(nil), r)))
 	return q.join("max", perPod, nil)
 }
 
@@ -134,27 +147,29 @@ func (q Queries) OOMKills(window time.Duration) string {
 	w := promDuration(window)
 	perPod := fmt.Sprintf(`(
   (
-    max by (cluster, namespace, pod, container) (max_over_time(kube_pod_container_status_last_terminated_reason%s[%s]))
+    max by (cluster, namespace, pod, container) (%s)
     and on (cluster, namespace, pod, container)
-    (max by (cluster, namespace, pod, container) (increase(kube_pod_container_status_restarts_total%s[%s])) > 0)
+    (max by (cluster, namespace, pod, container) (%s) > 0)
   )
   or
-  (max by (cluster, namespace, pod, container) (increase(container_oom_events_total%s[%s])) > 0)
-)`, q.sel(`reason="OOMKilled"`), w, q.sel(), w, q.containerSel(nil), w)
+  (max by (cluster, namespace, pod, container) (%s) > 0)
+)`, q.rel(fmt.Sprintf("max_over_time(kube_pod_container_status_last_terminated_reason%s[%s])", q.sel(`reason="OOMKilled"`), w)),
+		q.rel(fmt.Sprintf("increase(kube_pod_container_status_restarts_total%s[%s])", q.sel(), w)),
+		q.rel(fmt.Sprintf("increase(container_oom_events_total%s[%s])", q.containerSel(nil), w)))
 	return q.joinWith("max", perPod, lastOver(window))
 }
 
 // Restarts is the number of container restarts within window, summed over pods. Instant query.
 func (q Queries) Restarts(window time.Duration) string {
-	perPod := fmt.Sprintf("sum by (cluster, namespace, pod, container) (increase(kube_pod_container_status_restarts_total%s[%s]))",
-		q.sel(), promDuration(window))
+	perPod := fmt.Sprintf("sum by (cluster, namespace, pod, container) (%s)",
+		q.rel(fmt.Sprintf("increase(kube_pod_container_status_restarts_total%s[%s])", q.sel(), promDuration(window))))
 	return q.joinWith("sum", perPod, lastOver(window))
 }
 
 // RunningPods is the number of pods per workload that ran during each step.
 func (q Queries) RunningPods(step time.Duration) string {
-	return fmt.Sprintf("count by (%s) (\nmax by (cluster, namespace, pod) (max_over_time(container_memory_working_set_bytes%s[%s]))\n* on (cluster, namespace, pod) group_left (workload_kind, workload)\n%s\n)",
-		WorkloadLabels, q.containerSel(nil), promDuration(step), q.PodWorkload(nil, nil))
+	return fmt.Sprintf("count by (%s) (\nmax by (cluster, namespace, pod) (%s)\n* on (cluster, namespace, pod) group_left (workload_kind, workload)\n%s\n)",
+		WorkloadLabels, q.rel(fmt.Sprintf("max_over_time(container_memory_working_set_bytes%s[%s])", q.containerSel(nil), promDuration(step))), q.PodWorkload(nil, nil))
 }
 
 // Resources returns current requests (metric = "requests") or limits ("limits") per workload,
@@ -171,7 +186,7 @@ func (q Queries) Resources(metric string, init bool, lookback time.Duration, f *
 	if f != nil && f.Namespace != "" {
 		extra = append(extra, fmt.Sprintf("namespace=%q", f.Namespace))
 	}
-	perPod := fmt.Sprintf("max by (cluster, namespace, pod, container, resource) (%s)", wrap(name+q.sel(extra...)))
+	perPod := fmt.Sprintf("max by (cluster, namespace, pod, container, resource) (%s)", q.rel(wrap(name+q.sel(extra...))))
 	return fmt.Sprintf("max by (%s, container, resource) (\n%s\n* on (cluster, namespace, pod) group_left (workload_kind, workload)\n%s\n)",
 		WorkloadLabels, perPod, q.PodWorkload(f, wrap))
 }
@@ -179,7 +194,7 @@ func (q Queries) Resources(metric string, init bool, lookback time.Duration, f *
 // InitContainers lists init containers per workload.
 func (q Queries) InitContainers(lookback time.Duration) string {
 	wrap := lastOver(lookback)
-	perPod := fmt.Sprintf("max by (cluster, namespace, pod, container) (%s)", wrap("kube_pod_init_container_info"+q.sel()))
+	perPod := fmt.Sprintf("max by (cluster, namespace, pod, container) (%s)", q.rel(wrap("kube_pod_init_container_info"+q.sel())))
 	return fmt.Sprintf("max by (%s, container) (\n%s\n* on (cluster, namespace, pod) group_left (workload_kind, workload)\n%s\n)",
 		WorkloadLabels, perPod, q.PodWorkload(nil, wrap))
 }
@@ -187,32 +202,34 @@ func (q Queries) InitContainers(lookback time.Duration) string {
 // HPAInfo returns HPAs with their scale target.
 func (q Queries) HPAInfo(lookback time.Duration) string {
 	return fmt.Sprintf("max by (cluster, namespace, horizontalpodautoscaler, scaletargetref_kind, scaletargetref_name) (%s)",
-		lastOver(lookback)("kube_horizontalpodautoscaler_info"+q.sel()))
+		q.rel(lastOver(lookback)("kube_horizontalpodautoscaler_info"+q.sel())))
 }
 
 // HPAMetrics returns the metrics each HPA scales on.
 func (q Queries) HPAMetrics(lookback time.Duration) string {
 	return fmt.Sprintf("max by (cluster, namespace, horizontalpodautoscaler, metric_name, metric_target_type) (%s)",
-		lastOver(lookback)("kube_horizontalpodautoscaler_spec_target_metric"+q.sel()))
+		q.rel(lastOver(lookback)("kube_horizontalpodautoscaler_spec_target_metric"+q.sel())))
 }
 
 // HPAReplicaBounds returns spec.minReplicas or spec.maxReplicas (bound "min" or "max") per HPA.
 func (q Queries) HPAReplicaBounds(bound string, lookback time.Duration) string {
 	return fmt.Sprintf("max by (cluster, namespace, horizontalpodautoscaler) (%s)",
-		lastOver(lookback)("kube_horizontalpodautoscaler_spec_"+bound+"_replicas"+q.sel()))
+		q.rel(lastOver(lookback)("kube_horizontalpodautoscaler_spec_"+bound+"_replicas"+q.sel())))
 }
 
 // HPAPeakReplicas returns the highest current replica count of each HPA over window (WO-11: an HPA
 // at maxReplicas is not coordinated).
 func (q Queries) HPAPeakReplicas(window time.Duration) string {
-	return fmt.Sprintf("max by (cluster, namespace, horizontalpodautoscaler) (max_over_time(%s[%s]))",
-		"kube_horizontalpodautoscaler_status_current_replicas"+q.sel(), promDuration(window))
+	return fmt.Sprintf("max by (cluster, namespace, horizontalpodautoscaler) (%s)",
+		q.rel(fmt.Sprintf("max_over_time(%s[%s])", "kube_horizontalpodautoscaler_status_current_replicas"+q.sel(), promDuration(window))))
 }
 
-// Pricing returns the average hourly rate over the cluster's nodes and the node count.
+// Pricing returns the average hourly rate over the cluster's nodes and the node count. The pricing
+// service exports its series to the hub's own metrics store (datasource local) with label cluster
+// = the registered name, so these queries ignore the binding and must run against local.
 func (q Queries) Pricing(metric string, lookback time.Duration) (avg, count string) {
 	// max by node first: a pricing rollout briefly exposes two series per node (WO-03 hand-over).
-	inner := fmt.Sprintf("max by (cluster, node) (%s)", lastOver(lookback)(metric+q.sel()))
+	inner := fmt.Sprintf("max by (cluster, node) (%s)", lastOver(lookback)(metric+datasource.DefaultMatcher(q.Cluster).Sel()))
 	return fmt.Sprintf("avg by (cluster) (%s)", inner), fmt.Sprintf("count by (cluster) (%s)", inner)
 }
 

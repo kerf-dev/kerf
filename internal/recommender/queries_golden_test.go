@@ -3,9 +3,13 @@ package recommender
 import (
 	"flag"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
+	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
 )
 
 var updateGolden = flag.Bool("update", false, "rewrite golden files")
@@ -90,4 +94,94 @@ func itoa(i int) string {
 // byte-identical to the queries before D-025.
 func TestQueriesDefaultGolden(t *testing.T) {
 	golden(t, "testdata/queries-default.golden", allQueries(Queries{Cluster: "ro-spoke-1", RateWindow: 5 * time.Minute}))
+}
+
+// TestQueriesBindingEquivalent checks that a bound cluster's queries are the default queries with
+// the cluster matcher swapped and every raw vector relabelled: removing the relabelling and
+// swapping the matcher back gives the default queries byte for byte (pricing reads the hub's own
+// store and keeps the default selector).
+func TestQueriesBindingEquivalent(t *testing.T) {
+	def := allQueries(Queries{Cluster: "ro-spoke-1", RateWindow: 5 * time.Minute})
+	for _, tc := range []struct {
+		name    string
+		b       hubapi.MetricsBinding
+		matcher string
+	}{
+		{"renamed label", hubapi.MetricsBinding{ClusterLabel: "k8s_cluster", ClusterLabelValue: "prod-eu1"}, `k8s_cluster="prod-eu1"`},
+		{"other value", hubapi.MetricsBinding{ClusterLabel: "cluster", ClusterLabelValue: "spoke1"}, `cluster="spoke1"`},
+		{"no label", hubapi.MetricsBinding{ClusterLabel: ""}, ``},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, err := datasource.NewMatcher("ro-spoke-1", &tc.b)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := allQueries(Queries{Cluster: "ro-spoke-1", RateWindow: 5 * time.Minute, Binding: &m})
+			if !strings.Contains(got, `ro_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}`) {
+				t.Error("pricing queries must keep cluster=\"ro-spoke-1\"")
+			}
+			back := unrelabel(t, got, "ro-spoke-1")
+			if tc.matcher == "" {
+				back = strings.NewReplacer("{}", "", "{", `{cluster="ro-spoke-1", `).Replace(back)
+				// raw selectors without matchers had no braces at all
+				back = restoreBare(back)
+				back = strings.ReplaceAll(back, `cluster="ro-spoke-1", cluster="ro-spoke-1"`, `cluster="ro-spoke-1"`) // pricing
+			} else {
+				back = strings.ReplaceAll(back, tc.matcher, `cluster="ro-spoke-1"`)
+			}
+			if back != def {
+				t.Errorf("not equivalent to the default queries:\n%s", firstDiff(def, back))
+			}
+		})
+	}
+}
+
+// unrelabel removes every relabel wrapper `label_replace(X, "cluster", "<name>", "", "")`, keeping X.
+func unrelabel(t *testing.T, s, cluster string) string {
+	t.Helper()
+	suffix := `, "cluster", "` + cluster + `", "", "")`
+	for {
+		i := strings.Index(s, suffix)
+		if i < 0 {
+			return s
+		}
+		depth, k := 0, i-1
+		for ; k >= 0; k-- {
+			if s[k] == ')' {
+				depth++
+			} else if s[k] == '(' {
+				if depth == 0 {
+					break
+				}
+				depth--
+			}
+		}
+		if k < 0 || !strings.HasSuffix(s[:k], "label_replace") {
+			t.Fatalf("relabel suffix without label_replace at %d", i)
+		}
+		open := k - len("label_replace")
+		s = s[:open] + s[k+1:i] + s[i+len(suffix):]
+	}
+}
+
+// restoreBare adds the cluster matcher to metric names that had no selector in a no-label binding.
+func restoreBare(s string) string {
+	for _, m := range []string{"kube_pod_container_status_restarts_total", "kube_pod_init_container_info", "kube_pod_container_info",
+		"kube_horizontalpodautoscaler_info", "kube_horizontalpodautoscaler_spec_target_metric", "kube_horizontalpodautoscaler_spec_min_replicas",
+		"kube_horizontalpodautoscaler_status_current_replicas"} {
+		s = regexpBare(m).ReplaceAllString(s, m+`{cluster="ro-spoke-1"}$1`)
+	}
+	return s
+}
+
+func regexpBare(metric string) *regexp.Regexp {
+	return regexp.MustCompile(regexp.QuoteMeta(metric) + `([\[)])`)
+}
+
+func TestQueriesBindingGolden(t *testing.T) {
+	m, err := datasource.NewMatcher("ro-spoke-2", &hubapi.MetricsBinding{ClusterLabel: "k8s_cluster", ClusterLabelValue: "prod-eu1", ExtraMatchers: []string{`env="prod"`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "testdata/queries-binding.golden", allQueries(Queries{Cluster: "ro-spoke-2", RateWindow: 5 * time.Minute, Binding: &m}))
 }
