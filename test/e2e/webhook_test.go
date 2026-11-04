@@ -121,10 +121,6 @@ func TestWebhook(t *testing.T) {
 	deploy(t, cl, ns, overprovisioned("web"))
 	armed(t, cl, ns, ns, "web", overCPU, autoCPU(v1alpha1.StrategyInPlace))
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
-	// Drift repair (second subtest) only runs while the applied recommendation is still the hub's
-	// latest (agent: keepLive; see the WO-24 hand-over): no extra recommender runs from the suite
-	// until the end of this test.
-	env.Hub.holdRecompute(t)
 	want := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
 	// The webhook only trusts a status written for the current spec.
 	eventually(t, time.Minute, 2*time.Second, "RSR status observed its spec", func() (bool, string) {
@@ -158,6 +154,10 @@ func TestWebhook(t *testing.T) {
 	})
 
 	t.Run("webhook down does not block pod creation", func(t *testing.T) {
+		// A recommender run after the apply gives the workload a new recommendation id, usually with
+		// the same values. The agent adopts it and keeps repairing drift (WO-21c; before that fix
+		// drift repair stopped at the first run after an apply). So force one before the drift.
+		want = adoptNewRecommendation(t, cl, ns, "web", want)
 		restore := webhookDown(t, cl)
 		before := snapshot(t, cl, ns, "web")
 		start := time.Now()
@@ -179,19 +179,6 @@ func TestWebhook(t *testing.T) {
 			t.Errorf("pod %s was mutated although the webhook is down", fresh[0].Name)
 		}
 		restore()
-		appliedRec := rsr(t, cl, ns, deployment, "web").Status.AppliedRecommendationID
-		t.Cleanup(func() {
-			if !t.Failed() {
-				return
-			}
-			c, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if d, err := env.Hub.workload(c, cl.Name, ns, deployment, "web"); err == nil && d != nil && d.Recommendation != nil && d.Recommendation.ID != appliedRec {
-				t.Logf("KNOWN AGENT BUG (WO-24 hand-over): the hub issued recommendation %s after the applied %s; the agent repairs drift "+
-					"only while the applied recommendation is the latest (reconciler keepLive), and a new one within the tolerance is "+
-					"skipped (NoSignificantChange), so the unmutated pod is never resized", d.Recommendation.ID, appliedRec)
-			}
-		})
 		// The agent's drift repair brings the unmutated pod to the applied value.
 		eventually(t, 3*time.Minute, 5*time.Second, "drift repair resizes "+fresh[0].Name, func() (bool, string) {
 			var p corev1.Pod
@@ -202,4 +189,38 @@ func TestWebhook(t *testing.T) {
 			return got.Cmp(want) == 0, "cpu " + got.String()
 		})
 	})
+}
+
+// adoptNewRecommendation forces a recommender run, waits until the hub has a new recommendation
+// for the Applied workload and the agent has adopted it (RSR appliedRecommendationID, WO-21c), and
+// returns the CPU request that is then live. A new recommendation beyond the agent's tolerance is
+// not adopted silently (it is a new change, held by the cooldown): then it logs and returns want.
+func adoptNewRecommendation(t *testing.T, cl cluster, ns, name string, want resource.Quantity) resource.Quantity {
+	t.Helper()
+	before := rsr(t, cl, ns, deployment, name).Status.AppliedRecommendationID
+	if !env.Hub.recomputeNow(ctx(t), t.Logf) {
+		t.Skip("the hub has no recompute trigger: cannot force a new recommendation id")
+	}
+	rec := waitHubRecommendation(t, cl, ns, deployment, name, func(r *workloadRec) (bool, string) {
+		return r.ID != before, "still the applied recommendation " + before
+	})
+	got := q(rec.Containers[0].Recommended.Requests.CPU)
+	diff := got.MilliValue() - want.MilliValue()
+	if diff < 0 {
+		diff = -diff
+	}
+	if float64(diff) > 0.05*float64(want.MilliValue()) {
+		t.Logf("new recommendation %s: cpu %s vs live %s is beyond the 5%% tolerance; adoption not checked", rec.ID, got.String(), want.String())
+		return want
+	}
+	var r *v1alpha1.RightsizingRecommendation
+	eventually(t, 3*time.Minute, 3*time.Second, "agent adopts recommendation "+rec.ID, func() (bool, string) {
+		r = rsr(t, cl, ns, deployment, name)
+		if r == nil {
+			return false, rsrStatus(r)
+		}
+		return r.Status.Phase == v1alpha1.PhaseApplied && r.Status.AppliedRecommendationID == rec.ID &&
+			r.Status.ObservedGeneration == r.Generation, rsrStatus(r) + ", applied recommendation " + r.Status.AppliedRecommendationID
+	})
+	return r.Spec.Containers[0].Requests[corev1.ResourceCPU]
 }
