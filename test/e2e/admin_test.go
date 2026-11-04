@@ -745,18 +745,27 @@ func TestReadinessKSMDown(t *testing.T) {
 	if d.Spec.Replicas != nil && *d.Spec.Replicas > 0 {
 		orig = *d.Spec.Replicas
 	}
-	t.Cleanup(func() {
+	scaleBack := func(c context.Context) error {
+		var cur appsv1.Deployment
+		if err := cl.C.Get(c, key, &cur); err != nil {
+			return err
+		}
+		cur.Spec.Replicas = &orig
+		delete(cur.Annotations, scaledFromAnnotation)
+		if err := cl.C.Update(c, &cur); err != nil {
+			return fmt.Errorf("scale %s back to %d: %w", key, orig, err)
+		}
+		return releaseFields(c, cl, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name}})
+	}
+	restored := false
+	t.Cleanup(func() { // fallback when the test fails before its own restore
+		if restored {
+			return
+		}
 		c, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		var cur appsv1.Deployment
-		if err := cl.C.Get(c, key, &cur); err == nil {
-			cur.Spec.Replicas = &orig
-			delete(cur.Annotations, scaledFromAnnotation)
-			if err := cl.C.Update(c, &cur); err != nil {
-				t.Errorf("cleanup: scale %s back to %d: %v", key, orig, err)
-			} else if err := releaseFields(c, cl, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name}}); err != nil {
-				t.Errorf("cleanup: %v", err)
-			}
+		if err := scaleBack(c); err != nil {
+			t.Errorf("cleanup: %v", err)
 		}
 	})
 	zero := int32(0)
@@ -793,4 +802,20 @@ func TestReadinessKSMDown(t *testing.T) {
 			t.Errorf("cluster list readiness of %s: %+v, want blocking > 0 (banner)", c.Name, c.Readiness)
 		}
 	}
+
+	// Restore and wait for AutomationReady, so later scenarios on spoke-2 don't hit the auto-patch
+	// gate. The hub reruns metrics checks only every checkInterval (10m in dev) or on a recheck, and
+	// freshness passes only once VictoriaMetrics has new KSM samples: recheck every minute.
+	must(t, scaleBack(ctx(t)))
+	restored = true
+	t.Logf("scaled %s on %s back to %d", key, cl.Name, orig)
+	lastRecheck = time.Time{}
+	eventually(t, 10*time.Minute, 15*time.Second, cl.Name+" AutomationReady after the restore", func() (bool, string) {
+		if time.Since(lastRecheck) > time.Minute {
+			recheck(t, cl.Name)
+			lastRecheck = time.Now()
+		}
+		r = readiness(t, cl.Name)
+		return r.State == string(rd.StateAutomationReady), fmt.Sprintf("state %s blockedBy %v freshness %+v", r.State, r.BlockedBy, check(r, rd.CheckFreshness))
+	})
 }
