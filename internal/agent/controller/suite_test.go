@@ -112,7 +112,7 @@ func runSuite(m *testing.M) int {
 	r := &Reconciler{
 		Client: mgr.GetClient(), Reader: mgr.GetAPIReader(), Store: store, Reporter: rep,
 		Recorder: mgr.GetEventRecorder("resource-optimizer-agent"), Log: log,
-		Cfg: Config{ClusterName: testCluster, ApplyingRequeue: 200 * time.Millisecond},
+		Cfg: Config{ClusterName: testCluster, ApplyingRequeue: 200 * time.Millisecond, OnDeleteSettle: 300 * time.Millisecond},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
