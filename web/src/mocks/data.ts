@@ -637,7 +637,9 @@ function buildWorkload(
       } else if (phase === 'RolledBack') {
         // The rollback reason has to match a resource the agent actually changed.
         reason =
-          modes.memory === 'auto-patch' ? pick(r, ['OOMKills', 'Restarts', 'Throttling']) : 'Throttling'
+          modes.memory === 'auto-patch'
+            ? pick(r, ['OOMKills', 'Restarts'])
+            : pick(r, ['Throttling', 'Restarts'])
         message =
           reason === 'OOMKills'
             ? '2 OOM kills within 30m after change (threshold 1); previous values restored.'
@@ -837,18 +839,19 @@ function buildEvents(w: WorkloadModel, now: number): AuditEvent[] {
   const recAt = (i: number) => w.history[Math.min(i, w.history.length - 1)]
   if (!w.hasRecommendation) return out
 
-  // audit / off: one "skipped" per recent recommendation id (emitted only on change).
-  for (const res of ['cpu', 'memory'] as const) {
-    const mode = w.modes[res]
-    if (mode === 'auto-patch') continue
-    for (let i = 0; i < Math.min(2, w.history.length); i++) {
-      const rec = recAt(i)!
-      ev('skipped', Date.parse(rec.generatedAt) + 90_000, mode === 'off' ? 'ModeOff' : 'ModeAudit', {
-        recommendationID: rec.id,
-        resources: [res],
-        message: `Effective ${res} mode is ${mode} (${(res === 'cpu' ? w.modes.cpuSource : w.modes.memorySource) ?? 'global-default'}${w.policy ? `: ${w.policy}` : ''}).`,
-      })
-    }
+  // audit / off: D-017 — one "skipped" per (workload, type, reason), when the agent first saw it.
+  const notAuto = (['cpu', 'memory'] as const).filter((res) => w.modes[res] !== 'auto-patch')
+  if (notAuto.length) {
+    const first = recAt(w.history.length - 1)!
+    const allOff = notAuto.every((res) => w.modes[res] === 'off')
+    ev('skipped', Date.parse(first.generatedAt) + 90_000, allOff ? 'ModeOff' : 'ModeAudit', {
+      recommendationID: first.id,
+      resources: notAuto,
+      message:
+        notAuto.length === 2
+          ? 'no resource is in auto-patch mode'
+          : `${notAuto[0]} is in ${w.modes[notAuto[0]!]} mode (${(notAuto[0] === 'cpu' ? w.modes.cpuSource : w.modes.memorySource) ?? 'global-default'}${w.policy ? `: ${w.policy}` : ''})`,
+    })
   }
 
   const autoRes = (['cpu', 'memory'] as const).filter((x) => w.modes[x] === 'auto-patch')
@@ -900,15 +903,14 @@ function buildEvents(w: WorkloadModel, now: number): AuditEvent[] {
       })
     }
     // later runs too close to the live values
-    for (let i = 0; i < w.history.length; i++) {
-      const h = w.history[i]!
-      if (Date.parse(h.generatedAt) > t && r() < 0.35) {
-        ev('skipped', Date.parse(h.generatedAt) + 60_000, 'NoSignificantChange', {
-          recommendationID: h.id,
-          resources: autoRes,
-          message: 'Recommended values within 10 % of live values.',
-        })
-      }
+    // (D-017: once, not per run)
+    const later = [...w.history].reverse().find((h) => Date.parse(h.generatedAt) > t)
+    if (later && r() < 0.6) {
+      ev('skipped', Date.parse(later.generatedAt) + 60_000, 'NoSignificantChange', {
+        recommendationID: later.id,
+        resources: autoRes,
+        message: 'Recommended values within 10 % of live values.',
+      })
     }
     // an older apply for long-lived workloads
     if (r() < 0.3 && w.history.length > 8) {

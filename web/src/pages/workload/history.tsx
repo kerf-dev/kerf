@@ -1,7 +1,7 @@
 import { HistoryIcon, SparklesIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useHistory } from '@/api/queries'
-import type { AuditEvent, Resources, WorkloadRecommendation } from '@/api/types'
+import type { Resources, WorkloadRecommendation } from '@/api/types'
 import { EVENT_INFO, EventTypeBadge, Savings } from '@/components/domain'
 import { EmptyState, ErrorState } from '@/components/states'
 import { Button } from '@/components/ui/button'
@@ -10,11 +10,10 @@ import { Segmented } from '@/components/ui/segmented'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip } from '@/components/ui/tooltip'
 import { formatDateTime, formatPercent, formatQuantity, relativeTime } from '@/lib/format'
+import { collapseEvents, collapseRecommendations, type EventRun, type RecRun } from '@/lib/collapse'
 import { cn } from '@/lib/utils'
 
-type Item =
-  | { kind: 'rec'; time: string; rec: WorkloadRecommendation; prev?: WorkloadRecommendation }
-  | { kind: 'event'; time: string; ev: AuditEvent }
+type Item = { kind: 'rec'; time: string; run: RecRun } | { kind: 'event'; time: string; run: EventRun }
 
 export function ResourceDiff({ from, to }: { from?: Resources; to?: Resources }) {
   const rows: [string, 'cpu' | 'memory', 'requests' | 'limits'][] = [
@@ -49,10 +48,18 @@ export function HistoryCard({ id }: { id: string }) {
   const [limit, setLimit] = useState(12)
   const items = useMemo<Item[]>(() => {
     if (!history.data) return []
-    const recs = history.data.recommendations
+    // Repeats (same recommended values, same event) collapse into one entry with a count.
     const out: Item[] = [
-      ...recs.map((rec, i) => ({ kind: 'rec' as const, time: rec.generatedAt, rec, prev: recs[i + 1] })),
-      ...history.data.events.map((ev) => ({ kind: 'event' as const, time: ev.time, ev })),
+      ...collapseRecommendations(history.data.recommendations).map((run) => ({
+        kind: 'rec' as const,
+        time: run.latest.generatedAt,
+        run,
+      })),
+      ...collapseEvents(history.data.events).map((run) => ({
+        kind: 'event' as const,
+        time: run.latest.time,
+        run,
+      })),
     ]
     return out
       .sort((a, b) => b.time.localeCompare(a.time))
@@ -111,10 +118,10 @@ export function HistoryCard({ id }: { id: string }) {
               <span aria-hidden className="absolute top-3 bottom-3 left-3 w-px bg-border" />
               {items.slice(0, limit).map((it) => (
                 <li
-                  key={it.kind === 'rec' ? `r-${it.rec.id}` : `e-${it.ev.id}`}
+                  key={it.kind === 'rec' ? `r-${it.run.latest.id}` : `e-${it.run.latest.id}`}
                   className="relative flex gap-3 pb-5 last:pb-0"
                 >
-                  {it.kind === 'rec' ? <RecItem rec={it.rec} prev={it.prev} /> : <EventItem ev={it.ev} />}
+                  {it.kind === 'rec' ? <RecItem run={it.run} /> : <EventItem run={it.run} />}
                 </li>
               ))}
             </ol>
@@ -132,9 +139,9 @@ export function HistoryCard({ id }: { id: string }) {
   )
 }
 
-function When({ t }: { t: string }) {
+function When({ t, since }: { t: string; since?: string }) {
   return (
-    <Tooltip content={formatDateTime(t)}>
+    <Tooltip content={since ? `${formatDateTime(since)} – ${formatDateTime(t)}` : formatDateTime(t)}>
       <time dateTime={t} className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
         {relativeTime(t)}
       </time>
@@ -142,7 +149,20 @@ function When({ t }: { t: string }) {
   )
 }
 
-function RecItem({ rec, prev }: { rec: WorkloadRecommendation; prev?: WorkloadRecommendation }) {
+function Repeats({ count, since, what }: { count: number; since: string; what: string }) {
+  if (count < 2) return null
+  return (
+    <Tooltip content={`${count} ${what} with the same values since ${formatDateTime(since)}`}>
+      <span className="ml-1.5 inline-flex h-[18px] items-center rounded-full bg-muted px-1.5 align-middle font-mono text-[10px] font-medium text-muted-foreground">
+        ×{count}
+      </span>
+    </Tooltip>
+  )
+}
+
+function RecItem({ run }: { run: RecRun }) {
+  const rec = run.latest
+  const prev = run.previous
   const m = mainOf(rec)
   const pm = prev ? prev.containers.find((c) => c.name === m?.name) : undefined
   return (
@@ -153,7 +173,8 @@ function RecItem({ rec, prev }: { rec: WorkloadRecommendation; prev?: WorkloadRe
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-3">
           <div className="text-[13px]">
-            <span className="font-medium">New recommendation</span>
+            <span className="font-medium">{prev ? 'Recommendation changed' : 'First recommendation'}</span>
+            <Repeats count={run.count} since={run.first.generatedAt} what="runs" />
             <span className="text-muted-foreground">
               {' '}
               · confidence {formatPercent(rec.confidence)} ·{' '}
@@ -161,7 +182,7 @@ function RecItem({ rec, prev }: { rec: WorkloadRecommendation; prev?: WorkloadRe
               /mo
             </span>
           </div>
-          <When t={rec.generatedAt} />
+          <When t={rec.generatedAt} since={run.count > 1 ? run.first.generatedAt : undefined} />
         </div>
         {m ? (
           <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
@@ -183,7 +204,8 @@ function RecItem({ rec, prev }: { rec: WorkloadRecommendation; prev?: WorkloadRe
   )
 }
 
-function EventItem({ ev }: { ev: AuditEvent }) {
+function EventItem({ run }: { run: EventRun }) {
+  const ev = run.latest
   const info = EVENT_INFO[ev.type]
   const Icon = info.icon
   return (
@@ -196,12 +218,13 @@ function EventItem({ ev }: { ev: AuditEvent }) {
           <div className="flex flex-wrap items-center gap-1.5 text-[13px]">
             <EventTypeBadge type={ev.type} />
             <span className="font-mono text-xs font-medium">{ev.reason}</span>
+            <Repeats count={run.count} since={run.first.time} what="events" />
             {ev.resources?.length ? (
               <span className="text-xs text-muted-foreground">· {ev.resources.join(', ')}</span>
             ) : null}
             {ev.strategy ? <span className="text-xs text-muted-foreground">· {ev.strategy}</span> : null}
           </div>
-          <When t={ev.time} />
+          <When t={ev.time} since={run.count > 1 ? run.first.time : undefined} />
         </div>
         {ev.message ? (
           <p className="mt-1 text-[13px] text-pretty text-muted-foreground">{ev.message}</p>
