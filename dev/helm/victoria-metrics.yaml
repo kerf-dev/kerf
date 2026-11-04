@@ -13,10 +13,11 @@ server:
     size: 4Gi
   resources:
     requests:
-      cpu: 50m
-      memory: 128Mi
+      cpu: 100m
+      memory: 512Mi
     limits:
-      memory: 768Mi
+      # WO-02 bulk backfill (~0.9B samples) OOM-killed it at 768Mi.
+      memory: 3Gi
   service:
     annotations:
       prometheus.io/scrape: "true" # picked up by the hub vmagent (dev/helm/vmagent-hub.yaml)
