@@ -268,7 +268,7 @@ func TestMetricsCheckerUnreachableAndLabel(t *testing.T) {
 	}
 
 	// probe fails with a hint
-	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(401) }))
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) }))
 	defer bad.Close()
 	rep = (&MetricsChecker{Q: &fakeQ{}, API: datasource.NewAPI(bad.URL, http.DefaultClient), M: m, Now: func() time.Time { return now }}).Run(context.Background())
 	if c := byID(rep)[rd.CheckDatasourceReachable]; c.Status != "fail" || c.Details["httpStatus"] != "401" || !strings.Contains(c.Remediation, "credentials") {

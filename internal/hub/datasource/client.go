@@ -233,25 +233,25 @@ func (a *API) Probe(ctx context.Context) ProbeResult {
 	defer res.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
 	out := ProbeResult{Latency: lat, HTTPStatus: res.StatusCode}
-	switch {
-	case res.StatusCode == http.StatusOK:
+	switch res.StatusCode {
+	case http.StatusOK:
 		var r struct {
 			Status string `json:"status"`
 		}
 		if json.Unmarshal(body, &r) != nil || r.Status != "success" {
-			out.Error = "not a Prometheus query API response: " + truncate(string(body), 200)
+			out.Error = "not a Prometheus query API response: " + truncate(string(body))
 			out.Hint = "the URL must be the query base (the part before /api/v1/query); AMP: https://aps-workspaces.<region>.amazonaws.com/workspaces/<id>/"
 			return out
 		}
 		out.OK = true
-	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
-		out.Error = fmt.Sprintf("HTTP %d: %s", res.StatusCode, truncate(string(body), 200))
+	case http.StatusUnauthorized, http.StatusForbidden:
+		out.Error = fmt.Sprintf("HTTP %d: %s", res.StatusCode, truncate(string(body)))
 		out.Hint = "check the credentials; Mimir/Cortex also need the tenant header X-Scope-OrgID; AMP needs aps:QueryMetrics for the hub's IAM role"
-	case res.StatusCode == http.StatusNotFound:
-		out.Error = fmt.Sprintf("HTTP 404: %s", truncate(string(body), 200))
+	case http.StatusNotFound:
+		out.Error = fmt.Sprintf("HTTP 404: %s", truncate(string(body)))
 		out.Hint = "the URL must be the query base (the part before /api/v1/query), e.g. http://prometheus:9090 or https://thanos-query/"
 	default:
-		out.Error = fmt.Sprintf("HTTP %d: %s", res.StatusCode, truncate(string(body), 200))
+		out.Error = fmt.Sprintf("HTTP %d: %s", res.StatusCode, truncate(string(body)))
 		out.Hint = "the datasource answered with an error; check its logs"
 	}
 	return out
@@ -307,7 +307,7 @@ func (a *API) LabelValues(ctx context.Context, label string, match []string, sin
 		Data   []string `json:"data"`
 	}
 	if err := json.Unmarshal(body, &r); err != nil {
-		return nil, fmt.Errorf("label values: HTTP %d: %s", res.StatusCode, truncate(string(body), 200))
+		return nil, fmt.Errorf("label values: HTTP %d: %s", res.StatusCode, truncate(string(body)))
 	}
 	if r.Status != "success" {
 		return nil, fmt.Errorf("label values: %s", r.Error)
@@ -319,7 +319,8 @@ func (a *API) LabelValues(ctx context.Context, label string, match []string, sin
 	return r.Data, nil
 }
 
-func truncate(s string, n int) string {
+func truncate(s string) string {
+	const n = 200
 	s = strings.TrimSpace(s)
 	if len(s) <= n {
 		return s
