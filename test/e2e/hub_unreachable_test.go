@@ -8,63 +8,39 @@ import (
 	"testing"
 	"time"
 
-	discoveryv1 "k8s.io/api/discovery/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
 )
 
-// The hub outage is simulated on spoke 2 only, with a NetworkPolicy that blocks the agent's
-// egress to the hub endpoint (k3s enforces NetworkPolicies). It is removed when the test ends,
-// and `make e2e` removes a leftover one before and after the run.
-const blockPolicyName = "e2e-hub-unreachable"
+// The hub outage is simulated on spoke 2 only, by replacing the agent's hub token with an invalid
+// one: every pull fails (401), exactly as if the hub were gone, and the agent re-reads the token
+// file on each request. A NetworkPolicy is not used: the k3s policy controller keeps ESTABLISHED
+// connections open, and the agent's keep-alive connection to the hub never goes idle, so blocking
+// the hub endpoint only works when no connection happens to be open.
+// The token is put back at the end; `make e2e-unblock` restores it from the hub's dev token Secret
+// if a run was killed.
+const invalidToken = "e2e-hub-unreachable-invalid-token"
 
-// agentNamespace and agentSelector locate the deployed agent (deploy/charts/agent).
 var (
-	agentNamespace = getenv("E2E_AGENT_NAMESPACE", "resource-optimizer")
-	agentSelector  = map[string]string{"app.kubernetes.io/name": "resource-optimizer-agent"}
+	agentNamespace   = getenv("E2E_AGENT_NAMESPACE", "resource-optimizer")
+	agentTokenSecret = getenv("E2E_AGENT_TOKEN_SECRET", "resource-optimizer-agent-token")
 )
-
-// hubEndpointIPs returns the addresses behind the spoke's selector-less hub-api Service (WO-01).
-func hubEndpointIPs(t *testing.T, cl cluster) []string {
-	t.Helper()
-	var slices discoveryv1.EndpointSliceList
-	must(t, cl.C.List(ctx(t), &slices, client.InNamespace(getenv("E2E_HUB_SERVICE_NAMESPACE", "hub")),
-		client.MatchingLabels{discoveryv1.LabelServiceName: getenv("E2E_HUB_SERVICE", "hub-api")}))
-	var ips []string
-	for _, s := range slices.Items {
-		for _, ep := range s.Endpoints {
-			ips = append(ips, ep.Addresses...)
-		}
-	}
-	if len(ips) == 0 {
-		t.Fatal("no endpoints for the hub-api Service")
-	}
-	return ips
-}
 
 // blockHub cuts the agent off from the hub and returns the function that restores it.
 func blockHub(t *testing.T, cl cluster) func() {
 	t.Helper()
-	var except []string
-	for _, ip := range hubEndpointIPs(t, cl) {
-		except = append(except, ip+"/32")
+	key := client.ObjectKey{Namespace: agentNamespace, Name: agentTokenSecret}
+	var sec corev1.Secret
+	must(t, cl.C.Get(ctx(t), key, &sec))
+	original := append([]byte(nil), sec.Data["token"]...)
+	if string(original) == invalidToken {
+		t.Fatalf("the agent token on %s is still the e2e invalid token; run `make e2e-unblock`", cl.Name)
 	}
-	np := &networkingv1.NetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: blockPolicyName, Namespace: agentNamespace, Labels: map[string]string{suiteLabel: "true"}},
-		Spec: networkingv1.NetworkPolicySpec{
-			PodSelector: metav1.LabelSelector{MatchLabels: agentSelector},
-			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
-			Egress: []networkingv1.NetworkPolicyEgressRule{{
-				To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0", Except: except}}},
-			}},
-		},
-	}
-	_ = cl.C.Delete(ctx(t), np.DeepCopy())
-	must(t, cl.C.Create(ctx(t), np))
-	t.Logf("agent on %s cut off from the hub (%v)", cl.Name, except)
+	sec.Data["token"] = []byte(invalidToken)
+	must(t, cl.C.Update(ctx(t), &sec))
+	t.Logf("agent on %s cut off from the hub (token Secret %s replaced)", cl.Name, key)
 	restored := false
 	restore := func() {
 		if restored {
@@ -73,10 +49,17 @@ func blockHub(t *testing.T, cl cluster) func() {
 		restored = true
 		c, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		if err := ignoreNotFound(cl.C.Delete(c, np)); err != nil {
-			t.Errorf("REMOVE NetworkPolicy %s/%s on %s BY HAND: %v", agentNamespace, blockPolicyName, cl.Name, err)
+		var cur corev1.Secret
+		err := cl.C.Get(c, key, &cur)
+		if err == nil {
+			cur.Data["token"] = original
+			err = cl.C.Update(c, &cur)
 		}
-		t.Logf("agent on %s reconnected to the hub", cl.Name)
+		if err != nil {
+			t.Errorf("RESTORE the agent token on %s BY HAND (make e2e-unblock): %v", cl.Name, err)
+			return
+		}
+		t.Logf("agent on %s reconnected to the hub (token restored)", cl.Name)
 	}
 	t.Cleanup(restore)
 	return restore
@@ -91,7 +74,7 @@ func TestHubUnreachable(t *testing.T) {
 	staleAfter, err := time.ParseDuration(getenv("E2E_HUB_STALE_AFTER", "5m"))
 	must(t, err)
 
-	// "applied": auto-patch from the start; "held": audit until the hub is gone.
+	// "applied": auto-patch before the outage; "held": audit until the hub is gone.
 	applied, held := overprovisioned("applied"), overprovisioned("held")
 	applied.Labels = map[string]string{"e2e-role": "applied"}
 	deploy(t, cl, ns, applied)
@@ -103,15 +86,19 @@ func TestHubUnreachable(t *testing.T) {
 	pa := autoCPU(v1alpha1.StrategyInPlace)
 	pa.Selector.MatchLabels = map[string]string{"e2e-role": "applied"}
 	pa.Priority = 1001
-	policy(t, cl, ns+"-applied", ns, pa)
+	armed(t, cl, ns+"-applied", ns, "applied", "500m", pa)
 
 	waitPhase(t, cl, ns, deployment, "applied", v1alpha1.PhaseApplied)
+	// "held" must have a representative recommendation cached by the agent before the outage.
+	waitHubRecommendation(t, cl, ns, deployment, "held", cpuBelow("500m"))
 	waitReason(t, cl, ns, deployment, "held", v1alpha1.ReasonModeAudit, 3*time.Minute)
+	time.Sleep(time.Minute) // at least one agent pull after that recommendation
 	appliedPods := snapshot(t, cl, ns, "applied")
 	heldPods := snapshot(t, cl, ns, "held")
 
 	restore := blockHub(t, cl)
-	wait := staleAfter + 45*time.Second
+	// hubStaleAfter, plus up to ~1 min for the kubelet to refresh the mounted Secret.
+	wait := staleAfter + 90*time.Second
 	t.Logf("waiting %s for the agent to consider the hub unreachable (hubStaleAfter %s)", wait, staleAfter)
 	time.Sleep(wait)
 

@@ -23,6 +23,36 @@ func overprovisioned(name string) app {
 	return app{Name: name, CPULoad: 5, Requests: rl("500m", "64Mi"), Limits: rl("", "128Mi")}
 }
 
+// cpuBelow accepts a recommendation whose first container's CPU request is below limit.
+func cpuBelow(limit string) func(*workloadRec) (bool, string) {
+	return func(r *workloadRec) (bool, string) {
+		got := r.Containers[0].Recommended.Requests.CPU
+		return got != "" && q(got).Cmp(resource.MustParse(limit)) < 0, "cpu " + got
+	}
+}
+
+// armed creates the policy with CPU in audit, waits for a recommendation that decreases CPU
+// below `below` (a mature one: the first hub run may see a few samples only), then switches CPU to
+// auto-patch, so the agent applies a representative recommendation.
+func armed(t *testing.T, cl cluster, name, ns, workload, below string, spec v1alpha1.RightsizingPolicySpec) {
+	t.Helper()
+	spec.CPU.Mode = v1alpha1.ModeAudit
+	p := policy(t, cl, name, ns, spec)
+	rec := waitHubRecommendation(t, cl, ns, deployment, workload, cpuBelow(below))
+	t.Logf("hub recommends cpu %s for %s; switching cpu to auto-patch", rec.Containers[0].Recommended.Requests.CPU, workload)
+	eventually(t, time.Minute, 2*time.Second, "policy switched to auto-patch", func() (bool, string) {
+		var cur v1alpha1.RightsizingPolicy
+		if err := cl.C.Get(ctx(t), client.ObjectKeyFromObject(p), &cur); err != nil {
+			return false, err.Error()
+		}
+		cur.Spec.CPU.Mode = v1alpha1.ModeAutoPatch
+		if err := cl.C.Update(ctx(t), &cur); err != nil {
+			return false, err.Error()
+		}
+		return true, ""
+	})
+}
+
 // Scenario 1: audit mode. The hub recommends, nothing changes in the cluster.
 func TestAudit(t *testing.T) {
 	t.Parallel()
@@ -37,12 +67,8 @@ func TestAudit(t *testing.T) {
 	before := snapshot(t, cl, ns, "web")
 	gen := getDeployment(t, cl, ns, "web").Generation
 
-	rec := waitHubRecommendation(t, cl, ns, deployment, "web")
-	got := q(rec.Containers[0].Recommended.Requests.CPU)
-	if got.Cmp(resource.MustParse("500m")) >= 0 {
-		t.Fatalf("hub recommends cpu %s for a workload using ~25m of 500m", got.String())
-	}
-	t.Logf("hub recommends cpu %s (current 500m)", got.String())
+	rec := waitHubRecommendation(t, cl, ns, deployment, "web", cpuBelow("500m"))
+	t.Logf("hub recommends cpu %s (current 500m)", rec.Containers[0].Recommended.Requests.CPU)
 	// The agent has seen it and records why it does nothing.
 	waitReason(t, cl, ns, deployment, "web", v1alpha1.ReasonModeAudit, 3*time.Minute)
 	consistently(t, 45*time.Second, 5*time.Second, "audit leaves the workload alone", func() (bool, string) {
@@ -70,7 +96,7 @@ func TestInPlaceCPU(t *testing.T) {
 	deploy(t, cl, ns, a)
 	before := snapshot(t, cl, ns, "web")
 	gen := getDeployment(t, cl, ns, "web").Generation
-	policy(t, cl, ns, ns, autoCPU(v1alpha1.StrategyInPlace))
+	armed(t, cl, ns, ns, "web", "500m", autoCPU(v1alpha1.StrategyInPlace))
 
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	want := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
@@ -204,7 +230,7 @@ func TestRollout(t *testing.T) {
 	cl := env.Spoke1
 	ns := newNamespace(t, cl, "rollout")
 	deploy(t, cl, ns, overprovisioned("web"))
-	policy(t, cl, ns, ns, autoCPU(v1alpha1.StrategyRollout))
+	armed(t, cl, ns, ns, "web", "500m", autoCPU(v1alpha1.StrategyRollout))
 
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	want := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
@@ -242,7 +268,7 @@ func TestArgoCD(t *testing.T) {
 	app := argoApp(t, cl, ns)
 	waitAppSynced(t, cl, app, 4*time.Minute)
 	waitReady(t, cl, ns, "web", 3*time.Minute)
-	pol := policy(t, cl, ns, ns, autoCPU(v1alpha1.StrategyRollout))
+	armed(t, cl, ns, ns, "web", "500m", autoCPU(v1alpha1.StrategyRollout))
 
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	applied := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
@@ -266,7 +292,7 @@ func TestArgoCD(t *testing.T) {
 
 	t.Run("release restores Git values", func(t *testing.T) {
 		var p v1alpha1.RightsizingPolicy
-		must(t, cl.C.Get(ctx(t), client.ObjectKeyFromObject(pol), &p))
+		must(t, cl.C.Get(ctx(t), client.ObjectKey{Name: ns}, &p))
 		p.Spec.CPU.Mode = v1alpha1.ModeAudit
 		must(t, cl.C.Update(ctx(t), &p))
 		eventually(t, 3*time.Minute, 5*time.Second, "agent releases field ownership", func() (bool, string) {
@@ -299,15 +325,9 @@ func TestGuardrails(t *testing.T) {
 		// Wants a full core, limit 200m: heavily CFS-throttled.
 		deploy(t, cl, ns, app{Name: "web", CPULoad: 100, Requests: rl("100m", "64Mi"), Limits: rl("200m", "128Mi")})
 		policy(t, cl, ns, ns, autoCPU(v1alpha1.StrategyInPlace))
-		rec := waitHubRecommendation(t, cl, ns, deployment, "web")
-		for !slices.Contains(rec.RiskFlags, "throttled") {
-			t.Logf("recommendation %s has flags %v; waiting for the next run", rec.ID, rec.RiskFlags)
-			time.Sleep(time.Minute)
-			rec = waitHubRecommendation(t, cl, ns, deployment, "web")
-			if time.Since(rec.GeneratedAt) > env.ApplyTimeout {
-				t.Fatal("throttled flag never set")
-			}
-		}
+		rec := waitHubRecommendation(t, cl, ns, deployment, "web", func(r *workloadRec) (bool, string) {
+			return slices.Contains(r.RiskFlags, "throttled"), fmt.Sprintf("flags %v", r.RiskFlags)
+		})
 		if got := q(rec.Containers[0].Recommended.Requests.CPU); got.Cmp(resource.MustParse("100m")) <= 0 {
 			t.Fatalf("hub recommends cpu %s for a throttled workload at 100m", got.String())
 		}
@@ -352,8 +372,9 @@ func TestGuardrails(t *testing.T) {
 		deploy(t, cl, ns, overprovisioned("web"))
 		spec := autoCPU(v1alpha1.StrategyInPlace)
 		spec.Guardrails.MaxChangePercent = ptr(int32(20))
-		policy(t, cl, ns, ns, spec)
-		rec := waitHubRecommendation(t, cl, ns, deployment, "web")
+		// Wait for a recommendation well below the 20% cap so the cap is what limits the change.
+		armed(t, cl, ns, ns, "web", "300m", spec)
+		rec := waitHubRecommendation(t, cl, ns, deployment, "web", nil)
 		r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 		applied := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
 		t.Logf("hub recommends %s, applied %s (max change 20%% of 500m)", rec.Containers[0].Recommended.Requests.CPU, applied.String())

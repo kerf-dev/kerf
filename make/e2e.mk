@@ -25,8 +25,8 @@ e2e: ## Run the e2e suite against the running clusters (E2E_RUN=TestAudit to pic
 	exit $$rc
 
 .PHONY: e2e-unblock
-e2e-unblock: ## Remove the hub-outage NetworkPolicy of scenario 11 if a run left it behind.
-	@kubectl --context $(E2E_SPOKE2_CONTEXT) -n resource-optimizer delete networkpolicy e2e-hub-unreachable --ignore-not-found >/dev/null
+e2e-unblock: ## Restore the spoke-2 agent's hub token if a killed run left scenario 11's outage behind.
+	@bash test/e2e/unblock.sh
 
 .PHONY: e2e-clean
 e2e-clean: e2e-unblock ## Delete everything the suite created (namespaces, policies, Argo CD apps) on both spokes.
