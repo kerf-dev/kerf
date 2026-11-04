@@ -270,6 +270,13 @@ export const RISK_INFO: Record<
     icon: TriangleAlertIcon,
     severity: 'medium',
   },
+  'jvm-fixed-heap': {
+    label: 'JVM fixed heap',
+    desc: 'JVM with a fixed maximum heap (-Xmx); memory is never below heap + non-heap.',
+    impact: 'Memory is audit-only: the agent never changes it. Change -Xmx together with the memory.',
+    icon: TriangleAlertIcon,
+    severity: 'medium',
+  },
 }
 
 const SEVERITY_VARIANT = { high: 'destructive', medium: 'warning', low: 'muted' } as const

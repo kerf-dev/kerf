@@ -58,6 +58,7 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | `OutsideMaintenanceWindow` | Strategy `deferred` and no maintenance window is open: the change is queued (phase `Deferred`, `status.nextWindow`) and applied as a rollout when the next window opens (WO-10). |
 | `UnsupportedNode` | In-place refused: node has swap or a static CPU/Memory Manager policy (D-007). |
 | `RestartPolicyRequired` | Memory change on a JVM/Python container whose `resizePolicy` is not `RestartContainer` and strategy is `in-place` (D-007). |
+| `JVMFixedHeap` | Memory change on a JVM container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`, detected live or flagged `jvm-fixed-heap` by the hub); memory is audit-only (WO-12). |
 | `HubUnreachable` | No fresh recommendation because the hub cannot be reached; nothing new is applied. |
 | `ResizeInfeasible` | Pod resize status `Infeasible`. |
 | `ResizeDeferredTimeout` | Pod resize stayed `Deferred` longer than `apply.fallbackAfter`. |

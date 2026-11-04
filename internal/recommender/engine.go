@@ -20,6 +20,9 @@ type Engine struct {
 	// ProfilesInUse returns the profiles reported for a cluster's workloads; the data window is the
 	// longest of these and the default profile. nil means every configured profile.
 	ProfilesInUse func(cluster string) []string
+	// JVM returns the JVM containers the agent reported for a workload; reported is false when the
+	// agent never reported it (JVMs are then detected by image). nil: no agent reports (WO-12).
+	JVM func(hubapi.WorkloadKey) (containers []hubapi.JVMContainer, reported bool)
 }
 
 // ClusterResult is the outcome of one cluster in a run.
@@ -72,6 +75,12 @@ func (e *Engine) RunCluster(ctx context.Context, cluster string, end time.Time, 
 		s := e.Cfg.EffectiveSettings(reported)
 		p := e.Cfg.Profiles[s.Profile]
 		data := raw.Data(p, d.End, e.Cfg)
+		var jvm []hubapi.JVMContainer
+		jvmReported := false
+		if e.JVM != nil {
+			jvm, jvmReported = e.JVM(k)
+		}
+		attachJVM(&data, raw, jvm, jvmReported, e.Cfg.JVM)
 		inv := WorkloadInventory{Key: k, AverageReplicas: data.AverageReplicas, HPA: raw.HPA, Containers: data.ContainerNames()}
 		for _, c := range data.Containers {
 			inv.Used24hCPU += c.Used24hCPU

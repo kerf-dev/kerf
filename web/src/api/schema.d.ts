@@ -330,11 +330,20 @@ export interface components {
     /**
      * @description `throttled`, `oom-killed`: the workload is under-provisioned; the recommendation is never
      *     a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only
-     *     (D-011). `low-confidence`: confidence below the hub threshold.
+     *     (D-011). `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
+     *     container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`); its memory is audit-only,
+     *     the agent never changes it (WO-12).
      * @enum {string}
      */
     RiskFlag:
-      'throttled' | 'oom-killed' | 'restarting' | 'hpa-coupled' | 'sidecar' | 'short-lived' | 'low-confidence'
+      | 'throttled'
+      | 'oom-killed'
+      | 'restarting'
+      | 'hpa-coupled'
+      | 'sidecar'
+      | 'short-lived'
+      | 'low-confidence'
+      | 'jvm-fixed-heap'
     /** @enum {string} */
     EventType: 'applied' | 'skipped' | 'blocked' | 'fallback' | 'rolled_back' | 'released' | 'failed'
     /** @enum {string} */
@@ -494,6 +503,31 @@ export interface components {
       nextWindow?: string
       /** Format: date-time */
       observedAt?: string
+      /**
+       * @description JVM containers detected by the agent with their heap settings (WO-12). Absent when JVM
+       *     detection is off (`RightsizingPolicy.spec.jvm.detect: false`) or no container is a JVM.
+       */
+      jvm?: components['schemas']['JVMContainer'][]
+    }
+    /**
+     * @description Heap settings of one JVM container, parsed from `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`,
+     *     `JAVA_OPTS`, the container command/args and `_JAVA_OPTIONS` (later sources win, as in the
+     *     JVM). A missing value means "not set" (JVM default).
+     */
+    JVMContainer: {
+      name: string
+      /** @description What identified the container as a JVM. */
+      detectedBy: ('image' | 'command' | 'env')[]
+      /** @description `-Xmx` / `-XX:MaxHeapSize`. */
+      maxHeap?: components['schemas']['Quantity']
+      /** @description `-Xms` / `-XX:InitialHeapSize`. */
+      initialHeap?: components['schemas']['Quantity']
+      /** @description `-XX:MaxRAMPercentage` (or 100 / `-XX:MaxRAMFraction`). */
+      maxRAMPercentage?: number
+      /** @description `-XX:MaxRAM`. */
+      maxRAM?: components['schemas']['Quantity']
+      /** @description Option variables set from a ConfigMap/Secret reference, which the agent does not read. */
+      unresolved?: string[]
     }
     WorkloadStatusBatch: {
       agentVersion?: string
@@ -572,6 +606,31 @@ export interface components {
       limitRule?: string
       /** @description Adjustments, e.g. "raised: throttled" or "kept current: oom-killed". */
       notes?: string[]
+      jvm?: components['schemas']['JVMExplanation']
+    }
+    /**
+     * @description How the JVM heap shaped the memory recommendation (WO-12), only on `memory` of JVM
+     *     containers. `heapSizing`: `fixed` (`-Xmx`; memory audit-only, flag `jvm-fixed-heap`),
+     *     `percentage` (`-XX:MaxRAMPercentage`, max heap follows the memory limit), `default` (no heap
+     *     flags: the JVM default of 25 % of the limit). `heapNeed` is the observed peak working set
+     *     capped at the current maximum heap; `floor` is the smallest memory that keeps the maximum
+     *     heap at or above `heapNeed` (percentage, default) or fits heap plus `nonHeap` (fixed).
+     */
+    JVMExplanation: {
+      /** @enum {string} */
+      heapSizing: 'fixed' | 'percentage' | 'default'
+      detectedBy: ('image' | 'command' | 'env')[]
+      /**
+       * @description `agent`: heap settings reported by the agent; `image`: only the image name was known (no agent report), JVM defaults assumed.
+       * @enum {string}
+       */
+      source?: 'agent' | 'image'
+      maxRAMPercentage?: number
+      maxHeapBefore?: components['schemas']['Quantity']
+      maxHeapAfter?: components['schemas']['Quantity']
+      heapNeed?: components['schemas']['Quantity']
+      nonHeap?: components['schemas']['Quantity']
+      floor?: components['schemas']['Quantity']
     }
     /** @description Why the values were recommended. Only returned by `GET /v1/workloads/{id}`. */
     ContainerExplanation: {
