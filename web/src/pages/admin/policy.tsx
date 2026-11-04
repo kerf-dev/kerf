@@ -1,7 +1,15 @@
 import { ArrowLeftIcon, DownloadIcon, RotateCcwIcon, Trash2Icon, UsersIcon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
-import { usePolicies, usePolicy, usePolicyVersions, useWorkloadIndex, useWrite, writes } from '@/api/admin'
+import {
+  useGitOnlyClusters,
+  usePolicies,
+  usePolicy,
+  usePolicyVersions,
+  useWorkloadIndex,
+  useWrite,
+  writes,
+} from '@/api/admin'
 import { useAuth } from '@/api/auth'
 import { useClusters } from '@/api/queries'
 import type {
@@ -13,6 +21,7 @@ import type {
   RightsizingPolicySpec,
 } from '@/api/types'
 import { ActorChip, CodeBlock, OriginBadge, ReadOnlyNotice } from '@/components/admin/common'
+import { GitOnlyNotice } from '@/components/admin/git-notice'
 import { ImpactPreview } from '@/components/admin/impact-preview'
 import { PolicySpecForm } from '@/components/admin/policy-form'
 import { SaveBar, usePreview } from '@/components/admin/save-bar'
@@ -174,12 +183,17 @@ function ClusterPicker({
       </button>
       {names.map((n) => {
         const on = value.includes(n)
-        const env = clusters.data?.items.find((c) => c.name === n)?.environment
+        const info = clusters.data?.items.find((c) => c.name === n)
+        const env = info?.environment
+        const git = info?.policySource === 'git'
         return (
           <button
             key={n}
             type="button"
-            disabled={disabled}
+            disabled={disabled || (git && !on)}
+            title={
+              git ? 'Policies on this cluster are managed in Git; the hub sends it no policies.' : undefined
+            }
             aria-pressed={on}
             onClick={() => onChange(on ? value.filter((x) => x !== n) : [...value, n])}
             className={cn(
@@ -190,6 +204,11 @@ function ClusterPicker({
             )}
           >
             {n}
+            {git ? (
+              <span className="rounded bg-muted px-1 text-[9px] font-semibold text-muted-foreground uppercase">
+                git
+              </span>
+            ) : null}
             {env === 'prod' ? (
               <span className="rounded bg-destructive/12 px-1 text-[9px] font-semibold text-destructive uppercase">
                 prod
@@ -206,6 +225,7 @@ function Editor({ policy, readOnly }: { policy?: AdminPolicy; readOnly: boolean 
   const navigate = useNavigate()
   const clusters = useClusters()
   const globals = usePolicies({ type: ['global-default'] })
+  const git = useGitOnlyClusters()
   const type: HubPolicyType = policy?.type ?? 'policy'
   const base = useMemo(() => toDraft(policy), [policy])
   const [d, setD] = useState<Draft>(base)
@@ -275,6 +295,10 @@ function Editor({ policy, readOnly }: { policy?: AdminPolicy; readOnly: boolean 
     <>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">
+          <GitOnlyNotice
+            clusters={d.clusters.length ? d.clusters.filter(git.has) : git.names}
+            what={type === 'policy' ? 'This policy' : 'This change'}
+          />
           {type === 'policy' ? (
             <Card>
               <CardContent className="grid gap-4 py-5 md:grid-cols-[1fr_10rem]">

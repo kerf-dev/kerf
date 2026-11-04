@@ -237,8 +237,10 @@ function ModesSection(c: Ctx) {
       title="Modes and strategy"
       description="Audit only recommends; auto-patch applies changes within the guardrails. CPU and memory are set separately."
     >
-      <div className="grid gap-4">
-        <div className="grid gap-4 md:grid-cols-2">
+      {/* Container queries: the form column is narrow on tablets and with the sidebar open, so the mode
+          controls stack by the width they actually get, not the viewport. */}
+      <div className="@container grid gap-4">
+        <div className="grid gap-4 @xl:grid-cols-2">
           <ModeField
             label="CPU mode"
             value={c.value.cpu?.mode}
@@ -256,7 +258,7 @@ function ModesSection(c: Ctx) {
             testId="field-memory-mode"
           />
         </div>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 @xl:grid-cols-3">
           <SelectRow
             c={c}
             path="apply.strategy"

@@ -1,10 +1,11 @@
 import { FileCodeIcon, HistoryIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { usePolicies, useWrite, writes } from '@/api/admin'
+import { useGitOnlyClusters, usePolicies, useWrite, writes } from '@/api/admin'
 import { useClusters } from '@/api/queries'
 import type { AdminPolicy, PolicyChange, RightsizingPolicySpec } from '@/api/types'
 import { ActorChip, CodeBlock } from '@/components/admin/common'
+import { GitOnlyNotice } from '@/components/admin/git-notice'
 import { ImpactPreview } from '@/components/admin/impact-preview'
 import { PolicySpecForm } from '@/components/admin/policy-form'
 import { SaveBar, usePreview } from '@/components/admin/save-bar'
@@ -26,6 +27,7 @@ import { validateSpec } from '@/lib/validate'
 export default function DefaultsPage() {
   const policies = usePolicies({ type: ['global-default'] })
   const clusters = useClusters()
+  const git = useGitOnlyClusters()
   const current: AdminPolicy | undefined = policies.data?.items.find(
     (p) => p.type === 'global-default' && !p.deletedAt,
   )
@@ -110,6 +112,7 @@ export default function DefaultsPage() {
               </span>
             )}
           </div>
+          <GitOnlyNotice clusters={git.names} what="The global defaults" />
           <Card>
             <CardContent className="py-6">
               <PolicySpecForm
