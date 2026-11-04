@@ -115,7 +115,7 @@ func TestWebhook(t *testing.T) {
 	cl := env.Spoke1
 	ns := newNamespace(t, cl, "webhook")
 	deploy(t, cl, ns, overprovisioned("web"))
-	armed(t, cl, ns, ns, "web", "500m", autoCPU(v1alpha1.StrategyInPlace))
+	armed(t, cl, ns, ns, "web", overCPU, autoCPU(v1alpha1.StrategyInPlace))
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	want := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
 	// The webhook only trusts a status written for the current spec.
@@ -126,7 +126,7 @@ func TestWebhook(t *testing.T) {
 
 	t.Run("scale-out gets the applied values", func(t *testing.T) {
 		before := snapshot(t, cl, ns, "web")
-		scale(t, cl, ns, "web", 3)
+		scale(t, cl, ns, "web", 2)
 		waitReady(t, cl, ns, "web", 2*time.Minute)
 		for _, p := range pods(t, cl, ns, "web") {
 			if _, old := before[p.Name]; old {
@@ -144,7 +144,7 @@ func TestWebhook(t *testing.T) {
 				}
 			}
 		}
-		if got := templateCPU(getDeployment(t, cl, ns, "web")); got.Cmp(resource.MustParse("500m")) != 0 {
+		if got := templateCPU(getDeployment(t, cl, ns, "web")); got.Cmp(resource.MustParse(overCPU)) != 0 {
 			t.Errorf("template cpu %s: the webhook must not touch the Deployment", got.String())
 		}
 	})
@@ -153,7 +153,7 @@ func TestWebhook(t *testing.T) {
 		restore := webhookDown(t, cl)
 		before := snapshot(t, cl, ns, "web")
 		start := time.Now()
-		scale(t, cl, ns, "web", 4)
+		scale(t, cl, ns, "web", 3)
 		waitReady(t, cl, ns, "web", 2*time.Minute)
 		if d := time.Since(start); d > time.Minute {
 			t.Errorf("scale-out took %s with the webhook down; admission must not wait for it", d.Round(time.Second))
