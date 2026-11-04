@@ -228,7 +228,9 @@ func (r *run) clusterLabel() bool {
 			r.out.LabelValues = vals
 		}
 	}
-	n, err := r.count(`{__name__=~"container_memory_working_set_bytes|container_cpu_usage_seconds_total|kube_pod_owner|kube_node_labels"}`)
+	v, _, err := r.value(r.c.Q, fmt.Sprintf("count(last_over_time(%s[1h]))",
+		r.sel(`__name__=~"container_memory_working_set_bytes|container_cpu_usage_seconds_total|kube_pod_owner|kube_node_labels"`)))
+	n := int(v)
 	if err != nil {
 		r.queryFailed(rd.CheckClusterLabel, err)
 		return false

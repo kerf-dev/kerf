@@ -15,4 +15,12 @@ data:
     {{- $_ := set $auth "bootstrapAdmin" (dict "username" .Values.auth.bootstrapAdmin.username "passwordFile" "/etc/hub/bootstrap-admin/password") }}
     {{- end }}
     {{- $_ := set $cfg "auth" $auth }}
+    {{- $onb := deepCopy (default (dict) .Values.config.onboarding) }}
+    {{- if or .Values.onboarding.secretsKey.create .Values.onboarding.secretsKey.existingSecret }}
+    {{- $_ := set $onb "secretsKeyFile" "/etc/hub/datasource-key/key" }}
+    {{- end }}
+    {{- if .Chart.AppVersion }}
+    {{- if not (hasKey $onb "hubVersion") }}{{- $_ := set $onb "hubVersion" .Chart.AppVersion }}{{- end }}
+    {{- end }}
+    {{- $_ := set $cfg "onboarding" $onb }}
     {{- toYaml $cfg | nindent 4 }}

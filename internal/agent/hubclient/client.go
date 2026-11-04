@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,18 @@ type Client struct {
 	cluster string
 	token   TokenSource
 	http    *http.Client
+
+	clockMu sync.Mutex
+	hubDate time.Time // Date header of the last hub response
+	localAt time.Time // local time it was received
+}
+
+// HubClock returns the Date header of the last hub response and the local time it arrived (zero
+// before the first response): the agent.clock-skew self-check (D-025).
+func (c *Client) HubClock() (hubDate, localAt time.Time) {
+	c.clockMu.Lock()
+	defer c.clockMu.Unlock()
+	return c.hubDate, c.localAt
 }
 
 // TokenSource returns the bearer token for each request.
@@ -226,6 +239,11 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, hdr 
 		return 0, nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if d, err := http.ParseTime(resp.Header.Get("Date")); err == nil {
+		c.clockMu.Lock()
+		c.hubDate, c.localAt = d, time.Now()
+		c.clockMu.Unlock()
+	}
 	if resp.StatusCode == http.StatusNotModified {
 		return resp.StatusCode, resp.Header, nil
 	}

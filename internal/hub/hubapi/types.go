@@ -38,6 +38,9 @@ const (
 	RoleAgent = "agent"
 	RoleUI    = "ui"
 	RoleAdmin = "admin"
+	// RolePricing is the pricing service's token: metrics bindings and the datasource query proxy
+	// only (D-026).
+	RolePricing = "pricing"
 )
 
 // Risk flags (RiskFlag enum).

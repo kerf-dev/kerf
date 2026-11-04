@@ -36,6 +36,8 @@ type Change struct {
 	Version  int
 	Before   any
 	After    any
+	// AfterExtra adds keys to the stored after object (e.g. overrideReadiness, D-025).
+	AfterExtra map[string]any
 }
 
 func jsonOrNil(v any) ([]byte, error) {
@@ -66,6 +68,20 @@ func recordChange(ctx context.Context, tx pgx.Tx, c Change) error {
 	after, err := jsonOrNil(c.After)
 	if err != nil {
 		return err
+	}
+	if len(c.AfterExtra) > 0 {
+		m := map[string]any{}
+		if after != nil {
+			if err := json.Unmarshal(after, &m); err != nil {
+				return err
+			}
+		}
+		for k, v := range c.AfterExtra {
+			m[k] = v
+		}
+		if after, err = json.Marshal(m); err != nil {
+			return err
+		}
 	}
 	var ns, kind, name *string
 	cluster := nullStr(c.Target.Cluster)

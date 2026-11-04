@@ -79,6 +79,23 @@ spec:
             - --health-watch={{ .Values.health.enabled }}
             - --health-check-interval={{ .Values.health.checkInterval }}
             - --metrics-url={{ .Values.health.metricsURL }}
+            - --metrics-cluster-label={{ .Values.health.clusterLabel }}
+            {{- with .Values.health.clusterLabelValue }}
+            - --metrics-cluster-label-value={{ . }}
+            {{- end }}
+            {{- range .Values.health.extraMatchers }}
+            - --metrics-extra-matcher={{ . }}
+            {{- end }}
+            - --self-check={{ .Values.selfCheck.enabled }}
+            - --self-check-interval={{ .Values.selfCheck.interval }}
+            - --self-check-webhook-dry-run={{ .Values.selfCheck.webhookDryRun }}
+            {{- with .Values.selfCheck.webhookConfigName }}
+            - --webhook-config-name={{ . }}
+            {{- end }}
+            - --argocd-namespace={{ .Values.selfCheck.argocd.namespace }}
+            {{- with .Values.selfCheck.docsBaseURL }}
+            - --docs-base-url={{ . }}
+            {{- end }}
             - --health-min-throttling-window={{ .Values.health.minThrottlingWindow }}
             - --health-cadvisor-fallback={{ .Values.health.cadvisorFallback }}
             - --max-pod-deletes-per-run={{ .Values.onDelete.maxPodDeletesPerRun }}
