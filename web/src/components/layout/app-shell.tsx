@@ -1,0 +1,285 @@
+import {
+  ActivityIcon,
+  CommandIcon,
+  FlaskConicalIcon,
+  LayoutDashboardIcon,
+  MonitorIcon,
+  MoonIcon,
+  SearchIcon,
+  ServerIcon,
+  SunIcon,
+  TrendingDownIcon,
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router'
+import { useSummary } from '@/api/queries'
+import { useTheme, type Theme } from '@/components/theme-provider'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Tooltip } from '@/components/ui/tooltip'
+import { formatDateTime, relativeTime } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { CommandPalette } from './command-palette'
+
+export const NAV = [
+  { to: '/', label: 'Overview', icon: LayoutDashboardIcon, end: true },
+  { to: '/opportunities', label: 'Opportunities', icon: TrendingDownIcon },
+  { to: '/clusters', label: 'Clusters', icon: ServerIcon },
+  { to: '/activity', label: 'Activity', icon: ActivityIcon },
+] as const
+
+function Logo() {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="relative flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_60%,var(--chart-2))] shadow-sm ring-1 ring-black/5">
+        <svg viewBox="0 0 32 32" className="size-5" aria-hidden>
+          <path
+            d="M7 22 13 14.5l4.5 4 7.5-9"
+            fill="none"
+            stroke="white"
+            strokeWidth="2.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx="25" cy="9.5" r="2.2" fill="white" />
+        </svg>
+      </div>
+      <div className="hidden leading-tight lg:block">
+        <div className="text-[13px] font-semibold tracking-tight">Resource Optimizer</div>
+        <div className="text-[11px] text-muted-foreground">Kubernetes rightsizing</div>
+      </div>
+    </div>
+  )
+}
+
+function Freshness() {
+  const { data } = useSummary()
+  const at = data?.fleet.lastRecommenderRunAt
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 30_000)
+    return () => clearInterval(t)
+  }, [])
+  if (!at) return null
+  const stale = Date.now() - Date.parse(at) > 2 * 3600_000
+  return (
+    <Tooltip content={`Last recommender run: ${formatDateTime(at)}`} side="right">
+      <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-muted-foreground">
+        <span className="relative flex size-2 shrink-0">
+          {!stale ? (
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-50" />
+          ) : null}
+          <span
+            className={cn('relative inline-flex size-2 rounded-full', stale ? 'bg-warning' : 'bg-success')}
+          />
+        </span>
+        <span className="hidden lg:inline">Recommender ran {relativeTime(at)}</span>
+      </div>
+    </Tooltip>
+  )
+}
+
+function useMediaQuery(q: string) {
+  const [m, setM] = useState(() => window.matchMedia(q).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(q)
+    const on = () => setM(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [q])
+  return m
+}
+
+function Sidebar() {
+  const wide = useMediaQuery('(min-width: 1024px)')
+  return (
+    <aside className="w-16 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:w-60">
+      <div className="sticky top-0 flex h-dvh flex-col">
+        <div className="flex h-14 items-center justify-center px-4 lg:justify-start">
+          <Logo />
+        </div>
+        <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 px-2.5 pt-2 lg:px-3">
+          <div className="hidden px-2 pb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground/80 uppercase lg:block">
+            Rightsizing
+          </div>
+          {NAV.map((n) => (
+            <Tooltip key={n.to} content={wide ? null : n.label} side="right">
+              <span className="block">
+                <NavLink
+                  to={n.to}
+                  end={'end' in n ? n.end : false}
+                  className={({ isActive }) =>
+                    cn(
+                      'group flex h-9 items-center justify-center gap-2.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 lg:justify-start',
+                      isActive
+                        ? 'bg-sidebar-accent text-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]'
+                        : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-foreground',
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <n.icon
+                        className={cn(
+                          'size-4 shrink-0',
+                          isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
+                        )}
+                      />
+                      <span className="hidden lg:inline">{n.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              </span>
+            </Tooltip>
+          ))}
+        </nav>
+        <div className="border-t border-sidebar-border p-2.5 lg:p-3">
+          <Freshness />
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function ThemeMenu() {
+  const { theme, setTheme, resolved } = useTheme()
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label="Theme">
+          {resolved === 'dark' ? <MoonIcon /> : <SunIcon />}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-40">
+        <DropdownMenuLabel>Theme</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as Theme)}>
+          <DropdownMenuRadioItem value="light">
+            <SunIcon /> Light
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="dark">
+            <MoonIcon /> Dark
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="system">
+            <MonitorIcon /> System
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const SCENARIOS = [
+  { value: 'normal', label: 'Realistic fleet' },
+  { value: 'empty', label: 'Empty fleet' },
+  { value: 'slow', label: 'Slow hub (2 s)' },
+  { value: 'error', label: 'Hub errors' },
+]
+
+function MockMenu() {
+  const [scenario, setScenario] = useState(() => {
+    try {
+      return localStorage.getItem('ro-mock-scenario') ?? 'normal'
+    } catch {
+      return 'normal'
+    }
+  })
+  if (!__MOCK_API__) return null
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="xs" className="gap-1.5 border-dashed text-muted-foreground">
+          <FlaskConicalIcon className="size-3.5" />
+          Mock API
+          {scenario !== 'normal' ? (
+            <span className="rounded bg-warning/20 px-1 text-[10px] text-foreground">{scenario}</span>
+          ) : null}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-52">
+        <DropdownMenuLabel>Mock scenario</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={scenario}
+          onValueChange={(v) => {
+            try {
+              localStorage.setItem('ro-mock-scenario', v)
+            } catch {
+              /* ignore */
+            }
+            setScenario(v)
+            window.location.reload()
+          }}
+        >
+          {SCENARIOS.map((s) => (
+            <DropdownMenuRadioItem key={s.value} value={s.value}>
+              {s.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <div className="px-2 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          Data is generated in the browser by MSW from the hub OpenAPI contract.
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+export function AppShell() {
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const loc = useLocation()
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [])
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [loc.pathname])
+
+  return (
+    <div className="flex min-h-dvh">
+      <a
+        href="#main"
+        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+      >
+        Skip to content
+      </a>
+      <Sidebar />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur-md md:px-6 lg:px-8">
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="flex h-8 w-full max-w-md items-center gap-2 rounded-lg border bg-card px-2.5 text-[13px] text-muted-foreground shadow-xs transition-colors outline-none hover:border-ring/40 focus-visible:ring-[3px] focus-visible:ring-ring/30"
+          >
+            <SearchIcon className="size-4" />
+            <span className="truncate">Search workloads, namespaces…</span>
+            <kbd className="ml-auto hidden items-center gap-0.5 rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline-flex">
+              <CommandIcon className="size-2.5" />K
+            </kbd>
+          </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            <MockMenu />
+            <ThemeMenu />
+          </div>
+        </header>
+        <main id="main" className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 md:px-6 lg:px-8 lg:py-8">
+          <Outlet />
+        </main>
+      </div>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+    </div>
+  )
+}
