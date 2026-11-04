@@ -1100,9 +1100,14 @@ func (w *run) writeStatus() error {
 		// already says Released, and the reason lets a restarted agent recognise events it emitted.
 		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionFalse, reason, message)
 	}
-	if blocked {
+	switch {
+	case blocked:
 		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionTrue, reason, message)
-	} else {
+	case st.Phase == v1alpha1.PhaseApplied && isSkipReason(reason):
+		// Values are live and a newer recommendation was skipped: keep the reason here (the
+		// Applied condition stays True), so a restarted agent knows it reported it (D-017).
+		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionFalse, reason, message)
+	default:
 		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionFalse, condReasonNotBlocked, "")
 	}
 
@@ -1320,8 +1325,20 @@ func (w *run) alreadyRecorded(e hubclient.Event) bool {
 		c := meta.FindStatusCondition(w.prev.Conditions, v1alpha1.ConditionBlocked)
 		return c != nil && c.Status == metav1.ConditionTrue && c.Reason == e.Reason
 	case hubclient.EventSkipped:
+		if w.prev.Phase == v1alpha1.PhaseApplied {
+			c := meta.FindStatusCondition(w.prev.Conditions, v1alpha1.ConditionBlocked)
+			return c != nil && c.Status == metav1.ConditionFalse && c.Reason == e.Reason
+		}
 		c := meta.FindStatusCondition(w.prev.Conditions, v1alpha1.ConditionApplied)
 		return c != nil && c.Status == metav1.ConditionFalse && c.Reason == e.Reason
+	}
+	return false
+}
+
+func isSkipReason(r string) bool {
+	switch r {
+	case v1alpha1.ReasonModeOff, v1alpha1.ReasonModeAudit, v1alpha1.ReasonNoSignificantChange, v1alpha1.ReasonRecommendationStale:
+		return true
 	}
 	return false
 }
