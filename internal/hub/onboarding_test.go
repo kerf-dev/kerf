@@ -349,6 +349,14 @@ func TestReadinessAndGating(t *testing.T) {
 		t.Errorf("recheck not cleared: %+v", cfg2.Flags)
 	}
 	expectCode(t, "recheck viewer", e.do(http.MethodPost, "/v1/clusters/c1/readiness/recheck", tokUI, nil), 403)
+	// an unanswered re-check expires
+	expectCode(t, "recheck c2", e.sdo(operator, http.MethodPost, "/v1/clusters/c2/readiness/recheck", nil), 202)
+	e.advance(RecheckTimeout + time.Minute)
+	e.srv.refreshAgentChecks(e.ctx)
+	e.getJSON("/v1/clusters/c2/readiness", tokUI, &cr)
+	if cr.RecheckRequestedAt != nil {
+		t.Errorf("re-check not expired: %v", cr.RecheckRequestedAt)
+	}
 }
 
 func TestInstallSnippetAPI(t *testing.T) {
