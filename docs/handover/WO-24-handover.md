@@ -71,8 +71,8 @@ Hub and agents main-5d25dd7, web main-cbc813c, both spokes AutomationReady at th
 | final 1 (main-1e72c9e merged, 12:37) | 2 failures: `TestApproveOnce` (approval superseded, test race, fixed in a713fd7), `TestWebhook/webhook_down…` (agent drift-repair bug above) | 14m06s |
 | final 2a (a713fd7, 12:52) | PASS (two approvals superseded and approved again) | 14m43s |
 | final 2b (back to back) | `TestApproveOnceArgoCD`: a suite-triggered run 32 s after the approved apply gave a newer recommendation with other values; the agent ended the D-027 hold as designed and Argo CD started self-healing. Fixed in 4b508d5 (recomputes held for the whole test; a newer recommendation with other values ends the self-heal check) | 14m37s |
-| **final 3a** (4b508d5, 13:22 UTC) | **PASS** — all tests (skips: JVM memory on swap nodes, KSM without the flag, the sweep helper); approvals superseded once each and approved again | **16m10s** |
-| **final 3b** (back to back) | **PASS** | **14m06s** |
+| **final 3a** (4b508d5, 13:22:24–13:38:34 UTC, marker `e2e-run-ac3e1d`) | **PASS** — all tests (skips: JVM memory on swap nodes, KSM without the flag, the sweep helper); approvals superseded once each and approved again. **ro-spoke-1 ran agent wo21c-71b8b69 (WO-21c drift-repair fix branch, deployed ~13:22)**, ro-spoke-2 main-1e72c9e | **16m10s** |
+| **final 3b** (back to back, 13:38:34–13:52:40, marker `e2e-run-512f92`) | **PASS** — both spokes on main-1e72c9e (the spoke-1 agent was rolled back to main at 13:39:07, 33 s into the run, during setup) | **14m06s** |
 
 Final `make e2e && make e2e` on 4b508d5 (origin/main 98c1edd merged; hub, web and agents main-1e72c9e):
 30m16s wall for the pair, each run 14–16 min. Afterwards: no `e2e-*` hub policies or pauses, no e2e
