@@ -3,6 +3,8 @@
 WEBHOOK_IMAGE         ?= localhost:5005/resource-optimizer/webhook
 WEBHOOK_IMAGE_PULL    ?= k3d-ro-registry:5005/resource-optimizer/webhook
 WEBHOOK_TAG           ?= dev-$(shell date +%Y%m%d-%H%M%S)
+# Expand once: a recursive $(shell date) would give docker push and helm different tags.
+WEBHOOK_TAG           := $(WEBHOOK_TAG)
 WEBHOOK_CHART         := deploy/charts/webhook
 WEBHOOK_NAMESPACE     ?= resource-optimizer
 WEBHOOK_CLUSTERS      ?= ro-spoke-1 ro-spoke-2
