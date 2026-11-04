@@ -122,7 +122,7 @@ func (e *Exporter) Run(ctx context.Context, interval time.Duration) {
 	for {
 		wait := interval
 		if err := e.Refresh(ctx); err != nil && ctx.Err() == nil {
-			e.Log.Error("pricing refresh failed; keeping previous prices", "err", err)
+			e.Log.ErrorContext(ctx, "pricing refresh failed; keeping previous prices", "err", err)
 			wait = min(interval, RetryInterval)
 		}
 		select {
@@ -165,7 +165,7 @@ func (e *Exporter) Refresh(ctx context.Context) error {
 	e.refreshes.WithLabelValues("success").Inc()
 	e.lastSuccess.SetToCurrentTime()
 	e.duration.Set(time.Since(start).Seconds())
-	e.Log.Info("pricing refreshed", "nodes", len(nodes), "priced", len(costs), "skipped", skipped, "took", time.Since(start).Round(time.Millisecond).String())
+	e.Log.InfoContext(ctx, "pricing refreshed", "nodes", len(nodes), "priced", len(costs), "skipped", skipped, "took", time.Since(start).Round(time.Millisecond).String())
 	return nil
 }
 
@@ -173,32 +173,32 @@ func (e *Exporter) price(ctx context.Context, n Node) (NodeCost, string) {
 	log := e.Log.With("cluster", n.Cluster, "node", n.Name, "instance_type", n.InstanceType)
 	switch {
 	case n.InstanceType == "":
-		log.Debug("skipping node without instance type label")
+		log.DebugContext(ctx, "skipping node without instance type label")
 		return NodeCost{}, ReasonNoInstanceType
 	case n.Region == "":
-		log.Warn("skipping node without region (set --default-region)")
+		log.WarnContext(ctx, "skipping node without region (set --default-region)")
 		return NodeCost{}, ReasonNoRegion
 	case n.CapacityType == "":
-		log.Warn("skipping node with unknown capacity type")
+		log.WarnContext(ctx, "skipping node with unknown capacity type")
 		return NodeCost{}, ReasonUnknownCapacityType
 	case n.AllocatableCores <= 0 || n.AllocatableGiB <= 0:
-		log.Warn("skipping node without allocatable cpu/memory")
+		log.WarnContext(ctx, "skipping node without allocatable cpu/memory")
 		return NodeCost{}, ReasonNoAllocatable
 	}
 	k := Key{Region: n.Region, Zone: n.Zone, InstanceType: n.InstanceType, CapacityType: n.CapacityType}
 	p, err := e.Provider.Price(ctx, k)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			log.Warn("no price for node", "key", k.String())
+			log.WarnContext(ctx, "no price for node", "key", k.String())
 			return NodeCost{}, ReasonNoPrice
 		}
-		log.Error("pricing node failed", "key", k.String(), "err", err)
+		log.ErrorContext(ctx, "pricing node failed", "key", k.String(), "err", err)
 		return NodeCost{}, ReasonProviderError
 	}
 	w, _ := e.Splitter.Weight(ctx, n.Region, n.InstanceType)
 	cpu, mem, err := Split(p.HourlyUSD, n.AllocatableCores, n.AllocatableGiB, w)
 	if err != nil {
-		log.Warn("cannot split node price", "err", err)
+		log.WarnContext(ctx, "cannot split node price", "err", err)
 		return NodeCost{}, ReasonNoAllocatable
 	}
 	return NodeCost{Node: n, Provider: e.Provider.Name(), NodeUSD: p.HourlyUSD, CPURate: cpu, MemRate: mem, Weight: w}, ""

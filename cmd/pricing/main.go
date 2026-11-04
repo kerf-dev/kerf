@@ -66,8 +66,9 @@ func main() {
 	slog.SetDefault(log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	if err := run(ctx, o, log); err != nil {
+	err := run(ctx, o, log)
+	stop()
+	if err != nil {
 		log.Error("pricing exited", "err", err)
 		os.Exit(1)
 	}
@@ -105,7 +106,7 @@ func run(ctx context.Context, o options, log *slog.Logger) error {
 	go exp.Run(ctx, o.interval)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
-	log.Info("pricing started", "provider", base.Name(), "listen", o.listen, "vm_url", o.vmURL, "interval", o.interval.String())
+	log.InfoContext(ctx, "pricing started", "provider", base.Name(), "listen", o.listen, "vm_url", o.vmURL, "interval", o.interval.String())
 
 	select {
 	case err := <-errc:

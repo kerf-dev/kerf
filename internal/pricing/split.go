@@ -115,7 +115,7 @@ func (s *Splitter) Weight(ctx context.Context, region, instanceType string) (flo
 		w = weight{v, WeightDerived}
 	}
 	if s.Log != nil {
-		s.Log.Debug("cpu weight", "region", region, "family", sibs[0], "weight", w.value, "source", w.source, "points", len(points))
+		s.Log.DebugContext(ctx, "cpu weight", "region", region, "family", sibs[0], "weight", w.value, "source", w.source, "points", len(points))
 	}
 	if !transient { // retry next time if a sibling price failed for a transient reason
 		s.mu.Lock()
