@@ -550,6 +550,10 @@ func (in *RightsizingRecommendationStatus) DeepCopyInto(out *RightsizingRecommen
 		in, out := &in.RolledBackAt, &out.RolledBackAt
 		*out = (*in).DeepCopy()
 	}
+	if in.NextWindow != nil {
+		in, out := &in.NextWindow, &out.NextWindow
+		*out = (*in).DeepCopy()
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]metav1.Condition, len(*in))

@@ -6,7 +6,7 @@ import (
 )
 
 // Phase is the lifecycle phase of a RightsizingRecommendation.
-// +kubebuilder:validation:Enum=Pending;Applying;Applied;Blocked;RolledBack;Released
+// +kubebuilder:validation:Enum=Pending;Applying;Applied;Blocked;RolledBack;Released;Deferred
 type Phase string
 
 const (
@@ -22,6 +22,9 @@ const (
 	PhaseRolledBack Phase = "RolledBack"
 	// PhaseReleased: the workload left auto-patch and field ownership was released (D-006).
 	PhaseReleased Phase = "Released"
+	// PhaseDeferred: strategy deferred; the change is queued until the next maintenance window
+	// (status.nextWindow) and then applied as a rollout (WO-10).
+	PhaseDeferred Phase = "Deferred"
 )
 
 // Condition types on RightsizingRecommendation.status.conditions.
@@ -141,6 +144,9 @@ type RightsizingRecommendationStatus struct {
 	// RolledBackAt is when the most recent rollback happened (cooldown for decreases starts here).
 	// +optional
 	RolledBackAt *metav1.Time `json:"rolledBackAt,omitempty"`
+	// NextWindow is when the next maintenance window opens, set while the phase is Deferred.
+	// +optional
+	NextWindow *metav1.Time `json:"nextWindow,omitempty"`
 	// Conditions: PolicyResolved, Applied, Blocked, HealthWatch.
 	// +optional
 	// +listType=map
@@ -165,6 +171,7 @@ type RightsizingRecommendationStatus struct {
 // +kubebuilder:printcolumn:name="Strategy",type=string,JSONPath=`.spec.strategy`
 // +kubebuilder:printcolumn:name="CPU",type=string,JSONPath=`.status.effective.cpuMode`
 // +kubebuilder:printcolumn:name="Memory",type=string,JSONPath=`.status.effective.memoryMode`
+// +kubebuilder:printcolumn:name="Next Window",type=date,JSONPath=`.status.nextWindow`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type RightsizingRecommendation struct {
 	metav1.TypeMeta   `json:",inline"`
