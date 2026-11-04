@@ -54,6 +54,17 @@ freeze:
 # ClusterRole. Use it for clusters where every policy is audit.
 readOnly: false
 
+# Hub-managed configuration (D-022, WO-21): on every pull the agent fetches the cluster config,
+# makes the RightsizingPolicy CRs labelled resource-optimizer.oz.io/managed-by=hub equal to the
+# hub's policies (never touching other CRs), applies the hub's pause flag like a cluster-wide
+# freeze and applies approve-once grants. The last config is kept in the ConfigMap
+# <fullname>-config-state, so a restart without the hub keeps the pause flag and approvals.
+# With readOnly the CRs are not written; the inventory is still reported.
+# Before downgrading the agent below WO-21, delete the hub CRs:
+#   kubectl delete rsp -l resource-optimizer.oz.io/managed-by=hub
+configSync:
+  enabled: true
+
 pullInterval: 1m
 hubStaleAfter: 5m
 reportInterval: 10s

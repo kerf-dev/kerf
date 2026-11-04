@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
 	"github.com/tomer1983/resource-optimizer/internal/agent"
+	"github.com/tomer1983/resource-optimizer/internal/agent/configsync"
 	"github.com/tomer1983/resource-optimizer/internal/agent/controller"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubstub"
@@ -106,6 +108,9 @@ func run(args []string) error {
 		metricsTokenFile = fs.String("metrics-token-file", "", "optional bearer token file for --metrics-url")
 		cadvisorFallback = fs.Bool("health-cadvisor-fallback", false, "read throttling from the kubelets' cAdvisor (needs nodes/proxy) when --metrics-url fails")
 		minThrottleWin   = fs.Duration("health-min-throttling-window", 2*time.Minute, "time after a change before throttling is evaluated")
+
+		configSync    = fs.Bool("config-sync", true, "pull the hub config: hub-managed policies, pause and approve-once (D-022, WO-21)")
+		configStateCM = fs.String("config-state-configmap", "resource-optimizer-agent-config-state", "ConfigMap in $POD_NAMESPACE that persists the last hub config; empty disables persistence")
 	)
 	fs.Var(&unsupported, "unsupported-node-selector", "label selector (k=v,k2=v2; empty value = key exists) of nodes where in-place resize is not used; repeatable")
 	if err := fs.Parse(args); err != nil {
@@ -210,6 +215,20 @@ func run(args []string) error {
 		Trigger: trigger,
 		Log:     log.With("component", "puller"),
 	}
+	if *configSync {
+		state := configsync.NewState()
+		r.Admin = state
+		ns := os.Getenv("POD_NAMESPACE")
+		if ns == "" && *configStateCM != "" {
+			log.Warn("POD_NAMESPACE is not set: the hub config is not persisted across restarts")
+		}
+		puller.Config = &configsync.Syncer{
+			Hub: hub, Client: mgr.GetClient(), Reader: mgr.GetAPIReader(), State: state,
+			Namespace: ns, ConfigMap: *configStateCM, ReadOnly: *readOnly,
+			Inventory: rep.SetConfig,
+			Log:       log.With("component", "configsync"),
+		}
+	}
 	if err := mgr.Add(puller); err != nil {
 		return err
 	}
@@ -223,18 +242,53 @@ func runStubHub(args []string) error {
 	listen := fs.String("listen", ":8080", "listen address")
 	recsFile := fs.String("recommendations", "", "YAML/JSON file: cluster name -> list of WorkloadRecommendation (re-read every 10s)")
 	tokens := fs.String("tokens", "", "comma-separated token=cluster pairs; empty disables auth")
+	configFile := fs.String("config", "", "YAML/JSON file: cluster name -> ClusterConfig served at GET config (re-read every 10s; configVersion derived when empty)")
+	upstream := fs.String("upstream", "", "real hub URL: forward recommendations, statuses and events there; only config is served by the stub")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	log := newLogger("info")
 	s := hubstub.New()
+	if *upstream != "" {
+		u, err := url.Parse(*upstream)
+		if err != nil {
+			return fmt.Errorf("upstream: %w", err)
+		}
+		s.SetUpstream(u)
+	}
 	for _, pair := range strings.Split(*tokens, ",") {
 		if t, c, ok := strings.Cut(strings.TrimSpace(pair), "="); ok {
 			s.AddToken(t, c)
 		}
 	}
-	var last string
+	var last, lastCfg string
+	loadConfig := func() {
+		if *configFile == "" {
+			return
+		}
+		b, err := os.ReadFile(*configFile)
+		if err != nil {
+			log.Warn("read config", "err", err)
+			return
+		}
+		if string(b) == lastCfg {
+			return
+		}
+		var cfgs map[string]*hubclient.ClusterConfig
+		if err := yaml.Unmarshal(b, &cfgs); err != nil {
+			log.Warn("parse config", "err", err)
+			return
+		}
+		lastCfg = string(b)
+		for cluster, c := range cfgs {
+			s.SetConfig(cluster, c)
+			got := s.Config(cluster)
+			log.Info("loaded config", "cluster", cluster, "configVersion", got.ConfigVersion, "policies", len(got.Policies),
+				"approvals", len(got.Approvals), "paused", got.Flags.Paused)
+		}
+	}
 	load := func() {
+		loadConfig()
 		if *recsFile == "" {
 			return
 		}
