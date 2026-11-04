@@ -21,6 +21,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/tomer1983/resource-optimizer/internal/agent/configsync"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubstub"
 )
@@ -35,7 +36,9 @@ var (
 	testCtx context.Context
 	// testReconciler is the reconciler under test.
 	testReconciler *Reconciler
-	skipEnv        string
+	// adminState is the hub config state of the reconciler under test (WO-21).
+	adminState *configsync.State
+	skipEnv    string
 )
 
 // setRec adds or replaces the stub hub recommendation of a workload.
@@ -123,8 +126,12 @@ func runSuite(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, "setup:", err)
 		return 1
 	}
+	adminState = configsync.NewState()
+	r.Admin = adminState
+	syncer := &configsync.Syncer{Hub: hub, Client: mgr.GetClient(), Reader: mgr.GetAPIReader(), State: adminState,
+		Namespace: "default", ConfigMap: "agent-config-state", Inventory: rep.SetConfig, Log: log}
 	if err := mgr.Add(&Puller{Hub: hub, Store: store, Reporter: rep, PullInterval: 300 * time.Millisecond,
-		ReportInterval: 200 * time.Millisecond, Trigger: trigger, Log: log}); err != nil {
+		ReportInterval: 200 * time.Millisecond, Trigger: trigger, Config: syncer, Log: log}); err != nil {
 		fmt.Fprintln(os.Stderr, "puller:", err)
 		return 1
 	}
