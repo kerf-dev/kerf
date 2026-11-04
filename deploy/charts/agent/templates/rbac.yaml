@@ -1,10 +1,15 @@
+{{- if .Values.serviceAccount.create }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "agent.fullname" . }}
+  name: {{ include "agent.serviceAccountName" . }}
   namespace: {{ .Release.Namespace }}
   labels: {{- include "agent.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
 ---
+{{- end }}
 # Minimal cluster-wide permissions. Write verbs on workloads and pods exist only when the agent
 # may apply changes (readOnly: false). The agent always writes its own RightsizingRecommendations.
 apiVersion: rbac.authorization.k8s.io/v1
@@ -105,7 +110,7 @@ roleRef:
   name: {{ include "agent.fullname" . }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "agent.fullname" . }}
+    name: {{ include "agent.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 {{- if .Values.configSync.enabled }}
 ---
@@ -137,7 +142,7 @@ roleRef:
   name: {{ include "agent.fullname" . }}-config-state
 subjects:
   - kind: ServiceAccount
-    name: {{ include "agent.fullname" . }}
+    name: {{ include "agent.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 {{- end }}
 {{- if .Values.leaderElection }}
@@ -165,7 +170,7 @@ roleRef:
   name: {{ include "agent.fullname" . }}-leader-election
 subjects:
   - kind: ServiceAccount
-    name: {{ include "agent.fullname" . }}
+    name: {{ include "agent.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 {{- end }}
 ---
@@ -193,7 +198,7 @@ roleRef:
   name: {{ include "agent.fullname" . }}-selfcheck
 subjects:
   - kind: ServiceAccount
-    name: {{ include "agent.fullname" . }}
+    name: {{ include "agent.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 {{- $argo := .Values.selfCheck.argocd }}
 {{- if and .Values.selfCheck.enabled $argo.enabled (or $argo.force (lookup "v1" "Namespace" "" $argo.namespace)) }}
@@ -223,6 +228,6 @@ roleRef:
   name: {{ include "agent.fullname" . }}-argocd-cm
 subjects:
   - kind: ServiceAccount
-    name: {{ include "agent.fullname" . }}
+    name: {{ include "agent.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 {{- end }}

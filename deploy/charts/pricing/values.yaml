@@ -2,10 +2,20 @@
 # ro_pricing_* and Go runtime series; cost series carry the priced spoke's cluster instead.
 clusterName: ro-hub
 
+# Set by an umbrella chart; read by every resource-optimizer chart.
+global:
+  imageRegistry: ""         # prefixed to image.repository; image.registry wins over it
+  imagePullSecrets: []      # names or {name: ...}
+  externalSecrets:
+    secretStoreRef: {}      # fallback SecretStore for every ExternalSecret
+
 image:
+  registry: ""
   repository: ghcr.io/tomer1983/resource-optimizer/pricing
   tag: ""          # defaults to the chart appVersion
+  digest: ""       # sha256:..., appended as @digest
   pullPolicy: IfNotPresent
+imagePullSecrets: []
 
 # static | aws
 provider: static
@@ -44,22 +54,105 @@ hub:
     # create: true makes the chart create the Secret from `token` (local development only).
     create: false
     token: ""
+    # External Secrets Operator: builds Secret `name` (key `key`) from Secrets Manager.
+    externalSecret:
+      enabled: false
+      remoteRef:
+        key: ""             # e.g. resource-optimizer/pricing/hub-token
+        property: ""        # e.g. token (JSON secret); empty = the whole secret string
+        version: ""
+      refreshInterval: ""
+      secretStoreRef: {}
+  # CA that signed the hub's HTTPS certificate, when it is not publicly trusted (a private CA; an
+  # ACM public certificate needs nothing). Added to the system roots (SSL_CERT_DIR), mounted at
+  # /etc/resource-optimizer/hub-ca. One of existingConfigMap, existingSecret or pem (inline,
+  # rendered into ConfigMap <release>-hub-ca).
+  caBundle:
+    existingConfigMap: ""
+    existingSecret: ""
+    key: ca.crt
+    pem: ""
 
+# External Secrets Operator settings shared by every externalSecret of this chart.
+externalSecrets:
+  apiVersion: external-secrets.io/v1
+  refreshInterval: 1h
+  secretStoreRef: {}        # e.g. {kind: ClusterSecretStore, name: aws-secrets-manager}
+
+# AWS access for provider aws (D-028): one IAM policy with pricing:GetProducts and
+# ec2:DescribeSpotPriceHistory.
+# - EKS Pod Identity (preferred): no annotation. Create the association for this ServiceAccount:
+#     aws eks create-pod-identity-association --cluster-name <cluster> --namespace <namespace> \
+#       --service-account <serviceAccount name, default the release name> --role-arn <role>
+#   (needs the eks-pod-identity-agent add-on).
+# - IRSA (fallback): annotations: {eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role>}
 serviceAccount:
   create: true
   name: ""
-  # e.g. eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role> (pricing:GetProducts, ec2:DescribeSpotPriceHistory)
   annotations: {}
 
 service:
   port: 9090
+  # Default annotations; replace the map to change them.
   # Scraped by the hub vmagent's annotated-services job (honor_labels: true keeps `cluster`).
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "9090"
     prometheus.io/path: /metrics
 
-replicas: 1
+# Singleton by design: every replica would publish every cost series again (duplicate
+# ro_*_hourly_cost_usd series), and there is no leader election. An outage only leaves cost
+# figures stale for a few minutes (alert ResourceOptimizerPricingStale in the hub chart);
+# recommendations and patching are unaffected. Hence no PDB, HPA or spread either. Values above
+# 1 are rejected.
+replicaCount: 1
+# Deprecated alias of replicaCount (wins when set).
+replicas: null
+priorityClassName: ""
+
+podLabels: {}
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+# NetworkPolicy. Ingress to the metrics port from `ingress.metricsFrom` ([] = any source).
+# Egress: DNS, TCP `egress.ports` to any destination (the hub 8080, VictoriaMetrics 8428, AWS
+# APIs and an HTTPS hub on 443) and the raw rules in `egress.to`.
+networkPolicy:
+  enabled: false
+  ingress:
+    metricsFrom: []
+  egress:
+    enabled: true
+    ports: [443, 8080, 8428]
+    to: []
+
+# Prometheus Operator ServiceMonitor or VictoriaMetrics VMServiceScrape. Keep honorLabels: cost
+# series carry the priced spoke's `cluster` (docs/contracts/metrics.md).
+serviceMonitor:
+  enabled: false
+  kind: ServiceMonitor        # or VMServiceScrape
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: ""
+  honorLabels: true
+  labels: {}
+  relabelings: []
+  metricRelabelings: []
+
 resources:
   requests:
     cpu: 10m

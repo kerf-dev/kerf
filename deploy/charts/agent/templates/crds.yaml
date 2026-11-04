@@ -1,0 +1,14 @@
+{{- /* The resource-optimizer CRDs (files/crds = api/crds, `make charts-sync`). Templates rather than
+crds/, so that helm upgrade upgrades them; resource-policy keep, so that helm uninstall never
+deletes them with every custom resource (D-028). Exactly one release per cluster renders them. */}}
+{{- $install := .Values.crds.install }}
+{{- if and (hasKey .Values "installCRDs") (not (kindIs "invalid" .Values.installCRDs)) }}{{ $install = .Values.installCRDs }}{{ end }}
+{{- if $install }}
+{{- range $path, $_ := .Files.Glob "files/crds/*.yaml" }}
+{{- $crd := $.Files.Get $path | fromYaml }}
+{{- $_ := set $crd.metadata "annotations" (merge (dict "helm.sh/resource-policy" "keep") ($crd.metadata.annotations | default dict)) }}
+{{- $_ := set $crd.metadata "labels" (merge (include "agent.labels" $ | fromYaml) ($crd.metadata.labels | default dict)) }}
+---
+{{ toYaml $crd }}
+{{- end }}
+{{- end }}

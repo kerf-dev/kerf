@@ -10,10 +10,13 @@ make test-agent                         # unit + envtest (downloads kube-apiserv
 
 ## What it installs
 
-- **CRDs** (`crds/`, copies of `api/crds/`, kept in sync by `make agent-sync-crds` and a test).
-  Helm installs `crds/` only when the CRD does not exist yet and never deletes or upgrades them, so
-  the install is idempotent and other charts (WO-07) may ship the same files. Upgrade CRDs with
-  `make agent-crds` (server-side apply).
+- **CRDs** as templates (`files/crds/` = copies of `api/crds/`, kept in sync by `make charts-sync`
+  and `deploy/charts/sync_test.go`), annotated `helm.sh/resource-policy: keep` (D-028): `helm upgrade`
+  upgrades them, `helm uninstall` leaves them and every custom resource in place. Exactly one release
+  per cluster renders them: this chart (`crds.install: true`); the webhook chart has
+  `crds.install: false`. **Upgrading a release installed from the old `crds/` chart** (0.1.0 before
+  WO-18b): the first upgrade needs `--take-ownership` (Helm ≥ 3.17), because the existing CRDs carry
+  no Helm ownership metadata: `make deploy-agent AGENT_HELM_ARGS=--take-ownership`.
 - Deployment (1 replica; `leaderElection: true` for more), ServiceAccount, ClusterRole/Binding,
   metrics Service (scraped by the spoke vmagent), ConfigMap with the cluster defaults.
 - Optional: the hub token Secret (`hub.tokenSecret.create`, dev only) and a stub hub
@@ -65,5 +68,6 @@ The last config is kept in the ConfigMap `<fullname>-config-state`. A hub withou
 
 ## Values
 
-See `values.yaml`. `clusterDefaults` is a RightsizingPolicy spec (without selector/priority): the
+See `values.yaml`; every production feature is switched on in `ci/values-prod.yaml` (`make charts-lint`).
+Shared names across the component charts: `docs/handover/WO-18b-handover.md`. `clusterDefaults` is a RightsizingPolicy spec (without selector/priority): the
 cluster default level of D-005. Leave it empty to keep the global default (`audit`).

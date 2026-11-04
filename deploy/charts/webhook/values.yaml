@@ -1,6 +1,22 @@
 # resource-optimizer mutating admission webhook (WO-07). One release per spoke cluster,
-# namespace resource-optimizer. Needs cert-manager and the resource-optimizer CRDs (shipped by
-# the agent chart; this chart does not install CRDs).
+# namespace resource-optimizer. Needs cert-manager and the resource-optimizer CRDs (rendered by
+# the agent chart; see crds.install). Every production feature is shown switched on in
+# ci/values-prod.yaml (rendered by `make charts-lint`).
+
+# Set by an umbrella chart; read by every resource-optimizer chart.
+global:
+  imageRegistry: ""         # prefixed to image.repository; image.registry wins over it
+  imagePullSecrets: []      # names or {name: ...}
+  externalSecrets:
+    secretStoreRef: {}
+
+# The resource-optimizer CRDs as templates (helm.sh/resource-policy: keep). Off: the agent chart
+# renders them, and exactly one release per cluster may (Helm refuses a CRD owned by another
+# release). Turn it on only where the webhook is installed without the agent.
+crds:
+  install: false
+# Deprecated alias of crds.install (wins when set).
+installCRDs: null
 
 # Cluster name (informational; set by Tilt / dev scripts).
 clusterName: ""
@@ -9,11 +25,30 @@ clusterName: ""
 fullnameOverride: ""
 
 image:
+  registry: ""
   repository: localhost:5005/resource-optimizer/webhook
   tag: dev
+  digest: ""                # sha256:..., appended as @digest
   pullPolicy: IfNotPresent
+imagePullSecrets: []
 
-replicas: 2
+replicaCount: 2
+# Deprecated alias of replicaCount (wins when set).
+replicas: null
+
+# Optional HPA on CPU (replicaCount is then ignored).
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: null
+  behavior: {}
+
+# Port the webhook server listens on (HTTPS). On EKS the control plane must reach the nodes on
+# this port: EKS's cluster security group allows it, custom node security groups often do not
+# (open it from the cluster security group, or use 443 where nothing else binds it).
+containerPort: 9443
 
 # Serving certificate from cert-manager. By default the chart creates a namespaced self-signed
 # Issuer; set issuerRef to use an existing (Cluster)Issuer instead. cert-manager's CA injector
@@ -47,14 +82,65 @@ resources:
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
+  maxUnavailable: null
 
-# Spread replicas across nodes and zones (best effort: ScheduleAnyway).
+# Spread replicas across nodes and zones (best effort: ScheduleAnyway) when more than one pod can
+# run; topologySpreadConstraints replaces it.
 topologySpread:
   enabled: true
   whenUnsatisfiable: ScheduleAnyway
+topologySpreadConstraints: []
 
 priorityClassName: ""
 nodeSelector: {}
 tolerations: []
 affinity: {}
+podLabels: {}
 podAnnotations: {}
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
+
+serviceAccount:
+  # false: use an existing ServiceAccount `name` (the ClusterRole is still bound to it).
+  create: true
+  name: ""                  # default: the release name
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# NetworkPolicy. Ingress to the webhook port from `ingress.apiServerFrom` ([] = any source: the
+# API server's addresses are not pod addresses; on EKS the control-plane ENIs sit in the VPC, so
+# the VPC CIDR as ipBlock narrows it) and to the metrics port from `ingress.metricsFrom` ([] = any).
+# Egress: DNS, TCP `egress.ports` (the API server, for the informers) and `egress.to`.
+networkPolicy:
+  enabled: false
+  ingress:
+    apiServerFrom: []
+    metricsFrom: []
+  egress:
+    enabled: true
+    ports: [443, 6443]
+    to: []
+
+# Prometheus Operator ServiceMonitor or VictoriaMetrics VMServiceScrape for the metrics Service.
+serviceMonitor:
+  enabled: false
+  kind: ServiceMonitor        # or VMServiceScrape
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: ""
+  honorLabels: false
+  labels: {}
+  relabelings: []
+  metricRelabelings: []

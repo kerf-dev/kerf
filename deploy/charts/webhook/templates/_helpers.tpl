@@ -22,3 +22,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{- define "webhook.certificate" -}}{{ include "webhook.fullname" . }}-serving{{- end -}}
 {{- define "webhook.tlsSecret" -}}{{ include "webhook.fullname" . }}-tls{{- end -}}
+
+{{- define "webhook.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}{{ .Values.serviceAccount.name | default (include "webhook.fullname" .) }}
+{{- else -}}{{ required "serviceAccount.name is required with serviceAccount.create: false" .Values.serviceAccount.name }}
+{{- end -}}
+{{- end -}}

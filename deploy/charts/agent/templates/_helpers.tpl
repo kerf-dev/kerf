@@ -22,3 +22,14 @@ http://{{ include "agent.fullname" . }}-stub-hub.{{ .Release.Namespace }}.svc:80
 {{ .Values.hub.url }}
 {{- end -}}
 {{- end -}}
+
+{{- define "agent.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}{{ .Values.serviceAccount.name | default (include "agent.fullname" .) }}
+{{- else -}}{{ required "serviceAccount.name is required with serviceAccount.create: false" .Values.serviceAccount.name }}
+{{- end -}}
+{{- end -}}
+
+{{- define "agent.caEnabled" -}}
+{{- $ca := .Values.hub.caBundle | default dict -}}
+{{- if or $ca.existingConfigMap $ca.existingSecret $ca.pem -}}true{{- end -}}
+{{- end -}}

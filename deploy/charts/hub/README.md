@@ -63,6 +63,15 @@ the table above.
 | `auth.cookieSecure`, `.sessionTTL`, `.maxFailedLogins`, `.lockoutDuration` | `true`, `12h`, `5`, `15m` | browser sessions (D-023); dev: `cookieSecure: false` (plain HTTP) |
 | `auth.bootstrapAdmin.username`, `.password` or `.existingSecret`/`.existingSecretKey` | `admin`, – | initial admin, created only on a database without users |
 | `config` | see values.yaml | the hub config file (`internal/hub/config.go`): `prometheusURL`, `corsOrigins`, `agentStaleAfter`, `recommender.*`, `history.*` |
+| `database.externalSecret` (`source: rds\|url`), `.host`, `.port`, `.name`, `.sslmode`, `.params`, `.caBundle` | off, –, 5432, `resource_optimizer`, `verify-full` | External Secrets Operator builds Secret `<release>-db` from an RDS-managed secret (JSON username/password) plus host/port/name, `sslmode` and `sslrootcert` = the mounted CA bundle (`/etc/hub/db-ca/ca.pem`) |
+| `auth.bootstrapAdmin.externalSecret`, `onboarding.secretsKey.externalSecret` | off | the same for the first admin's password and the datasource encryption key (kept on uninstall) |
+| `replicaCount`, `updateStrategy`, `podDisruptionBudget`, `autoscaling`, `topologySpread` | 1, Recreate, on (>1 pod), off, on (>1 pod) | more than one replica needs leader election (WO-18a) and `updateStrategy: RollingUpdate` |
+| `serviceAccount.{create,name,annotations,automountServiceAccountToken}` | true, release name, –, false | IRSA / Pod Identity annotations |
+| `startupProbe.{enabled,periodSeconds,failureThreshold}` | on, 5, 120 | migrations run before the hub listens (10 minutes) |
+| `ingress`, `networkPolicy`, `serviceMonitor`, `prometheusRule`, `dashboards` | off | ALB example in values.yaml; alerts (agent offline, readiness blocking, recommender failing / stale, no leader, webhook errors, pricing stale); Grafana dashboard ConfigMaps (`grafana_dashboard: "1"`) |
+
+Every production feature is switched on in `ci/values-prod.yaml` (`make charts-lint`). Names shared by
+all component charts: `docs/handover/WO-18b-handover.md`.
 
 Recommender settings under `config.recommender` (all optional; defaults in `internal/recommender/config.go`):
 `interval` (production 24h, dev 5m), `backfill.runs`/`every` (dev: 29 × 24h of history before the

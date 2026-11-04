@@ -1,0 +1,38 @@
+# Every production feature on, EKS-like (rendered by `make charts-lint`).
+global:
+  imageRegistry: 123456789012.dkr.ecr.eu-west-1.amazonaws.com
+  imagePullSecrets: [ecr-pull]
+
+clusterName: prod-eu-1
+image:
+  repository: resource-optimizer/webhook
+  tag: 0.2.0
+  digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+# 10250: EKS node security groups already allow it from the control plane (the kubelet port; pods have their own IPs).
+containerPort: 10250
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+priorityClassName: system-cluster-critical
+serviceAccount:
+  annotations: {example.com/owner: platform}
+podLabels: {team: platform}
+nodeSelector: {kubernetes.io/os: linux}
+
+certManager:
+  issuerRef: {kind: ClusterIssuer, name: corp-ca}
+
+networkPolicy:
+  enabled: true
+  ingress:
+    apiServerFrom:
+      - ipBlock: {cidr: 10.0.0.0/16}
+    metricsFrom:
+      - namespaceSelector:
+          matchLabels: {kubernetes.io/metadata.name: monitoring}
+
+serviceMonitor:
+  enabled: true
+  labels: {release: kube-prometheus-stack}

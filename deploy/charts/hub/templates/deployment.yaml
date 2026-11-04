@@ -1,26 +1,41 @@
+{{- $dsKey := include "hub.datasourceKeyEnabled" . }}
+{{- $dbCA := include "hub.dbCAEnabled" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "hub.fullname" . }}
   labels: {{- include "hub.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
-  # One recommender at a time: never run two hub pods side by side during a rollout.
-  strategy:
-    type: Recreate
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ include "hub.c.replicas" . }}
+  {{- end }}
+  # Recreate by default: without leader election (WO-18a) two hub pods side by side would both run
+  # the recommender.
+  strategy: {{- toYaml .Values.updateStrategy | nindent 4 }}
   selector:
     matchLabels: {{- include "hub.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      labels: {{- include "hub.selectorLabels" . | nindent 8 }}
+      labels:
+        {{- include "hub.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{ end }}
     spec:
+      {{- with include "hub.serviceAccountName" . }}
+      serviceAccountName: {{ . }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- include "hub.c.imagePullSecrets" (dict "ctx" . "indent" 6) }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
       securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: hub
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: {{ include "hub.c.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["--config=/etc/hub/hub.yaml", "--log-level={{ .Values.logLevel }}"]
           env:
@@ -29,9 +44,20 @@ spec:
                 secretKeyRef:
                   name: {{ include "hub.dbSecret" . }}
                   key: {{ .Values.database.existingSecretKey }}
+            {{- with .Values.extraEnv }}{{ toYaml . | nindent 12 }}{{ end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 8080
+          {{- if .Values.startupProbe.enabled }}
+          # Migrations run before the hub listens (cmd/hub).
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+          {{- end }}
           readinessProbe:
             httpGet: {path: /readyz, port: http}
             periodSeconds: 5
@@ -58,11 +84,17 @@ spec:
               mountPath: /etc/hub/bootstrap-admin
               readOnly: true
             {{- end }}
-            {{- if or .Values.onboarding.secretsKey.create .Values.onboarding.secretsKey.existingSecret }}
+            {{- if $dsKey }}
             - name: datasource-key
               mountPath: /etc/hub/datasource-key
               readOnly: true
             {{- end }}
+            {{- if $dbCA }}
+            - name: db-ca
+              mountPath: /etc/hub/db-ca
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}{{ toYaml . | nindent 12 }}{{ end }}
       volumes:
         - name: config
           configMap:
@@ -83,7 +115,7 @@ spec:
               - key: {{ .Values.auth.bootstrapAdmin.existingSecretKey }}
                 path: password
         {{- end }}
-        {{- if or .Values.onboarding.secretsKey.create .Values.onboarding.secretsKey.existingSecret }}
+        {{- if $dsKey }}
         - name: datasource-key
           secret:
             secretName: {{ include "hub.datasourceKeySecret" . }}
@@ -91,3 +123,28 @@ spec:
               - key: {{ .Values.onboarding.secretsKey.existingSecretKey }}
                 path: key
         {{- end }}
+        {{- if $dbCA }}
+        {{- $ca := .Values.database.caBundle }}
+        - name: db-ca
+          {{- if $ca.existingSecret }}
+          secret:
+            secretName: {{ $ca.existingSecret }}
+          {{- else }}
+          configMap:
+            name: {{ $ca.existingConfigMap | default (printf "%s-db-ca" (include "hub.fullname" .)) }}
+          {{- end }}
+            items:
+              - key: {{ $ca.key }}
+                path: ca.pem
+        {{- end }}
+        {{- with .Values.extraVolumes }}{{ toYaml . | nindent 8 }}{{ end }}
+      {{- include "hub.c.topologySpread" (dict "ctx" . "indent" 6) }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

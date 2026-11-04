@@ -1,0 +1,1 @@
+{{- include "webhook.c.serviceMonitor" (dict "ctx" . "port" "metrics") }}
