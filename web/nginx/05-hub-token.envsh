@@ -1,0 +1,15 @@
+#!/bin/sh
+# Sourced by the nginx image entrypoint before templates are rendered. Reads the hub `ui` token from
+# the mounted Secret into HUB_TOKEN so envsubst can put it in the proxy config. An unset token still
+# renders (the hub then answers 401 and the UI shows "Not authorized").
+token_file="${HUB_TOKEN_FILE:-/etc/resource-optimizer/hub-token/token}"
+if [ -z "${HUB_TOKEN:-}" ] && [ -r "$token_file" ]; then
+  HUB_TOKEN="$(tr -d '\r\n' < "$token_file")"
+fi
+if [ -z "${HUB_TOKEN:-}" ]; then
+  echo "05-hub-token: no hub token at $token_file; /v1 requests will be unauthenticated" >&2
+fi
+case "$HUB_TOKEN" in
+  *[!A-Za-z0-9._~+/=-]*) echo "05-hub-token: token contains unexpected characters, refusing to start" >&2; exit 1 ;;
+esac
+export HUB_TOKEN="${HUB_TOKEN:-}"

@@ -1,0 +1,8 @@
+resource-optimizer web UI → {{ include "web.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+{{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+NodePort {{ .Values.service.nodePort }}{{ if eq (int .Values.service.nodePort) 30090 }} (k3d dev: http://localhost:19090){{ end }}
+{{- end }}
+Hub upstream: {{ .Values.hub.upstream }}  ·  token Secret: {{ include "web.tokenSecret" . }}
+{{- if and (not .Values.token.existingSecret) (not .Values.token.value) }}
+WARNING: no hub token configured; the UI will show "Not authorized".
+{{- end }}

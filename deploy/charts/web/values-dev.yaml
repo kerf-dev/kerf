@@ -1,0 +1,15 @@
+# Shared k3d dev environment (ro-hub). Host URL: http://localhost:19090 (k3d maps 19090 → NodePort 30090).
+image:
+  repository: k3d-ro-registry:5005/resource-optimizer/web
+  pullPolicy: Always
+
+replicaCount: 1
+
+service:
+  type: NodePort
+  nodePort: 30090
+
+# Development `ui` token seeded by the hub chart (deploy/charts/hub/values-dev.yaml, WO-04).
+# Never reuse outside the local environment.
+token:
+  value: ro-dev-ui-97446cd3a095035d6290abc5
