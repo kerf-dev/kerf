@@ -165,6 +165,7 @@ type WorkloadStatus struct {
 	RecommendationID string               `json:"recommendationID,omitempty"`
 	Live             []ContainerResources `json:"live,omitempty"`
 	AppliedAt        *time.Time           `json:"appliedAt,omitempty"`
+	NextWindow       *time.Time           `json:"nextWindow,omitempty"`
 	ObservedAt       *time.Time           `json:"observedAt,omitempty"`
 	// JVM lists the detected JVM containers and their heap settings (WO-12).
 	JVM []JVMContainer `json:"jvm,omitempty"`

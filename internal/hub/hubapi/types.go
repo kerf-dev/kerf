@@ -63,7 +63,7 @@ var WorkloadKinds = []string{KindDeployment, KindStatefulSet, KindDaemonSet, Kin
 var Modes = []string{ModeOff, ModeAudit, ModeAutoPatch}
 
 // Phases lists the Phase enum.
-var Phases = []string{"Pending", "Applying", "Applied", "Blocked", "RolledBack", "Released"}
+var Phases = []string{"Pending", "Applying", "Applied", "Blocked", "RolledBack", "Released", "Deferred"}
 
 // EventTypes lists the EventType enum.
 var EventTypes = []string{"applied", "skipped", "blocked", "fallback", "rolled_back", "released", "failed"}
@@ -268,6 +268,7 @@ type WorkloadStatus struct {
 	RecommendationID string               `json:"recommendationID,omitempty"`
 	Live             []ContainerResources `json:"live,omitempty"`
 	AppliedAt        *time.Time           `json:"appliedAt,omitempty"`
+	NextWindow       *time.Time           `json:"nextWindow,omitempty"`
 	ObservedAt       *time.Time           `json:"observedAt,omitempty"`
 	// JVM lists the JVM containers the agent detected (WO-12).
 	JVM []JVMContainer `json:"jvm,omitempty"`

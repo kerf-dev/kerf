@@ -37,6 +37,19 @@ clusterDefaults: {}
 #    maxChangePercent: 50
 #    cooldown: 24h
 
+# Cluster-wide freeze (WO-10), in addition to every policy's apply.freezeWindows and not
+# overridable by a policy. Nothing is changed or released while frozen; health-watch rollbacks
+# still happen. `now: true` freezes until turned off; windows use the RightsizingPolicy TimeWindow
+# format (schedule + duration [+ timeZone], or start + end).
+freeze:
+  now: false
+  windows: []
+#   - schedule: "0 18 * * 5"      # Fridays 18:00 ...
+#     duration: 62h               # ... until Monday 08:00
+#     timeZone: Asia/Jerusalem
+#   - start: "2026-12-24T00:00:00Z"
+#     end: "2027-01-02T00:00:00Z"
+
 # readOnly caps every mode at audit and drops every write verb on workloads and pods from the
 # ClusterRole. Use it for clusters where every policy is audit.
 readOnly: false

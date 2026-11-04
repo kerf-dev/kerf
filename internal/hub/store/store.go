@@ -379,7 +379,7 @@ func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*Workloa
 	rows, err := s.Pool.Query(ctx, `SELECT w.id, w.cluster, w.namespace, w.kind, w.name, w.first_seen_at, w.last_seen_at, w.attributes,
 		`+recColumns+`,
 		ws.workload_id IS NOT NULL, ws.recommendation_id, ws.policy, ws.cpu_mode, ws.cpu_mode_source, ws.memory_mode, ws.memory_mode_source,
-		ws.strategy, ws.settings, ws.phase, ws.reason, ws.message, ws.live, ws.applied_at, ws.observed_at
+		ws.strategy, ws.settings, ws.phase, ws.reason, ws.message, ws.live, ws.applied_at, ws.observed_at, ws.next_window
 		FROM workloads w
 		LEFT JOIN LATERAL (SELECT * FROM recommendations rr WHERE rr.workload_id = w.id ORDER BY rr.generated_at DESC, rr.id DESC LIMIT 1) r ON true
 		LEFT JOIN workload_status ws ON ws.workload_id = w.id
@@ -400,12 +400,12 @@ func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*Workloa
 			sCPUSrc, sMemSrc, sStrategy         *string
 			sReason, sMessage                   *string
 			sSettings, sLive                    []byte
-			sApplied, sObserved                 *time.Time
+			sApplied, sObserved, sNextWindow    *time.Time
 		)
 		dest := []any{&v.DBID, &v.Key.Cluster, &v.Key.Namespace, &v.Key.Kind, &v.Key.Name, &v.FirstSeenAt, &v.LastSeenAt, &attrs}
 		dest = append(dest, rec.dest()...)
 		dest = append(dest, &hasStatus, &sRecID, &sPolicy, &sCPUMode, &sCPUSrc, &sMemMode, &sMemSrc, &sStrategy, &sSettings, &sPhase,
-			&sReason, &sMessage, &sLive, &sApplied, &sObserved)
+			&sReason, &sMessage, &sLive, &sApplied, &sObserved, &sNextWindow)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
@@ -433,7 +433,7 @@ func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*Workloa
 			}
 			_ = json.Unmarshal(sLive, &st.Live)
 			st.JVM = statusJVM(sSettings)
-			st.AppliedAt, st.ObservedAt = utc(sApplied), utc(sObserved)
+			st.AppliedAt, st.ObservedAt, st.NextWindow = utc(sApplied), utc(sObserved), utc(sNextWindow)
 			v.Status = st
 		}
 		out = append(out, v)
@@ -707,16 +707,16 @@ func (s *Store) UpsertStatuses(ctx context.Context, cluster string, items []huba
 				INSERT INTO workloads (cluster, namespace, kind, name) VALUES ($1, $2, $3, $4)
 				ON CONFLICT (cluster, namespace, kind, name) DO UPDATE SET cluster = excluded.cluster RETURNING id)
 			INSERT INTO workload_status (workload_id, recommendation_id, policy, cpu_mode, cpu_mode_source, memory_mode,
-				memory_mode_source, strategy, settings, phase, reason, message, live, applied_at, observed_at, updated_at)
-			SELECT w.id, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, now() FROM w
+				memory_mode_source, strategy, settings, phase, reason, message, live, applied_at, observed_at, next_window, updated_at)
+			SELECT w.id, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, now() FROM w
 			ON CONFLICT (workload_id) DO UPDATE SET recommendation_id = excluded.recommendation_id, policy = excluded.policy,
 				cpu_mode = excluded.cpu_mode, cpu_mode_source = excluded.cpu_mode_source, memory_mode = excluded.memory_mode,
 				memory_mode_source = excluded.memory_mode_source, strategy = excluded.strategy, settings = excluded.settings,
 				phase = excluded.phase, reason = excluded.reason, message = excluded.message, live = excluded.live,
-				applied_at = excluded.applied_at, observed_at = excluded.observed_at, updated_at = now()`,
+				applied_at = excluded.applied_at, observed_at = excluded.observed_at, next_window = excluded.next_window, updated_at = now()`,
 			cluster, it.Workload.Namespace, it.Workload.Kind, it.Workload.Name,
 			nullUUID(it.RecommendationID), it.Policy, it.Modes.CPU, nullStr(it.Modes.CPUSource), it.Modes.Memory,
-			nullStr(it.Modes.MemorySource), nullStr(it.Strategy), settings, it.Phase, it.Reason, it.Message, live, it.AppliedAt, observed)
+			nullStr(it.Modes.MemorySource), nullStr(it.Strategy), settings, it.Phase, it.Reason, it.Message, live, it.AppliedAt, observed, it.NextWindow)
 	}
 	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
 		return err

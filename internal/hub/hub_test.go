@@ -1412,3 +1412,30 @@ func TestRerunSameAsOf(t *testing.T) {
 		t.Errorf("latest recommendation %s is not the one of the newest run %s", d.Recommendation.ID, newest)
 	}
 }
+
+// TestDeferredStatus (WO-10): an agent reports phase Deferred with the next maintenance window;
+// the hub stores both and returns them on the workload.
+func TestDeferredStatus(t *testing.T) {
+	e := newEnv(t)
+	next := time.Date(2026, 11, 5, 2, 0, 0, 0, time.UTC)
+	st := checkoutStatus()
+	st.Strategy, st.Phase, st.Reason, st.NextWindow = "deferred", "Deferred", "OutsideMaintenanceWindow", &next
+	var res hubapi.BatchResult
+	e.postJSON("/v1/clusters/c1/workload-status", tokC1, hubapi.WorkloadStatusBatch{Items: []hubapi.WorkloadStatus{st}}, &res)
+	if res.Accepted != 1 {
+		t.Fatalf("result %+v", res)
+	}
+	var d hubapi.WorkloadDetail
+	e.getJSON(wlPath(kCheckout, ""), tokUI, &d)
+	if d.Status == nil || d.Status.Phase != "Deferred" || d.Status.NextWindow == nil || !d.Status.NextWindow.Equal(next) || d.Phase != "Deferred" {
+		t.Fatalf("status %+v phase %s", d.Status, d.Phase)
+	}
+	// Leaving Deferred clears it.
+	st.Phase, st.NextWindow = "Applied", nil
+	e.postJSON("/v1/clusters/c1/workload-status", tokC1, hubapi.WorkloadStatusBatch{Items: []hubapi.WorkloadStatus{st}}, &res)
+	d = hubapi.WorkloadDetail{}
+	e.getJSON(wlPath(kCheckout, ""), tokUI, &d)
+	if d.Status == nil || d.Status.NextWindow != nil {
+		t.Fatalf("nextWindow kept: %v", d.Status.NextWindow)
+	}
+}

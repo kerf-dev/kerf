@@ -53,7 +53,7 @@ export type SavingsTrendQuery = NonNullable<operations['getSavingsTrend']['param
 
 export const WORKLOAD_KINDS: WorkloadKind[] = ['Deployment', 'StatefulSet', 'DaemonSet', 'CronJob']
 export const MODES: Mode[] = ['off', 'audit', 'auto-patch']
-export const PHASES: Phase[] = ['Pending', 'Applying', 'Applied', 'Blocked', 'RolledBack', 'Released']
+export const PHASES: Phase[] = ['Pending', 'Applying', 'Applied', 'Blocked', 'RolledBack', 'Released', 'Deferred']
 export const RISK_FLAGS: RiskFlag[] = [
   'throttled',
   'oom-killed',

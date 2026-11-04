@@ -35,6 +35,7 @@ import (
 	"github.com/tomer1983/resource-optimizer/internal/agent/controller"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubstub"
+	"github.com/tomer1983/resource-optimizer/internal/agent/windows"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
@@ -83,6 +84,7 @@ func run(args []string) error {
 		hubURL         = fs.String("hub-url", "http://hub-api.hub.svc:8080", "hub base URL")
 		tokenFile      = fs.String("hub-token-file", "/var/run/secrets/resource-optimizer/hub/token", "file with the hub bearer token (re-read on every request)")
 		defaultsFile   = fs.String("cluster-defaults", "", "YAML file with the cluster default policy (a RightsizingPolicy spec)")
+		freezeFile     = fs.String("freeze-file", "", "YAML file with the cluster-wide freeze {now: bool, windows: [TimeWindow]} (WO-10)")
 		pullInterval   = fs.Duration("pull-interval", time.Minute, "how often recommendations are pulled")
 		staleAfter     = fs.Duration("hub-stale-after", 5*time.Minute, "after this long without a successful pull the hub counts as unreachable and nothing new is applied")
 		reportInterval = fs.Duration("report-interval", 10*time.Second, "how often changed statuses and events are sent")
@@ -124,6 +126,14 @@ func run(args []string) error {
 		if err := yaml.UnmarshalStrict(b, defaults); err != nil {
 			return fmt.Errorf("cluster defaults %s: %w", *defaultsFile, err)
 		}
+	}
+
+	freeze, err := windows.LoadFreeze(*freezeFile)
+	if err != nil {
+		return err
+	}
+	if freeze.Now || len(freeze.Windows) > 0 {
+		log.Info("cluster-wide freeze configured", "now", freeze.Now, "windows", len(freeze.Windows))
 	}
 
 	scheme := runtime.NewScheme()
@@ -176,6 +186,7 @@ func run(args []string) error {
 			Tolerance:                *tolerance,
 			UnsupportedNodeSelectors: unsupported,
 			ApplyingRequeue:          *applyingCheck,
+			Freeze:                   freeze,
 		},
 	}
 	ctx := ctrl.SetupSignalHandler()

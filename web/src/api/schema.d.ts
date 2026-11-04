@@ -326,7 +326,7 @@ export interface components {
     /** @enum {string} */
     Profile: 'dev' | 'production' | 'high-availability'
     /** @enum {string} */
-    Phase: 'Pending' | 'Applying' | 'Applied' | 'Blocked' | 'RolledBack' | 'Released'
+    Phase: 'Pending' | 'Applying' | 'Applied' | 'Blocked' | 'RolledBack' | 'Released' | 'Deferred'
     /**
      * @description `throttled`, `oom-killed`: the workload is under-provisioned; the recommendation is never
      *     a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only
@@ -527,6 +527,11 @@ export interface components {
       live?: components['schemas']['ContainerResources'][]
       /** Format: date-time */
       appliedAt?: string
+      /**
+       * Format: date-time
+       * @description When the next maintenance window opens; set while the phase is `Deferred` (WO-10).
+       */
+      nextWindow?: string
       /** Format: date-time */
       observedAt?: string
       /**

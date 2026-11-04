@@ -54,8 +54,8 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | `Cooldown` | Last change or rollback was less than `guardrails.cooldown` ago. |
 | `HPACoupled` | Workload has a CPU/memory-utilization HPA that is not coordinated: coordination is off in its policy, the HPA cannot be coordinated, or the new target would leave its bounds (D-011, WO-11). |
 | `Throttled` / `OOMKilled` | Decrease refused because the resource is under pressure. |
-| `FreezeWindow` | Inside an `apply.freezeWindows` entry. |
-| `OutsideMaintenanceWindow` | Strategy `deferred` and no maintenance window is open. |
+| `FreezeWindow` | Inside an `apply.freezeWindows` entry or the cluster-wide freeze: no change and no release of field ownership; health-watch rollbacks still run (WO-10). |
+| `OutsideMaintenanceWindow` | Strategy `deferred` and no maintenance window is open: the change is queued (phase `Deferred`, `status.nextWindow`) and applied as a rollout when the next window opens (WO-10). |
 | `UnsupportedNode` | In-place refused: node has swap or a static CPU/Memory Manager policy (D-007). |
 | `RestartPolicyRequired` | Memory change on a JVM/Python container whose `resizePolicy` is not `RestartContainer` and strategy is `in-place` (D-007). |
 | `JVMFixedHeap` | Memory change on a JVM container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`, detected live or flagged `jvm-fixed-heap` by the hub); memory is audit-only (WO-12). |

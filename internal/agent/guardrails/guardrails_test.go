@@ -112,7 +112,23 @@ func TestGuardrails(t *testing.T) {
 			in.Effective.FreezeWindows = []v1alpha1.TimeWindow{{Schedule: "0 9 * * *", Duration: &metav1.Duration{Duration: 2 * time.Hour}}}
 		}, outcome: Blocked, reason: v1alpha1.ReasonFreezeWindow},
 		{name: "deferred outside maintenance window", mut: func(in *Input) { in.Strategy = v1alpha1.StrategyDeferred },
-			outcome: Blocked, reason: v1alpha1.ReasonOutsideMaintenanceWindow},
+			outcome: Deferred, reason: v1alpha1.ReasonOutsideMaintenanceWindow, check: func(t *testing.T, d Decision) {
+				if target(d, corev1.ResourceCPU, false) != "200m" || len(d.Changes) == 0 {
+					t.Errorf("deferred must carry the change to apply later: %+v", d)
+				}
+			}},
+		{name: "deferred inside maintenance window applies", mut: func(in *Input) {
+			in.Strategy = v1alpha1.StrategyDeferred
+			in.Effective.MaintenanceWindows = []v1alpha1.TimeWindow{{Schedule: "55 9 * * *", Duration: &metav1.Duration{Duration: 10 * time.Minute}}}
+		}, outcome: Apply, reason: v1alpha1.ReasonRecommendationApplied},
+		{name: "deferred without a change is not deferred", mut: func(in *Input) {
+			in.Strategy = v1alpha1.StrategyDeferred
+			in.Rec = rec("290m", "250Mi", "", "")
+		}, outcome: Skipped, reason: v1alpha1.ReasonNoSignificantChange},
+		{name: "freeze beats deferred", mut: func(in *Input) {
+			in.Strategy = v1alpha1.StrategyDeferred
+			in.Effective.FreezeWindows = []v1alpha1.TimeWindow{{Start: &metav1.Time{Time: now.Add(-time.Hour)}, End: &metav1.Time{Time: now.Add(time.Hour)}}}
+		}, outcome: Blocked, reason: v1alpha1.ReasonFreezeWindow},
 		{name: "cooldown after change", mut: func(in *Input) { in.LastAppliedAt = ago(time.Hour) }, outcome: Blocked, reason: v1alpha1.ReasonCooldown},
 		{name: "cooldown over", mut: func(in *Input) { in.LastAppliedAt = ago(25 * time.Hour) }, outcome: Apply, reason: v1alpha1.ReasonRecommendationApplied},
 		{name: "rollback blocks decreases", mut: func(in *Input) { in.RolledBackAt = ago(time.Hour) }, outcome: Blocked, reason: v1alpha1.ReasonCooldown},
