@@ -62,6 +62,7 @@ export const RISK_FLAGS: RiskFlag[] = [
   'sidecar',
   'short-lived',
   'low-confidence',
+  'jvm-fixed-heap',
 ]
 export const EVENT_TYPES: EventType[] = [
   'applied',

@@ -313,6 +313,12 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 		}
 		return names
 	}
+	// JVM heap settings the agent reported (WO-12); unreported workloads fall back to image detection.
+	jvm, err := j.Store.ReportedJVM(ctx, cluster)
+	if err != nil {
+		return err
+	}
+	eng.JVM = func(k hubapi.WorkloadKey) ([]hubapi.JVMContainer, bool) { c, ok := jvm[k]; return c, ok }
 	res, err := eng.RunCluster(ctx, cluster, asOf, func(k hubapi.WorkloadKey) *hubapi.ValueSettings { return reported[k] })
 	if err != nil {
 		return err
