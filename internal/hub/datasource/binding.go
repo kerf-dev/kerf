@@ -95,11 +95,11 @@ func ParseMatcher(s string) (name, op, value string, err error) {
 	}
 	value, err = strconv.Unquote(m[3])
 	if err != nil {
-		return "", "", "", fmt.Errorf("extraMatcher %q: %v", s, err)
+		return "", "", "", fmt.Errorf("extraMatcher %q: %w", s, err)
 	}
 	if strings.HasSuffix(m[2], "~") {
 		if _, err := regexp.Compile("^(?:" + value + ")$"); err != nil {
-			return "", "", "", fmt.Errorf("extraMatcher %q: invalid regex: %v", s, err)
+			return "", "", "", fmt.Errorf("extraMatcher %q: invalid regex: %w", s, err)
 		}
 	}
 	return m[1], m[2], value, nil
