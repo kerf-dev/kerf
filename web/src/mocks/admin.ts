@@ -50,6 +50,7 @@ import {
   unauthorized,
   writeSession,
   type Ctx,
+  installUnconfigured,
 } from './core'
 import { mulberry32, uuid } from './random'
 import {
@@ -680,6 +681,16 @@ function validateBinding(st: AdminState, b: S['MetricsBinding'] | undefined, err
   })
 }
 
+/** Binding errors as the hub answers them: 400 unknown_datasource or 400 invalid_metrics. */
+function bindingError(st: AdminState, b: S['MetricsBinding'] | undefined) {
+  if (!b) return undefined
+  if (!st.datasources.some((d) => d.id === b.datasourceId && !d.deletedAt))
+    return badRequest('unknown_datasource', 'Unknown datasource in metrics.')
+  const errs: string[] = []
+  validateBinding(st, b, errs)
+  return errs.length ? invalid('invalid_metrics', errs) : undefined
+}
+
 function labelMatches(st: AdminState, b: S['MetricsBinding'], cluster: string) {
   if (b.clusterLabel === '') return true
   const ds = st.datasources.find((d) => d.id === b.datasourceId)
@@ -985,7 +996,7 @@ export const adminHandlers = [
     const g = await gate(request)
     if (g instanceof Response) return g
     const cl = new URL(request.url).searchParams.get('cluster')
-    if (cl && !liveCluster(g.st, cl)) return notFound('cluster_not_found', `cluster ${cl} not found`)
+    if (cl && !liveCluster(g.st, cl)) return notFound('not_found', `cluster ${cl} not found`)
     const names = cl ? [cl] : [...g.st.clusters.values()].filter((c) => !c.deletedAt).map((c) => c.name)
     return json<S['PolicyInventoryList']>({ items: names.map((n) => inventory(g.st, g.db, n)) })
   }),
@@ -1086,7 +1097,7 @@ export const adminHandlers = [
     const g = await gate(request)
     if (g instanceof Response) return g
     const p = policyById(g.st, params.policyId)
-    if (!p) return notFound('policy_not_found', `policy ${String(params.policyId)} not found`)
+    if (!p) return notFound('not_found', `policy ${String(params.policyId)} not found`)
     const pg = page(g.st.versions.get(p.id) ?? [], new URL(request.url).searchParams)
     if (pg instanceof Response) return pg
     return json<S['PolicyVersionList']>(pg)
@@ -1096,7 +1107,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const p = policyById(g.st, params.policyId)
-    if (!p) return notFound('policy_not_found', `policy ${String(params.policyId)} not found`)
+    if (!p) return notFound('not_found', `policy ${String(params.policyId)} not found`)
     const m = ifMatch(request, p.version)
     if (m) return m
     const b = await body<S['PolicyRevert'] & { overrideReadiness?: boolean }>(request)
@@ -1147,7 +1158,7 @@ export const adminHandlers = [
     const g = await gate(request)
     if (g instanceof Response) return g
     const p = policyById(g.st, params.policyId)
-    if (!p) return notFound('policy_not_found', `policy ${String(params.policyId)} not found`)
+    if (!p) return notFound('not_found', `policy ${String(params.policyId)} not found`)
     return json(p, { version: p.version })
   }),
 
@@ -1155,7 +1166,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const p = policyById(g.st, params.policyId)
-    if (!p || p.deletedAt) return notFound('policy_not_found', `policy ${String(params.policyId)} not found`)
+    if (!p || p.deletedAt) return notFound('not_found', `policy ${String(params.policyId)} not found`)
     const m = ifMatch(request, p.version)
     if (m) return m
     const b = await body<S['PolicyInput']>(request)
@@ -1208,7 +1219,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const p = policyById(g.st, params.policyId)
-    if (!p || p.deletedAt) return notFound('policy_not_found', `policy ${String(params.policyId)} not found`)
+    if (!p || p.deletedAt) return notFound('not_found', `policy ${String(params.policyId)} not found`)
     const m = ifMatch(request, p.version)
     if (m) return m
     const b = await body<S['ChangeReason']>(request)
@@ -1266,7 +1277,7 @@ export const adminHandlers = [
     const w = findWorkload(g.db, params.id)
     if (w instanceof Response) return w
     const ov = liveOverride(g.st, w.id)
-    if (!ov) return notFound('override_not_found', `workload ${w.id} has no override`)
+    if (!ov) return notFound('not_found', `workload ${w.id} has no override`)
     return json(ov, { version: ov.version })
   }),
 
@@ -1356,7 +1367,7 @@ export const adminHandlers = [
     const w = findWorkload(g.db, params.id)
     if (w instanceof Response) return w
     const ov = liveOverride(g.st, w.id)
-    if (!ov) return notFound('override_not_found', `workload ${w.id} has no override`)
+    if (!ov) return notFound('not_found', `workload ${w.id} has no override`)
     const m = ifMatch(request, ov.version)
     if (m) return m
     const b = await body<S['ChangeReason']>(request)
@@ -1489,7 +1500,7 @@ export const adminHandlers = [
     const g = await gate(request, 'operator')
     if (g instanceof Response) return g
     const c = liveCluster(g.st, params.cluster)
-    if (!c) return notFound('cluster_not_found', `cluster ${String(params.cluster)} not found`)
+    if (!c) return notFound('not_found', `cluster ${String(params.cluster)} not found`)
     const m = ifMatch(request, c.automation.version, true)
     if (m) return m
     const b = await automationUpdate(request)
@@ -1533,8 +1544,9 @@ export const adminHandlers = [
       errs.push('environment: Required value: prod or non-prod')
     if (b.policySource && !['hub', 'git', 'both'].includes(b.policySource))
       errs.push(`policySource: Unsupported value: ${JSON.stringify(b.policySource)}`)
-    validateBinding(g.st, b.metrics, errs)
     if (errs.length) return invalid('invalid_cluster', errs)
+    const metricsErr = bindingError(g.st, b.metrics)
+    if (metricsErr) return metricsErr
     if (liveCluster(g.st, b.name)) return conflict('already_exists', `cluster ${b.name} exists`)
     const t = Date.now()
     const metrics: S['MetricsBinding'] = b.metrics
@@ -1599,11 +1611,16 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const c = liveCluster(g.st, params.cluster)
-    if (!c) return notFound('cluster_not_found', `cluster ${String(params.cluster)} not found`)
+    if (!c) return notFound('not_found', `cluster ${String(params.cluster)} not found`)
     const sp = new URL(request.url).searchParams
     const format = sp.get('format')
     if (format !== 'helm' && format !== 'values' && format !== 'argocd')
       return badRequest('invalid_format', 'format must be helm, values or argocd')
+    if (installUnconfigured())
+      return conflict(
+        'install_not_configured',
+        'Install snippets are not configured on the hub: hub URL must be an absolute http(s) URL; agent chart reference is not configured',
+      )
     return json(
       installSnippet(
         c.name,
@@ -1618,7 +1635,7 @@ export const adminHandlers = [
     const g = await gate(request)
     if (g instanceof Response) return g
     const c = liveCluster(g.st, params.cluster)
-    if (!c) return notFound('cluster_not_found', `cluster ${String(params.cluster)} not found`)
+    if (!c) return notFound('not_found', `cluster ${String(params.cluster)} not found`)
     return json(clusterAdmin(g.st, g.db, c), { version: c.version })
   }),
 
@@ -1626,7 +1643,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const c = liveCluster(g.st, params.cluster)
-    if (!c) return notFound('cluster_not_found', `cluster ${String(params.cluster)} not found`)
+    if (!c) return notFound('not_found', `cluster ${String(params.cluster)} not found`)
     const m = ifMatch(request, c.version)
     if (m) return m
     const b = await body<S['ClusterUpdate']>(request)
@@ -1638,8 +1655,9 @@ export const adminHandlers = [
       errs.push(`environment: Unsupported value: ${JSON.stringify(b.environment)}`)
     if (b.policySource && !['hub', 'git', 'both'].includes(b.policySource))
       errs.push(`policySource: Unsupported value: ${JSON.stringify(b.policySource)}`)
-    validateBinding(g.st, b.metrics, errs)
     if (errs.length) return invalid('invalid_cluster', errs)
+    const metricsErr = bindingError(g.st, b.metrics)
+    if (metricsErr) return metricsErr
     const before = clusterAdmin(g.st, g.db, c)
     for (const k of ['description', 'environment', 'owner', 'policySource', 'provider', 'region'] as const)
       if (b[k] !== undefined) (c as unknown as Record<string, unknown>)[k] = b[k]
@@ -1691,7 +1709,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const c = liveCluster(g.st, params.cluster)
-    if (!c) return notFound('cluster_not_found', `cluster ${String(params.cluster)} not found`)
+    if (!c) return notFound('not_found', `cluster ${String(params.cluster)} not found`)
     const m = ifMatch(request, c.version)
     if (m) return m
     const b = await body<S['ChangeReason']>(request)
@@ -1722,7 +1740,7 @@ export const adminHandlers = [
     if (g instanceof Response) return g
     const c = liveCluster(g.st, params.cluster)
     const m = c && g.st.readiness.get(c.name)
-    if (!m) return notFound('cluster_not_found', `cluster ${String(params.cluster)} not found`)
+    if (!m) return notFound('not_found', `cluster ${String(params.cluster)} not found`)
     const sp = new URL(request.url).searchParams
     const from = sp.get('from') ? Date.parse(sp.get('from')!) : -Infinity
     const to = sp.get('to') ? Date.parse(sp.get('to')!) : Infinity
@@ -1739,7 +1757,7 @@ export const adminHandlers = [
     if (g instanceof Response) return g
     const c = liveCluster(g.st, params.cluster)
     const m = c && g.st.readiness.get(c.name)
-    if (!c || !m) return notFound('cluster_not_found', `cluster ${String(params.cluster)} not found`)
+    if (!c || !m) return notFound('not_found', `cluster ${String(params.cluster)} not found`)
     m.recheckRequestedAt = now()
     const body: S['RecheckAccepted'] = {
       requestedAt: m.recheckRequestedAt,
@@ -1754,7 +1772,7 @@ export const adminHandlers = [
     if (g instanceof Response) return g
     const c = liveCluster(g.st, params.cluster)
     const m = c && g.st.readiness.get(c.name)
-    if (!m) return notFound('cluster_not_found', `cluster ${String(params.cluster)} not found`)
+    if (!m) return notFound('not_found', `cluster ${String(params.cluster)} not found`)
     return json(toClusterReadiness(m))
   }),
 
@@ -1789,7 +1807,7 @@ export const adminHandlers = [
       errs.push('expiresAt: Invalid value: must be in the future')
     if (errs.length) return invalid('invalid_token', errs)
     if (b.cluster && !liveCluster(g.st, b.cluster))
-      return notFound('cluster_not_found', `cluster ${b.cluster} not found`)
+      return notFound('not_found', `cluster ${b.cluster} not found`)
     return json(createToken(g.st, g.who, b, b.reason), { status: 201 })
   }),
 
@@ -1797,7 +1815,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const t = g.st.tokens.find((x) => x.id === String(params.tokenId))
-    if (!t) return notFound('token_not_found', `token ${String(params.tokenId)} not found`)
+    if (!t) return notFound('not_found', `token ${String(params.tokenId)} not found`)
     const b = await body<S['ChangeReason']>(request)
     const r = reasonError(b?.reason)
     if (r) return r
@@ -1880,7 +1898,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const u = g.st.users.get(String(params.username))
-    if (!u || u.deletedAt) return notFound('user_not_found', `user ${String(params.username)} not found`)
+    if (!u || u.deletedAt) return notFound('not_found', `user ${String(params.username)} not found`)
     const b = await body<S['PasswordReset']>(request)
     const r = reasonError(b?.reason)
     if (r) return r
@@ -1910,7 +1928,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const u = g.st.users.get(String(params.username))
-    if (!u) return notFound('user_not_found', `user ${String(params.username)} not found`)
+    if (!u) return notFound('not_found', `user ${String(params.username)} not found`)
     return json(userOut(u), { version: u.version })
   }),
 
@@ -1918,7 +1936,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const u = g.st.users.get(String(params.username))
-    if (!u || u.deletedAt) return notFound('user_not_found', `user ${String(params.username)} not found`)
+    if (!u || u.deletedAt) return notFound('not_found', `user ${String(params.username)} not found`)
     const m = ifMatch(request, u.version)
     if (m) return m
     const b = await body<S['UserUpdate']>(request)
@@ -1953,7 +1971,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const u = g.st.users.get(String(params.username))
-    if (!u || u.deletedAt) return notFound('user_not_found', `user ${String(params.username)} not found`)
+    if (!u || u.deletedAt) return notFound('not_found', `user ${String(params.username)} not found`)
     const m = ifMatch(request, u.version)
     if (m) return m
     const b = await body<S['ChangeReason']>(request)
@@ -2061,12 +2079,12 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const d = g.st.datasources.find((x) => x.id === String(params.datasourceId) && !x.deletedAt)
-    if (!d) return notFound('datasource_not_found', `datasource ${String(params.datasourceId)} not found`)
+    if (!d) return notFound('not_found', `datasource ${String(params.datasourceId)} not found`)
     const b = await body<S['DatasourceTestRequest']>(request)
     if (b?.binding) {
       const errs: string[] = []
       validateBinding(g.st, { ...b.binding, datasourceId: d.id }, errs)
-      if (errs.length) return invalid('invalid_binding', errs)
+      if (errs.length) return invalid('invalid_datasource', errs)
     }
     const cluster = b?.binding?.clusterLabelValue || 'new-cluster'
     const res = metricsCheckResults(cluster, b?.binding, d.knownLabelValues, Date.now())
@@ -2084,7 +2102,7 @@ export const adminHandlers = [
     const g = await gate(request)
     if (g instanceof Response) return g
     const d = g.st.datasources.find((x) => x.id === String(params.datasourceId) && !x.deletedAt)
-    if (!d) return notFound('datasource_not_found', `datasource ${String(params.datasourceId)} not found`)
+    if (!d) return notFound('not_found', `datasource ${String(params.datasourceId)} not found`)
     return json(datasourceOut(g.st, d), { version: d.version })
   }),
 
@@ -2092,7 +2110,13 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const d = g.st.datasources.find((x) => x.id === String(params.datasourceId) && !x.deletedAt)
-    if (!d) return notFound('datasource_not_found', `datasource ${String(params.datasourceId)} not found`)
+    if (!d) return notFound('not_found', `datasource ${String(params.datasourceId)} not found`)
+    // Like the hub (WO-25): the built-in datasource is managed by the hub configuration.
+    if (d.builtIn)
+      return conflict(
+        'builtin',
+        'the built-in datasource local is configured by the hub and cannot be changed',
+      )
     const m = ifMatch(request, d.version)
     if (m) return m
     const b = await body<S['DatasourceInput']>(request)
@@ -2101,8 +2125,6 @@ export const adminHandlers = [
     if (r) return r
     const v = validateDatasource(g.st, b, d)
     if (v) return v
-    if (d.builtIn && (b.name !== d.name || b.type !== d.type))
-      return conflict('builtin', 'the built-in datasource keeps its name and type')
     const before = datasourceOut(g.st, d)
     d.name = b.name
     d.type = b.type
@@ -2132,7 +2154,7 @@ export const adminHandlers = [
     const g = await gate(request, 'admin')
     if (g instanceof Response) return g
     const d = g.st.datasources.find((x) => x.id === String(params.datasourceId) && !x.deletedAt)
-    if (!d) return notFound('datasource_not_found', `datasource ${String(params.datasourceId)} not found`)
+    if (!d) return notFound('not_found', `datasource ${String(params.datasourceId)} not found`)
     const m = ifMatch(request, d.version)
     if (m) return m
     const b = await body<S['ChangeReason']>(request)

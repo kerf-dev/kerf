@@ -693,6 +693,9 @@ export function toClusterReadiness(m: ReadinessModel): ClusterReadiness {
     }
   })
   const agentReported = m.results['agent.connected']?.status === 'pass'
+  // Like the hub (WO-25): agent checks that never reported have no row in `checks`; blocking ones
+  // still appear in `blockedBy` and in `summary.unknown`.
+  const reported = checks.filter((c) => !(c.source === 'agent' && c.status === 'unknown'))
   return {
     cluster: m.cluster,
     state,
@@ -709,13 +712,15 @@ export function toClusterReadiness(m: ReadinessModel): ClusterReadiness {
       : {}),
     ...(agentReported ? { capabilities: caps } : {}),
     ...(m.recheckRequestedAt ? { recheckRequestedAt: m.recheckRequestedAt } : {}),
-    checks,
+    checks: reported,
   }
 }
 
 function summaryCounts(checks: ReadinessCheck[]) {
   return {
-    blocking: checks.filter((c) => c.severity === 'blocking' && c.status !== 'pass').length,
+    // Failing blocking checks only; blocking checks without a result are `unknown` (hub semantics).
+    blocking: checks.filter((c) => c.severity === 'blocking' && (c.status === 'fail' || c.status === 'warn'))
+      .length,
     warnings: checks.filter((c) => c.severity === 'warning' && (c.status === 'warn' || c.status === 'fail'))
       .length,
     unknown: checks.filter((c) => c.status === 'unknown').length,

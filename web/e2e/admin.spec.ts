@@ -308,3 +308,36 @@ test.describe('WO-22b polish', () => {
     ).toBeDisabled()
   })
 })
+
+test.describe('WO-22c readiness alignment', () => {
+  test('checks without a result show as pending, not failures', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('readiness-banner-pending').first()).toContainText(
+      /\d+ checks? not reported yet/,
+    )
+    await login(page, 'admin', '/clusters/dr-eu-central-1?tab=readiness')
+    const row = page.getByTestId('check-agent.version')
+    await expect(row).toContainText('Not reported yet')
+    await expect(row).toContainText('pending')
+  })
+
+  test('the built-in datasource offers no edit or delete', async ({ page }) => {
+    await login(page, 'admin', '/admin/datasources')
+    const local = page.getByTestId('datasource-local')
+    await expect(local.getByTestId('builtin-note')).toBeVisible()
+    await expect(local.getByRole('button', { name: 'Edit local' })).toHaveCount(0)
+    await expect(
+      page.getByTestId('datasource-amp-eu1').getByRole('button', { name: 'Edit amp-eu1' }),
+    ).toBeVisible()
+  })
+
+  test('install snippets not configured on the hub name the missing chart values', async ({ page }) => {
+    await login(page, 'admin', '/')
+    await page.evaluate(() => localStorage.setItem('ro-mock-install', 'unconfigured'))
+    await page.goto('/clusters/dr-eu-central-1?tab=agent')
+    const box = page.getByTestId('install-not-configured')
+    await expect(box).toContainText('config.onboarding.agentChart')
+    await expect(box).toContainText('config.onboarding.hubURL')
+    await page.evaluate(() => localStorage.removeItem('ro-mock-install'))
+  })
+})
