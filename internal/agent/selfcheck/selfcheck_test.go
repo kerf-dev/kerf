@@ -420,6 +420,13 @@ func TestArgoCDAndNodes(t *testing.T) {
 	if a := byID(e.checker(t).Run(context.Background()))[rd.CheckArgoCD]; a.Status != "unknown" || a.Remediation == "" {
 		t.Errorf("forbidden %+v", a)
 	}
+	// no Argo CD API and no Role (no argocd namespace): the 403 on argocd-cm is not "unreadable"
+	e = healthyEnv(t)
+	e.forbidCM = true
+	e.resources = []*metav1.APIResourceList{coreResources(true), crdResources(), {GroupVersion: "cert-manager.io/v1"}}
+	if a := byID(e.checker(t).Run(context.Background()))[rd.CheckArgoCD]; a.Status != "pass" || !strings.Contains(a.Message, "not installed") {
+		t.Errorf("no argocd, forbidden: %+v", a)
+	}
 	// no Argo CD at all
 	e = healthyEnv(t)
 	e.objs = append(e.objs[:4], e.objs[5:]...)

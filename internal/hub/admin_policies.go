@@ -230,6 +230,29 @@ func (s *Server) revertPolicy(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &in) || !validReason(w, r, in.Reason) {
 		return
 	}
+	// Readiness gating (D-025): a revert that newly enables auto-patch is gated like an update.
+	change := s.change(r, hubapi.ActionPolicyReverted, in.Reason)
+	if cur, err := s.Store.GetPolicy(r.Context(), r.PathValue("policyId")); err == nil && in.Version >= 1 && in.Version < cur.Version {
+		vs, _, err := s.Store.PolicyVersions(r.Context(), cur.ID, in.Version+1, 1)
+		if err != nil {
+			s.internal(w, r, err)
+			return
+		}
+		if len(vs) == 1 && vs[0].Version == in.Version && !vs[0].Deleted {
+			next := cur
+			next.Clusters, next.Spec, next.DeletedAt = vs[0].Clusters, vs[0].Spec, nil
+			gateClusters := next.Clusters
+			if cur.Type == v1alpha1.HubPolicyTypeWorkloadOverride {
+				k, _ := hubapi.ParseWorkloadID(cur.WorkloadID)
+				gateClusters = []string{k.Cluster}
+			}
+			extra, ok := s.readinessGate(w, r, gateClusters, newAutoPatch(cur, next), in.OverrideReadiness)
+			if !ok {
+				return
+			}
+			change.AfterExtra = extra
+		}
+	}
 	var badVersion bool
 	out, err := s.Store.UpdatePolicy(r.Context(), r.PathValue("policyId"), ver, func(c hubapi.AdminPolicy, version func(int) (hubapi.PolicyVersion, error)) (hubapi.AdminPolicy, string, int, error) {
 		if in.Version < 1 || in.Version >= c.Version {
@@ -246,7 +269,7 @@ func (s *Server) revertPolicy(w http.ResponseWriter, r *http.Request) {
 		c.Name, c.Description, c.Clusters, c.Priority, c.Spec = v.Name, v.Description, v.Clusters, v.Priority, v.Spec
 		c.DeletedAt = nil
 		return c, hubapi.PolicyOpRevert, in.Version, nil
-	}, s.change(r, hubapi.ActionPolicyReverted, in.Reason))
+	}, change)
 	if badVersion {
 		badRequest(w, r, "invalid_version", fmt.Sprintf("version %d is not an earlier version of the policy.", in.Version))
 		return
