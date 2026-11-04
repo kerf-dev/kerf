@@ -1,8 +1,10 @@
-import { KeyRoundIcon, Loader2Icon, PlusIcon, RotateCwIcon, Trash2Icon } from 'lucide-react'
+import { KeyRoundIcon, Loader2Icon, SettingsIcon, PlusIcon, RotateCwIcon, Trash2Icon } from 'lucide-react'
 import { useState } from 'react'
 import { useInstallSnippet, useTokens, useWrite, writes } from '@/api/admin'
 import type { InstallFormat, TokenCreated, TokenInfo } from '@/api/types'
+import { ApiError } from '@/api/client'
 import { ErrorState } from '@/components/states'
+import { Callout } from '@/components/ui/form'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
@@ -52,7 +54,11 @@ export function InstallSnippets({ cluster, compact }: { cluster: string; compact
         </div>
       </div>
       {q.isError ? (
-        <ErrorState error={q.error} compact onRetry={() => q.refetch()} />
+        q.error instanceof ApiError && q.error.code === 'install_not_configured' ? (
+          <InstallNotConfigured detail={q.error.problem?.detail} webhook={webhook} />
+        ) : (
+          <ErrorState error={q.error} compact onRetry={() => q.refetch()} />
+        )
       ) : !q.data ? (
         <Skeleton className="h-48 rounded-lg" />
       ) : (
@@ -80,6 +86,56 @@ export function InstallSnippets({ cluster, compact }: { cluster: string; compact
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+const HUB_VALUES: { key: string; what: string; match: RegExp; when?: 'webhook' }[] = [
+  { key: 'config.onboarding.hubURL', what: 'the hub URL as agents reach it', match: /hub URL/i },
+  {
+    key: 'config.onboarding.agentChart',
+    what: 'the agent chart (oci://…, <repo URL>|<chart>, or a path)',
+    match: /agent chart/i,
+  },
+  {
+    key: 'config.onboarding.webhookChart',
+    what: 'the webhook chart, for the webhook option',
+    match: /webhook chart/i,
+    when: 'webhook',
+  },
+  { key: 'config.onboarding.chartVersion', what: 'optional: pin the chart version', match: /$^/ },
+]
+
+/**
+ * `409 install_not_configured` (WO-25): the hub cannot render install snippets until its chart sets
+ * the onboarding values. Names the missing ones (from the hub's message) and shows how to set them.
+ */
+function InstallNotConfigured({ detail, webhook }: { detail?: string; webhook: boolean }) {
+  const missing = HUB_VALUES.filter((v) => detail && v.match.test(detail))
+  const list = missing.length
+    ? missing
+    : HUB_VALUES.filter((v) => v.when !== 'webhook' || webhook).slice(0, webhook ? 3 : 2)
+  const cmd = `helm upgrade hub deploy/charts/hub -n resource-optimizer --reuse-values \\\n${list
+    .filter((v) => !v.key.endsWith('chartVersion'))
+    .map(
+      (v) =>
+        `  --set ${v.key}=${v.key.endsWith('hubURL') ? 'https://hub.example.com' : v.key.endsWith('webhookChart') ? 'oci://registry.example.com/resource-optimizer/webhook' : 'oci://registry.example.com/resource-optimizer/agent'}`,
+    )
+    .join(' \\\n')}`
+  return (
+    <div className="flex flex-col gap-3" data-testid="install-not-configured">
+      <Callout tone="warning" icon={SettingsIcon} title="Install snippets are not configured on the hub">
+        The hub needs these chart values before it can render install instructions:
+        <ul className="mt-1.5 space-y-0.5">
+          {list.map((v) => (
+            <li key={v.key}>
+              <code className="font-mono text-[12px] text-foreground">{v.key}</code> — {v.what}
+            </li>
+          ))}
+        </ul>
+        {detail ? <p className="mt-1.5 text-xs">Hub: {detail}</p> : null}
+      </Callout>
+      <CodeBlock code={cmd} maxHeight={160} />
     </div>
   )
 }
