@@ -1,0 +1,6 @@
+apiVersion: v2
+name: webhook
+description: resource-optimizer mutating admission webhook (WO-07) - recommended resources on new pods of in-place workloads
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

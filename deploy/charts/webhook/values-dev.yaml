@@ -1,0 +1,2 @@
+# Local k3d development (picked up by dev/scripts/tilt-deploy.sh and `make deploy-webhook`).
+logLevel: debug
