@@ -1,0 +1,69 @@
+# Rendered at container start by the nginx image's envsubst step (/etc/nginx/templates → conf.d).
+# Variables: HUB_UPSTREAM (host:port of the hub API), HUB_TOKEN (set from HUB_TOKEN_FILE by
+# /docker-entrypoint.d/05-hub-token.envsh), NGINX_LOCAL_RESOLVERS (from /etc/resolv.conf).
+
+server_tokens off;
+gzip on;
+gzip_comp_level 5;
+gzip_min_length 1024;
+gzip_vary on;
+gzip_types text/plain text/css application/json application/javascript application/problem+json image/svg+xml;
+
+# Never log the bearer token or query strings with workload names at debug level.
+log_format ro '$remote_addr [$time_local] "$request_method $uri" $status $body_bytes_sent $request_time "$http_user_agent"';
+
+server {
+    listen 80 default_server;
+    server_name _;
+    root /usr/share/nginx/html;
+    access_log /var/log/nginx/access.log ro;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Hub API. The UI is read-only, so only GET/HEAD are forwarded.
+    location /v1/ {
+        limit_except GET HEAD { deny all; }
+
+        # Resolve the hub at request time (it may start after this pod) and do not normalise the URI:
+        # `$request_uri` is the raw request line, so a workload id's `%2F` reaches the hub undecoded
+        # (hub.yaml: workload ids are one URL-encoded path segment).
+        resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+        resolver_timeout 3s;
+        set $hub_upstream ${HUB_UPSTREAM};
+        proxy_pass http://$hub_upstream$request_uri;
+
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $hub_upstream;
+        # The `ui` token lives only here (Secret mounted into this pod); the browser never sees it and
+        # anything the browser sends in Authorization or Cookie is replaced/dropped.
+        proxy_set_header Authorization "Bearer ${HUB_TOKEN}";
+        proxy_set_header Cookie "";
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_hide_header Access-Control-Allow-Origin;
+
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-store" always;
+    }
+
+    # Fingerprinted build output: cache forever.
+    location /assets/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # SPA: every other path serves index.html; never cache it so new deploys load at once.
+    location / {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri /index.html;
+    }
+}
