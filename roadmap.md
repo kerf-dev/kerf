@@ -36,6 +36,7 @@ Exit criterion: one non-prod EKS namespace on `auto-patch` for 2 weeks with no u
 
 ## Phase 4 – Product
 - WO-14b Admin area and write actions (`docs/plans/admin-area.md`): WO-19 contract → WO-20 hub, WO-21 agent, WO-22 web (parallel) → WO-24 e2e
+- WO-25 Cluster onboarding, per-cluster metrics sources, readiness checks (`docs/plans/cluster-onboarding.md`)
 - WO-15 Notifications (Slack/Teams)
 - WO-16 CUR-based price adjustment (Savings Plans, RIs, spot)
 - WO-17 Realized savings (node cost trend vs. released requests)
