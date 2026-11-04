@@ -1,6 +1,6 @@
 # Plan: Admin area and write actions (phase 4, WO-14b)
 
-Status: **proposed**. Open decisions are marked with ❓. Each one has a recommended default.
+Status: **accepted** (2026-11-04). The user decided D1–D3: UI + Git policies (D-022), local users first with OIDC later (D-023), approve-once included (D-024).
 
 ## 1. Problem
 
@@ -50,7 +50,7 @@ How this works:
 
   They are stored as versioned rows. A recommender change takes effect on the next run; a "Recompute now" button triggers one.
 
-❓ **D1 – Policy source of truth.**
+✅ **D1 – Policy source of truth: UI + Git (D-022).**
 - *Recommended:* `hub + git` as above. A per-installation setting `policySource: hub | git | both` exists anyway.
 - In `git` mode, the admin pages are read-only and offer "Export YAML" so teams commit the policy themselves.
 
@@ -65,12 +65,12 @@ Writes need a real user for the audit trail ("who set payments to auto-patch?").
 | `admin` | defaults, policies, recommender, pricing, clusters, tokens, users |
 
 Mechanics:
-- **Login:** OIDC (authorization code + PKCE) handled by the hub. The session cookie is HttpOnly, SameSite=Strict, with CSRF protection on writes.
-- **Roles:** IdP groups map to roles in the hub config.
+- **Login:** a username/password form handled by the hub (D-023). The session cookie is HttpOnly, SameSite=Strict, with CSRF protection on writes. There is login rate limiting and lockout, and admins can reset passwords. OIDC comes later and maps IdP groups to the same roles.
+- **Roles:** stored per user in the hub.
 - **Machine tokens:** agent, ui and admin tokens stay as they are.
-- **Local dev (k3d):** Dex runs as the IdP with static users `viewer@`, `operator@` and `admin@`.
+- **Local dev (k3d):** seeded users `viewer`, `operator` and `admin`, with passwords from the chart's dev values.
 
-❓ **D2 – Identity provider.**
+✅ **D2 – Local users first (D-023).** Users and passwords (bcrypt) live in the hub. An initial admin is bootstrapped from a Secret on first start. OIDC is added later behind the same session and role model. The original options were:
 - *Recommended:* generic OIDC, so any IdP works (Azure AD/Entra, Okta, Keycloak).
 - Name the one you use, and I'll make it the documented example.
 - Alternative for now: local users stored in the hub (bcrypt), with OIDC later.
@@ -113,7 +113,7 @@ Mechanics:
    - Current rates per cluster and their source.
    - Per-cluster discount % (Savings Plans / EDP until CUR arrives in WO-16), and optional fixed rate overrides.
 7. **Access.**
-   - Role mapping from IdP groups, and local users if D2 = local.
+   - Local users: create, set the role, disable, reset the password.
    - API tokens: create with a role and expiry, revoke, last used.
 8. **Audit.** All config changes (actor, time, before/after diff, reason). This is the existing Activity log with a `config` type filter.
 
@@ -126,7 +126,7 @@ Mechanics:
 - **Opportunities table:** row selection with bulk "Set mode…" or "Exclude". It always shows a confirmation dialog with the count and the savings impact.
 - **Production confirmation:** every write to a cluster labelled `prod` asks the user to type the cluster name.
 
-❓ **D3 – "Approve once".**
+✅ **D3 – "Approve once": included (D-024).**
 - *Recommended:* include it. An audit workload can be applied once for the current recommendation, with guardrails still enforced.
 - The hub records the approval for that recommendation id, and the agent applies it as if the mode were auto-patch for that one change.
 - This gives FinOps a safe review-and-approve flow without turning on automation.
@@ -153,7 +153,7 @@ Mechanics:
 - **Agent:**
   - `GET /v1/clusters/{c}/config` returns policies, flags and approvals, with an ETag.
   - The status batch gains `policyInventory[]` (name, source, priority, generation) and `configVersion`.
-- **Auth:** `/auth/login`, `/auth/callback`, `/auth/logout`, `/v1/me`.
+- **Auth:** `POST /auth/login`, `POST /auth/logout`, `GET /v1/me`. Users: `GET`, `POST`, `PATCH`, `DELETE /v1/admin/users`, and `POST .../reset-password`.
 - **CRD:**
   - `RightsizingPolicy.spec.selector.workloads[]` (additive).
   - Label and annotation constants in `wellknown.go`.
@@ -162,7 +162,7 @@ Mechanics:
   - `policies` and `policy_versions`
   - `cluster_automation`
   - `workload_approvals`
-  - `users` (if D2 = local)
+  - `users` (bcrypt hash, role, disabled, failed-login counters)
   - `sessions`
   - `api_tokens.role/expiry/last_used`
 
@@ -179,17 +179,16 @@ Mechanics:
 | WO | Track | Depends on |
 |---|---|---|
 | WO-19 | **Contract**: hub.yaml admin/config/auth endpoints, CRD selector.workloads, migrations 0007–0009, events | – |
-| WO-20 | **Hub**: settings/policies store + versions, admin API, preview/effective-policy, config endpoint for agents, OIDC sessions + roles, audit | WO-19 |
+| WO-20 | **Hub**: settings/policies store + versions, admin API, preview/effective-policy, config endpoint for agents, local users + sessions + roles, audit | WO-19 |
 | WO-21 | **Agent**: config pull, CR materialisation (hub-labelled only), policy inventory, pause flag, approve-once | WO-19 |
 | WO-22 | **Web**: login, role-aware nav, the `/admin` pages, workload Automation card, bulk actions, confirmations | WO-19 (mock API first) |
-| WO-23 | **Dev env**: Dex in k3d with static users; chart values for OIDC | – |
 | WO-24 | **E2E**: UI change → CR on the spoke → applied; pause blocks; approve-once; Git CR untouched; revert | WO-20, 21, 22 |
 
-Estimate: the contract first (one session), then WO-20, 21, 22 and 23 in parallel, then WO-24. Similar in size to phase 2.
+Estimate: the contract first (one session), then WO-20, 21 and 22 in parallel, then WO-24. Similar in size to phase 2.
 
 ## 8. Definition of done
 
-On k3d, an admin logs in (Dex) and does the following:
+On k3d, an admin logs in with a seeded local user and does the following:
 1. Sets namespace `payments` on `ro-spoke-1` to CPU auto-patch, sees the impact preview, and saves. Within one pull, a hub-labelled `RightsizingPolicy` appears on the spoke, workloads apply, and the change shows in Audit with the actor.
 2. Pauses `ro-spoke-1` from the overview. Applies stop (a `blocked/Paused` event); rollbacks still work.
 3. As operator, approves one audit workload once. It is applied once, and the next recommendation is not.

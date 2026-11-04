@@ -109,3 +109,20 @@ metrics or pinned at `maxReplicas` stay audit-only. D-011 remains in force for w
 After two hub outages caused by parallel deploys with colliding migration numbers, only the orchestrator deploys the
 hub (from `main`, after merging), and the orchestrator assigns `db/migrations` numbers. Spoke deploys check that no
 `make e2e` is running first.
+
+## D-022 Policy management: UI + Git — Accepted (2026-11-04, user)
+The hub stores policies created in the UI. Each agent pulls them and materialises them as `RightsizingPolicy` CRs
+labelled `resource-optimizer.oz.io/managed-by=hub`, and it only ever changes CRs with that label. CRs from Git
+keep working, are reported back to the hub, and appear read-only in the UI. Global and cluster defaults become the
+hub policies `ro-global-defaults` (priority 0) and `ro-cluster-defaults` (priority 10). UI workload overrides use
+priority ≥ 900000 and a new `selector.workloads` field. Workload annotations still win (D-005). Per-cluster pause
+is a flag in the agent config pull and behaves like a cluster-wide freeze. Plan: `docs/plans/admin-area.md`.
+
+## D-023 UI login: local users first — Accepted (2026-11-04, user)
+The hub manages users (bcrypt) with the roles `viewer`, `operator` and `admin`, and issues HttpOnly session
+cookies with CSRF protection. The initial admin comes from a Secret. OIDC comes later on the same session and role
+model. The machine tokens (`agent`, `ui`, `admin`) are unchanged.
+
+## D-024 Approve once — Accepted (2026-11-04, user)
+Operators can approve the current recommendation of a workload in `audit` mode. The hub records the approval for
+that recommendation id. The agent applies it once, with all guardrails, and the workload stays in audit.
