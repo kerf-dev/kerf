@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -938,5 +939,41 @@ func TestFreezePostponesRelease(t *testing.T) {
 			t.Logf("event %s %s %s", e.Type, e.Reason, e.Message)
 		}
 		t.Fatalf("released events: %d", n)
+	}
+}
+
+// TestSkippedWhileAppliedSurvivesRestart: a newer recommendation with the same values while the
+// change is live is reported once (skipped/NoSignificantChange), also across an agent restart.
+func TestSkippedWhileAppliedSurvivesRestart(t *testing.T) {
+	needEnv(t)
+	const name = "applied-restart"
+	if err := argoApply(t, deploymentApply(name, map[string]string{v1alpha1.AnnotationMode: "auto-patch", v1alpha1.AnnotationStrategy: "rollout"}, "500m", "256Mi"), false); err != nil {
+		t.Fatal(err)
+	}
+	r := recFor(name, "250m", "200Mi")
+	r.ID = "66666666-6666-4666-a666-666666666666"
+	setRec(r)
+	eventually(t, 20*time.Second, "applied", wantPhase(name, v1alpha1.PhaseApplied))
+	r.ID = "77777777-7777-4777-a777-777777777777" // next hub run, same values
+	setRec(r)
+	eventually(t, 10*time.Second, "skipped", wantEvent(name, hubclient.EventSkipped, v1alpha1.ReasonNoSignificantChange))
+	eventually(t, 10*time.Second, "reason recorded", func() error {
+		rsr, err := getRSR(name)
+		if err != nil {
+			return err
+		}
+		c := meta.FindStatusCondition(rsr.Status.Conditions, v1alpha1.ConditionBlocked)
+		if c == nil || c.Status != metav1.ConditionFalse || c.Reason != v1alpha1.ReasonNoSignificantChange || rsr.Status.Phase != v1alpha1.PhaseApplied {
+			return fmt.Errorf("phase %s Blocked %+v", rsr.Status.Phase, c)
+		}
+		return nil
+	})
+	testReconciler.mu.Lock()
+	testReconciler.last = nil // simulated restart
+	testReconciler.mu.Unlock()
+	annotate(t, &appsv1.Deployment{}, name, map[string]any{"test/poke": "1"})
+	time.Sleep(2 * time.Second)
+	if n := countEvents(name, hubclient.EventSkipped, v1alpha1.ReasonNoSignificantChange); n != 1 {
+		t.Fatalf("skipped re-emitted after a restart: %d", n)
 	}
 }
