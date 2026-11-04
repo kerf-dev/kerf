@@ -59,6 +59,20 @@ type Config struct {
 	Recommender RecommenderConfig `json:"recommender"`
 	History     HistoryConfig     `json:"history"`
 	Onboarding  OnboardingConfig  `json:"onboarding"`
+	HA          HAConfig          `json:"ha"`
+}
+
+// HAConfig tunes running several hub replicas on one database (WO-18a, D-028). The defaults
+// give a failover of at most 15 s after the leader dies.
+type HAConfig struct {
+	// LeaderRetry: how often a follower tries to take the leader lock (default 5s).
+	LeaderRetry Duration `json:"leaderRetry"`
+	// LeaderCheck: how often the lock connection is checked, and the timeout of that check
+	// (default 2s). A replica that cannot reach Postgres stops leading within twice this.
+	LeaderCheck Duration `json:"leaderCheck"`
+	// RecomputePoll: how often the leader looks for queued recompute requests besides being
+	// notified of new ones (default 2s).
+	RecomputePoll Duration `json:"recomputePoll"`
 }
 
 // OnboardingConfig configures datasources, readiness checks and install snippets (D-025).
@@ -239,6 +253,7 @@ func DefaultConfig() Config {
 		Recommender:       RecommenderConfig{Interval: Duration(24 * time.Hour), Strategy: "percentile"},
 		History:           HistoryConfig{FullResolution: Duration(7 * 24 * time.Hour), Retention: Duration(90 * 24 * time.Hour)},
 		Onboarding:        OnboardingConfig{CheckInterval: Duration(time.Hour), AgentPullInterval: Duration(time.Minute)},
+		HA:                HAConfig{LeaderRetry: Duration(5 * time.Second), LeaderCheck: Duration(2 * time.Second), RecomputePoll: Duration(2 * time.Second)},
 	}
 }
 

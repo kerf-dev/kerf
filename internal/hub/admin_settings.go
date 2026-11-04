@@ -7,6 +7,7 @@ import (
 
 	"github.com/tomer1983/resource-optimizer/internal/hub/config"
 	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/tomer1983/resource-optimizer/internal/hub/store"
 )
 
 // ---- settings (hub-only, versioned; docs/contracts/admin.md "Settings") ----
@@ -111,7 +112,12 @@ func (s *Server) putRecommenderSettings(w http.ResponseWriter, r *http.Request) 
 		s.storeError(w, r, err, "settings section")
 		return
 	}
-	if s.Job != nil {
+	switch {
+	case s.Coord != nil: // the leader runs the schedule; it reloads the interval when notified
+		if err := s.Store.Notify(r.Context(), store.NotifySettings); err != nil {
+			s.Log.WarnContext(r.Context(), "notify settings change", "err", err)
+		}
+	case s.Job != nil:
 		s.Job.SetInterval(applied.Interval)
 	}
 	s.Log.InfoContext(r.Context(), "recommender settings updated", "version", v, "by", PrincipalFrom(r.Context()).Actor().Name)
