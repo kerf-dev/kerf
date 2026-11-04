@@ -1,0 +1,126 @@
+# Static prices for the pricing service's `static` provider (WO-03). Used locally and in tests.
+#
+# Values are USD per hour for Linux, shared tenancy, eu-west-1 (Ireland), approximating AWS list
+# prices in late 2026. They are dev data, not a source of truth: production uses `--provider aws`.
+# On-demand prices are per region; spot prices may be set per zone (spotByZone), with `spot` used for
+# any other zone. An instance type needs an entry under instanceTypes (vCPU and GiB as sold).
+#
+# The real spokes use m6i.xlarge on-demand (ro-spoke-1, eu-west-1a) and c6a.2xlarge spot
+# (ro-spoke-2, eu-west-1b); synth-a/synth-b also use these types. The c/m/r siblings of each family
+# let the service derive the vCPU:GiB price weight (see internal/pricing/split.go).
+
+instanceTypes:
+  # general purpose
+  m5.large:     {vcpu: 2, memoryGiB: 8}
+  m5.xlarge:    {vcpu: 4, memoryGiB: 16}
+  m5.2xlarge:   {vcpu: 8, memoryGiB: 32}
+  m6i.large:    {vcpu: 2, memoryGiB: 8}
+  m6i.xlarge:   {vcpu: 4, memoryGiB: 16}
+  m6i.2xlarge:  {vcpu: 8, memoryGiB: 32}
+  m6i.4xlarge:  {vcpu: 16, memoryGiB: 64}
+  m6a.large:    {vcpu: 2, memoryGiB: 8}
+  m6a.xlarge:   {vcpu: 4, memoryGiB: 16}
+  m6a.2xlarge:  {vcpu: 8, memoryGiB: 32}
+  m6a.4xlarge:  {vcpu: 16, memoryGiB: 64}
+  m6g.large:    {vcpu: 2, memoryGiB: 8}
+  m6g.xlarge:   {vcpu: 4, memoryGiB: 16}
+  m6g.2xlarge:  {vcpu: 8, memoryGiB: 32}
+  m7i.large:    {vcpu: 2, memoryGiB: 8}
+  m7i.xlarge:   {vcpu: 4, memoryGiB: 16}
+  m7i.2xlarge:  {vcpu: 8, memoryGiB: 32}
+  # compute optimized
+  c5.large:     {vcpu: 2, memoryGiB: 4}
+  c5.xlarge:    {vcpu: 4, memoryGiB: 8}
+  c5.2xlarge:   {vcpu: 8, memoryGiB: 16}
+  c6i.large:    {vcpu: 2, memoryGiB: 4}
+  c6i.xlarge:   {vcpu: 4, memoryGiB: 8}
+  c6i.2xlarge:  {vcpu: 8, memoryGiB: 16}
+  c6i.4xlarge:  {vcpu: 16, memoryGiB: 32}
+  c6a.large:    {vcpu: 2, memoryGiB: 4}
+  c6a.xlarge:   {vcpu: 4, memoryGiB: 8}
+  c6a.2xlarge:  {vcpu: 8, memoryGiB: 16}
+  c6a.4xlarge:  {vcpu: 16, memoryGiB: 32}
+  c6g.large:    {vcpu: 2, memoryGiB: 4}
+  c6g.xlarge:   {vcpu: 4, memoryGiB: 8}
+  c6g.2xlarge:  {vcpu: 8, memoryGiB: 16}
+  c7i.large:    {vcpu: 2, memoryGiB: 4}
+  c7i.xlarge:   {vcpu: 4, memoryGiB: 8}
+  c7i.2xlarge:  {vcpu: 8, memoryGiB: 16}
+  # memory optimized
+  r5.large:     {vcpu: 2, memoryGiB: 16}
+  r5.xlarge:    {vcpu: 4, memoryGiB: 32}
+  r5.2xlarge:   {vcpu: 8, memoryGiB: 64}
+  r6i.large:    {vcpu: 2, memoryGiB: 16}
+  r6i.xlarge:   {vcpu: 4, memoryGiB: 32}
+  r6i.2xlarge:  {vcpu: 8, memoryGiB: 64}
+  r6i.4xlarge:  {vcpu: 16, memoryGiB: 128}
+  r6a.large:    {vcpu: 2, memoryGiB: 16}
+  r6a.xlarge:   {vcpu: 4, memoryGiB: 32}
+  r6a.2xlarge:  {vcpu: 8, memoryGiB: 64}
+  r6a.4xlarge:  {vcpu: 16, memoryGiB: 128}
+  r6g.large:    {vcpu: 2, memoryGiB: 16}
+  r6g.xlarge:   {vcpu: 4, memoryGiB: 32}
+  r6g.2xlarge:  {vcpu: 8, memoryGiB: 64}
+  r7i.large:    {vcpu: 2, memoryGiB: 16}
+  r7i.xlarge:   {vcpu: 4, memoryGiB: 32}
+  r7i.2xlarge:  {vcpu: 8, memoryGiB: 64}
+
+regions:
+  eu-west-1:
+    m5.large:    {onDemand: 0.107,  spot: 0.0412}
+    m5.xlarge:   {onDemand: 0.214,  spot: 0.0838}
+    m5.2xlarge:  {onDemand: 0.428,  spot: 0.1690}
+    m6i.large:   {onDemand: 0.107,  spot: 0.0405}
+    m6i.xlarge:
+      onDemand: 0.214
+      spot: 0.0812
+      spotByZone: {eu-west-1a: 0.0798, eu-west-1b: 0.0821, eu-west-1c: 0.0817}
+    m6i.2xlarge: {onDemand: 0.428,  spot: 0.1633}
+    m6i.4xlarge: {onDemand: 0.856,  spot: 0.3301}
+    m6a.large:   {onDemand: 0.0963, spot: 0.0371}
+    m6a.xlarge:  {onDemand: 0.1926, spot: 0.0744}
+    m6a.2xlarge: {onDemand: 0.3852, spot: 0.1502}
+    m6a.4xlarge: {onDemand: 0.7704, spot: 0.3004}
+    m6g.large:   {onDemand: 0.086,  spot: 0.0335}
+    m6g.xlarge:  {onDemand: 0.172,  spot: 0.0671}
+    m6g.2xlarge: {onDemand: 0.344,  spot: 0.1342}
+    m7i.large:   {onDemand: 0.1124, spot: 0.0452}
+    m7i.xlarge:  {onDemand: 0.2247, spot: 0.0903}
+    m7i.2xlarge: {onDemand: 0.4494, spot: 0.1811}
+    c5.large:    {onDemand: 0.096,  spot: 0.0376}
+    c5.xlarge:   {onDemand: 0.192,  spot: 0.0751}
+    c5.2xlarge:  {onDemand: 0.384,  spot: 0.1488}
+    c6i.large:   {onDemand: 0.096,  spot: 0.0368}
+    c6i.xlarge:  {onDemand: 0.192,  spot: 0.0735}
+    c6i.2xlarge: {onDemand: 0.384,  spot: 0.1471}
+    c6i.4xlarge: {onDemand: 0.768,  spot: 0.2941}
+    c6a.large:   {onDemand: 0.0864, spot: 0.0339}
+    c6a.xlarge:  {onDemand: 0.1728, spot: 0.0676}
+    c6a.2xlarge:
+      onDemand: 0.3456
+      spot: 0.1357
+      spotByZone: {eu-west-1a: 0.1329, eu-west-1b: 0.1356, eu-west-1c: 0.1386}
+    c6a.4xlarge: {onDemand: 0.6912, spot: 0.2714}
+    c6g.large:   {onDemand: 0.0772, spot: 0.0298}
+    c6g.xlarge:  {onDemand: 0.1544, spot: 0.0596}
+    c6g.2xlarge: {onDemand: 0.3088, spot: 0.1193}
+    c7i.large:   {onDemand: 0.1008, spot: 0.0404}
+    c7i.xlarge:  {onDemand: 0.2016, spot: 0.0809}
+    c7i.2xlarge: {onDemand: 0.4032, spot: 0.1617}
+    r5.large:    {onDemand: 0.141,  spot: 0.0499}
+    r5.xlarge:   {onDemand: 0.282,  spot: 0.0996}
+    r5.2xlarge:  {onDemand: 0.564,  spot: 0.1987}
+    r6i.large:   {onDemand: 0.141,  spot: 0.0497}
+    r6i.xlarge:  {onDemand: 0.282,  spot: 0.0991}
+    r6i.2xlarge: {onDemand: 0.564,  spot: 0.1979}
+    r6i.4xlarge: {onDemand: 1.128,  spot: 0.3958}
+    r6a.large:   {onDemand: 0.1269, spot: 0.0452}
+    r6a.xlarge:  {onDemand: 0.2538, spot: 0.0903}
+    r6a.2xlarge: {onDemand: 0.5076, spot: 0.1806}
+    r6a.4xlarge: {onDemand: 1.0152, spot: 0.3612}
+    r6g.large:   {onDemand: 0.1128, spot: 0.0402}
+    r6g.xlarge:  {onDemand: 0.2256, spot: 0.0803}
+    r6g.2xlarge: {onDemand: 0.4512, spot: 0.1606}
+    r7i.large:   {onDemand: 0.1481, spot: 0.0538}
+    r7i.xlarge:  {onDemand: 0.2961, spot: 0.1075}
+    r7i.2xlarge: {onDemand: 0.5922, spot: 0.2150}

@@ -1,0 +1,7 @@
+{
+ "FormatVersion": "aws_v1",
+ "NextToken": null,
+ "PriceList": [
+  "{\"product\":{\"productFamily\":\"Compute Instance\",\"sku\":\"M7ILARGEQ7ZK9W\",\"attributes\":{\"enhancedNetworkingSupported\":\"Yes\",\"memory\":\"8 GiB\",\"vcpu\":\"2\",\"capacitystatus\":\"Used\",\"locationType\":\"AWS Region\",\"storage\":\"EBS only\",\"instanceFamily\":\"General purpose\",\"operatingSystem\":\"Linux\",\"regionCode\":\"eu-west-1\",\"physicalProcessor\":\"Intel Xeon Platinum 8488C\",\"networkPerformance\":\"Up to 12500 Megabit\",\"servicename\":\"Amazon Elastic Compute Cloud\",\"instanceType\":\"m7i.large\",\"tenancy\":\"Shared\",\"usagetype\":\"EU-BoxUsage:m7i.large\",\"servicecode\":\"AmazonEC2\",\"licenseModel\":\"No License required\",\"currentGeneration\":\"Yes\",\"preInstalledSw\":\"NA\",\"location\":\"EU (Ireland)\",\"processorArchitecture\":\"64-bit\",\"marketoption\":\"OnDemand\",\"operation\":\"RunInstances\",\"availabilityzone\":\"NA\"}},\"serviceCode\":\"AmazonEC2\",\"terms\":{\"OnDemand\":{\"M7ILARGEQ7ZK9W.JRTCKXETXF\":{\"priceDimensions\":{\"M7ILARGEQ7ZK9W.JRTCKXETXF.6YS6EN2CT7\":{\"unit\":\"Hrs\",\"endRange\":\"Inf\",\"beginRange\":\"0\",\"appliesTo\":[],\"description\":\"$0.1124 per On Demand Linux m7i.large Instance Hour\",\"rateCode\":\"M7ILARGEQ7ZK9W.JRTCKXETXF.6YS6EN2CT7\",\"pricePerUnit\":{\"USD\":\"0.1124000000\"}}},\"sku\":\"M7ILARGEQ7ZK9W\",\"effectiveDate\":\"2026-10-01T00:00:00Z\",\"offerTermCode\":\"JRTCKXETXF\",\"termAttributes\":{}}}},\"version\":\"20261001000000\",\"publicationDate\":\"2026-10-01T00:00:00Z\"}"
+ ]
+}
