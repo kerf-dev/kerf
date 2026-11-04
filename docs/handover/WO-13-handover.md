@@ -52,16 +52,12 @@ Flags `--max-pod-deletes-per-run`, `--ondelete-settle`; chart values `onDelete.m
 `onDelete.settle`. RBAC (chart): `pods/eviction create` (dropped with `readOnly`), `policy
 poddisruptionbudgets get list watch`.
 
-## Contract additions to make (WO-00 / orchestrator)
-Defined in agent code until then (the hub does not validate reasons):
-- `api/v1alpha1/wellknown.go`: `ReasonSingleReplicaUnsafe = "SingleReplicaUnsafe"` (blocked),
-  `ReasonPodDisruptionBudget = "PodDisruptionBudget"` (blocked), and the user annotation
-  `AnnotationAllowDisruption = Prefix + "allow-disruption"`. Today: `guardrails.ReasonSingleReplicaUnsafe`,
-  `guardrails.ReasonPodDisruptionBudget`, `apply.AnnotationAllowDisruption`.
-- `docs/contracts/events.md` rows: `SingleReplicaUnsafe` — "one replica (or a PDB allowing no disruption) and
-  the change would leave no Ready pod (in-place needs a restart, or the rollout has no surge); opt in with
-  allow-disruption"; `PodDisruptionBudget` — "an OnDelete StatefulSet pod eviction was refused by a PDB; retried".
-- Web (WO-14): show both reasons; `details.fallbackReason` on SingleReplicaUnsafe, `details.pod` on PodDisruptionBudget.
+## Contract (WO-13b)
+`api/v1alpha1/wellknown.go`: `ReasonSingleReplicaUnsafe`, `ReasonPodDisruptionBudget` (both `blocked`) and the user
+annotation `AnnotationAllowDisruption` (`resource-optimizer.oz.io/allow-disruption`); rows in
+`docs/contracts/events.md`. No new condition-only reasons (OnDelete progress is in the Applied message).
+Event details: `fallbackReason` on SingleReplicaUnsafe from a refused fallback, `pod` on PodDisruptionBudget.
+Web (WO-14) may want labels for both reasons.
 
 ## Verification
 - `go test ./internal/agent/... -cover`: apply 58.6%, controller 83.7%, guardrails 86.7% (all ok except
