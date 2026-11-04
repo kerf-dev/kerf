@@ -88,6 +88,27 @@ type RightsizingRecommendationSpec struct {
 	// Source is the hub recommendation this was built from.
 	// +required
 	Source RecommendationSource `json:"source"`
+	// HPA is the HPA utilization target applied together with the containers (WO-11): set when
+	// the workload's HPA scales on the utilization of a resource whose requests change.
+	// +optional
+	HPA *HPATarget `json:"hpa,omitempty"`
+}
+
+// HPATarget is an HorizontalPodAutoscaler's averageUtilization target for one resource (WO-11).
+type HPATarget struct {
+	// Name of the HPA, in the same namespace.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+	// Resource the HPA scales on (Resource metric, Utilization target).
+	// +required
+	// +kubebuilder:validation:Enum=cpu;memory
+	Resource corev1.ResourceName `json:"resource"`
+	// AverageUtilization target in percent.
+	// +required
+	// +kubebuilder:validation:Minimum=1
+	AverageUtilization int32 `json:"averageUtilization"`
 }
 
 // EffectivePolicy is the result of policy resolution for a workload (D-005).
@@ -132,6 +153,11 @@ type RightsizingRecommendationStatus struct {
 	// +listType=map
 	// +listMapKey=name
 	Previous []ContainerResources `json:"previous,omitempty"`
+	// PreviousHPATarget is the HPA target that was live before the most recent apply (WO-11),
+	// restored by a rollback together with the containers.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	PreviousHPATarget *int32 `json:"previousHPATarget,omitempty"`
 	// AppliedAt is when the most recent change became live.
 	// +optional
 	AppliedAt *metav1.Time `json:"appliedAt,omitempty"`

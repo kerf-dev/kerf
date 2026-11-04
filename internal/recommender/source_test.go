@@ -95,6 +95,7 @@ type sourceQueries struct {
 	cpu, mem, pods, cpu24h, mem24h, throttle string
 	oom, restarts, init, hpa, hpaMetrics     string
 	images                                   string
+	hpaMin, hpaMax, hpaPeak                  string
 	priceCPU, priceMem, priceNodes           string
 	// res[metric][init][lookback>0]
 	res map[string]map[bool]map[bool]string
@@ -115,6 +116,9 @@ func buildSourceQueries(cfg Config) sourceQueries {
 		hpa:        q.HPAInfo(cfg.InventoryLookback),
 		hpaMetrics: q.HPAMetrics(cfg.InventoryLookback),
 		images:     q.ContainerImages(cfg.InventoryLookback),
+		hpaMin:     q.HPAReplicaBounds("min", cfg.InventoryLookback),
+		hpaMax:     q.HPAReplicaBounds("max", cfg.InventoryLookback),
+		hpaPeak:    q.HPAPeakReplicas(14 * 24 * time.Hour),
 		res:        map[string]map[bool]map[bool]string{},
 	}
 	sq.priceCPU, sq.priceNodes = q.Pricing("ro_cpu_core_hourly_cost_usd", time.Hour)
@@ -230,9 +234,12 @@ func sourceFixture(cfg Config) (*fakeQuerier, sourceQueries) {
 	f.instant[sq.hpa] = []VectorSample{vs(hpaL("web-hpa", "Deployment", "web"), 1), vs(hpaL("orphan", "Deployment", "gone"), 1)}
 	f.instant[sq.hpaMetrics] = []VectorSample{
 		vs(hpaL("web-hpa", "", "", "metric_name", "http_requests", "metric_target_type", "averagevalue"), 1),
-		vs(hpaL("web-hpa", "", "", "metric_name", "cpu", "metric_target_type", "utilization"), 1),
-		vs(hpaL("orphan", "", "", "metric_name", "memory", "metric_target_type", "utilization"), 1),
+		vs(hpaL("web-hpa", "", "", "metric_name", "cpu", "metric_target_type", "utilization"), 60),
+		vs(hpaL("orphan", "", "", "metric_name", "memory", "metric_target_type", "utilization"), 70),
 	}
+	f.instant[sq.hpaMin] = []VectorSample{vs(hpaL("web-hpa", "", ""), 2), vs(hpaL("orphan", "", ""), 1)}
+	f.instant[sq.hpaMax] = []VectorSample{vs(hpaL("web-hpa", "", ""), 6), vs(hpaL("orphan", "", ""), 3)}
+	f.instant[sq.hpaPeak] = []VectorSample{vs(hpaL("web-hpa", "", ""), 4)}
 	f.instant[sq.priceCPU] = []VectorSample{vs(Labels{"cluster": "c1"}, 0.03)}
 	f.instant[sq.priceMem] = []VectorSample{vs(Labels{"cluster": "c1"}, 0.004)}
 	f.instant[sq.priceNodes] = []VectorSample{vs(Labels{"cluster": "c1"}, 5)}
@@ -371,7 +378,8 @@ func TestSourceLoad(t *testing.T) {
 		{
 			name: "hpa attached to its target",
 			check: func(t *testing.T, d *ClusterData) {
-				want := &HPA{Name: "web-hpa", Metrics: []string{"cpu/utilization", "http_requests/averagevalue"}}
+				want := &HPA{Name: "web-hpa", Metrics: []string{"cpu/utilization", "http_requests/averagevalue"},
+					Targets: map[string]float64{"cpu": 60}, MinReplicas: 2, MaxReplicas: 6, PeakReplicas: 4}
 				h := d.Workloads[keyWeb].HPA
 				if !reflect.DeepEqual(h, want) {
 					t.Fatalf("web HPA = %+v, want %+v", h, want)
@@ -492,6 +500,10 @@ func TestSourceLoadQueries(t *testing.T) {
 	cfg := DefaultConfig()
 	f, sq := sourceFixture(cfg)
 	window := 28 * 24 * time.Hour
+	// The peak replicas cover the loaded window.
+	q := Queries{Cluster: "c1", RateWindow: cfg.RateWindow}
+	f.instant[q.HPAPeakReplicas(window)] = f.instant[sq.hpaPeak]
+	delete(f.instant, sq.hpaPeak)
 	src := &Source{Q: f, Cfg: cfg} // default concurrency
 	if _, err := src.Load(context.Background(), "c1", testEnd.Add(time.Minute), window); err != nil {
 		t.Fatal(err)
@@ -516,8 +528,8 @@ func TestSourceLoadQueries(t *testing.T) {
 	for q := range f.instant {
 		instants = append(instants, q)
 	}
-	if len(instants) != 17 {
-		t.Errorf("fixture has %d instant queries, want 17", len(instants))
+	if len(instants) != 20 {
+		t.Errorf("fixture has %d instant queries, want 20", len(instants))
 	}
 	for _, q := range instants {
 		if got, ok := f.called[q]; !ok || !got.Equal(testEnd) {
