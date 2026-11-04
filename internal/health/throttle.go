@@ -48,6 +48,32 @@ type PromSource struct {
 	URL       string
 	TokenFile string
 	HTTP      *http.Client
+	// Selector selects this cluster's series (the cluster's metrics binding, D-025); nil = label
+	// cluster = the cluster name.
+	Selector *MetricsSelector
+}
+
+// MetricsSelector is the cluster part of a metrics binding: label Label = Value ("" Label = no
+// cluster matcher) plus extra PromQL label matchers.
+type MetricsSelector struct {
+	Label string
+	Value string
+	Extra []string
+}
+
+func (m *MetricsSelector) matchers(cluster string) []string {
+	if m == nil {
+		return []string{fmt.Sprintf("cluster=%q", cluster)}
+	}
+	var out []string
+	if m.Label != "" {
+		v := m.Value
+		if v == "" {
+			v = cluster
+		}
+		out = append(out, fmt.Sprintf("%s=%q", m.Label, v))
+	}
+	return append(out, m.Extra...)
 }
 
 // Name implements ThrottleSource.
@@ -55,6 +81,11 @@ func (p *PromSource) Name() string { return "promql" }
 
 // ThrottlingQuery builds the PromQL for the throttling ratio of the given containers.
 func ThrottlingQuery(q ThrottleQuery, window time.Duration) string {
+	return ThrottlingQuerySelector(q, window, nil)
+}
+
+// ThrottlingQuerySelector is ThrottlingQuery with the cluster's metrics selector.
+func ThrottlingQuerySelector(q ThrottleQuery, window time.Duration, ms *MetricsSelector) string {
 	pods := make([]string, 0, len(q.Pods))
 	for _, p := range q.Pods {
 		pods = append(pods, regexp.QuoteMeta(p.Name))
@@ -63,7 +94,9 @@ func ThrottlingQuery(q ThrottleQuery, window time.Duration) string {
 	for _, c := range q.Containers {
 		ctrs = append(ctrs, regexp.QuoteMeta(c))
 	}
-	sel := fmt.Sprintf(`{cluster=%q,namespace=%q,pod=~%q,container=~%q}`, q.Cluster, q.Namespace, strings.Join(pods, "|"), strings.Join(ctrs, "|"))
+	parts := append(ms.matchers(q.Cluster), fmt.Sprintf("namespace=%q", q.Namespace), fmt.Sprintf("pod=~%q", strings.Join(pods, "|")),
+		fmt.Sprintf("container=~%q", strings.Join(ctrs, "|")))
+	sel := "{" + strings.Join(parts, ",") + "}"
 	w := fmt.Sprintf("%ds", int(window.Seconds()))
 	return fmt.Sprintf(`sum(increase(container_cpu_cfs_throttled_periods_total%s[%s])) / sum(increase(container_cpu_cfs_periods_total%s[%s]))`+
 		` and sum(increase(container_cpu_cfs_periods_total%s[%s])) >= %d`, sel, w, sel, w, sel, w, minPeriods)
@@ -79,7 +112,7 @@ func (p *PromSource) Ratio(ctx context.Context, q ThrottleQuery) (float64, bool,
 	if err != nil {
 		return 0, false, err
 	}
-	u.RawQuery = url.Values{"query": {ThrottlingQuery(q, window)}}.Encode()
+	u.RawQuery = url.Values{"query": {ThrottlingQuerySelector(q, window, p.Selector)}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return 0, false, err

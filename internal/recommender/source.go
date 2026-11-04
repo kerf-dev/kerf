@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
 	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
 )
 
@@ -70,6 +71,25 @@ type Source struct {
 	Cfg Config
 	// Concurrency bounds parallel queries per cluster.
 	Concurrency int
+	// Binder returns where a cluster's metrics are (D-025): its datasource and the matcher of its
+	// series. nil, or a nil matcher, = Q with label cluster (the queries before D-025). Pricing
+	// series are always read from Q (the hub's own store).
+	Binder func(ctx context.Context, cluster string) (Querier, *datasource.Matcher, error)
+}
+
+// bind returns the querier and matcher of a cluster's metrics.
+func (s *Source) bind(ctx context.Context, cluster string) (Querier, *datasource.Matcher, error) {
+	if s.Binder == nil {
+		return s.Q, nil, nil
+	}
+	q, m, err := s.Binder(ctx, cluster)
+	if err != nil {
+		return nil, nil, fmt.Errorf("metrics binding of %s: %w", cluster, err)
+	}
+	if q == nil {
+		q = s.Q
+	}
+	return q, m, nil
 }
 
 // Load reads everything needed to recommend for one cluster. window is the longest profile window
@@ -79,7 +99,11 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	step := cfg.Step
 	end = end.Truncate(step)
 	start := end.Add(-window)
-	q := Queries{Cluster: cluster, RateWindow: cfg.RateWindow}
+	data, binding, err := s.bind(ctx, cluster)
+	if err != nil {
+		return nil, err
+	}
+	q := Queries{Cluster: cluster, RateWindow: cfg.RateWindow, Binding: binding}
 	d := &ClusterData{Cluster: cluster, End: end, Window: window, Workloads: map[hubapi.WorkloadKey]*RawWorkload{}}
 
 	var mu sync.Mutex
@@ -117,7 +141,7 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	g.SetLimit(conc)
 	rangeQ := func(name, query string, from time.Time, st time.Duration, apply func(Series)) {
 		g.Go(func() error {
-			res, err := s.Q.Range(gctx, query, from, end, st)
+			res, err := data.Range(gctx, query, from, end, st)
 			if err != nil {
 				return fmt.Errorf("%s: %w", name, err)
 			}
@@ -129,9 +153,9 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 			return nil
 		})
 	}
-	instantQ := func(name, query string, apply func(VectorSample)) {
+	instantOn := func(src Querier, name, query string, apply func(VectorSample)) {
 		g.Go(func() error {
-			res, err := s.Q.Instant(gctx, query, end)
+			res, err := src.Instant(gctx, query, end)
 			if err != nil {
 				return fmt.Errorf("%s: %w", name, err)
 			}
@@ -143,6 +167,7 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 			return nil
 		})
 	}
+	instantQ := func(name, query string, apply func(VectorSample)) { instantOn(data, name, query, apply) }
 
 	rangeQ("cpu", q.CPUUsage("max", nil), start, step, func(r Series) {
 		if c := container(r.Labels); c != nil {
@@ -233,7 +258,7 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 				query := q.Resources(metric, init, lb, nil)
 				name := fmt.Sprintf("%s(init=%v,lookback=%s)", metric, init, lb)
 				g.Go(func() error {
-					r, err := s.Q.Instant(gctx, query, end)
+					r, err := data.Instant(gctx, query, end)
 					if err != nil {
 						return fmt.Errorf("%s: %w", name, err)
 					}
@@ -290,9 +315,10 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	var cpuRate, memRate, nodes float64
 	cpuAvg, cpuCount := q.Pricing("ro_cpu_core_hourly_cost_usd", time.Hour)
 	memAvg, _ := q.Pricing("ro_memory_gib_hourly_cost_usd", time.Hour)
-	instantQ("pricingCPU", cpuAvg, func(r VectorSample) { cpuRate = r.Sample.V })
-	instantQ("pricingMemory", memAvg, func(r VectorSample) { memRate = r.Sample.V })
-	instantQ("pricingNodes", cpuCount, func(r VectorSample) { nodes = r.Sample.V })
+	// Pricing series are in the hub's own store.
+	instantOn(s.Q, "pricingCPU", cpuAvg, func(r VectorSample) { cpuRate = r.Sample.V })
+	instantOn(s.Q, "pricingMemory", memAvg, func(r VectorSample) { memRate = r.Sample.V })
+	instantOn(s.Q, "pricingNodes", cpuCount, func(r VectorSample) { nodes = r.Sample.V })
 
 	if err := g.Wait(); err != nil {
 		return nil, err

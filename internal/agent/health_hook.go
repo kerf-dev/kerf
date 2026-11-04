@@ -20,6 +20,9 @@ type HealthConfig struct {
 	// VictoriaMetrics); empty disables it.
 	MetricsURL       string
 	MetricsTokenFile string
+	// MetricsSelector selects the cluster's series at MetricsURL (its metrics binding, D-025);
+	// nil = label cluster = the cluster name.
+	MetricsSelector *health.MetricsSelector
 	// CadvisorFallback reads throttling from the kubelets (nodes/proxy) when MetricsURL fails.
 	CadvisorFallback    bool
 	CheckInterval       time.Duration
@@ -36,7 +39,7 @@ func SetupHealth(mgr manager.Manager, r *controller.Reconciler, cfg HealthConfig
 	}
 	var sources []health.ThrottleSource
 	if cfg.MetricsURL != "" {
-		sources = append(sources, &health.PromSource{URL: cfg.MetricsURL, TokenFile: cfg.MetricsTokenFile})
+		sources = append(sources, &health.PromSource{URL: cfg.MetricsURL, TokenFile: cfg.MetricsTokenFile, Selector: cfg.MetricsSelector})
 	}
 	if cfg.CadvisorFallback {
 		cs, err := kubernetes.NewForConfig(mgr.GetConfig())

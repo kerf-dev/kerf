@@ -264,3 +264,34 @@ type InstallSnippet struct {
 	ArgoCDIgnoreDifferences string   `json:"argocdIgnoreDifferences"`
 	Notes                   []string `json:"notes,omitempty"`
 }
+
+// ClusterMetricsBinding is a cluster's metrics binding for the pricing service (D-026). Bound is
+// false for clusters without a stored binding (datasource local, label cluster = the name).
+type ClusterMetricsBinding struct {
+	Cluster string         `json:"cluster"`
+	Binding MetricsBinding `json:"binding"`
+	Bound   bool           `json:"bound"`
+}
+
+// MetricsBindingList is the response of GET /v1/internal/metrics-bindings.
+type MetricsBindingList struct {
+	Items []ClusterMetricsBinding `json:"items"`
+}
+
+// PromQueryForm are the parameters the datasource query proxy forwards (D-026).
+type PromQueryForm struct {
+	Query   string `json:"query"`
+	Time    string `json:"time,omitempty"`
+	Start   string `json:"start,omitempty"`
+	End     string `json:"end,omitempty"`
+	Step    string `json:"step,omitempty"`
+	Timeout string `json:"timeout,omitempty"`
+}
+
+// PromQueryResponse is a Prometheus HTTP API response, passed through by the proxy.
+type PromQueryResponse struct {
+	Status    string         `json:"status"`
+	Data      map[string]any `json:"data,omitempty"`
+	ErrorType string         `json:"errorType,omitempty"`
+	Error     string         `json:"error,omitempty"`
+}

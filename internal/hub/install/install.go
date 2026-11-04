@@ -7,6 +7,7 @@ package install
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -50,9 +51,21 @@ type Options struct {
 	Webhook, CertManager bool
 	// CertManagerChart / CertManagerVersion default to DefaultCertManagerRef / Ver.
 	CertManagerChart, CertManagerVersion string
+	// Health is the cluster's metrics binding for the agent's throttling health watch (D-025);
+	// nil = the chart defaults (hub VictoriaMetrics, label cluster).
+	Health *HealthMetrics
 	// ArgoCDNamespace and ArgoCDProject of the Application (defaults argocd, default);
 	// DestinationServer defaults to the in-cluster API server.
 	ArgoCDNamespace, ArgoCDProject, DestinationServer string
+}
+
+// HealthMetrics are the agent chart's health.* values selecting the cluster's series.
+type HealthMetrics struct {
+	// MetricsURL is set when the agent can query the datasource directly (no auth).
+	MetricsURL        string   `yaml:"metricsURL,omitempty"`
+	ClusterLabel      string   `yaml:"clusterLabel"`
+	ClusterLabelValue string   `yaml:"clusterLabelValue,omitempty"`
+	ExtraMatchers     []string `yaml:"extraMatchers,omitempty"`
 }
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -195,6 +208,19 @@ func helmScript(o Options) string {
 	if o.ReadOnly {
 		b.WriteString(" \\\n  --set readOnly=true")
 	}
+	if h := o.Health; h != nil {
+		if h.MetricsURL != "" {
+			fmt.Fprintf(&b, " \\\n  --set-string health.metricsURL=%s", shellQuote(h.MetricsURL))
+		}
+		fmt.Fprintf(&b, " \\\n  --set-string health.clusterLabel=%s", shellQuote(h.ClusterLabel))
+		if h.ClusterLabelValue != "" {
+			fmt.Fprintf(&b, " \\\n  --set-string health.clusterLabelValue=%s", shellQuote(h.ClusterLabelValue))
+		}
+		if len(h.ExtraMatchers) > 0 {
+			j, _ := json.Marshal(h.ExtraMatchers)
+			fmt.Fprintf(&b, " \\\n  --set-json health.extraMatchers=%s", shellQuote(string(j)))
+		}
+	}
 	b.WriteString("\n")
 	if o.Webhook {
 		fmt.Fprintf(&b, "\nhelm upgrade --install webhook %s -n %s --wait \\\n  --set-string clusterName=%s\n",
@@ -220,10 +246,11 @@ type imageValues struct {
 }
 
 type agentValues struct {
-	ClusterName string       `yaml:"clusterName"`
-	Hub         hubValues    `yaml:"hub"`
-	Image       *imageValues `yaml:"image,omitempty"`
-	ReadOnly    bool         `yaml:"readOnly"`
+	ClusterName string         `yaml:"clusterName"`
+	Hub         hubValues      `yaml:"hub"`
+	Image       *imageValues   `yaml:"image,omitempty"`
+	ReadOnly    bool           `yaml:"readOnly"`
+	Health      *HealthMetrics `yaml:"health,omitempty"`
 }
 
 func agentVals(o Options) agentValues {
@@ -231,6 +258,7 @@ func agentVals(o Options) agentValues {
 		ClusterName: o.Cluster,
 		Hub:         hubValues{URL: o.HubURL, TokenSecret: tokenSecret{Name: hubapi.AgentTokenSecretName, Key: hubapi.AgentTokenSecretKey}},
 		ReadOnly:    o.ReadOnly,
+		Health:      o.Health,
 	}
 	if o.ImageRepository != "" || o.ImageTag != "" {
 		v.Image = &imageValues{Repository: o.ImageRepository, Tag: o.ImageTag}
