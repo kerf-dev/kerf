@@ -101,6 +101,7 @@ type fakeLoader struct {
 	hidden    map[string]bool // workload ids missing from the inventory
 	empty     map[string]bool // clusters returning no workloads at all
 	noReqs    map[string]bool // workload ids without request series (HasRequests false)
+	gone      map[string]bool // workload ids with history but no pods now (Live false)
 	// noPricing: no pricing series at the window end; pricingNow (if set) is what PricingAt returns.
 	noPricing  bool
 	pricingNow *recommender.Pricing
@@ -160,7 +161,8 @@ func (l *fakeLoader) Load(_ context.Context, cluster string, end time.Time, wind
 			continue
 		}
 		n := int(w.days * 24 * float64(time.Hour/fakeStep))
-		rw := &recommender.RawWorkload{Key: w.key, Containers: map[string]*recommender.RawContainer{}, HasRequests: !l.noReqs[w.key.ID()], HPA: w.hpa}
+		rw := &recommender.RawWorkload{Key: w.key, Containers: map[string]*recommender.RawContainer{}, HasRequests: !l.noReqs[w.key.ID()], HPA: w.hpa,
+			Live: !l.noReqs[w.key.ID()] && !l.gone[w.key.ID()]}
 		for i := 0; i < n; i++ {
 			rw.Pods = append(rw.Pods, recommender.Sample{T: end.Add(-time.Duration(n-1-i) * fakeStep), V: w.replicas})
 		}

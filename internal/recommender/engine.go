@@ -50,6 +50,8 @@ type WorkloadInventory struct {
 	HPA             *HPA
 	// Used24hCPU / Used24hMemory: mean usage over the last 24 h summed over pods and containers.
 	Used24hCPU, Used24hMemory float64
+	// Live: the workload has pods at the window end (RawWorkload.Live).
+	Live bool
 }
 
 // RunCluster recommends for every workload of a cluster. settings returns the agent-reported
@@ -93,7 +95,7 @@ func (e *Engine) RunCluster(ctx context.Context, cluster string, end time.Time, 
 			jvm, jvmReported = e.JVM(k)
 		}
 		attachJVM(&data, raw, jvm, jvmReported, e.Cfg.JVM)
-		inv := WorkloadInventory{Key: k, AverageReplicas: data.AverageReplicas, HPA: raw.HPA, Containers: data.ContainerNames()}
+		inv := WorkloadInventory{Key: k, AverageReplicas: data.AverageReplicas, HPA: raw.HPA, Containers: data.ContainerNames(), Live: raw.Live}
 		for _, c := range data.Containers {
 			inv.Used24hCPU += c.Used24hCPU
 			inv.Used24hMemory += c.Used24hMemory
