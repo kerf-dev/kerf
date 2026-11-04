@@ -36,8 +36,8 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-22 | Admin: web (+ onboarding wizard, readiness UI) | 4 | done | local_9fadb724 | wo-22-admin-web | – | merged 3070005 |
 | WO-22b | Admin web polish (overflow, sync state, git read-only) | 4 | done | local_9fadb724 | wo-22b-admin-polish | – | |
 | WO-25 | Onboarding, metrics sources, readiness | 4 | done | local_14a53b46 | wo-25-onboarding-p2 | – | p1 56424f9, p2 5d25dd7; D-026 |
-| WO-25b | Gate revert; spoke-2 argocd check unknown | 4 | in-progress | local_14a53b46 | wo-25b-readiness-fixes | – | |
-| WO-22c | Readiness UI aligned with real hub | 4 | in-progress | local_9fadb724 | wo-22c-readiness-align | – | |
+| WO-25b | Gate revert; spoke-2 argocd check unknown | 4 | done | local_14a53b46 | wo-25b-readiness-fixes | – | |
+| WO-22c | Readiness UI aligned with real hub | 4 | done | local_9fadb724 | wo-22c-readiness-align | – | |
 | WO-24 | Admin: e2e (+ onboarding/readiness scenarios) | 4 | in-progress | local_7697cfde | wo-24-admin-e2e | – | KSM scenario opt-in pending user OK |
 
 ## Open questions for the user
@@ -62,3 +62,5 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-04 Migration 0011 assigned to WO-25 p2 (0011_pricing_token_role: api_tokens.role CHECK adds 'pricing' for the D-026 proxy token). 0012+ unassigned.
 - 2026-11-04 WO-21b (approve-once keeps field ownership, D-027; live Argo CD self-heal check on ro-spoke-1) and WO-22b (mode controls, /admin/clusters redirect, Git-only read-only, sync state) merged (cbc813c). `make ci` exit 0, `make web-verify` exit 0 (28/28). Agents and web deployed at main-cbc813c; hub unchanged (main-9325962). GitHub push failed (GitHub outage); a first deploy went out with an empty tag `main-` because the push failure short-circuited the SHA assignment — redeployed with the right tag within minutes.
 - 2026-11-04 WO-25 phase 2 merged (5d25dd7). `make ci` + `make web-verify` (28/28) green. Hub (0011 applied) and agents deployed at main-5d25dd7. Pricing failed to build (Dockerfile COPY list) and pointed at the spoke alias for the hub; both fixed on main (4e66418), pricing healthy via the D-026 proxy (177/177 priced). Live: ro-spoke-1/2 AutomationReady after recheck, synth-a Registered; auto-patch on synth-a → 409, override accepted and audited. Not run: KSM scale-to-0 (denied by WO-25's permission check; needs the user). Started WO-24 (local_7697cfde), WO-25b, WO-22c.
+- 2026-11-04 11:48 UTC: a WO-25b agent deploy to ro-spoke-2 overlapped a WO-24 e2e run; the e2e-* namespace pre-check missed it (the RBAC scenario creates no namespace), and helm failed on a ClusterRole field conflict with `e2e.test`. WO-24's runs were not disturbed. Fix: the suite now creates an `e2e-run-<id>` marker namespace on both spokes for the whole run, and drops its field ownership after restoring Helm-owned objects.
+- 2026-11-04 WO-25b (revert gated by readiness; spoke-2 argocd check) and WO-22c (readiness UI matches the real hub) merged (1e72c9e). `make ci` + `make web-verify` (31/31) green. Hub, web, agents deployed at main-1e72c9e; both spokes AutomationReady, integration.argocd passes on both. WO-24 final back-to-back runs started.
