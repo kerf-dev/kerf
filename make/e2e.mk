@@ -1,7 +1,7 @@
-# WO-09 end-to-end suite (test/e2e). Runs against the existing k3d environment; see test/e2e/README.md.
+# WO-09 end-to-end suite (test/e2e), with the admin-area scenarios of WO-24. Runs against the existing k3d environment; see test/e2e/README.md.
 
 E2E_TIMEOUT        ?= 40m
-E2E_PARALLEL       ?= 16
+E2E_PARALLEL       ?= 32
 E2E_RUN            ?=
 E2E_FLAGS          ?=
 E2E_LOG            ?= $(ROOT)/bin/e2e.log
@@ -11,7 +11,7 @@ export E2E_SPOKE1_CONTEXT E2E_SPOKE2_CONTEXT
 
 E2E_LABEL := e2e.resource-optimizer.oz.io/suite=true
 
-##@ End-to-end (WO-09)
+##@ End-to-end (WO-09, WO-24)
 
 .PHONY: e2e
 e2e: ## Run the e2e suite against the running clusters (E2E_RUN=TestAudit to pick scenarios).
@@ -29,7 +29,8 @@ e2e-unblock: ## Restore the spoke-2 agent's hub token if a killed run left scena
 	@bash test/e2e/unblock.sh
 
 .PHONY: e2e-clean
-e2e-clean: e2e-unblock ## Delete everything the suite created (namespaces, policies, Argo CD apps) on both spokes.
+e2e-clean: e2e-unblock ## Delete everything the suite created (namespaces, policies, Argo CD apps, hub policies/clusters/pauses).
+	@E2E_SWEEP=1 $(GO) test -tags e2e -count=1 -run '^TestHubSweep$$' ./test/e2e/... >/dev/null
 	@for c in $(E2E_SPOKE1_CONTEXT) $(E2E_SPOKE2_CONTEXT); do \
 	  kubectl --context $$c delete rightsizingpolicies -l $(E2E_LABEL) --ignore-not-found; \
 	  kubectl --context $$c delete namespaces -l $(E2E_LABEL) --ignore-not-found --wait=false; \
