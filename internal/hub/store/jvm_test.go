@@ -71,3 +71,26 @@ func TestStatusSettingsColumn(t *testing.T) {
 		t.Error("statusJVM must be nil without jvm data")
 	}
 }
+
+// TestAllRiskFlagsStorable: every RiskFlag of the API contract passes the recommendations
+// risk_flags check constraint (a new flag needs a migration, e.g. 0003 for jvm-fixed-heap).
+func TestAllRiskFlagsStorable(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	if err := st.EnsureCluster(ctx, "c1", ""); err != nil {
+		t.Fatal(err)
+	}
+	k := wkey("c1", "flags")
+	ids, err := st.UpsertInventory(ctx, "c1", inventory(k), now, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := result(k, now, "1", 1)
+	r.Recommendation.RiskFlags = append([]string{}, hubapi.AllRiskFlags...)
+	r.Recommendation.Containers[0].RiskFlags = []string{hubapi.FlagJVMFixedHeap}
+	insert(t, st, "c1", ids, r)
+	views, err := st.LoadWorkloads(ctx, WorkloadFilter{Cluster: "c1"})
+	if err != nil || len(views) != 1 || views[0].Rec == nil || !reflect.DeepEqual(views[0].Rec.RiskFlags, hubapi.AllRiskFlags) {
+		t.Fatalf("views %+v %v", views, err)
+	}
+}
