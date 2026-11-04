@@ -624,6 +624,8 @@ export interface paths {
      * Restore an earlier version
      * @description Stores a new version whose content equals version `version` (operation `revert`); reverting
      *     to a version of a deleted policy undeletes it. Records `PolicyReverted`.
+     *     A revert that newly enables `auto-patch` on a cluster that is not `AutomationReady` answers
+     *     `409` `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
      */
     post: operations['revertPolicy']
     delete?: never
@@ -2311,6 +2313,11 @@ export interface components {
     PolicyRevert: {
       version: number
       reason: components['schemas']['ReasonText']
+      /**
+       * @description Admin only (D-025): allow a revert that enables `auto-patch` on clusters that are not
+       *     `AutomationReady`. Without it such a revert answers `409 cluster_not_automation_ready`.
+       */
+      overrideReadiness?: boolean
     }
     /**
      * @description One RightsizingPolicy CR on a cluster, as the agent sees it. `valid` is the result of the

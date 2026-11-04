@@ -1251,6 +1251,8 @@ paths:
       description: |
         Stores a new version whose content equals version `version` (operation `revert`); reverting
         to a version of a deleted policy undeletes it. Records `PolicyReverted`.
+        A revert that newly enables `auto-patch` on a cluster that is not `AutomationReady` answers
+        `409` `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
       parameters:
         - $ref: '#/components/parameters/IfMatch'
         - $ref: '#/components/parameters/CSRFToken'
@@ -4728,6 +4730,11 @@ components:
           minimum: 1
         reason:
           $ref: '#/components/schemas/ReasonText'
+        overrideReadiness:
+          type: boolean
+          description: |
+            Admin only (D-025): allow a revert that enables `auto-patch` on clusters that are not
+            `AutomationReady`. Without it such a revert answers `409 cluster_not_automation_ready`.
     PolicyInventoryItem:
       type: object
       description: |

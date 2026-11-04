@@ -50,11 +50,12 @@ has status `pass` (`readiness.ComputeState`). A blocking check without a result 
 
 **Auto-patch gating.** These requests answer **`409`, code `cluster_not_automation_ready`**, when a
 target cluster is not `AutomationReady`:
-- a policy write (policies, defaults, override) that sets a mode to `auto-patch`, for any target cluster;
+- a policy write (create, update or revert of policies, defaults, overrides) that newly enables `auto-patch` (it did not
+  set it before, or it now reaches more clusters), for any target cluster;
 - an approve-once for a workload on such a cluster.
 
 `detail` lists the clusters and their states. An **admin** can send `"overrideReadiness": true` (with
-the usual `reason`) on `PolicyInput`, `WorkloadOverrideInput` or `ApprovalRequest`. The override is
+the usual `reason`) on `PolicyInput`, `PolicyRevert`, `WorkloadOverrideInput` or `ApprovalRequest`. The override is
 recorded in the `config_changed` entry (`after.overrideReadiness`). An operator sending it gets `403
 admin_required`. Existing `auto-patch` policies are not changed when a cluster drops out of
 `AutomationReady`. The agent itself still refuses writes it has no RBAC for.
