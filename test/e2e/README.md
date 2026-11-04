@@ -34,6 +34,32 @@ make e2e-vet                     # compile/vet the suite without a cluster
 | 10 | `TestRollback/restarts_after_an_in-place_CPU_change` | spoke-1 | in-place CPU decrease applied; the container is then made to crash-loop (ConfigMap) → ≥ 3 restarts → RSR `RolledBack`, pods resized back to 250m in place, template untouched, hub `rolled_back` event reason `Restarts` |
 | 11 | `TestHubUnreachable` | spoke-2 | with one workload applied and one waiting in audit, the agent is cut off from the hub (invalid hub token) for `hubStaleAfter` + 90 s; switching the waiting workload to auto-patch gives `HubUnreachable` and nothing changes for 60 s; the applied workload is not reverted; after reconnecting, the pending change is applied |
 
+### Admin area (WO-24, D-022..D-027)
+
+These drive the hub API like the web UI: logged in as the dev users `viewer`, `operator` and `admin`
+(values-dev.yaml; `E2E_<USER>_PASSWORD` overrides) with the `ro_session` cookie and `X-CSRF-Token`.
+
+| # | Test | Cluster | What is asserted |
+|---|---|---|---|
+| A1, A4 | `TestAdminPolicy` | spoke-1 | admin creates a namespace policy (audit) → hub-labelled CR with id/version/type annotations; update to auto-patch (`If-Match`) → CR v2, workload `Applied`; `config_changed` rows `PolicyCreated`/`PolicyUpdated` name the admin; revert to v1 → v3, CR back to audit, agent resolves cpu audit, `PolicyReverted` row; delete → CR removed |
+| A2 | `TestAdminPause` | spoke-2 | operator pauses ro-spoke-2 (after the agent applied the paused config) → a workload switched to auto-patch gets exactly one `blocked/Paused` and stays unchanged; an applied workload made to crash is still `RolledBack`; operator resume → the pending change is `Applied`; `AutomationPaused`/`Resumed` rows name the operator |
+| A3 | `TestApproveOnce` | spoke-1 | operator approves the latest recommendation of an audit workload → `applied/ApprovedOnce`, pods resized in place, approval `consumed`, `WorkloadApproved` row; the next recommendation (new id) is not applied |
+| A5 | `TestGitPolicyUntouched` | spoke-1 | a hub policy with the name of a Git CR (no hub label): the CR is never modified or deleted (also after the hub policy is deleted); the inventory lists it as `source: git` and the hub policy as invalid |
+| A6 | `TestAdminRoles` | registered test cluster | viewer: 403 `role_forbidden` on policy create, pause, recheck; operator: 403 on global defaults, policies and recommender settings, 403 `csrf_invalid` without the token, pause + resume of a non-prod cluster OK and audited |
+| A7 | `TestApproveOnceArgoCD` | spoke-1 | approve once on an Argo CD app with self-heal (rollout): the agent keeps the field ownership (D-027), a hard sync and 75 s of self-heal keep the approved value, app Synced |
+| A8 | `TestOnboarding` | new cluster `e2e-onb-*` | datasource test of `local` with ro-spoke-1's label finds series; registered with that binding; recheck runs the metrics checks; state stays `Registered`; auto-patch policy → 409 `cluster_not_automation_ready`; operator `overrideReadiness` → 403; admin override → 201 with `after.overrideReadiness: true`; cluster deleted |
+| A9 | `TestReadiness/*` | both spokes | after a recheck (answered by the agent) the state is `AutomationReady`, no blocking failures, every capability granted |
+| A10 | `TestReadinessRBAC` | spoke-2 | the agent's `pods/resize` rule removed from its ClusterRole → recheck → `ReadyAudit`, `rbac.resize` fail, `ReadinessChanged` row (actor system/readiness), auto-patch policy refused (409); rule restored (also on failure, and by `make e2e-unblock`) → `AutomationReady` again |
+| A11 | `TestReadinessKSMDown` | spoke-2 | **skipped unless `RO_E2E_DISRUPTIVE=1`** (needs the user's OK): kube-state-metrics scaled to 0 → `metrics.freshness` fails (blocking), state below `MetricsOK`, `summary.blocking > 0` (banner); scaled back at the end |
+
+Spoke-2 is shared by scenarios that disturb its agent (hub outage, pause, RBAC removal, KSM) or
+need it undisturbed while they apply. A suite-wide lock (`lockSpoke2`) serialises those phases;
+setup (deploying, waiting for recommendations) still runs in parallel.
+
+Hub objects: every test deletes the policies and clusters it created and resumes what it paused.
+Before the scenarios (and in `make e2e-clean`) the suite sweeps what an interrupted run left:
+hub policies and clusters named `e2e-*`, and pauses whose reason starts with `e2e `.
+
 ## How the hub is driven
 
 The real hub, not the agent's stub-hub mode: the agents are shared Helm releases (WO-06) and a
@@ -72,8 +98,9 @@ second agent with a stub hub would fight them over the same workloads.
   every 2 minutes while it waits, using the admin token from `hub-dev-tokens` (`E2E_HUB_ADMIN_TOKEN`
   overrides; `E2E_HUB_RECOMPUTE=off` disables it). Without it (404), it waits for the periodic run.
 
-Nothing outside the suite's namespaces is modified, except that temporary token swap and webhook
-scale-down.
+Nothing outside the suite's namespaces is modified, except that temporary token swap, the webhook
+scale-down, the spoke-2 pause and `pods/resize` rule removal (WO-24) and, only with
+`RO_E2E_DISRUPTIVE=1`, the kube-state-metrics scale-down; `make e2e-unblock` undoes the cluster-side ones.
 
 ## Configuration (environment)
 
@@ -88,6 +115,10 @@ scale-down.
 | `E2E_HUB_STALE_AFTER` | `5m` (the agent's `hubStaleAfter`) |
 | `E2E_INFEASIBLE_CPU` | `16` (scenario 4's CPU floor; must exceed the node's capacity) |
 | `E2E_KEEP` | set to keep namespaces/policies/apps for debugging (`make e2e-clean` later) |
+| `E2E_VIEWER_PASSWORD` / `E2E_OPERATOR_PASSWORD` / `E2E_ADMIN_PASSWORD` | dev users of values-dev.yaml |
+| `E2E_AGENT_CLUSTERROLE` | `resource-optimizer-agent` (scenario A10) |
+| `RO_E2E_DISRUPTIVE` | unset: A11 skipped; `1` runs it |
+| `E2E_KSM_NAMESPACE` / `E2E_KSM_DEPLOYMENT` | `monitoring` / `kube-state-metrics` (A11) |
 
 Prerequisites: the agents have their hub token Secret (WO-06 hand-over) and are connected.
 

@@ -64,7 +64,15 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "e2e setup:", err)
 		os.Exit(1)
 	}
-	os.Exit(m.Run())
+	if os.Getenv("E2E_KEEP") == "" {
+		if err := sweepHub(func(f string, a ...any) { fmt.Printf(f+"\n", a...) }); err != nil {
+			fmt.Fprintln(os.Stderr, "e2e setup: hub sweep:", err)
+			os.Exit(1)
+		}
+	}
+	code := m.Run()
+	logoutAll()
+	os.Exit(code)
 }
 
 func newScheme() *runtime.Scheme {

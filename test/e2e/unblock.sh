@@ -31,3 +31,25 @@ for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
     echo "scaled the webhook on $ctx back to $was"
   fi
 done
+
+# WO-24 scenario 10 removes the agent's pods/resize rule on spoke-2 for a few minutes.
+role=${E2E_AGENT_CLUSTERROLE:-resource-optimizer-agent}
+for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
+  res=$(kubectl --context "$ctx" get clusterrole "$role" -o jsonpath='{.rules[*].resources}' 2>/dev/null || true)
+  if [ -n "$res" ] && ! grep -q 'pods/resize' <<<"$res"; then
+    kubectl --context "$ctx" patch clusterrole "$role" --type json \
+      -p '[{"op":"add","path":"/rules/-","value":{"apiGroups":[""],"resources":["pods/resize"],"verbs":["patch"]}}]' >/dev/null
+    echo "restored the pods/resize rule of $role on $ctx"
+  fi
+done
+
+# WO-24 scenario 11 (RO_E2E_DISRUPTIVE=1) scales kube-state-metrics on spoke-2 to 0.
+ksm_ns=${E2E_KSM_NAMESPACE:-monitoring}
+ksm=${E2E_KSM_DEPLOYMENT:-kube-state-metrics}
+was=$(kubectl --context "$spoke_ctx" -n "$ksm_ns" get deploy "$ksm" \
+  -o jsonpath='{.metadata.annotations.e2e\.resource-optimizer\.oz\.io/scaled-from}' 2>/dev/null || true)
+if [ -n "$was" ]; then
+  kubectl --context "$spoke_ctx" -n "$ksm_ns" scale deploy "$ksm" --replicas="$was" >/dev/null
+  kubectl --context "$spoke_ctx" -n "$ksm_ns" annotate deploy "$ksm" e2e.resource-optimizer.oz.io/scaled-from- >/dev/null
+  echo "scaled $ksm on $spoke_ctx back to $was"
+fi

@@ -126,9 +126,12 @@ func TestHubUnreachable(t *testing.T) {
 	pa := autoCPU(v1alpha1.StrategyInPlace)
 	pa.Selector.MatchLabels = map[string]string{"e2e-role": "applied"}
 	pa.Priority = 1001
+	// The apply and, below, the outage must not overlap the other spoke-2 scenarios (lockSpoke2).
+	waitHubRecommendation(t, cl, ns, deployment, "applied", cpuBelow(overCPU))
+	unlock := lockSpoke2(t)
 	armed(t, cl, ns+"-applied", ns, "applied", overCPU, pa)
-
 	waitPhase(t, cl, ns, deployment, "applied", v1alpha1.PhaseApplied)
+	unlock()
 	// "held" must have a representative recommendation cached by the agent before the outage.
 	waitHubRecommendation(t, cl, ns, deployment, "held", cpuBelow(overCPU))
 	waitReason(t, cl, ns, deployment, "held", v1alpha1.ReasonModeAudit, 3*time.Minute)
@@ -136,6 +139,7 @@ func TestHubUnreachable(t *testing.T) {
 	appliedPods := snapshot(t, cl, ns, "applied")
 	heldPods := snapshot(t, cl, ns, "held")
 
+	lockSpoke2(t)
 	restore := blockHub(t, cl)
 	// hubStaleAfter, plus up to ~1 min for the kubelet to refresh the mounted Secret.
 	wait := staleAfter + 90*time.Second
