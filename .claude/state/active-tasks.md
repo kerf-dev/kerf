@@ -32,9 +32,9 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-19 | Admin: contract (+ onboarding/readiness contract) | 4 | done | local_7697cfde | wo-19-admin-contract | – | Migrations 0007–0010 assigned |
 | WO-20 | Admin: hub | 4 | done | local_9125207c | wo-20-admin-hub | – | merged 70e02d1 |
 | WO-21 | Admin: agent | 4 | done | local_11de0a00 | wo-21-admin-agent | – | merged d2a50b6 |
-| WO-21b | Approve-once keeps field ownership (D-027) | 4 | in-progress | local_11de0a00 | wo-21b-approve-ownership | – | |
+| WO-21b | Approve-once keeps field ownership (D-027) | 4 | done | local_11de0a00 | wo-21b-approve-ownership | – | |
 | WO-22 | Admin: web (+ onboarding wizard, readiness UI) | 4 | done | local_9fadb724 | wo-22-admin-web | – | merged 3070005 |
-| WO-22b | Admin web polish (overflow, sync state, git read-only) | 4 | in-progress | local_9fadb724 | wo-22b-admin-polish | – | |
+| WO-22b | Admin web polish (overflow, sync state, git read-only) | 4 | done | local_9fadb724 | wo-22b-admin-polish | – | |
 | WO-25 | Onboarding, metrics sources, readiness | 4 | in-progress (phase 2) | local_14a53b46 | wo-25-onboarding-p2 | – | phase 1 merged 56424f9; D-026 |
 | WO-24 | Admin: e2e | 4 | todo | – | wo-24-admin-e2e | WO-25 p2, WO-21b (shared spokes) | |
 
@@ -58,3 +58,4 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-04 WO-19 merged (59539ee): hub.yaml 19 → 90 operations, purely additive (no removed ops/props, no new required fields on existing schemas); migrations 0007–0010; shared validator api/v1alpha1/validate. `make ci` exit 0, web gen:api:check + typecheck pass. WO-20/21/22/25 started in parallel.
 - 2026-11-04 WO-20, WO-21, WO-22 and WO-25 phase 1 merged (9325962; only go.mod overlapped). `make ci` exit 0 (lint 0 issues, Postgres tests), `make web-verify` exit 0 (25/25 Playwright). Deployed hub, agents (both spokes, CRDs re-applied) and web at main-9325962; migrations 0007–0010 applied, dev users seeded. Live: admin login via API and UI; hub policy → CR on ro-spoke-1 in 22 s, delete and pause/resume followed on the next pull; audit rows carry actor, reason, before/after. D-026, D-027 logged. Started WO-25 phase 2, WO-21b, WO-22b.
 - 2026-11-04 Migration 0011 assigned to WO-25 p2 (0011_pricing_token_role: api_tokens.role CHECK adds 'pricing' for the D-026 proxy token). 0012+ unassigned.
+- 2026-11-04 WO-21b (approve-once keeps field ownership, D-027; live Argo CD self-heal check on ro-spoke-1) and WO-22b (mode controls, /admin/clusters redirect, Git-only read-only, sync state) merged (cbc813c). `make ci` exit 0, `make web-verify` exit 0 (28/28). Agents and web deployed at main-cbc813c; hub unchanged (main-9325962). GitHub push failed (GitHub outage); a first deploy went out with an empty tag `main-` because the push failure short-circuited the SHA assignment — redeployed with the right tag within minutes.
