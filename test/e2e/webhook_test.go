@@ -12,6 +12,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
@@ -97,6 +98,9 @@ func webhookDown(t *testing.T, cl cluster) func() {
 			}
 			if err == nil {
 				t.Logf("webhook on %s scaled back to %d", cl.Name, orig)
+				if err := releaseFields(c, cl, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name}}); err != nil {
+					t.Errorf("%v (make e2e-unblock drops it)", err)
+				}
 				return
 			}
 			time.Sleep(time.Second)
@@ -117,6 +121,10 @@ func TestWebhook(t *testing.T) {
 	deploy(t, cl, ns, overprovisioned("web"))
 	armed(t, cl, ns, ns, "web", overCPU, autoCPU(v1alpha1.StrategyInPlace))
 	r := waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
+	// Drift repair (second subtest) only runs while the applied recommendation is still the hub's
+	// latest (agent: keepLive; see the WO-24 hand-over): no extra recommender runs from the suite
+	// until the end of this test.
+	env.Hub.holdRecompute(t)
 	want := r.Spec.Containers[0].Requests[corev1.ResourceCPU]
 	// The webhook only trusts a status written for the current spec.
 	eventually(t, time.Minute, 2*time.Second, "RSR status observed its spec", func() (bool, string) {
@@ -171,6 +179,19 @@ func TestWebhook(t *testing.T) {
 			t.Errorf("pod %s was mutated although the webhook is down", fresh[0].Name)
 		}
 		restore()
+		appliedRec := rsr(t, cl, ns, deployment, "web").Status.AppliedRecommendationID
+		t.Cleanup(func() {
+			if !t.Failed() {
+				return
+			}
+			c, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if d, err := env.Hub.workload(c, cl.Name, ns, deployment, "web"); err == nil && d != nil && d.Recommendation != nil && d.Recommendation.ID != appliedRec {
+				t.Logf("KNOWN AGENT BUG (WO-24 hand-over): the hub issued recommendation %s after the applied %s; the agent repairs drift "+
+					"only while the applied recommendation is the latest (reconciler keepLive), and a new one within the tolerance is "+
+					"skipped (NoSignificantChange), so the unmutated pod is never resized", d.Recommendation.ID, appliedRec)
+			}
+		})
 		// The agent's drift repair brings the unmutated pod to the applied value.
 		eventually(t, 3*time.Minute, 5*time.Second, "drift repair resizes "+fresh[0].Name, func() (bool, string) {
 			var p corev1.Pod

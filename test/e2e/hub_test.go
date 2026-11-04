@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"testing"
 	"time"
 )
 
@@ -23,6 +24,28 @@ type hubAPI struct {
 	mu            sync.Mutex
 	lastRecompute time.Time
 	noRecompute   bool
+	holds         int // > 0: no recompute requests (holdRecompute)
+}
+
+// holdRecompute stops the suite's recompute requests until the returned function is called (or
+// the test ends). Every recommender run gives every workload a new recommendation id, even with
+// the same values; a scenario that depends on the id staying the same for a minute (an approval,
+// drift repair of an applied recommendation) holds the suite's extra runs off meanwhile. The hub's
+// periodic run still happens.
+func (h *hubAPI) holdRecompute(t *testing.T) (release func()) {
+	h.mu.Lock()
+	h.holds++
+	h.mu.Unlock()
+	var once sync.Once
+	release = func() {
+		once.Do(func() {
+			h.mu.Lock()
+			h.holds--
+			h.mu.Unlock()
+		})
+	}
+	t.Cleanup(release)
+	return release
 }
 
 // recomputeEvery limits suite-wide recompute requests: every run covers every cluster.
@@ -33,7 +56,7 @@ const recomputeEvery = 2 * time.Minute
 // endpoint (404/405), the suite relies on the periodic run.
 func (h *hubAPI) maybeRecompute(ctx context.Context, logf func(string, ...any)) {
 	h.mu.Lock()
-	if h.noRecompute || h.AdminToken == "" || time.Since(h.lastRecompute) < recomputeEvery {
+	if h.noRecompute || h.AdminToken == "" || h.holds > 0 || time.Since(h.lastRecompute) < recomputeEvery {
 		h.mu.Unlock()
 		return
 	}

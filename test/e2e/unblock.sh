@@ -31,3 +31,53 @@ for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
     echo "scaled the webhook on $ctx back to $was"
   fi
 done
+
+# WO-24 scenario 10 removes the agent's pods/resize rule on spoke-2 for a few minutes.
+role=${E2E_AGENT_CLUSTERROLE:-resource-optimizer-agent}
+for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
+  res=$(kubectl --context "$ctx" get clusterrole "$role" -o jsonpath='{.rules[*].resources}' 2>/dev/null || true)
+  if [ -n "$res" ] && ! grep -q 'pods/resize' <<<"$res"; then
+    kubectl --context "$ctx" patch clusterrole "$role" --type json \
+      -p '[{"op":"add","path":"/rules/-","value":{"apiGroups":[""],"resources":["pods/resize"],"verbs":["patch"]}}]' >/dev/null
+    echo "restored the pods/resize rule of $role on $ctx"
+  fi
+done
+
+# WO-24 scenario 11 (RO_E2E_DISRUPTIVE=1) scales kube-state-metrics on spoke-2 to 0.
+ksm_ns=${E2E_KSM_NAMESPACE:-monitoring}
+ksm=${E2E_KSM_DEPLOYMENT:-kube-state-metrics}
+was=$(kubectl --context "$spoke_ctx" -n "$ksm_ns" get deploy "$ksm" \
+  -o jsonpath='{.metadata.annotations.e2e\.resource-optimizer\.oz\.io/scaled-from}' 2>/dev/null || true)
+if [ -n "$was" ]; then
+  kubectl --context "$spoke_ctx" -n "$ksm_ns" scale deploy "$ksm" --replicas="$was" >/dev/null
+  kubectl --context "$spoke_ctx" -n "$ksm_ns" annotate deploy "$ksm" e2e.resource-optimizer.oz.io/scaled-from- >/dev/null
+  echo "scaled $ksm on $spoke_ctx back to $was"
+fi
+
+# The suite's field-manager entries on Helm-owned objects make the next `helm upgrade` fail with a
+# conflict: drop them (the values stay). e2e.test is the manager of suite versions before WO-24.
+release_fields() { # context, kubectl get args...
+  local ctx=$1; shift
+  local patch
+  patch=$(kubectl --context "$ctx" get "$@" --show-managed-fields -o json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except ValueError:
+    sys.exit()
+mf = d["metadata"].get("managedFields", [])
+keep = [m for m in mf if m["manager"] not in ("resource-optimizer-e2e", "e2e.test")]
+if len(keep) < len(mf):
+    print(json.dumps([{"op": "test", "path": "/metadata/resourceVersion", "value": d["metadata"]["resourceVersion"]},
+                      {"op": "replace", "path": "/metadata/managedFields", "value": keep or [{}]}]))
+') || return 0
+  if [ -n "$patch" ]; then
+    kubectl --context "$ctx" patch "$@" --type json -p "$patch" >/dev/null && echo "dropped the e2e field manager from $* on $ctx"
+  fi
+}
+for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
+  release_fields "$ctx" clusterrole "$role"
+  release_fields "$ctx" -n "$ns" secret "$secret"
+  release_fields "$ctx" -n "$webhook_ns" deployment "$webhook"
+  release_fields "$ctx" -n "$ksm_ns" deployment "$ksm"
+done
