@@ -127,9 +127,9 @@ type Cluster struct {
 	AgentVersion string
 }
 
-// Clusters lists registered clusters by name.
+// Clusters lists registered (not deleted) clusters by name.
 func (s *Store) Clusters(ctx context.Context) ([]Cluster, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT name, description, created_at, last_seen_at, coalesce(agent_version, '') FROM clusters ORDER BY name`)
+	rows, err := s.Pool.Query(ctx, `SELECT name, description, created_at, last_seen_at, coalesce(agent_version, '') FROM clusters WHERE deleted_at IS NULL ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +377,8 @@ type WorkloadFilter struct {
 
 // LoadWorkloads returns live workloads with their latest recommendation and status.
 func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*WorkloadView, error) {
-	where := "w.deleted_at IS NULL"
+	// Workloads of deleted clusters (WO-20) are hidden like deleted workloads.
+	where := "w.deleted_at IS NULL AND w.cluster NOT IN (SELECT name FROM clusters WHERE deleted_at IS NOT NULL)"
 	args := []any{}
 	if f.Key != nil {
 		// A single workload is returned even when deleted (detail pages of old links).
@@ -444,6 +445,7 @@ func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*Workloa
 			}
 			_ = json.Unmarshal(sLive, &st.Live)
 			st.JVM = statusJVM(sSettings)
+			st.Override = statusOverride(sSettings)
 			st.AppliedAt, st.ObservedAt, st.NextWindow = utc(sApplied), utc(sObserved), utc(sNextWindow)
 			v.Status = st
 		}
@@ -623,8 +625,12 @@ func (s *Store) LastMetricsPricing(ctx context.Context, cluster string, since ti
 		return recommender.Pricing{}, false, err
 	}
 	var p recommender.Pricing
-	if err := json.Unmarshal(b, &p); err != nil || p.CPUCoreHour <= 0 || p.MemoryGiBHour <= 0 {
+	if err := json.Unmarshal(b, &p); err != nil {
 		return recommender.Pricing{}, false, err
+	}
+	// The run stored the adjusted rates; the fallback needs the rates before the hub's settings.
+	if p = p.Base(); p.CPUCoreHour <= 0 || p.MemoryGiBHour <= 0 {
+		return recommender.Pricing{}, false, nil
 	}
 	return p, true, nil
 }
@@ -898,7 +904,8 @@ type AuditQuery struct {
 
 // QueryAudit returns events and whether more exist.
 func (s *Store) QueryAudit(ctx context.Context, q AuditQuery) ([]hubapi.AuditEvent, bool, error) {
-	conds := []string{"true"}
+	// Configuration changes are served by QueryConfigChanges (GET /v1/audit/config), not here.
+	conds := []string{"e.type <> 'config_changed'"}
 	args := []any{}
 	add := func(cond string, v any) {
 		args = append(args, v)
@@ -963,7 +970,7 @@ func (s *Store) WorkloadEvents(ctx context.Context, k hubapi.WorkloadKey, from, 
 	rows, err := s.Pool.Query(ctx, `SELECT e.id, e.type, e.time, e.namespace, e.workload_kind, e.workload_name, e.recommendation_id, e.strategy,
 		e.resources, e.containers, e.reason, e.message, e.details, e.cluster, e.received_at
 		FROM audit_events e WHERE e.cluster = $1 AND e.namespace = $2 AND e.workload_kind = $3 AND e.workload_name = $4
-		AND e.time >= $5 AND e.time < $6 ORDER BY e.time DESC, e.id DESC LIMIT $7`, k.Cluster, k.Namespace, k.Kind, k.Name, from, to, limit)
+		AND e.type <> 'config_changed' AND e.time >= $5 AND e.time < $6 ORDER BY e.time DESC, e.id DESC LIMIT $7`, k.Cluster, k.Namespace, k.Kind, k.Name, from, to, limit)
 	if err != nil {
 		return nil, err
 	}

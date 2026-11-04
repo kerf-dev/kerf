@@ -49,6 +49,14 @@ spec:
             - name: dev-tokens
               mountPath: /etc/hub/dev-tokens
               readOnly: true
+            - name: dev-users
+              mountPath: /etc/hub/dev-users
+              readOnly: true
+            {{- end }}
+            {{- if include "hub.bootstrapSecret" . }}
+            - name: bootstrap-admin
+              mountPath: /etc/hub/bootstrap-admin
+              readOnly: true
             {{- end }}
       volumes:
         - name: config
@@ -58,4 +66,15 @@ spec:
         - name: dev-tokens
           secret:
             secretName: hub-dev-tokens
+        - name: dev-users
+          secret:
+            secretName: hub-dev-users
+        {{- end }}
+        {{- if include "hub.bootstrapSecret" . }}
+        - name: bootstrap-admin
+          secret:
+            secretName: {{ include "hub.bootstrapSecret" . }}
+            items:
+              - key: {{ .Values.auth.bootstrapAdmin.existingSecretKey }}
+                path: password
         {{- end }}

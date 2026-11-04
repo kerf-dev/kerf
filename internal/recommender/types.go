@@ -121,6 +121,28 @@ type Pricing struct {
 	Source string `json:"source"`
 	// Nodes is the number of priced nodes the rates were averaged over.
 	Nodes int `json:"nodes,omitempty"`
+	// Adjustment records the hub's pricing settings applied to the rates (WO-20); nil = none.
+	// CPUCoreHour and MemoryGiBHour are then the adjusted rates.
+	Adjustment *PricingAdjustment `json:"adjustment,omitempty"`
+}
+
+// PricingAdjustment is how the hub's pricing settings changed a cluster's rates: a fixed rate
+// replaces the metric or default rate, then the discount applies to whichever rate is used.
+type PricingAdjustment struct {
+	DiscountPercent   float64 `json:"discountPercent,omitempty"`
+	FixedCPU          bool    `json:"fixedCPU,omitempty"`
+	FixedMemory       bool    `json:"fixedMemory,omitempty"`
+	BaseCPUCoreHour   float64 `json:"baseCPUCoreHourUSD"`
+	BaseMemoryGiBHour float64 `json:"baseMemoryGiBHourUSD"`
+	SettingsVersion   int     `json:"settingsVersion,omitempty"`
+}
+
+// Base returns the rates before any adjustment.
+func (p Pricing) Base() Pricing {
+	if p.Adjustment == nil {
+		return p
+	}
+	return Pricing{CPUCoreHour: p.Adjustment.BaseCPUCoreHour, MemoryGiBHour: p.Adjustment.BaseMemoryGiBHour, Source: p.Source, Nodes: p.Nodes}
 }
 
 // Fallback reports whether the default rates were used.
