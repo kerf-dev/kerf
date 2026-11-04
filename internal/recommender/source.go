@@ -321,6 +321,28 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	return d, nil
 }
 
+// PricingAt returns the cluster's average pricing rates at t (lookback 1 h). ok is false when the
+// cluster has no pricing series then.
+func (s *Source) PricingAt(ctx context.Context, cluster string, t time.Time) (Pricing, bool, error) {
+	q := Queries{Cluster: cluster, RateWindow: s.Cfg.RateWindow}
+	cpuAvg, cpuCount := q.Pricing("ro_cpu_core_hourly_cost_usd", time.Hour)
+	memAvg, _ := q.Pricing("ro_memory_gib_hourly_cost_usd", time.Hour)
+	var v [3]float64
+	for i, query := range []string{cpuAvg, memAvg, cpuCount} {
+		res, err := s.Q.Instant(ctx, query, t)
+		if err != nil {
+			return Pricing{}, false, err
+		}
+		if len(res) > 0 {
+			v[i] = res[0].Sample.V
+		}
+	}
+	if v[0] <= 0 || v[1] <= 0 {
+		return Pricing{}, false, nil
+	}
+	return Pricing{CPUCoreHour: v[0], MemoryGiBHour: v[1], Source: PricingSourceMetrics, Nodes: int(v[2])}, true, nil
+}
+
 // Data derives the recommender input for profile p from the raw series.
 func (w *RawWorkload) Data(p Profile, end time.Time, cfg Config) WorkloadData {
 	from := end.Add(-p.Window)

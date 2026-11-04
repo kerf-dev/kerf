@@ -94,3 +94,34 @@ go test ./internal/recommender -run TestLive -v` runs the engine against live Vi
   and the hub peaks well under its 1Gi limit.
 - WO verification uses ports 8080/8428; in the shared environment VictoriaMetrics is `localhost:18428`
   and the deployed hub `localhost:18080`.
+
+## WO-04d: incomplete metrics and pricing gaps
+- **Incomplete metrics guard**: a regular run whose inventory, or number of workloads with request
+  series, falls below half of the last accepted run (clusters with >= 10 workloads) is refused for
+  that cluster (run cluster `failed`, "metrics look incomplete ..."): nothing is stored, the summary
+  and the trend keep the previous values. A drop lasting longer than
+  `recommender.incompleteMetricsGrace` (default 30m, negative disables) is accepted as real.
+  After a restart the baseline is the stored live inventory. This is what produced the trend dip and
+  the zero-savings history entries on 2026-11-04 00:40–01:45 UTC (WO-02 regenerating synthetic data:
+  6–31 of 203 workloads, request series missing, no pricing series).
+- **Pricing gaps**: a cluster without pricing series at a run's time uses, for a backfill (as-of more
+  than 1 h ago), today's series; otherwise the rates of the cluster's last run with series (within
+  24 h). Both keep `pricing.source = "metrics"`; only a cluster with no rates anywhere gets `default`.
+- **Backfill repricing**: backfill runs that used the default rates while the cluster's latest regular
+  run has pricing series are rebuilt by the backfill plan at the next start (the dev history then
+  carries today's rates).
+- **One-off cleanup of the existing dev history** (not run; for the orchestrator):
+  ```sql
+  BEGIN;
+  CREATE TEMP TABLE bad AS SELECT rc.run_id, rc.cluster FROM recommender_run_clusters rc
+    JOIN recommender_runs r ON r.id = rc.run_id
+    WHERE NOT r.backfill AND rc.cluster IN ('synth-a', 'synth-b')
+      AND rc.as_of >= '2026-11-04 00:40' AND rc.as_of < '2026-11-04 01:45'
+      AND (rc.pricing->>'source' = 'default' OR rc.workloads < 200
+           OR rc.monthly_savings_cpu_usd + rc.monthly_savings_memory_usd = 0);
+  DELETE FROM recommendations x USING workloads w, bad b
+    WHERE w.id = x.workload_id AND x.run_id = b.run_id AND w.cluster = b.cluster;
+  DELETE FROM recommender_run_clusters rc USING bad b WHERE rc.run_id = b.run_id AND rc.cluster = b.cluster;
+  COMMIT;
+  ```
+  (18 run-cluster rows of 26 in that window.)

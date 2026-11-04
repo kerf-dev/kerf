@@ -23,6 +23,10 @@ type Engine struct {
 	// JVM returns the JVM containers the agent reported for a workload; reported is false when the
 	// agent never reported it (JVMs are then detected by image). nil: no agent reports (WO-12).
 	JVM func(hubapi.WorkloadKey) (containers []hubapi.JVMContainer, reported bool)
+	// PricingFallback is asked for the cluster's rates when it has no pricing series at the end of
+	// the window (a backfill before the series existed, or a gap); ok false keeps the configured
+	// default rates (WO-04d).
+	PricingFallback func(ctx context.Context, cluster string, end time.Time) (p Pricing, ok bool)
 }
 
 // ClusterResult is the outcome of one cluster in a run.
@@ -33,6 +37,9 @@ type ClusterResult struct {
 	// Inventory has every workload found, with or without a recommendation.
 	Inventory []WorkloadInventory
 	Results   []Result
+	// WithRequests is the number of inventory workloads with request series (KSM); a sudden drop
+	// means incomplete metrics rather than workloads without requests.
+	WithRequests int
 }
 
 // WorkloadInventory is a discovered workload plus attributes stored by the hub.
@@ -65,6 +72,11 @@ func (e *Engine) RunCluster(ctx context.Context, cluster string, end time.Time, 
 	if err != nil {
 		return nil, err
 	}
+	if d.Pricing.Fallback() && e.PricingFallback != nil {
+		if p, ok := e.PricingFallback(ctx, cluster, d.End); ok {
+			d.Pricing = p
+		}
+	}
 	res := &ClusterResult{Cluster: cluster, End: d.End, Pricing: d.Pricing}
 	for _, k := range d.SortedKeys() {
 		raw := d.Workloads[k]
@@ -92,6 +104,9 @@ func (e *Engine) RunCluster(ctx context.Context, cluster string, end time.Time, 
 			}
 		}
 		res.Inventory = append(res.Inventory, inv)
+		if raw.HasRequests {
+			res.WithRequests++
+		}
 		r, ok := Recommend(Request{Workload: data, Settings: s, Profile: p, Pricing: d.Pricing, End: d.End}, e.Strategy, e.Cfg)
 		if ok {
 			res.Results = append(res.Results, r)

@@ -63,7 +63,8 @@ the table above.
 
 Recommender settings under `config.recommender` (all optional; defaults in `internal/recommender/config.go`):
 `interval` (production 24h, dev 5m), `backfill.runs`/`every` (dev: 29 × 24h of history before the
-first regular run, computed from the stored metrics and filled in between regular runs), `step`, `rateWindow`, `riskWindow`, `inventoryLookback`, `throttleThreshold`,
+first regular run, computed from the stored metrics and filled in between regular runs), `incompleteMetricsGrace` (default 30m: how long a run whose inventory suddenly halves is
+refused as incomplete metrics), `step`, `rateWindow`, `riskWindow`, `inventoryLookback`, `throttleThreshold`,
 `restartThreshold`, `throttleIncrease`, `oomIncrease`, `minCPU`, `minMemory`, `lowConfidence`,
 `defaultProfile`, `defaultCPUCoreHourUSD`, `defaultMemoryGiBHourUSD` (fallback when the cluster has no
 `ro_*_hourly_cost_usd` series) and `profiles.<dev|production|high-availability>.{window, cpuPercentile,
