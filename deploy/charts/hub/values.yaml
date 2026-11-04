@@ -1,0 +1,62 @@
+# Defaults for a real installation. Development overrides: values-dev.yaml.
+image:
+  repository: localhost:5005/resource-optimizer/hub
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# Set by Tilt (unused by the hub, which serves every cluster).
+clusterName: ""
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8080
+  nodePort: null        # e.g. 30080 with type NodePort
+  # Hub vmagent scrapes Services with these annotations (docs/handover/WO-01-handover.md).
+  scrape: true
+
+# Postgres URL. Either inline (rendered into Secret <release>-db) or an existing Secret.
+database:
+  url: ""
+  existingSecret: ""
+  existingSecretKey: DATABASE_URL
+
+# Development seed: registers clusters and tokens; the tokens are stored in Secret hub-dev-tokens.
+devSeed:
+  enabled: false
+  clusters: []
+  # key = cluster name (agent token for that cluster), "ui" or "admin".
+  tokens: {}
+
+logLevel: info
+
+# Hub configuration file (internal/hub/config.go). databaseURL and devSeed are injected by the chart.
+config:
+  listen: ":8080"
+  prometheusURL: http://victoria-metrics.monitoring.svc:8428
+  prometheusTimeout: 2m
+  corsOrigins: []
+  agentStaleAfter: 10m
+  recommender:
+    interval: 24h
+  history:
+    fullResolution: 168h
+    retention: 2160h
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]

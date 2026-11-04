@@ -1,0 +1,37 @@
+# Shared k3d dev environment (ro-hub). Endpoints: docs/handover/WO-01-handover.md.
+image:
+  repository: k3d-ro-registry:5005/resource-optimizer/hub
+  pullPolicy: Always
+
+service:
+  type: NodePort
+  nodePort: 30080          # host localhost:18080; spokes use http://hub-api.hub.svc:8080
+
+database:
+  url: postgres://ro:ro@postgres.postgres.svc:5432/resource_optimizer?sslmode=disable
+
+# Development tokens — documented in README.md. Never reuse outside the local environment.
+devSeed:
+  enabled: true
+  clusters: [ro-spoke-1, ro-spoke-2, synth-a, synth-b]
+  tokens:
+    ro-spoke-1: ro-dev-rospoke1-2b8dbdc041b28d5865e7caf7
+    ro-spoke-2: ro-dev-rospoke2-22690fedaab92db2f9f3b91b
+    synth-a: ro-dev-syntha-624ec11020f8aadc7458d7a6
+    synth-b: ro-dev-synthb-a06443f1dbc00f61be2e0900
+    ui: ro-dev-ui-97446cd3a095035d6290abc5
+    admin: ro-dev-admin-1b71e51dc42ec5deb56e7f06
+
+config:
+  prometheusURL: http://victoria-metrics.monitoring.svc:8428
+  corsOrigins: ["http://localhost:5173"]
+  recommender:
+    interval: 5m
+    # First start on an empty database: also compute daily recommendations for the past 7 days
+    # (history and savings trend for the UI).
+    backfill:
+      runs: 7
+      every: 24h
+  history:
+    fullResolution: 6h
+    retention: 720h

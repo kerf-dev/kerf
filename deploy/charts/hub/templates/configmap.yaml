@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hub.fullname" . }}-config
+  labels: {{- include "hub.labels" . | nindent 4 }}
+data:
+  hub.yaml: |
+    {{- $cfg := deepCopy .Values.config }}
+    {{- $_ := set $cfg "migrationsDir" "/migrations" }}
+    {{- if .Values.devSeed.enabled }}
+    {{- $_ := set $cfg "devSeed" (dict "enabled" true "clusters" .Values.devSeed.clusters "tokensDir" "/etc/hub/dev-tokens") }}
+    {{- end }}
+    {{- toYaml $cfg | nindent 4 }}
