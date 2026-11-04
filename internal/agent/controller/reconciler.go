@@ -85,10 +85,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	kind := v1alpha1.WorkloadKind(kindS)
 	k := wkey{req.Namespace, kindS, name}
-	obj, err := workload.New(kind)
-	if err != nil {
-		return ctrl.Result{}, nil
+	if _, ok := workload.Kinds[kind]; !ok {
+		return ctrl.Result{}, nil // not a workload kind we manage
 	}
+	obj, _ := workload.New(kind)
 	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: name}, obj); err != nil {
 		if apierrors.IsNotFound(err) {
 			r.Reporter.DeleteStatus(k)
@@ -501,7 +501,7 @@ func (w *run) keepLive() (ctrl.Result, error) {
 		if st.State != apply.ResizeNeeded {
 			continue
 		}
-		if ok, _ := w.nodesSupportInPlace(pods[i : i+1]); !ok {
+		if ok, _ := w.nodesSupportInPlace(pods[i:i+1], own[corev1.ResourceMemory]); !ok {
 			continue
 		}
 		if _, err := apply.Resize(w.ctx, r.Client, &pods[i], targets, own, w.rsr.Spec.Source.RecommendationID); err != nil {
@@ -624,7 +624,7 @@ func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous 
 // ---------------------------------------------------------------------------------------------
 // In-place (D-007)
 
-func (w *run) nodesSupportInPlace(pods []corev1.Pod) (bool, string) {
+func (w *run) nodesSupportInPlace(pods []corev1.Pod, memoryChange bool) (bool, string) {
 	seen := map[string]bool{}
 	for _, p := range pods {
 		if p.Spec.NodeName == "" || seen[p.Spec.NodeName] {
@@ -635,7 +635,7 @@ func (w *run) nodesSupportInPlace(pods []corev1.Pod) (bool, string) {
 		if err := w.r.Client.Get(w.ctx, client.ObjectKey{Name: p.Spec.NodeName}, &node); err != nil {
 			continue
 		}
-		if ok, why := apply.NodeSupportsInPlace(&node, w.r.Cfg.UnsupportedNodeSelectors); !ok {
+		if ok, why := apply.NodeSupportsInPlace(&node, w.r.Cfg.UnsupportedNodeSelectors, memoryChange); !ok {
 			return false, why
 		}
 	}
@@ -648,7 +648,7 @@ func (w *run) startInPlace(dec guardrails.Decision) (ctrl.Result, error) {
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if ok, why := w.nodesSupportInPlace(pods); !ok {
+	if ok, why := w.nodesSupportInPlace(pods, slices.Contains(dec.Resources, "memory")); !ok {
 		if err := w.upsertSpec(dec.Targets, v1alpha1.StrategyInPlace); err != nil {
 			return ctrl.Result{}, err
 		}

@@ -149,7 +149,7 @@ func getDeploy(t *testing.T, name string) *appsv1.Deployment {
 
 func managerOwns(d *appsv1.Deployment, manager string) (bool, string) {
 	for _, mf := range d.ManagedFields {
-		if mf.Manager == manager && mf.FieldsV1 != nil && strings.Contains(string(mf.FieldsV1.Raw), `"f:resources"`) {
+		if mf.Manager == manager && mf.FieldsV1 != nil && strings.Contains(mf.FieldsV1.GetRawString(), `"f:resources"`) {
 			return true, string(mf.Operation)
 		}
 	}
@@ -204,8 +204,8 @@ func TestRolloutFieldManagerAndRelease(t *testing.T) {
 		t.Fatalf("owned resources = %v", owned)
 	}
 	for _, mf := range d.ManagedFields {
-		if mf.Manager == argoManager && strings.Contains(string(mf.FieldsV1.Raw), `"f:requests":{"f:cpu"`) {
-			t.Fatalf("argo still owns cpu request after forced apply: %s", mf.FieldsV1.Raw)
+		if mf.Manager == argoManager && strings.Contains(mf.FieldsV1.GetRawString(), `"f:requests":{"f:cpu"`) {
+			t.Fatalf("argo still owns cpu request after forced apply: %s", mf.FieldsV1.GetRawString())
 		}
 	}
 	if d.Annotations[v1alpha1.AnnotationManaged] != "true" || d.Annotations[v1alpha1.AnnotationPreviousResources] == "" {

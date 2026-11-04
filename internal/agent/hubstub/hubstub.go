@@ -256,7 +256,13 @@ func Normalize(recs []hubclient.WorkloadRecommendation, now time.Time) []hubclie
 	for i := range out {
 		r := &out[i]
 		if r.ID == "" {
-			sum := sha256.Sum256([]byte(r.Workload.Namespace + "/" + r.Workload.Kind + "/" + r.Workload.Name + "/" + fmt.Sprint(r.Containers)))
+			// Stable across restarts: derived from the workload and the recommended values.
+			body, _ := json.Marshal(struct {
+				W hubclient.WorkloadRef
+				C []hubclient.ContainerRecommendation
+				S hubclient.ValueSettings
+			}{r.Workload, r.Containers, r.Settings})
+			sum := sha256.Sum256(body)
 			h := hex.EncodeToString(sum[:16])
 			r.ID = h[0:8] + "-" + h[8:12] + "-4" + h[13:16] + "-a" + h[17:20] + "-" + h[20:32]
 		}

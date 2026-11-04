@@ -99,7 +99,7 @@ func (r *Reconciler) allRequests(ctx context.Context) []reconcile.Request {
 	}
 	for _, l := range lists {
 		if err := r.Client.List(ctx, l.list); err != nil {
-			r.Log.Error("list workloads", "kind", l.kind, "err", err)
+			r.Log.ErrorContext(ctx, "list workloads", "kind", l.kind, "err", err)
 			continue
 		}
 		switch list := l.list.(type) {

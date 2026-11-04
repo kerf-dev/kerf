@@ -308,20 +308,30 @@ type Puller struct {
 
 // Start implements manager.Runnable.
 func (p *Puller) Start(ctx context.Context) error {
-	pull := time.NewTicker(p.PullInterval)
-	defer pull.Stop()
 	report := time.NewTicker(p.ReportInterval)
 	defer report.Stop()
-	p.pullOnce(ctx)
+	// After a failed pull retry sooner (5s, doubling) than the pull interval.
+	retry := 5 * time.Second
+	next := func(ok bool) time.Duration {
+		if ok {
+			retry = 5 * time.Second
+			return p.PullInterval
+		}
+		d := min(retry, p.PullInterval)
+		retry = min(retry*2, p.PullInterval)
+		return d
+	}
+	pull := time.NewTimer(next(p.pullOnce(ctx)))
+	defer pull.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-pull.C:
-			p.pullOnce(ctx)
+			pull.Reset(next(p.pullOnce(ctx)))
 		case <-report.C:
 			if err := p.Reporter.Flush(ctx, false); err != nil {
-				p.Log.Debug("report to hub failed", "err", err)
+				p.Log.DebugContext(ctx, "report to hub failed", "err", err)
 			}
 		}
 	}
@@ -330,7 +340,7 @@ func (p *Puller) Start(ctx context.Context) error {
 // NeedLeaderElection implements manager.LeaderElectionRunnable.
 func (p *Puller) NeedLeaderElection() bool { return true }
 
-func (p *Puller) pullOnce(ctx context.Context) {
+func (p *Puller) pullOnce(ctx context.Context) bool {
 	items, etag, err := p.Hub.ListRecommendations(ctx, p.Store.getETag())
 	switch {
 	case errors.Is(err, hubclient.ErrNotModified):
@@ -338,23 +348,25 @@ func (p *Puller) pullOnce(ctx context.Context) {
 		p.Store.touch()
 	case err != nil:
 		hubRequests.WithLabelValues("listRecommendations", "error").Inc()
-		p.Log.Warn("pull recommendations failed; no new changes are applied while the hub is unreachable", "err", err)
+		p.Log.WarnContext(ctx, "pull recommendations failed; no new changes are applied while the hub is unreachable", "err", err)
 	default:
 		hubRequests.WithLabelValues("listRecommendations", "ok").Inc()
 		changed := p.Store.Replace(items, etag)
-		p.Log.Info("pulled recommendations", "items", len(items), "changed", len(changed))
+		p.Log.InfoContext(ctx, "pulled recommendations", "items", len(items), "changed", len(changed))
 	}
 	p.Store.markAttempted()
 	p.Trigger()
-	if err == nil || errors.Is(err, hubclient.ErrNotModified) {
+	ok := err == nil || errors.Is(err, hubclient.ErrNotModified)
+	if ok {
 		// Give the reconciles a moment so the full batch carries their results.
 		select {
 		case <-ctx.Done():
-			return
+			return ok
 		case <-time.After(2 * time.Second):
 		}
 		if err := p.Reporter.Flush(ctx, true); err != nil {
-			p.Log.Warn("report to hub failed", "err", err)
+			p.Log.WarnContext(ctx, "report to hub failed", "err", err)
 		}
 	}
+	return ok
 }

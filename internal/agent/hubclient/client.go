@@ -103,15 +103,15 @@ func (c *Client) ListRecommendations(ctx context.Context, etag string) ([]Worklo
 			hdr.Set("If-None-Match", etag)
 		}
 		var page RecommendationList
-		resp, err := c.do(ctx, http.MethodGet, c.path("recommendations"), q, hdr, nil, &page)
+		status, respHdr, err := c.do(ctx, http.MethodGet, c.path("recommendations"), q, hdr, nil, &page)
 		if err != nil {
 			return nil, "", err
 		}
-		if resp.StatusCode == http.StatusNotModified {
+		if status == http.StatusNotModified {
 			return nil, etag, ErrNotModified
 		}
 		if firstReq {
-			gotETag = resp.Header.Get("ETag")
+			gotETag = respHdr.Get("ETag")
 		}
 		firstReq = false
 		all = append(all, page.Items...)
@@ -128,7 +128,7 @@ func (c *Client) ReportWorkloadStatus(ctx context.Context, agentVersion string, 
 		end := min(start+MaxBatch, len(items))
 		var res BatchResult
 		body := WorkloadStatusBatch{AgentVersion: agentVersion, Items: items[start:end]}
-		if _, err := c.do(ctx, http.MethodPost, c.path("workload-status"), nil, nil, body, &res); err != nil {
+		if _, _, err := c.do(ctx, http.MethodPost, c.path("workload-status"), nil, nil, body, &res); err != nil {
 			return err
 		}
 	}
@@ -141,7 +141,7 @@ func (c *Client) ReportEvents(ctx context.Context, items []Event) (BatchResult, 
 	if len(items) > MaxBatch {
 		return res, fmt.Errorf("hub: %d events exceed the batch limit %d", len(items), MaxBatch)
 	}
-	_, err := c.do(ctx, http.MethodPost, c.path("events"), nil, nil, EventBatch{Items: items}, &res)
+	_, _, err := c.do(ctx, http.MethodPost, c.path("events"), nil, nil, EventBatch{Items: items}, &res)
 	return res, err
 }
 
@@ -149,7 +149,9 @@ func (c *Client) path(suffix string) string {
 	return "/v1/clusters/" + url.PathEscape(c.cluster) + "/" + suffix
 }
 
-func (c *Client) do(ctx context.Context, method, path string, q url.Values, hdr http.Header, in, out any) (*http.Response, error) {
+// do performs one request and decodes a 2xx body into out. It returns the status and headers;
+// the body is always closed here.
+func (c *Client) do(ctx context.Context, method, path string, q url.Values, hdr http.Header, in, out any) (int, http.Header, error) {
 	u := *c.baseURL
 	u.Path = strings.TrimRight(u.Path, "/") + path
 	u.RawQuery = q.Encode()
@@ -158,13 +160,13 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, hdr 
 	if in != nil {
 		b, err := json.Marshal(in)
 		if err != nil {
-			return nil, err
+			return 0, nil, err
 		}
 		body = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	for k, v := range hdr {
 		req.Header[k] = v
@@ -175,22 +177,22 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, hdr 
 	}
 	tok, err := c.token()
 	if err != nil {
-		return nil, fmt.Errorf("hub token: %w", err)
+		return 0, nil, fmt.Errorf("hub token: %w", err)
 	}
 	if tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotModified {
-		return resp, nil
+		return resp.StatusCode, resp.Header, nil
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		apiErr := &APIError{StatusCode: resp.StatusCode}
@@ -198,12 +200,12 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, hdr 
 		if apiErr.Problem.Title == "" && apiErr.Problem.Detail == "" {
 			apiErr.Problem.Detail = strings.TrimSpace(string(data[:min(len(data), 256)]))
 		}
-		return nil, apiErr
+		return 0, nil, apiErr
 	}
 	if out != nil && len(data) > 0 {
 		if err := json.Unmarshal(data, out); err != nil {
-			return nil, fmt.Errorf("hub: decode %s %s: %w", method, path, err)
+			return 0, nil, fmt.Errorf("hub: decode %s %s: %w", method, path, err)
 		}
 	}
-	return resp, nil
+	return resp.StatusCode, resp.Header, nil
 }

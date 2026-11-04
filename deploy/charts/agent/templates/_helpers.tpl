@@ -1,0 +1,24 @@
+{{- define "agent.fullname" -}}
+{{- if contains "resource-optimizer" .Release.Name -}}{{ .Release.Name | trunc 63 | trimSuffix "-" }}{{- else -}}resource-optimizer-{{ .Release.Name | trunc 44 | trimSuffix "-" }}{{- end -}}
+{{- end -}}
+
+{{- define "agent.labels" -}}
+app.kubernetes.io/name: resource-optimizer-agent
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/part-of: resource-optimizer
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+{{- end -}}
+
+{{- define "agent.selectorLabels" -}}
+app.kubernetes.io/name: resource-optimizer-agent
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "agent.hubURL" -}}
+{{- if .Values.stubHub.enabled -}}
+http://{{ include "agent.fullname" . }}-stub-hub.{{ .Release.Namespace }}.svc:8080
+{{- else -}}
+{{ .Values.hub.url }}
+{{- end -}}
+{{- end -}}
