@@ -32,7 +32,8 @@ in `audit_events` (`db/migrations/0001_init.sql`), counts them in `ro_actions_to
 `skipped` and `blocked` are emitted **only on change** (D-017): once per (workload, type, reason)
 until the reason or the proposed values change (the hub's recommended values, by more than the
 agent's tolerance, default 5 %), not on every loop iteration and not again just because the hub
-issued a new recommendation id for the same values. A change that is applied,
+issued a new recommendation id for the same values. A change of the workload's effective policy
+(e.g. a RightsizingPolicy edit) also reports the current skip or block again, once. A change that is applied,
 rolled back or released starts over, so the next skip or block is reported again. Per-resource
 blocks inside an applied change (`Throttled`, `OOMKilled`, `RestartPolicyRequired`) follow the
 same rule per resource.
