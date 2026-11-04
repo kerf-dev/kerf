@@ -5,7 +5,7 @@ Go tests (build tag `e2e`) against the running k3d environment (WO-01) with the 
 vmagent ships usage to VictoriaMetrics, the hub's periodic run recommends, the agent applies.
 
 ```bash
-make e2e                         # all scenarios in parallel, ~25 min
+make e2e                         # all scenarios in parallel, 13–20 min
 make e2e E2E_RUN=TestRollout     # one scenario (Go -run regexp)
 make e2e E2E_FLAGS=-short        # (no-op today) extra go test flags
 make e2e-clean                   # remove leftovers of an interrupted run
@@ -28,7 +28,7 @@ make e2e-vet                     # compile/vet the suite without a cluster
 | 8 | `TestWebhook` | – | **skipped** until WO-07 lands |
 | 9 | `TestGuardrails/*` | spoke-1 | throttled workload (limit 200m, wants a core): hub flags `throttled` and raises; applied value > current, never below. HPA-coupled (CPU-utilization HPA): RSR reason `HPACoupled`, nothing changed. `maxChangePercent: 20`: applied decrease is within 20% (400m–500m) |
 | 10 | `TestRollback` | – | **skipped** until WO-08 lands |
-| 11 | `TestHubUnreachable` | spoke-2 | with one workload applied and one waiting in audit, the agent is cut off from the hub (NetworkPolicy on its egress) for `hubStaleAfter` + 45 s; switching the waiting workload to auto-patch gives `HubUnreachable` and nothing changes for 60 s; the applied workload is not reverted; after reconnecting, the pending change is applied |
+| 11 | `TestHubUnreachable` | spoke-2 | with one workload applied and one waiting in audit, the agent is cut off from the hub (invalid hub token) for `hubStaleAfter` + 90 s; switching the waiting workload to auto-patch gives `HubUnreachable` and nothing changes for 60 s; the applied workload is not reverted; after reconnecting, the pending change is applied |
 
 ## How the hub is driven
 
@@ -41,8 +41,12 @@ second agent with a stub hub would fight them over the same workloads.
   value settings stay at the defaults, so the hub's recommendation settings match at once (no
   `RecommendationStale` round).
 - The hub (dev chart) runs every 5 minutes over data aligned to 5-minute steps, so a new workload
-  gets its first recommendation 10–15 minutes after it starts; the agent pulls every 30 s. Timeouts
-  are sized for that (`E2E_APPLY_TIMEOUT`, default 18m) and all scenarios run in parallel.
+  gets a recommendation 3–15 minutes after it starts; the agent pulls every 30 s. Timeouts are sized
+  for that (`E2E_APPLY_TIMEOUT`, default 18m) and all scenarios run in parallel.
+- The first recommendation can be based on a handful of samples (e.g. "keep 500m"). Scenarios that
+  apply therefore start their policy with CPU in audit, wait until the hub recommends a real
+  decrease, and only then switch CPU to auto-patch (`armed`). Otherwise an immature first
+  recommendation could be applied and then held by the 24 h cooldown.
 - Usage: `stress-ng --cpu 1 --cpu-load N` (5% of a core against a 500m request = clearly
   over-provisioned; 100% against a 200m limit = throttled); a small JVM program for scenario 3.
   Images are the ones the sample workloads already pulled, so nothing is downloaded.
@@ -50,12 +54,14 @@ second agent with a stub hub would fight them over the same workloads.
   `git://localhost:19418/workloads.git` (the main `argocd/workloads` Application syncs only the repo
   root, non-recursively) and creates its own Application in `argocd`, removed (cascading) at the end,
   together with the git directory.
-- Hub outage (scenario 11): NetworkPolicy `resource-optimizer/e2e-hub-unreachable` on spoke-2,
-  selecting the agent pods and allowing all egress except the hub-api endpoint. It affects the
-  spoke-2 agent for ~7 minutes; `make e2e` removes a leftover one before and after the run
-  (`make e2e-unblock`).
+- Hub outage (scenario 11): the spoke-2 agent's hub token (`resource-optimizer/resource-optimizer-agent-token`)
+  is replaced by an invalid one for ~8 minutes. Every pull fails with 401, which the agent treats like
+  an unreachable hub, and it re-reads the token on each request. The original is put back at the end.
+  If a run was killed, `make e2e` restores it from the hub's `hub-dev-tokens` Secret before and after
+  the run (`make e2e-unblock`). A NetworkPolicy does not work: the k3s policy controller keeps
+  ESTABLISHED connections, and the agent's keep-alive connection to the hub never goes idle.
 
-Nothing outside the suite's namespaces is modified, except that temporary NetworkPolicy.
+Nothing outside the suite's namespaces is modified, except that temporary token swap.
 
 ## Configuration (environment)
 

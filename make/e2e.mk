@@ -17,7 +17,7 @@ E2E_LABEL := e2e.resource-optimizer.oz.io/suite=true
 e2e: ## Run the e2e suite against the running clusters (E2E_RUN=TestAudit to pick scenarios).
 	@mkdir -p $(dir $(E2E_LOG))
 	@$(MAKE) --no-print-directory e2e-unblock
-	@rc=0; $(GO) test -tags e2e -count=1 -timeout $(E2E_TIMEOUT) -parallel $(E2E_PARALLEL) -v ./test/e2e/... \
+	@set -o pipefail; rc=0; $(GO) test -tags e2e -count=1 -timeout $(E2E_TIMEOUT) -parallel $(E2E_PARALLEL) -v ./test/e2e/... \
 	  $(if $(E2E_RUN),-run '$(E2E_RUN)') $(E2E_FLAGS) 2>&1 | tee $(E2E_LOG) || rc=$$?; \
 	$(MAKE) --no-print-directory e2e-unblock; \
 	echo "e2e log: $(E2E_LOG)"; \
