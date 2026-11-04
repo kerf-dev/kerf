@@ -108,6 +108,19 @@ Workload labels below = `cluster, namespace, workload_kind, workload`.
 
 `ro_actions_total` lives in the hub process and resets on restart; always use `increase()`/`rate()`.
 
+### Cluster readiness (WO-19 contract, WO-25; D-025, `docs/contracts/readiness.md`)
+
+Labels: `cluster` only (no workload labels).
+
+| Series | Type | Extra labels | Meaning |
+|---|---|---|---|
+| `ro_cluster_readiness` | gauge | `check` (check id, e.g. `metrics.ksm-owners`), `severity` (`blocking`\|`warning`\|`info`) | 1 when the latest result of the check is `pass`, 0 when it is `warn`, `fail` or `unknown`. One series per catalog check per registered cluster. |
+| `ro_cluster_readiness_state` | gauge | `state` (`Registered`\|`AgentConnected`\|`MetricsOK`\|`ReadyAudit`\|`AutomationReady`) | 1 for the cluster's current readiness state, 0 for the others. |
+
+Alert examples: `ro_cluster_readiness{severity="blocking"} == 0` (a blocking check is failing);
+`ro_cluster_readiness_state{state="AutomationReady"} == 0 and on(cluster) (sum by (cluster) (ro_workload_mode{mode="auto-patch"}) > 0)`
+(auto-patch workloads on a cluster that lost automation readiness).
+
 ## 4. Reference PromQL
 
 Pod → workload. Each query returns 1 per pod with `workload_kind` and `workload` labels; `or` them

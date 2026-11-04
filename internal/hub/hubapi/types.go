@@ -257,8 +257,10 @@ func DefaultModes() EffectiveModes {
 
 // WorkloadStatus is the status of one workload as reported by the agent.
 type WorkloadStatus struct {
-	Workload         WorkloadRef          `json:"workload"`
-	Policy           string               `json:"policy,omitempty"`
+	Workload WorkloadRef `json:"workload"`
+	Policy   string      `json:"policy,omitempty"`
+	// Override is the hub workload-override policy layered on top of Policy (D-022).
+	Override         string               `json:"override,omitempty"`
 	Modes            EffectiveModes       `json:"modes"`
 	Strategy         string               `json:"strategy,omitempty"`
 	Settings         *ValueSettings       `json:"settings,omitempty"`
@@ -278,6 +280,13 @@ type WorkloadStatus struct {
 type WorkloadStatusBatch struct {
 	AgentVersion string           `json:"agentVersion,omitempty"`
 	Items        []WorkloadStatus `json:"items"`
+	// ConfigVersion is the cluster config the agent last materialised (D-022).
+	ConfigVersion string `json:"configVersion,omitempty"`
+	// PolicyInventory is nil when unchanged; non-nil (possibly empty) is the full inventory.
+	PolicyInventory []PolicyInventoryItem `json:"policyInventory,omitempty"`
+	// Capabilities and Checks are the agent self-checks (D-025): nil = unchanged.
+	Capabilities []AgentCapability `json:"capabilities,omitempty"`
+	Checks       []ReadinessCheck  `json:"checks,omitempty"`
 }
 
 // ContainerChange is a change of one container's resources.
@@ -401,6 +410,15 @@ type ClusterInfo struct {
 	AgentVersion    string        `json:"agentVersion,omitempty"`
 	AgentStatus     string        `json:"agentStatus"`
 	Counts          ClusterCounts `json:"counts"`
+	// Admin area (D-022).
+	Environment  string           `json:"environment,omitempty"`
+	Owner        string           `json:"owner,omitempty"`
+	PolicySource string           `json:"policySource,omitempty"`
+	Paused       *bool            `json:"paused,omitempty"`
+	Automation   *Automation      `json:"automation,omitempty"`
+	ConfigSync   *AgentConfigSync `json:"configSync,omitempty"`
+	// Readiness (D-025).
+	Readiness *ReadinessSummary `json:"readiness,omitempty"`
 }
 
 // ClusterList is the response of GET /v1/clusters.
@@ -461,6 +479,10 @@ type WorkloadDetail struct {
 	LastSeenAt     *time.Time              `json:"lastSeenAt,omitempty"`
 	Recommendation *WorkloadRecommendation `json:"recommendation,omitempty"`
 	Status         *WorkloadStatus         `json:"status,omitempty"`
+	// Approval is the latest approve-once grant (D-024).
+	Approval *Approval `json:"approval,omitempty"`
+	// Override is the workload's hub override policy (D-022).
+	Override *AdminPolicy `json:"override,omitempty"`
 }
 
 // Point is [unix seconds, value].
@@ -492,6 +514,8 @@ type WorkloadHistory struct {
 	WorkloadID      string                   `json:"workloadId"`
 	Recommendations []WorkloadRecommendation `json:"recommendations"`
 	Events          []AuditEvent             `json:"events"`
+	// ConfigChanges targeting this workload (override, approval), newest first.
+	ConfigChanges []ConfigChange `json:"configChanges,omitempty"`
 }
 
 // SavingsPoint is one point of the savings trend.

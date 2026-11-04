@@ -80,6 +80,32 @@ type PolicySelector struct {
 	// +kubebuilder:validation:MaxItems=4
 	// +listType=set
 	Kinds []WorkloadKind `json:"kinds,omitempty"`
+
+	// Workloads restricts the policy to the listed workloads: a workload matches if it equals any
+	// entry. Empty means no restriction. Like every criterion it is combined with the others (AND).
+	// The hub uses it for UI workload overrides (D-022). Agents older than this field ignore it,
+	// so the hub also sets namespaces and kinds to narrow such a policy.
+	// +optional
+	// +kubebuilder:validation:MaxItems=100
+	// +listType=atomic
+	Workloads []NamespacedWorkloadRef `json:"workloads,omitempty"`
+}
+
+// NamespacedWorkloadRef identifies one workload in the cluster.
+type NamespacedWorkloadRef struct {
+	// Kind of the workload.
+	// +required
+	Kind WorkloadKind `json:"kind"`
+	// Namespace of the workload.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Namespace string `json:"namespace"`
+	// Name of the workload.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
 }
 
 // CPUPolicy configures CPU handling.

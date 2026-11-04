@@ -16,6 +16,21 @@ info:
     - `admin`: may use every endpoint for every cluster (satisfies every role).
     A token without an accepted role gets `403`. The hub stores only a SHA-256 hash of each token.
 
+    **Sessions** (D-023, admin area `docs/contracts/admin.md`): a local user logs in with
+    `POST /v1/auth/login` and gets the HttpOnly cookie `ro_session` (`sessionAuth`). Users have one
+    role, `viewer` < `operator` < `admin`; each includes the ones before it. An operation lists the
+    lowest user role it accepts as `sessionAuth: [role]`, next to the token roles it accepts. For
+    authorization a `ui` token counts as `viewer` and an `admin` token as `admin`. Every write
+    (POST, PUT, PATCH, DELETE) made with a session needs the header `X-CSRF-Token` with the token
+    from the login or `GET /v1/me` response (`403`, code `csrf_invalid`); bearer requests need none.
+    When a request carries both a valid session cookie and a bearer token, the session is used.
+
+    **Admin writes** take a `reason` and record a `config_changed` audit entry
+    (`GET /v1/audit/config`). Changes to an existing versioned object need `If-Match` with its
+    ETag `"<version>"`: missing gives `428` (code `precondition_required`), stale gives `412` (code
+    `version_conflict`). Until the hub implements an endpoint it answers `501` (code
+    `not_implemented`).
+
     **Conventions**
     - `cluster` is the cluster name, identical to the `cluster` label on all metrics
       (`docs/contracts/metrics.md`).
@@ -48,7 +63,9 @@ tags:
   - name: ui
     description: Read-only endpoints for the web UI.
   - name: admin
-    description: Operator endpoints (role `admin` only).
+    description: Administration (admin area, D-022). Roles per operation.
+  - name: auth
+    description: Login, logout and the caller's identity (D-023).
 paths:
   /v1/clusters/{cluster}/recommendations:
     parameters:
@@ -179,6 +196,7 @@ paths:
       security:
         - bearerAuth: [agent]
         - bearerAuth: [ui]
+        - sessionAuth: [viewer]
       summary: Query the audit log
       description: |
         Returns audit events matching all given filters, ordered by event `time` (ascending by
@@ -255,6 +273,7 @@ paths:
       operationId: getSummary
       security:
         - bearerAuth: [ui]
+        - sessionAuth: [viewer]
       summary: Fleet and per-cluster totals
       description: |
         Totals over the latest recommendation of every live workload. Workloads the agent never
@@ -276,6 +295,7 @@ paths:
       operationId: listClusters
       security:
         - bearerAuth: [ui]
+        - sessionAuth: [viewer]
       summary: Clusters with agent heartbeat and counts
       responses:
         '200':
@@ -294,6 +314,7 @@ paths:
       operationId: listWorkloads
       security:
         - bearerAuth: [ui]
+        - sessionAuth: [viewer]
       summary: Workloads with their latest recommendation
       description: |
         One row per live workload, including workloads that have no recommendation yet (their
@@ -392,6 +413,7 @@ paths:
       operationId: getWorkloadFacets
       security:
         - bearerAuth: [ui]
+        - sessionAuth: [viewer]
       summary: Filter values with workload counts (D-016)
       description: |
         Counts of live workloads per filter value, for building the filters of the workload list.
@@ -475,6 +497,7 @@ paths:
       operationId: getWorkload
       security:
         - bearerAuth: [ui]
+        - sessionAuth: [viewer]
       summary: Workload detail with per-container explanation
       responses:
         '200':
@@ -499,6 +522,7 @@ paths:
       operationId: getWorkloadUsage
       security:
         - bearerAuth: [ui]
+        - sessionAuth: [viewer]
       summary: Usage, request, limit and recommendation time series
       description: |
         Per container. `usage` is the maximum across the workload's pods at each step (what a
@@ -542,6 +566,7 @@ paths:
       operationId: getWorkloadHistory
       security:
         - bearerAuth: [ui]
+        - sessionAuth: [viewer]
       summary: Past recommendations and audit events of a workload
       description: Both lists are newest first and capped at `limit` entries each.
       parameters:
@@ -575,6 +600,7 @@ paths:
       operationId: getSavingsTrend
       security:
         - bearerAuth: [ui]
+        - sessionAuth: [viewer]
       summary: Estimated monthly savings over time
       description: |
         At each step: the sum of the estimated monthly savings of the recommendation that was
@@ -620,6 +646,7 @@ paths:
       operationId: recompute
       security:
         - bearerAuth: [admin]
+        - sessionAuth: [admin]
       summary: Run the recommender now
       description: |
         Queues a recommender run (D-019) for one cluster (`cluster`) or for all registered
@@ -653,13 +680,1897 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/clusters/{cluster}/config:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [agent]
+      operationId: getClusterConfig
+      security:
+        - bearerAuth: [agent]
+      summary: Hub-managed configuration of a cluster (D-022)
+      description: |
+        What the agent materialises on its cluster (`docs/contracts/admin.md`):
+        - `policies`: every hub-managed policy for this cluster, as `RightsizingPolicy` specs. The
+          agent creates, updates and deletes `RightsizingPolicy` CRs labelled
+          `resource-optimizer.oz.io/managed-by=hub` so that exactly these exist (name = `name`,
+          annotations `hub-policy-id`, `hub-version`, `hub-policy-type`). CRs without the label are
+          never touched. With `policySource: git` the list is empty.
+        - `flags`: pause. While `paused`, the agent applies nothing new (event `blocked`, reason
+          `Paused`); rollbacks still run.
+        - `approvals`: approve-once grants (D-024).
+
+        The agent pulls it on every pull interval. Conditional requests: the response carries an
+        `ETag` (equal to `configVersion` in quotes); `If-None-Match` returns `304` when nothing
+        changed. If the hub is unreachable the agent keeps the CRs and the last flags it received.
+      parameters:
+        - name: If-None-Match
+          in: header
+          description: ETag of a previous response.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cluster configuration.
+          headers:
+            ETag:
+              description: '`"<configVersion>"`.'
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterConfig'
+        '304':
+          description: Not modified since the given ETag.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      security: []
+      summary: Log in with a local user (D-023)
+      description: |
+        Checks the username and password and starts a session. The response sets the session
+        cookie `ro_session` (`HttpOnly; SameSite=Strict; Path=/`, plus `Secure` behind TLS) and
+        returns the CSRF token the client sends as `X-CSRF-Token` on every write made with the
+        session. Failed logins are rate limited per client address and per user; after repeated
+        failures the user is locked for a while (`429` with `Retry-After`, code `account_locked`).
+        A wrong username and a wrong password give the same `401` (code `invalid_credentials`).
+        A disabled user gets `401` too.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Logged in.
+          headers:
+            Set-Cookie:
+              description: '`ro_session=<opaque>; HttpOnly; SameSite=Strict; Path=/`'
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      security:
+        - sessionAuth: [viewer]
+      summary: End the current session
+      description: Revokes the session and clears the cookie. Idempotent.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '204':
+          description: Logged out.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: The caller's identity, role and CSRF token
+      description: |
+        For a session: the user, the role and the CSRF token. For a bearer token (`ui` or `admin`):
+        the token's role mapped to a user role (`ui` → `viewer`, `admin` → `admin`) and no CSRF
+        token (bearer requests need none). The UI uses it to decide what to show.
+      responses:
+        '200':
+          description: Identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/me/password:
+    post:
+      tags: [auth]
+      operationId: changeOwnPassword
+      security:
+        - sessionAuth: [viewer]
+      summary: Change the caller's own password
+      description: |
+        Requires the current password. Clears `mustChangePassword`. Other sessions of the user are
+        revoked; the current one stays.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChange'
+      responses:
+        '204':
+          description: Password changed.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/admin/settings:
+    get:
+      tags: [admin]
+      operationId: getSettings
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Hub-only settings (recommender, pricing)
+      description: |
+        Settings that stay in the hub and never reach clusters. A section never saved holds the
+        values from the hub's configuration file with `version` 0.
+      responses:
+        '200':
+          description: Settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/settings/recommender:
+    get:
+      tags: [admin]
+      operationId: getRecommenderSettings
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Recommender settings
+      responses:
+        '200':
+          description: Recommender settings.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommenderSettingsDoc'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [admin]
+      operationId: putRecommenderSettings
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Replace the recommender settings
+      description: |
+        Stores a new version. Takes effect on the next recommender run (`POST /v1/admin/recompute`
+        starts one). Records a `config_changed` audit event (`SettingsUpdated`).
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommenderSettingsUpdate'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommenderSettingsDoc'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/admin/settings/pricing:
+    get:
+      tags: [admin]
+      operationId: getPricingSettings
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Pricing adjustments
+      responses:
+        '200':
+          description: Pricing settings.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingSettingsDoc'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [admin]
+      operationId: putPricingSettings
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Replace the pricing adjustments
+      description: |
+        Stores a new version. Savings of recommendations computed afterwards use the adjusted rates.
+        Records a `config_changed` audit event (`SettingsUpdated`).
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricingSettingsUpdate'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingSettingsDoc'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/admin/settings/{section}/versions:
+    parameters:
+      - name: section
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/SettingsSection'
+    get:
+      tags: [admin]
+      operationId: listSettingsVersions
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Version history of a settings section
+      description: Newest first.
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/Continue'
+      responses:
+        '200':
+          description: Versions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsVersionList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/policies:
+    get:
+      tags: [admin]
+      operationId: listPolicies
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Hub-managed policies
+      description: |
+        Hub-managed policies (all types, including workload overrides), ordered by type and then
+        priority descending. Policies from Git are in `GET /v1/admin/policy-inventory`.
+      parameters:
+        - name: cluster
+          in: query
+          description: Only policies sent to this cluster (fleet-wide policies included).
+          schema:
+            $ref: '#/components/schemas/ClusterName'
+        - name: type
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/HubPolicyType'
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Policies.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPolicyList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [admin]
+      operationId: createPolicy
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Create a hub-managed policy
+      description: |
+        Types `global-default`, `cluster-default` and `policy`; workload overrides use
+        `PUT /v1/workloads/{id}/override`. The hub sets the name and priority of the default types
+        (`ro-global-defaults` / 0, `ro-cluster-defaults` / 10); at most one global default and one
+        cluster default per cluster exist (`409`, code `already_exists`). A `policy` needs a name
+        that does not start with `ro-` and a priority from 1 to 899999. The spec is validated like
+        the CRD (code `invalid_policy`, `detail` lists the fields). Records a `config_changed`
+        audit event (`PolicyCreated`).
+        Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyInput'
+      responses:
+        '201':
+          description: Created.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/policies/{policyId}:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+    get:
+      tags: [admin]
+      operationId: getPolicy
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: One hub-managed policy
+      description: Soft-deleted policies are returned too (with `deletedAt`).
+      responses:
+        '200':
+          description: Policy.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPolicy'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PolicyNotFound'
+    put:
+      tags: [admin]
+      operationId: updatePolicy
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Replace a hub-managed policy
+      description: |
+        Stores a new version; `type` cannot change (`400`, code `type_immutable`). Agents pick the
+        change up on their next config pull. Records `PolicyUpdated`.
+        Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyInput'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PolicyNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+    delete:
+      tags: [admin]
+      operationId: deletePolicy
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Soft-delete a hub-managed policy
+      description: |
+        Sets `deletedAt` and stores a version with operation `delete`; the versions are kept and
+        `revert` restores it. Agents delete the CR on their next pull. Records `PolicyDeleted`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeReason'
+      responses:
+        '200':
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PolicyNotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/admin/policies/{policyId}/versions:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+    get:
+      tags: [admin]
+      operationId: listPolicyVersions
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Version history of a policy
+      description: Newest first. Every create, update, delete and revert is one version.
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/Continue'
+      responses:
+        '200':
+          description: Versions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyVersionList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PolicyNotFound'
+  /v1/admin/policies/{policyId}/revert:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+    post:
+      tags: [admin]
+      operationId: revertPolicy
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Restore an earlier version
+      description: |
+        Stores a new version whose content equals version `version` (operation `revert`); reverting
+        to a version of a deleted policy undeletes it. Records `PolicyReverted`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyRevert'
+      responses:
+        '200':
+          description: Reverted.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PolicyNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/admin/policy-inventory:
+    get:
+      tags: [admin]
+      operationId: getPolicyInventory
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: RightsizingPolicy CRs reported by the agents
+      description: |
+        Every policy CR on each cluster as last reported by its agent (`policyInventory` of the
+        status batch), hub-managed and from Git. The UI shows Git policies read-only from here.
+      parameters:
+        - name: cluster
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ClusterName'
+      responses:
+        '200':
+          description: Inventory per cluster.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyInventoryList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/preview:
+    post:
+      tags: [admin]
+      operationId: previewPolicyChange
+      security:
+        - sessionAuth: [operator]
+        - bearerAuth: [admin]
+      summary: Impact dry-run of policy changes
+      description: |
+        Applies the given hypothetical policy changes (global and cluster defaults are policies
+        too) to the current state without saving them, and returns the workloads whose effective
+        CPU or memory mode changes and the estimated monthly savings that move into (or out of)
+        `auto-patch`. Read-only: needs no `If-Match` or reason and records nothing.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewRequest'
+      responses:
+        '200':
+          description: Impact.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImpactPreview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/clusters:
+    post:
+      tags: [admin]
+      operationId: createCluster
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Register a cluster
+      description: |
+        Creates the cluster and, with `createAgentToken`, an `agent` token for it whose value is
+        returned once in `agentToken`. Records `ClusterCreated` (and `TokenCreated`).
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClusterCreate'
+      responses:
+        '201':
+          description: Created.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/clusters/{cluster}:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [admin]
+      operationId: getClusterAdmin
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Cluster metadata, automation state and agent config sync
+      responses:
+        '200':
+          description: Cluster.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [admin]
+      operationId: updateCluster
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Change cluster metadata
+      description: Only the given fields change (JSON merge semantics). Records `ClusterUpdated`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClusterUpdate'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterAdmin'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+    delete:
+      tags: [admin]
+      operationId: deleteCluster
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Retire a cluster
+      description: |
+        Soft delete: sets `deletedAt`, revokes the cluster's tokens and hides it from the lists;
+        its history is kept. Records `ClusterDeleted`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeReason'
+      responses:
+        '204':
+          description: Deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/clusters/{cluster}/automation:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    put:
+      tags: [admin]
+      operationId: setClusterAutomation
+      security:
+        - sessionAuth: [operator]
+        - bearerAuth: [admin]
+      summary: Pause or resume automation of a cluster
+      description: |
+        Pausing is always allowed for an operator. Resuming a cluster with environment `prod`
+        needs an admin (`403`, code `admin_required`). `If-Match` is optional here, so a pause is
+        never held up by a stale page; when given it is checked. With `resumeAt` the hub stops
+        reporting the pause at that time (the agent does not evaluate it). Records
+        `AutomationPaused` or `AutomationResumed`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatchOptional'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationUpdate'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Automation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+  /v1/admin/automation:
+    get:
+      tags: [admin]
+      operationId: getFleetAutomation
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Fleet-wide and per-cluster pause state
+      responses:
+        '200':
+          description: Automation state.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetAutomation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [admin]
+      operationId: setFleetAutomation
+      security:
+        - sessionAuth: [operator]
+        - bearerAuth: [admin]
+      summary: Pause or resume automation of the whole fleet
+      description: |
+        A fleet pause applies to every cluster in addition to its own pause (a cluster is paused
+        if either is). Resuming the fleet needs an admin. `If-Match` (the `fleet.version`) is
+        optional, as for a cluster. Records `AutomationPaused` or `AutomationResumed`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatchOptional'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutomationUpdate'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Automation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+  /v1/workloads/{id}/effective-policy:
+    parameters:
+      - $ref: '#/components/parameters/WorkloadID'
+    get:
+      tags: [ui]
+      operationId: getEffectivePolicy
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Precedence chain and winning value per field
+      description: |
+        Computed by the hub from the hub-managed policies, the cluster's reported policy inventory
+        (Git policies), the agent's reported cluster defaults and the workload's annotations and
+        labels as last reported. Layers from lowest to highest precedence: built-in defaults →
+        global default → cluster default (chart value) → cluster default (hub) → the winning
+        policy (highest priority, ties by name) → workload override (hub) → annotations (D-005).
+        `fields` lists every field with its value and the layer that set it. `agentModes` is what
+        the agent last reported, so the UI can show a difference (e.g. before the next pull).
+      responses:
+        '200':
+          description: Effective policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EffectivePolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WorkloadNotFound'
+  /v1/workloads/{id}/override:
+    parameters:
+      - $ref: '#/components/parameters/WorkloadID'
+    get:
+      tags: [ui]
+      operationId: getWorkloadOverride
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: The workload's hub override policy
+      responses:
+        '200':
+          description: Override.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WorkloadNotFound'
+    put:
+      tags: [ui]
+      operationId: putWorkloadOverride
+      security:
+        - sessionAuth: [operator]
+        - bearerAuth: [admin]
+      summary: Create or replace the workload's override
+      description: |
+        Stores a hub policy of type `workload-override` named
+        `ro-override-<16 hex of sha256("<namespace>/<kind>/<name>")>`, priority 900000, sent only to
+        the workload's cluster, with selector `{namespaces: [ns], kinds: [kind], workloads: [ref]}`.
+        Creating one needs no `If-Match`; replacing an existing one does (`428` without it).
+        Setting a mode to `auto-patch` on a cluster with environment `prod` needs an admin (`403`,
+        code `admin_required`). "Exclude" is an override with both modes `off`. Records
+        `OverrideSet`.
+        Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+      parameters:
+        - $ref: '#/components/parameters/IfMatchOptional'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkloadOverrideInput'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPolicy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WorkloadNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+    delete:
+      tags: [ui]
+      operationId: deleteWorkloadOverride
+      security:
+        - sessionAuth: [operator]
+        - bearerAuth: [admin]
+      summary: Clear the workload's override
+      description: Soft-deletes the override policy; the workload inherits again. Records `OverrideCleared`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeReason'
+      responses:
+        '204':
+          description: Cleared.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WorkloadNotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/workloads/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/WorkloadID'
+    post:
+      tags: [ui]
+      operationId: approveRecommendation
+      security:
+        - sessionAuth: [operator]
+        - bearerAuth: [admin]
+      summary: Approve the current recommendation once (D-024)
+      description: |
+        Records an approval for `recommendationID`, which must be the workload's latest
+        recommendation (`409`, code `recommendation_stale`). Only for a workload whose effective
+        mode for at least one resource is `audit` (`409`, code `not_in_audit`). The agent applies
+        that recommendation once, with all guardrails, as if the `audit` resources were
+        `auto-patch`, and emits `applied` with reason `ApprovedOnce`; the workload stays in
+        `audit`. A new approval replaces an earlier unconsumed one. Records `WorkloadApproved`.
+        On a cluster that is not `AutomationReady`: `409`, code `cluster_not_automation_ready`,
+        unless an admin sends `overrideReadiness: true` (D-025).
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequest'
+      responses:
+        '201':
+          description: Approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/WorkloadNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/tokens:
+    get:
+      tags: [admin]
+      operationId: listTokens
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: API tokens (never their values)
+      parameters:
+        - name: cluster
+          in: query
+          schema:
+            $ref: '#/components/schemas/ClusterName'
+        - name: includeRevoked
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Tokens, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [admin]
+      operationId: createToken
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Create an API token
+      description: |
+        The value is returned once, in `value`; the hub stores only its SHA-256. Role `agent` needs
+        `cluster`; `ui` and `admin` must not have one. Records `TokenCreated` (without the value).
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/tokens/{tokenId}:
+    parameters:
+      - name: tokenId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[0-9]+$'
+    delete:
+      tags: [admin]
+      operationId: revokeToken
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Revoke an API token
+      description: |
+        Sets `revokedAt`; the token stops working at once (the hub's token cache is invalidated).
+        Revoking the token used for this request is allowed. Records `TokenRevoked`.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeReason'
+      responses:
+        '200':
+          description: Revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/users:
+    get:
+      tags: [admin]
+      operationId: listUsers
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Local users
+      parameters:
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Users, ordered by username.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [admin]
+      operationId: createUser
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Create a local user
+      description: |
+        The password is stored as a bcrypt hash. The user must change it at first login
+        (`mustChangePassword`) unless `mustChangePassword: false` is sent. Records `UserCreated`.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: Created.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/users/{username}:
+    parameters:
+      - $ref: '#/components/parameters/Username'
+    get:
+      tags: [admin]
+      operationId: getUser
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: One local user
+      responses:
+        '200':
+          description: User.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+    patch:
+      tags: [admin]
+      operationId: updateUser
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Change a user's display name, role or disabled flag
+      description: |
+        Only the given fields change. Disabling a user or changing the role revokes the user's
+        sessions. The last enabled admin cannot be demoted or disabled (`409`, code
+        `last_admin`). Records `UserUpdated`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+    delete:
+      tags: [admin]
+      operationId: deleteUser
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Delete a local user
+      description: |
+        Soft delete (`deletedAt`, sessions revoked); the username stays reserved so the audit
+        trail stays unambiguous. Not for the last enabled admin (`409`, code `last_admin`).
+        Records `UserDeleted`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeReason'
+      responses:
+        '204':
+          description: Deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/admin/users/{username}/reset-password:
+    parameters:
+      - $ref: '#/components/parameters/Username'
+    post:
+      tags: [admin]
+      operationId: resetUserPassword
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Set a new password for a user
+      description: |
+        Sets `password`, or a generated one returned once in `temporaryPassword` when `password`
+        is omitted. Sets `mustChangePassword`, clears the lockout and revokes the user's sessions.
+        Records `PasswordReset` (without the password).
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordReset'
+      responses:
+        '200':
+          description: Reset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+  /v1/audit/config:
+    get:
+      tags: [audit]
+      operationId: queryConfigAudit
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Configuration changes (audit type `config_changed`)
+      description: |
+        Every configuration change made through the hub API, with actor, target, before/after and
+        reason, ordered by time. Stored in the audit log with type `config_changed`; served here
+        and not by `GET /v1/audit`, whose items are workload events. All filters are combined with
+        AND.
+      parameters:
+        - name: cluster
+          in: query
+          description: Changes whose target belongs to this cluster.
+          schema:
+            $ref: '#/components/schemas/ClusterName'
+        - name: targetType
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ConfigTargetType'
+        - name: targetId
+          in: query
+          schema:
+            type: string
+        - name: workloadId
+          in: query
+          schema:
+            $ref: '#/components/schemas/WorkloadID'
+        - name: actor
+          in: query
+          description: Actor name (username or `token:<id>`).
+          schema:
+            type: string
+        - name: action
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ConfigAction'
+        - name: from
+          in: query
+          description: Inclusive lower bound on time.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Exclusive upper bound on time.
+          schema:
+            type: string
+            format: date-time
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/Continue'
+      responses:
+        '200':
+          description: Changes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigChangeList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/datasources:
+    get:
+      tags: [admin]
+      operationId: listDatasources
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Metrics datasources (D-025)
+      description: Includes the built-in `local` datasource. Secrets are never returned.
+      responses:
+        '200':
+          description: Datasources, ordered by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasourceList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [admin]
+      operationId: createDatasource
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Add a metrics datasource
+      description: |
+        Secret auth fields are write-only: stored encrypted, never returned. Records
+        `DatasourceCreated` (without secrets).
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasourceInput'
+      responses:
+        '201':
+          description: Created.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Datasource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/datasources/{datasourceId}:
+    parameters:
+      - $ref: '#/components/parameters/DatasourceID'
+    get:
+      tags: [admin]
+      operationId: getDatasource
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: One datasource
+      responses:
+        '200':
+          description: Datasource.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Datasource'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+    put:
+      tags: [admin]
+      operationId: updateDatasource
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Replace a datasource
+      description: |
+        Omitted secret fields keep their stored values; `clearSecrets: true` removes them. The
+        built-in `local` datasource only accepts `timeout` and `maxPoints` changes (`400`, code
+        `builtin`). Records `DatasourceUpdated`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasourceInput'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Datasource'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+    delete:
+      tags: [admin]
+      operationId: deleteDatasource
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Delete a datasource
+      description: |
+        Soft delete. `409` with code `datasource_in_use` while a cluster is bound to it, `builtin`
+        for `local`. Records `DatasourceDeleted`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeReason'
+      responses:
+        '204':
+          description: Deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/admin/datasources/{datasourceId}/test:
+    parameters:
+      - $ref: '#/components/parameters/DatasourceID'
+    post:
+      tags: [admin]
+      operationId: testDatasource
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Run the metrics checks against a datasource now
+      description: |
+        Runs `datasource.reachable` and, with `binding`, every hub metrics check for that binding
+        (before any agent exists; the onboarding wizard's "Test"). Nothing is stored or audited.
+        Returns `200` also when checks fail; `ok` is true when no blocking check failed.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasourceTestRequest'
+      responses:
+        '200':
+          description: Check results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasourceTestResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+  /v1/clusters/{cluster}/readiness:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [ui]
+      operationId: getClusterReadiness
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Readiness state and check results of a cluster (D-025)
+      description: |
+        The latest result of every check (hub metrics checks and agent self-checks), the state they
+        imply and what blocks the next state. Checks never run yet have status `unknown`.
+      responses:
+        '200':
+          description: Readiness.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterReadiness'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/clusters/{cluster}/readiness/recheck:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    post:
+      tags: [ui]
+      operationId: recheckClusterReadiness
+      security:
+        - sessionAuth: [operator]
+        - bearerAuth: [admin]
+      summary: Re-run the readiness checks now
+      description: |
+        Queues the hub metrics checks and sets the recheck flag in the cluster's config, so the
+        agent re-runs its self-checks on its next pull. Results appear in
+        `GET /v1/clusters/{cluster}/readiness` as they arrive. Not audited.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '202':
+          description: Re-check queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecheckAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/clusters/{cluster}/readiness/history:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [ui]
+      operationId: getClusterReadinessHistory
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: State transitions and check status changes
+      description: Only changes are stored (a check's status or the state), newest first.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/Continue'
+      responses:
+        '200':
+          description: History.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessHistory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/clusters/{cluster}/install:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [admin]
+      operationId: getClusterInstall
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Agent install instructions for a cluster
+      description: |
+        Rendered for this cluster and hub URL. The token value is never included: the snippet
+        references the Secret `resource-optimizer-agent-token` (key `token`); the value is shown
+        once when the token is created. Also returns the Argo CD `ignoreDifferences` snippet for
+        `argocd-cm` (D-006).
+      parameters:
+        - name: format
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/InstallFormat'
+        - name: webhook
+          in: query
+          description: Include the webhook install.
+          schema:
+            type: boolean
+            default: false
+        - name: certManager
+          in: query
+          description: Webhook certificates from cert-manager (otherwise self-signed).
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Install instructions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallSnippet'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       description: Opaque token with role `agent` (per cluster), `ui` or `admin` (D-012).
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: ro_session
+      description: |
+        Session of a local user (D-023), set by `POST /v1/auth/login`. The requirement lists the
+        lowest user role accepted (`viewer` < `operator` < `admin`). Writes also need `X-CSRF-Token`.
+  headers:
+    ETag:
+      description: '`"<version>"` of the returned object; send it back in `If-Match`.'
+      schema:
+        type: string
   parameters:
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      description: Required when the request is authenticated with the session cookie.
+      schema:
+        type: string
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale).
+      schema:
+        type: string
+    IfMatchOptional:
+      name: If-Match
+      in: header
+      required: false
+      description: ETag (`"<version>"`) of the object being changed; checked when given (`412` if stale).
+      schema:
+        type: string
+    DatasourceID:
+      name: datasourceId
+      in: path
+      required: true
+      description: '`local` or a UUID.'
+      schema:
+        type: string
+    PolicyID:
+      name: policyId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Username:
+      name: username
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Username'
+    PageLimit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 100
     Cluster:
       name: cluster
       in: path
@@ -742,6 +2653,53 @@ components:
             $ref: '#/components/schemas/Problem'
     TooLarge:
       description: Batch too large (more than 1000 items or 8 MiB).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: The change conflicts with the current state (`code` says how).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PreconditionFailed:
+      description: '`If-Match` does not match the current version (code `version_conflict`).'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PreconditionRequired:
+      description: '`If-Match` is required (code `precondition_required`).'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: Too many failed attempts (code `rate_limited` or `account_locked`).
+      headers:
+        Retry-After:
+          description: Seconds until the next attempt is allowed.
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PolicyNotFound:
+      description: Unknown policy id.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    DatasourceNotFound:
+      description: Unknown datasource id.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UserNotFound:
+      description: Unknown username.
       content:
         application/problem+json:
           schema:
@@ -1046,6 +3004,11 @@ components:
         policy:
           type: string
           description: Winning RightsizingPolicy name; empty when none matched.
+        override:
+          type: string
+          description: |
+            Name of the hub workload-override policy layered on top of `policy` (D-022), if any.
+            Modes it sets are reported with source `policy`.
         modes:
           $ref: '#/components/schemas/EffectiveModes'
         strategy:
@@ -1129,6 +3092,34 @@ components:
       properties:
         agentVersion:
           type: string
+        configVersion:
+          type: string
+          description: |
+            `configVersion` of the last cluster config the agent materialised (D-022). Absent for
+            agents without config pull.
+        policyInventory:
+          type: array
+          description: |
+            Every RightsizingPolicy CR on the cluster (hub-managed and Git) and every hub policy the
+            agent could not materialise. Sent with full batches; absent means "unchanged since the
+            last report", an empty array means "none".
+          items:
+            $ref: '#/components/schemas/PolicyInventoryItem'
+        capabilities:
+          type: array
+          description: |
+            Agent self-check of its RBAC per capability (D-025). Absent = unchanged; present = all
+            capabilities.
+          items:
+            $ref: '#/components/schemas/AgentCapability'
+        checks:
+          type: array
+          description: |
+            Agent self-check results (source `agent`, docs/contracts/readiness.md). Absent =
+            unchanged; present = every agent check. Sent at start, every 10 minutes and after a
+            recheck.
+          items:
+            $ref: '#/components/schemas/ReadinessCheck'
         items:
           type: array
           maxItems: 1000
@@ -1466,6 +3457,23 @@ components:
           type: string
           description: '`stale` when the last heartbeat is older than the hub''s configured threshold.'
           enum: [connected, stale, never]
+        environment:
+          $ref: '#/components/schemas/Environment'
+        owner:
+          type: string
+        policySource:
+          $ref: '#/components/schemas/ClusterPolicySource'
+        paused:
+          type: boolean
+          description: Automation paused (cluster or fleet, D-022).
+        automation:
+          description: The cluster's own pause state.
+          allOf:
+            - $ref: '#/components/schemas/Automation'
+        configSync:
+          $ref: '#/components/schemas/AgentConfigSync'
+        readiness:
+          $ref: '#/components/schemas/ReadinessSummary'
         counts:
           type: object
           required: [workloads, withRecommendation, autoPatch, blocked]
@@ -1613,6 +3621,14 @@ components:
           description: Latest status reported by the agent. Absent if never reported.
           allOf:
             - $ref: '#/components/schemas/WorkloadStatus'
+        approval:
+          description: The latest approve-once grant (D-024), if any.
+          allOf:
+            - $ref: '#/components/schemas/Approval'
+        override:
+          description: The workload's hub override policy (D-022), if any.
+          allOf:
+            - $ref: '#/components/schemas/AdminPolicy'
     Point:
       type: array
       description: '[unix seconds, value]'
@@ -1688,6 +3704,11 @@ components:
           description: Newest first.
           items:
             $ref: '#/components/schemas/AuditEvent'
+        configChanges:
+          type: array
+          description: Configuration changes targeting this workload (override, approval), newest first.
+          items:
+            $ref: '#/components/schemas/ConfigChange'
     SavingsPoint:
       type: object
       required: [time, cpu, memory, total]
@@ -1745,6 +3766,1932 @@ components:
         coalesced:
           type: boolean
           description: True when an already queued run for the same scope was returned.
+    UserRole:
+      type: string
+      description: |
+        Role of a local user (D-023). `viewer`: everything the read-only UI shows. `operator`:
+        additionally workload actions (override, exclude, approve-once) and pausing automation.
+        `admin`: additionally defaults, policies, settings, clusters, tokens and users. Each role
+        includes the ones before it.
+      enum: [viewer, operator, admin]
+    TokenRole:
+      type: string
+      description: Role of an API (machine) token (D-012); unchanged by the admin area.
+      enum: [agent, ui, admin]
+    Username:
+      type: string
+      pattern: '^[a-z0-9][a-z0-9._-]{1,62}$'
+      examples: [alice]
+    Password:
+      type: string
+      description: At least 8 characters; at most 72 bytes (bcrypt).
+      minLength: 8
+      maxLength: 72
+    ReasonText:
+      type: string
+      description: Why the change is made; stored in the audit log.
+      minLength: 1
+      maxLength: 1024
+    Duration:
+      type: string
+      description: Go duration.
+      pattern: '^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$'
+      examples: [10m, 168h]
+    Actor:
+      type: object
+      description: |
+        Who made a change. `user`: a local user (`name` = username). `token`: an API token
+        (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`).
+      required: [type, name]
+      properties:
+        type:
+          type: string
+          enum: [user, token, system]
+        name:
+          type: string
+        role:
+          type: string
+          description: The user role or token role at the time of the change.
+    ChangeReason:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          maxLength: 63
+        password:
+          type: string
+          maxLength: 72
+    Me:
+      type: object
+      required: [authMethod, role]
+      properties:
+        authMethod:
+          type: string
+          enum: [session, token]
+        role:
+          $ref: '#/components/schemas/UserRole'
+        user:
+          description: The logged-in user; only with `authMethod = session`.
+          allOf:
+            - $ref: '#/components/schemas/User'
+        tokenId:
+          type: string
+          description: Only with `authMethod = token`.
+        csrfToken:
+          type: string
+          description: Send as `X-CSRF-Token` on writes; only with `authMethod = session`.
+        sessionExpiresAt:
+          type: string
+          format: date-time
+    PasswordChange:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          maxLength: 72
+        newPassword:
+          $ref: '#/components/schemas/Password'
+    User:
+      type: object
+      required: [username, displayName, role, disabled, mustChangePassword, createdAt, version]
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        displayName:
+          type: string
+          maxLength: 128
+        role:
+          $ref: '#/components/schemas/UserRole'
+        disabled:
+          type: boolean
+        mustChangePassword:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          description: Actor name; absent for the bootstrap admin.
+        updatedAt:
+          type: string
+          format: date-time
+        lastLoginAt:
+          type: string
+          format: date-time
+        lockedUntil:
+          type: string
+          format: date-time
+          description: Present while login is locked after failed attempts.
+        deletedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          minimum: 1
+    UserList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+    UserCreate:
+      type: object
+      required: [username, role, password, reason]
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        displayName:
+          type: string
+          maxLength: 128
+        role:
+          $ref: '#/components/schemas/UserRole'
+        password:
+          $ref: '#/components/schemas/Password'
+        mustChangePassword:
+          type: boolean
+          default: true
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    UserUpdate:
+      type: object
+      required: [reason]
+      properties:
+        displayName:
+          type: string
+          maxLength: 128
+        role:
+          $ref: '#/components/schemas/UserRole'
+        disabled:
+          type: boolean
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    PasswordReset:
+      type: object
+      required: [reason]
+      properties:
+        password:
+          $ref: '#/components/schemas/Password'
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    PasswordResetResult:
+      type: object
+      required: [mustChangePassword]
+      properties:
+        temporaryPassword:
+          type: string
+          description: The generated password, shown once; absent when `password` was given.
+        mustChangePassword:
+          type: boolean
+    TokenInfo:
+      type: object
+      required: [id, role, description, createdAt]
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9]+$'
+        role:
+          $ref: '#/components/schemas/TokenRole'
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          description: Actor name; absent for tokens seeded from configuration.
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          description: Updated at most once a minute.
+        revokedAt:
+          type: string
+          format: date-time
+    TokenList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenInfo'
+    TokenCreate:
+      type: object
+      required: [role, description, reason]
+      properties:
+        role:
+          $ref: '#/components/schemas/TokenRole'
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        description:
+          type: string
+          maxLength: 256
+        expiresAt:
+          type: string
+          format: date-time
+          description: Absent means the token does not expire.
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    TokenCreated:
+      type: object
+      required: [token, value]
+      properties:
+        token:
+          $ref: '#/components/schemas/TokenInfo'
+        value:
+          type: string
+          description: The token value. Shown once; the hub cannot return it again.
+    SettingsSection:
+      type: string
+      enum: [recommender, pricing]
+    RecommenderProfileSettings:
+      type: object
+      description: One recommender profile (WO-04). Fractions are 0.15 for +15 %.
+      required: [name, window, cpuPercentile, memoryPercentile, cpuHeadroom, memoryBuffer]
+      properties:
+        name:
+          $ref: '#/components/schemas/Profile'
+        window:
+          $ref: '#/components/schemas/Duration'
+        cpuPercentile:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+        memoryPercentile:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+        memoryPeakWindow:
+          description: Window of the memory peak; absent or 0 means the whole window.
+          allOf:
+            - $ref: '#/components/schemas/Duration'
+        cpuHeadroom:
+          type: number
+          minimum: 0
+          maximum: 10
+        memoryBuffer:
+          type: number
+          minimum: 0
+          maximum: 10
+    RecommenderSettings:
+      type: object
+      required: [interval, retention, profiles]
+      properties:
+        interval:
+          description: Time between scheduled recommender runs.
+          allOf:
+            - $ref: '#/components/schemas/Duration'
+        retention:
+          description: Recommendation history retention (the latest per workload is always kept).
+          allOf:
+            - $ref: '#/components/schemas/Duration'
+        profiles:
+          type: array
+          description: Exactly one entry per built-in profile (`dev`, `production`, `high-availability`).
+          minItems: 3
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/RecommenderProfileSettings'
+    RecommenderSettingsDoc:
+      type: object
+      required: [version, value]
+      properties:
+        version:
+          type: integer
+          minimum: 0
+          description: 0 = never saved (values from the hub configuration file).
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          $ref: '#/components/schemas/Actor'
+        reason:
+          type: string
+        value:
+          $ref: '#/components/schemas/RecommenderSettings'
+    RecommenderSettingsUpdate:
+      type: object
+      required: [value, reason]
+      properties:
+        value:
+          $ref: '#/components/schemas/RecommenderSettings'
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    ClusterPricingAdjustment:
+      type: object
+      description: |
+        Adjusts the rates of one cluster. A fixed rate replaces the rate from the pricing metrics
+        (or the default rate); the discount then applies to whichever rate is used.
+      required: [cluster]
+      properties:
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        discountPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Savings Plans / EDP discount, percent off the rate.
+        cpuCoreHourUSD:
+          type: number
+          minimum: 0
+        memoryGiBHourUSD:
+          type: number
+          minimum: 0
+    PricingSettings:
+      type: object
+      required: [clusters]
+      properties:
+        defaultDiscountPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Discount for clusters without their own entry.
+        clusters:
+          type: array
+          description: At most one entry per cluster.
+          items:
+            $ref: '#/components/schemas/ClusterPricingAdjustment'
+    PricingSettingsDoc:
+      type: object
+      required: [version, value]
+      properties:
+        version:
+          type: integer
+          minimum: 0
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          $ref: '#/components/schemas/Actor'
+        reason:
+          type: string
+        value:
+          $ref: '#/components/schemas/PricingSettings'
+    PricingSettingsUpdate:
+      type: object
+      required: [value, reason]
+      properties:
+        value:
+          $ref: '#/components/schemas/PricingSettings'
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    Settings:
+      type: object
+      required: [recommender, pricing]
+      properties:
+        recommender:
+          $ref: '#/components/schemas/RecommenderSettingsDoc'
+        pricing:
+          $ref: '#/components/schemas/PricingSettingsDoc'
+    SettingsVersion:
+      type: object
+      required: [section, version, value, createdAt, actor, reason]
+      properties:
+        section:
+          $ref: '#/components/schemas/SettingsSection'
+        version:
+          type: integer
+          minimum: 1
+        value:
+          type: object
+          description: '`RecommenderSettings` or `PricingSettings`, by `section`.'
+        createdAt:
+          type: string
+          format: date-time
+        actor:
+          $ref: '#/components/schemas/Actor'
+        reason:
+          type: string
+    SettingsVersionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettingsVersion'
+        continue:
+          type: string
+    HubPolicyType:
+      type: string
+      description: |
+        `global-default` (`ro-global-defaults`, priority 0, every cluster), `cluster-default`
+        (`ro-cluster-defaults`, priority 10, one cluster), `policy` (named, priority 1-899999),
+        `workload-override` (`ro-override-…`, priority 900000, one workload). The agent layers the
+        default types under the winning policy and the override above it (D-022).
+      enum: [global-default, cluster-default, policy, workload-override]
+    ClusterPolicySource:
+      type: string
+      description: |
+        Where a cluster's policies come from (D-022). `hub`: hub-managed policies only (Git CRs are
+        still reported). `git`: no hub-managed policies are sent and the admin pages are read-only
+        for that cluster. `both`: both.
+      enum: [hub, git, both]
+    PolicyOrigin:
+      type: string
+      description: '`hub`: a CR labelled `managed-by=hub`; `git`: any other CR.'
+      enum: [hub, git]
+    Environment:
+      type: string
+      description: Writes to a `prod` cluster ask for confirmation in the UI and some need an admin.
+      enum: [prod, non-prod]
+    NamespacedWorkloadRef:
+      type: object
+      required: [kind, namespace, name]
+      properties:
+        kind:
+          $ref: '#/components/schemas/WorkloadKind'
+        namespace:
+          type: string
+          minLength: 1
+          maxLength: 63
+        name:
+          type: string
+          minLength: 1
+          maxLength: 253
+    PolicySelector:
+      type: object
+      description: Mirrors `RightsizingPolicy.spec.selector` (api/v1alpha1). All set criteria must match.
+      properties:
+        namespaces:
+          type: array
+          maxItems: 64
+          items:
+            type: string
+            maxLength: 253
+        excludeNamespaces:
+          type: array
+          maxItems: 64
+          items:
+            type: string
+            maxLength: 253
+        matchLabels:
+          type: object
+          additionalProperties:
+            type: string
+        kinds:
+          type: array
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/WorkloadKind'
+        workloads:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/NamespacedWorkloadRef'
+    CPUPolicy:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/Mode'
+        limits:
+          type: string
+          enum: [keep, remove, ratio]
+        limitRatio:
+          type: string
+          pattern: '^([1-9][0-9]*)(\.[0-9]{1,3})?$'
+          description: Required iff `limits = ratio`.
+    MemoryPolicy:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/Mode'
+        limitEqualsRequest:
+          type: boolean
+    TimeWindow:
+      type: object
+      description: Either `schedule` + `duration` (recurring) or `start` + `end` (one-off).
+      properties:
+        schedule:
+          type: string
+          maxLength: 128
+          description: 5-field cron expression.
+        duration:
+          $ref: '#/components/schemas/Duration'
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        timeZone:
+          type: string
+          maxLength: 64
+          description: IANA name; default UTC.
+    ApplyPolicy:
+      type: object
+      properties:
+        strategy:
+          $ref: '#/components/schemas/Strategy'
+        fallbackAfter:
+          $ref: '#/components/schemas/Duration'
+        maintenanceWindows:
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/TimeWindow'
+        freezeWindows:
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/TimeWindow'
+    RollbackPolicy:
+      type: object
+      properties:
+        watchDuration:
+          $ref: '#/components/schemas/Duration'
+        oomKills:
+          type: integer
+          minimum: 1
+        restarts:
+          type: integer
+          minimum: 1
+        throttlingRatio:
+          type: string
+          pattern: '^(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$'
+    Guardrails:
+      type: object
+      properties:
+        learningPeriod:
+          $ref: '#/components/schemas/Duration'
+        minConfidence:
+          type: string
+          pattern: '^(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$'
+        maxChangePercent:
+          type: integer
+          minimum: 1
+          maximum: 100
+        minCPU:
+          $ref: '#/components/schemas/Quantity'
+        minMemory:
+          $ref: '#/components/schemas/Quantity'
+        cooldown:
+          $ref: '#/components/schemas/Duration'
+        rollback:
+          $ref: '#/components/schemas/RollbackPolicy'
+    HPATargetBounds:
+      type: object
+      properties:
+        minUtilization:
+          type: integer
+          minimum: 1
+          maximum: 100
+        maxUtilization:
+          type: integer
+          minimum: 1
+          maximum: 100
+    HPAPolicy:
+      type: object
+      properties:
+        coordinate:
+          type: boolean
+        targetBounds:
+          $ref: '#/components/schemas/HPATargetBounds'
+    JVMPolicy:
+      type: object
+      properties:
+        detect:
+          type: boolean
+    RightsizingPolicySpec:
+      type: object
+      description: |
+        Mirrors `RightsizingPolicy.spec` (api/v1alpha1, `kubectl explain rsp.spec`). Unset fields
+        inherit from the next lower layer. Validated by the shared validator
+        (`api/v1alpha1/validate`) exactly like the CRD.
+      properties:
+        selector:
+          $ref: '#/components/schemas/PolicySelector'
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+        profile:
+          $ref: '#/components/schemas/Profile'
+        cpu:
+          $ref: '#/components/schemas/CPUPolicy'
+        memory:
+          $ref: '#/components/schemas/MemoryPolicy'
+        apply:
+          $ref: '#/components/schemas/ApplyPolicy'
+        guardrails:
+          $ref: '#/components/schemas/Guardrails'
+        hpa:
+          $ref: '#/components/schemas/HPAPolicy'
+        jvm:
+          $ref: '#/components/schemas/JVMPolicy'
+    PolicyInput:
+      type: object
+      description: |
+        Body of create and update. For the default types `name` and `spec.priority` are set by the
+        hub (and ignored if sent); for `policy` both are required. `clusters` empty means every
+        cluster; `cluster-default` needs exactly one.
+      required: [type, spec, reason]
+      properties:
+        type:
+          $ref: '#/components/schemas/HubPolicyType'
+        name:
+          type: string
+          maxLength: 253
+          pattern: '^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$'
+        description:
+          type: string
+          maxLength: 1024
+        clusters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterName'
+        spec:
+          $ref: '#/components/schemas/RightsizingPolicySpec'
+        overrideReadiness:
+          type: boolean
+          description: |
+            Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+            audited with the change.
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    PolicyDraft:
+      type: object
+      description: A policy as in `PolicyInput`, without reason, for `POST /v1/admin/preview`.
+      required: [type, spec]
+      properties:
+        type:
+          $ref: '#/components/schemas/HubPolicyType'
+        name:
+          type: string
+          maxLength: 253
+        description:
+          type: string
+          maxLength: 1024
+        clusters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterName'
+        workloadId:
+          description: Required for `workload-override`.
+          allOf:
+            - $ref: '#/components/schemas/WorkloadID'
+        spec:
+          $ref: '#/components/schemas/RightsizingPolicySpec'
+    AdminPolicy:
+      type: object
+      required: [id, type, name, priority, clusters, spec, version, createdAt, createdBy, updatedAt, updatedBy]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/HubPolicyType'
+        name:
+          type: string
+          description: Name of the RightsizingPolicy CR on the clusters.
+        description:
+          type: string
+        priority:
+          type: integer
+          description: Equal to `spec.priority`.
+        clusters:
+          type: array
+          description: Clusters the policy is sent to; empty means every cluster.
+          items:
+            $ref: '#/components/schemas/ClusterName'
+        workloadId:
+          description: Only for `workload-override`.
+          allOf:
+            - $ref: '#/components/schemas/WorkloadID'
+        spec:
+          $ref: '#/components/schemas/RightsizingPolicySpec'
+        version:
+          type: integer
+          minimum: 1
+          description: Increases with every change; the ETag is `"<version>"`.
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          $ref: '#/components/schemas/Actor'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          $ref: '#/components/schemas/Actor'
+        deletedAt:
+          type: string
+          format: date-time
+    AdminPolicyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPolicy'
+    PolicyVersion:
+      type: object
+      required: [version, operation, name, priority, clusters, spec, deleted, createdAt, actor, reason]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        operation:
+          type: string
+          enum: [create, update, delete, revert]
+        revertedFrom:
+          type: integer
+          description: Source version of a `revert`.
+        name:
+          type: string
+        description:
+          type: string
+        priority:
+          type: integer
+        clusters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterName'
+        spec:
+          $ref: '#/components/schemas/RightsizingPolicySpec'
+        deleted:
+          type: boolean
+          description: True if the policy was deleted in this version.
+        createdAt:
+          type: string
+          format: date-time
+        actor:
+          $ref: '#/components/schemas/Actor'
+        reason:
+          type: string
+    PolicyVersionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyVersion'
+        continue:
+          type: string
+    PolicyRevert:
+      type: object
+      required: [version, reason]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    PolicyInventoryItem:
+      type: object
+      description: |
+        One RightsizingPolicy CR on a cluster, as the agent sees it. `valid` is the result of the
+        shared validator; an invalid hub-managed policy is not materialised (its old CR, if any,
+        stays) and `message` says why; for a Git CR it is informational only.
+      required: [name, source, priority, generation, valid]
+      properties:
+        name:
+          type: string
+        source:
+          $ref: '#/components/schemas/PolicyOrigin'
+        priority:
+          type: integer
+        generation:
+          type: integer
+          minimum: 0
+          description: '`metadata.generation`; 0 for a hub policy the agent could not materialise.'
+        valid:
+          type: boolean
+        message:
+          type: string
+          maxLength: 1024
+        hubPolicyId:
+          type: string
+          format: uuid
+        hubVersion:
+          type: integer
+        hubPolicyType:
+          $ref: '#/components/schemas/HubPolicyType'
+        matchedWorkloads:
+          type: integer
+          minimum: 0
+          description: Workloads for which this policy is the winning policy (or applied override).
+        spec:
+          $ref: '#/components/schemas/RightsizingPolicySpec'
+    ClusterPolicyInventory:
+      type: object
+      required: [cluster, items]
+      properties:
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        reportedAt:
+          type: string
+          format: date-time
+        configVersion:
+          type: string
+          description: Config version the agent had applied when it reported.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyInventoryItem'
+    PolicyInventoryList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterPolicyInventory'
+    PolicyChange:
+      type: object
+      description: |
+        A hypothetical change for the preview. `upsert` with `policyId` replaces that policy; without
+        it, adds a new one (a `workload-override` for a workload that already has one replaces it).
+        `delete` needs `policyId`.
+      required: [op]
+      properties:
+        op:
+          type: string
+          enum: [upsert, delete]
+        policyId:
+          type: string
+          format: uuid
+        policy:
+          $ref: '#/components/schemas/PolicyDraft'
+    PreviewRequest:
+      type: object
+      required: [changes]
+      properties:
+        changes:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/PolicyChange'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 200
+          description: Maximum number of `items`; the totals always cover every workload.
+    ImpactItem:
+      type: object
+      required: [workloadId, cluster, namespace, kind, name, before, after]
+      properties:
+        workloadId:
+          $ref: '#/components/schemas/WorkloadID'
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        namespace:
+          type: string
+        kind:
+          $ref: '#/components/schemas/WorkloadKind'
+        name:
+          type: string
+        before:
+          $ref: '#/components/schemas/EffectiveModes'
+        after:
+          $ref: '#/components/schemas/EffectiveModes'
+        policyBefore:
+          type: string
+          description: Winning policy name before the change.
+        policyAfter:
+          type: string
+        monthlySavingsUSD:
+          $ref: '#/components/schemas/Savings'
+    ImpactPreview:
+      type: object
+      required: [workloadsEvaluated, workloadsChanged, savingsIntoAutoPatchUSD, savingsOutOfAutoPatchUSD, items, truncated]
+      properties:
+        workloadsEvaluated:
+          type: integer
+          minimum: 0
+        workloadsChanged:
+          type: integer
+          minimum: 0
+          description: Workloads whose CPU or memory mode changes.
+        savingsIntoAutoPatchUSD:
+          description: |
+            Estimated monthly savings of the resources whose mode becomes `auto-patch` (CPU savings
+            of workloads whose CPU mode becomes auto-patch, likewise memory).
+          allOf:
+            - $ref: '#/components/schemas/Savings'
+        savingsOutOfAutoPatchUSD:
+          description: Likewise for resources that leave `auto-patch`.
+          allOf:
+            - $ref: '#/components/schemas/Savings'
+        items:
+          type: array
+          description: Changed workloads, by savings descending, at most `limit`.
+          items:
+            $ref: '#/components/schemas/ImpactItem'
+        truncated:
+          type: boolean
+        warnings:
+          type: array
+          description: E.g. validation problems of a draft, or clusters whose labels are unknown.
+          items:
+            type: string
+    Automation:
+      type: object
+      description: Pause state of one cluster (or of the fleet).
+      required: [paused, version]
+      properties:
+        paused:
+          type: boolean
+        reason:
+          type: string
+        by:
+          $ref: '#/components/schemas/Actor'
+        since:
+          type: string
+          format: date-time
+          description: When the current state was set.
+        resumeAt:
+          type: string
+          format: date-time
+          description: Only while paused; the hub resumes at this time.
+        version:
+          type: integer
+          minimum: 0
+          description: 0 = never changed. The ETag is `"<version>"`.
+    AutomationUpdate:
+      type: object
+      required: [paused, reason]
+      properties:
+        paused:
+          type: boolean
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+        resumeAt:
+          type: string
+          format: date-time
+          description: Only with `paused = true`; must be in the future.
+    FleetAutomation:
+      type: object
+      required: [fleet, clusters]
+      properties:
+        fleet:
+          $ref: '#/components/schemas/Automation'
+        clusters:
+          type: array
+          items:
+            type: object
+            required: [cluster, automation, paused]
+            properties:
+              cluster:
+                $ref: '#/components/schemas/ClusterName'
+              automation:
+                $ref: '#/components/schemas/Automation'
+              paused:
+                type: boolean
+                description: Effective state (cluster or fleet paused).
+    AgentConfigSync:
+      type: object
+      required: [configVersion, inSync]
+      properties:
+        agentVersion:
+          type: string
+        lastHeartbeatAt:
+          type: string
+          format: date-time
+        lastConfigPullAt:
+          type: string
+          format: date-time
+        configVersion:
+          type: string
+          description: Current config version the hub serves this cluster.
+        appliedConfigVersion:
+          type: string
+          description: Config version the agent last reported as applied.
+        inSync:
+          type: boolean
+          description: '`appliedConfigVersion = configVersion`.'
+    ClusterAdmin:
+      type: object
+      required: [name, description, owner, policySource, version, automation, paused, agent, metrics, readiness]
+      properties:
+        name:
+          $ref: '#/components/schemas/ClusterName'
+        description:
+          type: string
+        environment:
+          $ref: '#/components/schemas/Environment'
+        owner:
+          type: string
+          description: Owning team.
+        policySource:
+          $ref: '#/components/schemas/ClusterPolicySource'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          $ref: '#/components/schemas/Actor'
+        deletedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          minimum: 1
+          description: Version of the metadata; the ETag is `"<version>"`.
+        automation:
+          $ref: '#/components/schemas/Automation'
+        paused:
+          type: boolean
+          description: Effective pause (cluster or fleet).
+        agent:
+          $ref: '#/components/schemas/AgentConfigSync'
+        policyInventory:
+          $ref: '#/components/schemas/ClusterPolicyInventory'
+        provider:
+          type: string
+          maxLength: 64
+          description: Informational, e.g. `aws`.
+        region:
+          type: string
+          maxLength: 64
+          description: Informational.
+        metrics:
+          $ref: '#/components/schemas/MetricsBinding'
+        readiness:
+          $ref: '#/components/schemas/ReadinessSummary'
+    ClusterCreate:
+      type: object
+      required: [name, environment, reason]
+      properties:
+        name:
+          $ref: '#/components/schemas/ClusterName'
+        description:
+          type: string
+          maxLength: 1024
+        environment:
+          $ref: '#/components/schemas/Environment'
+        owner:
+          type: string
+          maxLength: 128
+        policySource:
+          allOf:
+            - $ref: '#/components/schemas/ClusterPolicySource'
+          default: both
+        provider:
+          type: string
+          maxLength: 64
+          description: Informational, e.g. `aws`.
+        region:
+          type: string
+          maxLength: 64
+          description: Informational.
+        metrics:
+          description: 'Default: datasource `local`, label `cluster`, value = the cluster name.'
+          allOf:
+            - $ref: '#/components/schemas/MetricsBinding'
+        createAgentToken:
+          type: boolean
+          default: true
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    ClusterCreated:
+      type: object
+      required: [cluster]
+      properties:
+        cluster:
+          $ref: '#/components/schemas/ClusterAdmin'
+        agentToken:
+          $ref: '#/components/schemas/TokenCreated'
+    ClusterUpdate:
+      type: object
+      required: [reason]
+      properties:
+        description:
+          type: string
+          maxLength: 1024
+        environment:
+          $ref: '#/components/schemas/Environment'
+        owner:
+          type: string
+          maxLength: 128
+        policySource:
+          $ref: '#/components/schemas/ClusterPolicySource'
+        provider:
+          type: string
+          maxLength: 64
+          description: Informational, e.g. `aws`.
+        region:
+          type: string
+          maxLength: 64
+          description: Informational.
+        metrics:
+          $ref: '#/components/schemas/MetricsBinding'
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    ClusterConfig:
+      type: object
+      required: [cluster, configVersion, generatedAt, policySource, policies, flags, approvals]
+      properties:
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        configVersion:
+          type: string
+          description: Opaque; changes whenever anything in this document changes.
+        generatedAt:
+          type: string
+          format: date-time
+        policySource:
+          $ref: '#/components/schemas/ClusterPolicySource'
+        policies:
+          type: array
+          description: |
+            The complete set of hub-managed policies for the cluster: the agent deletes
+            hub-labelled CRs that are not listed.
+          items:
+            $ref: '#/components/schemas/ConfigPolicy'
+        flags:
+          $ref: '#/components/schemas/ConfigFlags'
+        approvals:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigApproval'
+        hubVersion:
+          type: string
+          description: For the agent's `agent.version` check.
+        minAgentVersion:
+          type: string
+          description: Oldest agent version this hub supports (`agent.version` check).
+    ConfigPolicy:
+      type: object
+      required: [id, name, type, version, priority, spec]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Annotation `resource-optimizer.oz.io/hub-policy-id`.
+        name:
+          type: string
+          description: Name of the CR.
+        type:
+          $ref: '#/components/schemas/HubPolicyType'
+        version:
+          type: integer
+          minimum: 1
+          description: Annotation `resource-optimizer.oz.io/hub-version`.
+        priority:
+          type: integer
+          description: Equal to `spec.priority`.
+        spec:
+          $ref: '#/components/schemas/RightsizingPolicySpec'
+    ConfigFlags:
+      type: object
+      required: [paused]
+      properties:
+        paused:
+          type: boolean
+          description: Cluster or fleet paused. Behaves like a cluster-wide freeze (reason `Paused`).
+        pauseScope:
+          type: string
+          enum: [cluster, fleet]
+          description: Which pause is in effect (`fleet` if both).
+        pauseReason:
+          type: string
+        pausedAt:
+          type: string
+          format: date-time
+        resumeAt:
+          type: string
+          format: date-time
+          description: Informational; the hub ends the pause, the agent does not.
+        recheck:
+          type: boolean
+          description: |
+            A readiness re-check is pending (D-025): the agent re-runs its self-checks if
+            `recheckRequestedAt` is newer than its last run, and reports them in the next batch.
+        recheckRequestedAt:
+          type: string
+          format: date-time
+    ConfigApproval:
+      type: object
+      description: |
+        An approve-once grant (D-024). The agent applies the recommendation `recommendationID` of the
+        workload once, treating its `audit` resources as `auto-patch`, with every guardrail, if that
+        is still the latest recommendation and `expiresAt` has not passed. It then emits `applied`
+        with reason `ApprovedOnce` and `details.approvalId`; the hub marks the approval consumed and
+        stops sending it.
+      required: [id, workload, recommendationID, expiresAt, approvedBy, approvedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        workload:
+          $ref: '#/components/schemas/WorkloadRef'
+        recommendationID:
+          type: string
+          format: uuid
+        expiresAt:
+          type: string
+          format: date-time
+        approvedBy:
+          type: string
+          description: Actor name, for the event message.
+        approvedAt:
+          type: string
+          format: date-time
+    ApprovalRequest:
+      type: object
+      required: [recommendationID, reason]
+      properties:
+        recommendationID:
+          type: string
+          format: uuid
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+        expiresAt:
+          type: string
+          format: date-time
+          description: Default 24 h from now; at most 7 days.
+        overrideReadiness:
+          type: boolean
+          description: |
+            Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+            audited with the change.
+    Approval:
+      type: object
+      required: [id, workloadId, recommendationID, approvedBy, approvedAt, expiresAt, reason, state]
+      properties:
+        id:
+          type: string
+          format: uuid
+        workloadId:
+          $ref: '#/components/schemas/WorkloadID'
+        recommendationID:
+          type: string
+          format: uuid
+        approvedBy:
+          $ref: '#/components/schemas/Actor'
+        approvedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        state:
+          type: string
+          description: '`superseded`: replaced by a newer approval or a newer recommendation.'
+          enum: [pending, consumed, expired, superseded]
+        consumedAt:
+          type: string
+          format: date-time
+        consumedEventId:
+          type: string
+          format: uuid
+          description: The agent's `applied` / `ApprovedOnce` event.
+    WorkloadOverrideInput:
+      type: object
+      description: |
+        `spec` without `selector` and `priority` (the hub sets both; sending them is a `400`, code
+        `invalid_override`).
+      required: [spec, reason]
+      properties:
+        description:
+          type: string
+          maxLength: 1024
+        spec:
+          $ref: '#/components/schemas/RightsizingPolicySpec'
+        overrideReadiness:
+          type: boolean
+          description: |
+            Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+            audited with the change.
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    LayerSource:
+      type: string
+      description: |
+        A precedence layer, lowest first: `built-in` (documented global defaults), `global-default`
+        (hub `ro-global-defaults`), `cluster-default-chart` (agent chart value `clusterDefaults`),
+        `cluster-default` (hub `ro-cluster-defaults`), `policy` (the winning RightsizingPolicy, hub
+        or Git), `workload-override` (hub), `annotation` (workload annotations, D-005).
+      enum: [built-in, global-default, cluster-default-chart, cluster-default, policy, workload-override, annotation]
+    PolicyLayer:
+      type: object
+      required: [source, applied]
+      properties:
+        source:
+          $ref: '#/components/schemas/LayerSource'
+        name:
+          type: string
+          description: Policy name (or annotation key for `annotation`).
+        origin:
+          $ref: '#/components/schemas/PolicyOrigin'
+        policyId:
+          type: string
+          format: uuid
+          description: Hub policy id, for hub-managed layers.
+        priority:
+          type: integer
+        applied:
+          type: boolean
+          description: |
+            False for a matching policy that lost on priority (listed so the UI can explain it) and
+            for an invalid policy.
+        note:
+          type: string
+          description: Why a layer was not applied, e.g. "priority 100 < 200 of payments".
+        spec:
+          description: The fields this layer sets.
+          allOf:
+            - $ref: '#/components/schemas/RightsizingPolicySpec'
+    EffectiveField:
+      type: object
+      required: [path, value, source]
+      properties:
+        path:
+          type: string
+          description: JSON path in the spec, e.g. `cpu.mode`, `guardrails.rollback.oomKills`.
+          examples: [cpu.mode]
+        value:
+          type: string
+          description: The effective value as a string; lists and objects as JSON.
+        source:
+          $ref: '#/components/schemas/LayerSource'
+        name:
+          type: string
+          description: Name of the policy (or annotation key) that set it.
+    EffectivePolicy:
+      type: object
+      required: [workloadId, layers, fields, modes]
+      properties:
+        workloadId:
+          $ref: '#/components/schemas/WorkloadID'
+        layers:
+          type: array
+          description: Lowest precedence first.
+          items:
+            $ref: '#/components/schemas/PolicyLayer'
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/EffectiveField'
+        modes:
+          $ref: '#/components/schemas/EffectiveModes'
+        agentModes:
+          description: Modes the agent last reported; absent if never reported.
+          allOf:
+            - $ref: '#/components/schemas/EffectiveModes'
+        agentPolicy:
+          type: string
+          description: Winning policy the agent last reported.
+        warnings:
+          type: array
+          description: E.g. "workload labels unknown; matchLabels selectors assumed not to match".
+          items:
+            type: string
+    ConfigTargetType:
+      type: string
+      enum: [settings, policy, workload-override, approval, cluster, automation, token, user, datasource, readiness]
+    ConfigAction:
+      type: string
+      description: CamelCase action of a configuration change (`docs/contracts/events.md`).
+      enum:
+        - SettingsUpdated
+        - PolicyCreated
+        - PolicyUpdated
+        - PolicyDeleted
+        - PolicyReverted
+        - OverrideSet
+        - OverrideCleared
+        - WorkloadApproved
+        - ClusterCreated
+        - ClusterUpdated
+        - ClusterDeleted
+        - AutomationPaused
+        - AutomationResumed
+        - TokenCreated
+        - TokenRevoked
+        - UserCreated
+        - UserUpdated
+        - UserDeleted
+        - PasswordReset
+        - DatasourceCreated
+        - DatasourceUpdated
+        - DatasourceDeleted
+        - ReadinessChanged
+    ConfigTarget:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          $ref: '#/components/schemas/ConfigTargetType'
+        id:
+          type: string
+          description: |
+            Policy or approval id, settings section, cluster name (`*` for the fleet automation),
+            token id or username.
+        name:
+          type: string
+          description: Display name, e.g. the policy name.
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        workloadId:
+          $ref: '#/components/schemas/WorkloadID'
+    ConfigChange:
+      type: object
+      description: |
+        One configuration change (audit type `config_changed`). `before` and `after` are the
+        target's API representation before and after the change (`null` on create / delete),
+        never including password hashes or token values.
+      required: [id, type, time, actor, action, target, reason]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [config_changed]
+        time:
+          type: string
+          format: date-time
+        actor:
+          $ref: '#/components/schemas/Actor'
+        action:
+          $ref: '#/components/schemas/ConfigAction'
+        target:
+          $ref: '#/components/schemas/ConfigTarget'
+        reason:
+          type: string
+          description: The reason given with the change.
+        version:
+          type: integer
+          description: Version of the target after the change, if it is versioned.
+        before:
+          type: [object, 'null']
+        after:
+          type: [object, 'null']
+    ConfigChangeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigChange'
+        continue:
+          type: string
+    DatasourceType:
+      type: string
+      enum: [prometheus, victoriametrics, thanos, mimir, amp]
+    DatasourceAuthType:
+      type: string
+      enum: [none, bearer, basic, sigv4, mtls]
+    DatasourceSigV4:
+      type: object
+      description: AWS SigV4 (Amazon Managed Prometheus); credentials come from IRSA / Pod Identity.
+      required: [region]
+      properties:
+        region:
+          type: string
+        service:
+          type: string
+          default: aps
+        roleARN:
+          type: string
+          description: Role to assume; absent = the hub's own identity.
+    DatasourceTLSInput:
+      type: object
+      properties:
+        caCert:
+          type: string
+          description: PEM; not secret, returned as `caConfigured`.
+        clientCert:
+          type: string
+          description: PEM (mTLS).
+        clientKey:
+          type: string
+          writeOnly: true
+          description: PEM (mTLS). Write-only.
+        insecureSkipVerify:
+          type: boolean
+    DatasourceAuthInput:
+      type: object
+      description: |
+        Secret fields (`token`, `password`, `tls.clientKey`) are write-only. On update, omitted
+        secret fields keep the stored values.
+      required: [type]
+      properties:
+        type:
+          $ref: '#/components/schemas/DatasourceAuthType'
+        token:
+          type: string
+          writeOnly: true
+          description: For `bearer`.
+        username:
+          type: string
+          description: For `basic`.
+        password:
+          type: string
+          writeOnly: true
+          description: For `basic`.
+        sigv4:
+          $ref: '#/components/schemas/DatasourceSigV4'
+        tls:
+          $ref: '#/components/schemas/DatasourceTLSInput'
+    DatasourceAuthInfo:
+      type: object
+      description: The stored auth without secrets.
+      required: [type, secretConfigured]
+      properties:
+        type:
+          $ref: '#/components/schemas/DatasourceAuthType'
+        username:
+          type: string
+        sigv4:
+          $ref: '#/components/schemas/DatasourceSigV4'
+        secretConfigured:
+          type: boolean
+          description: A token, password or client key is stored.
+        caConfigured:
+          type: boolean
+        clientCertConfigured:
+          type: boolean
+        insecureSkipVerify:
+          type: boolean
+    DatasourceInput:
+      type: object
+      required: [name, type, url, reason]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$'
+        type:
+          $ref: '#/components/schemas/DatasourceType'
+        url:
+          type: string
+          format: uri
+          description: Query base URL (`/api/v1/query` is appended).
+        auth:
+          $ref: '#/components/schemas/DatasourceAuthInput'
+        clearSecrets:
+          type: boolean
+          description: On update, remove the stored secrets.
+        headers:
+          type: object
+          description: Extra request headers, e.g. `X-Scope-OrgID`. Not secret.
+          additionalProperties:
+            type: string
+        timeout:
+          $ref: '#/components/schemas/Duration'
+        maxPoints:
+          type: integer
+          minimum: 100
+          description: Most points per series per query; the recommender chunks queries to fit.
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    Datasource:
+      type: object
+      required: [id, name, type, url, builtIn, auth, headers, usedBy, version]
+      properties:
+        id:
+          type: string
+          description: '`local` for the built-in datasource, otherwise a UUID.'
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/DatasourceType'
+        url:
+          type: string
+        builtIn:
+          type: boolean
+        auth:
+          $ref: '#/components/schemas/DatasourceAuthInfo'
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        timeout:
+          $ref: '#/components/schemas/Duration'
+        maxPoints:
+          type: integer
+        usedBy:
+          type: array
+          description: Clusters bound to it.
+          items:
+            $ref: '#/components/schemas/ClusterName'
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          $ref: '#/components/schemas/Actor'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          $ref: '#/components/schemas/Actor'
+    DatasourceList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Datasource'
+    MetricsJobNames:
+      type: object
+      description: Scrape job names, only used to make diagnoses precise.
+      properties:
+        cadvisor:
+          type: array
+          items:
+            type: string
+        kubeStateMetrics:
+          type: array
+          items:
+            type: string
+    MetricsBinding:
+      type: object
+      description: |
+        Where a cluster's metrics are (D-025). Every query uses
+        `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the
+        registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster
+        Prometheus). Defaults: `local`, `cluster`, the cluster name.
+      required: [datasourceId, clusterLabel]
+      properties:
+        datasourceId:
+          type: string
+        clusterLabel:
+          type: string
+          pattern: '^([a-zA-Z_][a-zA-Z0-9_]*)?$'
+        clusterLabelValue:
+          type: string
+          description: Default the cluster name.
+        extraMatchers:
+          type: array
+          maxItems: 16
+          items:
+            type: string
+            pattern: '^[a-zA-Z_][a-zA-Z0-9_]*(=|!=|=~|!~)"([^"\\]|\\.)*"$'
+            examples: ['env="prod"']
+        jobNames:
+          $ref: '#/components/schemas/MetricsJobNames'
+    DatasourceTestRequest:
+      type: object
+      properties:
+        binding:
+          $ref: '#/components/schemas/MetricsBinding'
+    DatasourceTestResult:
+      type: object
+      required: [ok, checks]
+      properties:
+        ok:
+          type: boolean
+          description: No blocking check failed.
+        latencyMs:
+          type: integer
+          minimum: 0
+        found:
+          type: object
+          description: What the binding's matchers found.
+          properties:
+            containerSeries:
+              type: integer
+              minimum: 0
+            pods:
+              type: integer
+              minimum: 0
+            nodes:
+              type: integer
+              minimum: 0
+        labelValues:
+          type: array
+          description: Existing values of the cluster label (suggestions when it does not match).
+          items:
+            type: string
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessCheck'
+    ReadinessState:
+      type: string
+      description: Each state includes the ones before it (docs/contracts/readiness.md).
+      enum: [Registered, AgentConnected, MetricsOK, ReadyAudit, AutomationReady]
+    ReadinessSeverity:
+      type: string
+      enum: [blocking, warning, info]
+    ReadinessStatus:
+      type: string
+      enum: [pass, warn, fail, unknown]
+    ReadinessCategory:
+      type: string
+      enum: [datasource, metrics, pricing, agent, rbac, apply, webhook, nodes, integration, policy]
+    ReadinessCheckID:
+      type: string
+      description: Stable check id from the catalog (docs/contracts/readiness.md, api/v1alpha1/readiness).
+      pattern: '^[a-z]+\.[a-z0-9-]+$'
+      examples: [metrics.ksm-owners, rbac.resize]
+    ReadinessCheck:
+      type: object
+      required: [id, category, severity, source, status, message, checkedAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/ReadinessCheckID'
+        category:
+          $ref: '#/components/schemas/ReadinessCategory'
+        severity:
+          $ref: '#/components/schemas/ReadinessSeverity'
+        source:
+          type: string
+          enum: [hub, agent]
+        gates:
+          description: For blocking checks, the state that needs this check to pass.
+          allOf:
+            - $ref: '#/components/schemas/ReadinessState'
+        status:
+          $ref: '#/components/schemas/ReadinessStatus'
+        message:
+          type: string
+          maxLength: 2048
+        remediation:
+          type: string
+          description: Exact command or values snippet that fixes it.
+        remediationType:
+          type: string
+          enum: [command, yaml, text]
+        docsURL:
+          type: string
+        checkedAt:
+          type: string
+          format: date-time
+        details:
+          type: object
+          additionalProperties:
+            type: string
+    AgentCapability:
+      type: object
+      description: Result of the SelfSubjectAccessReviews of one capability (check `rbac.<name>`).
+      required: [name, granted]
+      properties:
+        name:
+          type: string
+          enum: [read, resize, rollout, hpa, evict, policies, events]
+        granted:
+          type: boolean
+        missing:
+          type: array
+          description: ClusterRole rules to add, each as JSON (`{"apiGroups":[…],"resources":[…],"verbs":[…]}`).
+          items:
+            type: string
+        message:
+          type: string
+    ReadinessSummary:
+      type: object
+      required: [state, blocking, warnings]
+      properties:
+        state:
+          $ref: '#/components/schemas/ReadinessState'
+        blocking:
+          type: integer
+          minimum: 0
+          description: Blocking checks not passing.
+        warnings:
+          type: integer
+          minimum: 0
+          description: Warning checks with status warn or fail.
+        checkedAt:
+          type: string
+          format: date-time
+    ClusterReadiness:
+      type: object
+      required: [cluster, state, summary, checks]
+      properties:
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        state:
+          $ref: '#/components/schemas/ReadinessState'
+        stateSince:
+          type: string
+          format: date-time
+        checkedAt:
+          type: string
+          format: date-time
+          description: Newest result.
+        summary:
+          type: object
+          required: [blocking, warnings, unknown]
+          properties:
+            blocking:
+              type: integer
+              minimum: 0
+            warnings:
+              type: integer
+              minimum: 0
+            unknown:
+              type: integer
+              minimum: 0
+        nextState:
+          description: Absent at AutomationReady.
+          allOf:
+            - $ref: '#/components/schemas/ReadinessState'
+        blockedBy:
+          type: array
+          description: Ids of the blocking checks that keep the cluster from `nextState`.
+          items:
+            $ref: '#/components/schemas/ReadinessCheckID'
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentCapability'
+        recheckRequestedAt:
+          type: string
+          format: date-time
+          description: Present while a re-check is pending.
+        checks:
+          type: array
+          description: One result per catalog check, in catalog order.
+          items:
+            $ref: '#/components/schemas/ReadinessCheck'
+    RecheckAccepted:
+      type: object
+      required: [requestedAt, hubChecks, agentRecheck]
+      properties:
+        requestedAt:
+          type: string
+          format: date-time
+        hubChecks:
+          type: boolean
+          description: Hub metrics checks queued.
+        agentRecheck:
+          type: boolean
+          description: Recheck flag set in the cluster config.
+    ReadinessHistoryEntry:
+      type: object
+      required: [time, kind]
+      properties:
+        time:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          enum: [state, check]
+        fromState:
+          $ref: '#/components/schemas/ReadinessState'
+        toState:
+          $ref: '#/components/schemas/ReadinessState'
+        checkId:
+          $ref: '#/components/schemas/ReadinessCheckID'
+        fromStatus:
+          $ref: '#/components/schemas/ReadinessStatus'
+        toStatus:
+          $ref: '#/components/schemas/ReadinessStatus'
+        message:
+          type: string
+    ReadinessHistory:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessHistoryEntry'
+        continue:
+          type: string
+    InstallFormat:
+      type: string
+      enum: [helm, values, argocd]
+    InstallSnippet:
+      type: object
+      required: [format, content, filename, argocdIgnoreDifferences]
+      properties:
+        format:
+          $ref: '#/components/schemas/InstallFormat'
+        content:
+          type: string
+          description: Shell commands (`helm`), a values file (`values`) or an Application manifest (`argocd`).
+        filename:
+          type: string
+          examples: [install.sh, values.yaml, application.yaml]
+        argocdIgnoreDifferences:
+          type: string
+          description: Snippet for `argocd-cm` so Argo CD ignores fields owned by `resource-optimizer` (D-006).
+        notes:
+          type: array
+          items:
+            type: string
     Problem:
       type: object
       description: |

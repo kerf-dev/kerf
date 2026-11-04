@@ -92,6 +92,7 @@ func TestAgentPathsInSpec(t *testing.T) {
 		"/v1/clusters/{cluster}/recommendations": "get",
 		"/v1/clusters/{cluster}/workload-status": "post",
 		"/v1/clusters/{cluster}/events":          "post",
+		"/v1/clusters/{cluster}/config":          "get",
 	}
 	c := &Client{cluster: "{cluster}"}
 	for p, m := range want {
@@ -99,7 +100,7 @@ func TestAgentPathsInSpec(t *testing.T) {
 			t.Errorf("spec has no %s %s", m, p)
 		}
 	}
-	for _, suffix := range []string{"recommendations", "workload-status", "events"} {
+	for _, suffix := range []string{"recommendations", "workload-status", "events", "config"} {
 		got := strings.ReplaceAll(c.path(suffix), "%7B", "{")
 		got = strings.ReplaceAll(got, "%7D", "}")
 		if _, ok := want[got]; !ok {

@@ -309,6 +309,892 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/clusters/{cluster}/config': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /**
+     * Hub-managed configuration of a cluster (D-022)
+     * @description What the agent materialises on its cluster (`docs/contracts/admin.md`):
+     *     - `policies`: every hub-managed policy for this cluster, as `RightsizingPolicy` specs. The
+     *       agent creates, updates and deletes `RightsizingPolicy` CRs labelled
+     *       `resource-optimizer.oz.io/managed-by=hub` so that exactly these exist (name = `name`,
+     *       annotations `hub-policy-id`, `hub-version`, `hub-policy-type`). CRs without the label are
+     *       never touched. With `policySource: git` the list is empty.
+     *     - `flags`: pause. While `paused`, the agent applies nothing new (event `blocked`, reason
+     *       `Paused`); rollbacks still run.
+     *     - `approvals`: approve-once grants (D-024).
+     *
+     *     The agent pulls it on every pull interval. Conditional requests: the response carries an
+     *     `ETag` (equal to `configVersion` in quotes); `If-None-Match` returns `304` when nothing
+     *     changed. If the hub is unreachable the agent keeps the CRs and the last flags it received.
+     */
+    get: operations['getClusterConfig']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/auth/login': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Log in with a local user (D-023)
+     * @description Checks the username and password and starts a session. The response sets the session
+     *     cookie `ro_session` (`HttpOnly; SameSite=Strict; Path=/`, plus `Secure` behind TLS) and
+     *     returns the CSRF token the client sends as `X-CSRF-Token` on every write made with the
+     *     session. Failed logins are rate limited per client address and per user; after repeated
+     *     failures the user is locked for a while (`429` with `Retry-After`, code `account_locked`).
+     *     A wrong username and a wrong password give the same `401` (code `invalid_credentials`).
+     *     A disabled user gets `401` too.
+     */
+    post: operations['login']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/auth/logout': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * End the current session
+     * @description Revokes the session and clears the cookie. Idempotent.
+     */
+    post: operations['logout']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/me': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * The caller's identity, role and CSRF token
+     * @description For a session: the user, the role and the CSRF token. For a bearer token (`ui` or `admin`):
+     *     the token's role mapped to a user role (`ui` → `viewer`, `admin` → `admin`) and no CSRF
+     *     token (bearer requests need none). The UI uses it to decide what to show.
+     */
+    get: operations['getMe']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/me/password': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Change the caller's own password
+     * @description Requires the current password. Clears `mustChangePassword`. Other sessions of the user are
+     *     revoked; the current one stays.
+     */
+    post: operations['changeOwnPassword']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/settings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Hub-only settings (recommender, pricing)
+     * @description Settings that stay in the hub and never reach clusters. A section never saved holds the
+     *     values from the hub's configuration file with `version` 0.
+     */
+    get: operations['getSettings']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/settings/recommender': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Recommender settings */
+    get: operations['getRecommenderSettings']
+    /**
+     * Replace the recommender settings
+     * @description Stores a new version. Takes effect on the next recommender run (`POST /v1/admin/recompute`
+     *     starts one). Records a `config_changed` audit event (`SettingsUpdated`).
+     */
+    put: operations['putRecommenderSettings']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/settings/pricing': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Pricing adjustments */
+    get: operations['getPricingSettings']
+    /**
+     * Replace the pricing adjustments
+     * @description Stores a new version. Savings of recommendations computed afterwards use the adjusted rates.
+     *     Records a `config_changed` audit event (`SettingsUpdated`).
+     */
+    put: operations['putPricingSettings']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/settings/{section}/versions': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        section: components['schemas']['SettingsSection']
+      }
+      cookie?: never
+    }
+    /**
+     * Version history of a settings section
+     * @description Newest first.
+     */
+    get: operations['listSettingsVersions']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/policies': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Hub-managed policies
+     * @description Hub-managed policies (all types, including workload overrides), ordered by type and then
+     *     priority descending. Policies from Git are in `GET /v1/admin/policy-inventory`.
+     */
+    get: operations['listPolicies']
+    put?: never
+    /**
+     * Create a hub-managed policy
+     * @description Types `global-default`, `cluster-default` and `policy`; workload overrides use
+     *     `PUT /v1/workloads/{id}/override`. The hub sets the name and priority of the default types
+     *     (`ro-global-defaults` / 0, `ro-cluster-defaults` / 10); at most one global default and one
+     *     cluster default per cluster exist (`409`, code `already_exists`). A `policy` needs a name
+     *     that does not start with `ro-` and a priority from 1 to 899999. The spec is validated like
+     *     the CRD (code `invalid_policy`, `detail` lists the fields). Records a `config_changed`
+     *     audit event (`PolicyCreated`).
+     *     Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+     */
+    post: operations['createPolicy']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/policies/{policyId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        policyId: components['parameters']['PolicyID']
+      }
+      cookie?: never
+    }
+    /**
+     * One hub-managed policy
+     * @description Soft-deleted policies are returned too (with `deletedAt`).
+     */
+    get: operations['getPolicy']
+    /**
+     * Replace a hub-managed policy
+     * @description Stores a new version; `type` cannot change (`400`, code `type_immutable`). Agents pick the
+     *     change up on their next config pull. Records `PolicyUpdated`.
+     *     Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+     */
+    put: operations['updatePolicy']
+    post?: never
+    /**
+     * Soft-delete a hub-managed policy
+     * @description Sets `deletedAt` and stores a version with operation `delete`; the versions are kept and
+     *     `revert` restores it. Agents delete the CR on their next pull. Records `PolicyDeleted`.
+     */
+    delete: operations['deletePolicy']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/policies/{policyId}/versions': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        policyId: components['parameters']['PolicyID']
+      }
+      cookie?: never
+    }
+    /**
+     * Version history of a policy
+     * @description Newest first. Every create, update, delete and revert is one version.
+     */
+    get: operations['listPolicyVersions']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/policies/{policyId}/revert': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        policyId: components['parameters']['PolicyID']
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Restore an earlier version
+     * @description Stores a new version whose content equals version `version` (operation `revert`); reverting
+     *     to a version of a deleted policy undeletes it. Records `PolicyReverted`.
+     */
+    post: operations['revertPolicy']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/policy-inventory': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * RightsizingPolicy CRs reported by the agents
+     * @description Every policy CR on each cluster as last reported by its agent (`policyInventory` of the
+     *     status batch), hub-managed and from Git. The UI shows Git policies read-only from here.
+     */
+    get: operations['getPolicyInventory']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/preview': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Impact dry-run of policy changes
+     * @description Applies the given hypothetical policy changes (global and cluster defaults are policies
+     *     too) to the current state without saving them, and returns the workloads whose effective
+     *     CPU or memory mode changes and the estimated monthly savings that move into (or out of)
+     *     `auto-patch`. Read-only: needs no `If-Match` or reason and records nothing.
+     */
+    post: operations['previewPolicyChange']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/clusters': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Register a cluster
+     * @description Creates the cluster and, with `createAgentToken`, an `agent` token for it whose value is
+     *     returned once in `agentToken`. Records `ClusterCreated` (and `TokenCreated`).
+     */
+    post: operations['createCluster']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/clusters/{cluster}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /** Cluster metadata, automation state and agent config sync */
+    get: operations['getClusterAdmin']
+    put?: never
+    post?: never
+    /**
+     * Retire a cluster
+     * @description Soft delete: sets `deletedAt`, revokes the cluster's tokens and hides it from the lists;
+     *     its history is kept. Records `ClusterDeleted`.
+     */
+    delete: operations['deleteCluster']
+    options?: never
+    head?: never
+    /**
+     * Change cluster metadata
+     * @description Only the given fields change (JSON merge semantics). Records `ClusterUpdated`.
+     */
+    patch: operations['updateCluster']
+    trace?: never
+  }
+  '/v1/clusters/{cluster}/automation': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Pause or resume automation of a cluster
+     * @description Pausing is always allowed for an operator. Resuming a cluster with environment `prod`
+     *     needs an admin (`403`, code `admin_required`). `If-Match` is optional here, so a pause is
+     *     never held up by a stale page; when given it is checked. With `resumeAt` the hub stops
+     *     reporting the pause at that time (the agent does not evaluate it). Records
+     *     `AutomationPaused` or `AutomationResumed`.
+     */
+    put: operations['setClusterAutomation']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/automation': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Fleet-wide and per-cluster pause state */
+    get: operations['getFleetAutomation']
+    /**
+     * Pause or resume automation of the whole fleet
+     * @description A fleet pause applies to every cluster in addition to its own pause (a cluster is paused
+     *     if either is). Resuming the fleet needs an admin. `If-Match` (the `fleet.version`) is
+     *     optional, as for a cluster. Records `AutomationPaused` or `AutomationResumed`.
+     */
+    put: operations['setFleetAutomation']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/workloads/{id}/effective-policy': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. */
+        id: components['parameters']['WorkloadID']
+      }
+      cookie?: never
+    }
+    /**
+     * Precedence chain and winning value per field
+     * @description Computed by the hub from the hub-managed policies, the cluster's reported policy inventory
+     *     (Git policies), the agent's reported cluster defaults and the workload's annotations and
+     *     labels as last reported. Layers from lowest to highest precedence: built-in defaults →
+     *     global default → cluster default (chart value) → cluster default (hub) → the winning
+     *     policy (highest priority, ties by name) → workload override (hub) → annotations (D-005).
+     *     `fields` lists every field with its value and the layer that set it. `agentModes` is what
+     *     the agent last reported, so the UI can show a difference (e.g. before the next pull).
+     */
+    get: operations['getEffectivePolicy']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/workloads/{id}/override': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. */
+        id: components['parameters']['WorkloadID']
+      }
+      cookie?: never
+    }
+    /** The workload's hub override policy */
+    get: operations['getWorkloadOverride']
+    /**
+     * Create or replace the workload's override
+     * @description Stores a hub policy of type `workload-override` named
+     *     `ro-override-<16 hex of sha256("<namespace>/<kind>/<name>")>`, priority 900000, sent only to
+     *     the workload's cluster, with selector `{namespaces: [ns], kinds: [kind], workloads: [ref]}`.
+     *     Creating one needs no `If-Match`; replacing an existing one does (`428` without it).
+     *     Setting a mode to `auto-patch` on a cluster with environment `prod` needs an admin (`403`,
+     *     code `admin_required`). "Exclude" is an override with both modes `off`. Records
+     *     `OverrideSet`.
+     *     Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
+     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+     */
+    put: operations['putWorkloadOverride']
+    post?: never
+    /**
+     * Clear the workload's override
+     * @description Soft-deletes the override policy; the workload inherits again. Records `OverrideCleared`.
+     */
+    delete: operations['deleteWorkloadOverride']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/workloads/{id}/approve': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. */
+        id: components['parameters']['WorkloadID']
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Approve the current recommendation once (D-024)
+     * @description Records an approval for `recommendationID`, which must be the workload's latest
+     *     recommendation (`409`, code `recommendation_stale`). Only for a workload whose effective
+     *     mode for at least one resource is `audit` (`409`, code `not_in_audit`). The agent applies
+     *     that recommendation once, with all guardrails, as if the `audit` resources were
+     *     `auto-patch`, and emits `applied` with reason `ApprovedOnce`; the workload stays in
+     *     `audit`. A new approval replaces an earlier unconsumed one. Records `WorkloadApproved`.
+     *     On a cluster that is not `AutomationReady`: `409`, code `cluster_not_automation_ready`,
+     *     unless an admin sends `overrideReadiness: true` (D-025).
+     */
+    post: operations['approveRecommendation']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/tokens': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** API tokens (never their values) */
+    get: operations['listTokens']
+    put?: never
+    /**
+     * Create an API token
+     * @description The value is returned once, in `value`; the hub stores only its SHA-256. Role `agent` needs
+     *     `cluster`; `ui` and `admin` must not have one. Records `TokenCreated` (without the value).
+     */
+    post: operations['createToken']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/tokens/{tokenId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        tokenId: string
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /**
+     * Revoke an API token
+     * @description Sets `revokedAt`; the token stops working at once (the hub's token cache is invalidated).
+     *     Revoking the token used for this request is allowed. Records `TokenRevoked`.
+     */
+    delete: operations['revokeToken']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/users': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Local users */
+    get: operations['listUsers']
+    put?: never
+    /**
+     * Create a local user
+     * @description The password is stored as a bcrypt hash. The user must change it at first login
+     *     (`mustChangePassword`) unless `mustChangePassword: false` is sent. Records `UserCreated`.
+     */
+    post: operations['createUser']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/users/{username}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        username: components['parameters']['Username']
+      }
+      cookie?: never
+    }
+    /** One local user */
+    get: operations['getUser']
+    put?: never
+    post?: never
+    /**
+     * Delete a local user
+     * @description Soft delete (`deletedAt`, sessions revoked); the username stays reserved so the audit
+     *     trail stays unambiguous. Not for the last enabled admin (`409`, code `last_admin`).
+     *     Records `UserDeleted`.
+     */
+    delete: operations['deleteUser']
+    options?: never
+    head?: never
+    /**
+     * Change a user's display name, role or disabled flag
+     * @description Only the given fields change. Disabling a user or changing the role revokes the user's
+     *     sessions. The last enabled admin cannot be demoted or disabled (`409`, code
+     *     `last_admin`). Records `UserUpdated`.
+     */
+    patch: operations['updateUser']
+    trace?: never
+  }
+  '/v1/admin/users/{username}/reset-password': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        username: components['parameters']['Username']
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Set a new password for a user
+     * @description Sets `password`, or a generated one returned once in `temporaryPassword` when `password`
+     *     is omitted. Sets `mustChangePassword`, clears the lockout and revokes the user's sessions.
+     *     Records `PasswordReset` (without the password).
+     */
+    post: operations['resetUserPassword']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/audit/config': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Configuration changes (audit type `config_changed`)
+     * @description Every configuration change made through the hub API, with actor, target, before/after and
+     *     reason, ordered by time. Stored in the audit log with type `config_changed`; served here
+     *     and not by `GET /v1/audit`, whose items are workload events. All filters are combined with
+     *     AND.
+     */
+    get: operations['queryConfigAudit']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/datasources': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Metrics datasources (D-025)
+     * @description Includes the built-in `local` datasource. Secrets are never returned.
+     */
+    get: operations['listDatasources']
+    put?: never
+    /**
+     * Add a metrics datasource
+     * @description Secret auth fields are write-only: stored encrypted, never returned. Records
+     *     `DatasourceCreated` (without secrets).
+     */
+    post: operations['createDatasource']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/datasources/{datasourceId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    /** One datasource */
+    get: operations['getDatasource']
+    /**
+     * Replace a datasource
+     * @description Omitted secret fields keep their stored values; `clearSecrets: true` removes them. The
+     *     built-in `local` datasource only accepts `timeout` and `maxPoints` changes (`400`, code
+     *     `builtin`). Records `DatasourceUpdated`.
+     */
+    put: operations['updateDatasource']
+    post?: never
+    /**
+     * Delete a datasource
+     * @description Soft delete. `409` with code `datasource_in_use` while a cluster is bound to it, `builtin`
+     *     for `local`. Records `DatasourceDeleted`.
+     */
+    delete: operations['deleteDatasource']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/datasources/{datasourceId}/test': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Run the metrics checks against a datasource now
+     * @description Runs `datasource.reachable` and, with `binding`, every hub metrics check for that binding
+     *     (before any agent exists; the onboarding wizard's "Test"). Nothing is stored or audited.
+     *     Returns `200` also when checks fail; `ok` is true when no blocking check failed.
+     */
+    post: operations['testDatasource']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/clusters/{cluster}/readiness': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /**
+     * Readiness state and check results of a cluster (D-025)
+     * @description The latest result of every check (hub metrics checks and agent self-checks), the state they
+     *     imply and what blocks the next state. Checks never run yet have status `unknown`.
+     */
+    get: operations['getClusterReadiness']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/clusters/{cluster}/readiness/recheck': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Re-run the readiness checks now
+     * @description Queues the hub metrics checks and sets the recheck flag in the cluster's config, so the
+     *     agent re-runs its self-checks on its next pull. Results appear in
+     *     `GET /v1/clusters/{cluster}/readiness` as they arrive. Not audited.
+     */
+    post: operations['recheckClusterReadiness']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/clusters/{cluster}/readiness/history': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /**
+     * State transitions and check status changes
+     * @description Only changes are stored (a check's status or the state), newest first.
+     */
+    get: operations['getClusterReadinessHistory']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/clusters/{cluster}/install': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /**
+     * Agent install instructions for a cluster
+     * @description Rendered for this cluster and hub URL. The token value is never included: the snippet
+     *     references the Secret `resource-optimizer-agent-token` (key `token`); the value is shown
+     *     once when the token is created. Also returns the Argo CD `ignoreDifferences` snippet for
+     *     `argocd-cm` (D-006).
+     */
+    get: operations['getClusterInstall']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -511,6 +1397,11 @@ export interface components {
       workload: components['schemas']['WorkloadRef']
       /** @description Winning RightsizingPolicy name; empty when none matched. */
       policy?: string
+      /**
+       * @description Name of the hub workload-override policy layered on top of `policy` (D-022), if any.
+       *     Modes it sets are reported with source `policy`.
+       */
+      override?: string
       modes: components['schemas']['EffectiveModes']
       strategy?: components['schemas']['Strategy']
       settings?: components['schemas']['ValueSettings']
@@ -562,6 +1453,28 @@ export interface components {
     }
     WorkloadStatusBatch: {
       agentVersion?: string
+      /**
+       * @description `configVersion` of the last cluster config the agent materialised (D-022). Absent for
+       *     agents without config pull.
+       */
+      configVersion?: string
+      /**
+       * @description Every RightsizingPolicy CR on the cluster (hub-managed and Git) and every hub policy the
+       *     agent could not materialise. Sent with full batches; absent means "unchanged since the
+       *     last report", an empty array means "none".
+       */
+      policyInventory?: components['schemas']['PolicyInventoryItem'][]
+      /**
+       * @description Agent self-check of its RBAC per capability (D-025). Absent = unchanged; present = all
+       *     capabilities.
+       */
+      capabilities?: components['schemas']['AgentCapability'][]
+      /**
+       * @description Agent self-check results (source `agent`, docs/contracts/readiness.md). Absent =
+       *     unchanged; present = every agent check. Sent at start, every 10 minutes and after a
+       *     recheck.
+       */
+      checks?: components['schemas']['ReadinessCheck'][]
       items: components['schemas']['WorkloadStatus'][]
     }
     ContainerChange: {
@@ -754,6 +1667,15 @@ export interface components {
        * @enum {string}
        */
       agentStatus: 'connected' | 'stale' | 'never'
+      environment?: components['schemas']['Environment']
+      owner?: string
+      policySource?: components['schemas']['ClusterPolicySource']
+      /** @description Automation paused (cluster or fleet, D-022). */
+      paused?: boolean
+      /** @description The cluster's own pause state. */
+      automation?: components['schemas']['Automation']
+      configSync?: components['schemas']['AgentConfigSync']
+      readiness?: components['schemas']['ReadinessSummary']
       counts: {
         workloads: number
         withRecommendation: number
@@ -820,6 +1742,10 @@ export interface components {
       recommendation?: components['schemas']['WorkloadRecommendation']
       /** @description Latest status reported by the agent. Absent if never reported. */
       status?: components['schemas']['WorkloadStatus']
+      /** @description The latest approve-once grant (D-024), if any. */
+      approval?: components['schemas']['Approval']
+      /** @description The workload's hub override policy (D-022), if any. */
+      override?: components['schemas']['AdminPolicy']
     }
     /** @description [unix seconds, value] */
     Point: [number, number]
@@ -851,6 +1777,8 @@ export interface components {
       recommendations: components['schemas']['WorkloadRecommendation'][]
       /** @description Newest first. */
       events: components['schemas']['AuditEvent'][]
+      /** @description Configuration changes targeting this workload (override, approval), newest first. */
+      configChanges?: components['schemas']['ConfigChange'][]
     }
     SavingsPoint: {
       /** Format: date-time */
@@ -886,6 +1814,1154 @@ export interface components {
       requestedAt: string
       /** @description True when an already queued run for the same scope was returned. */
       coalesced: boolean
+    }
+    /**
+     * @description Role of a local user (D-023). `viewer`: everything the read-only UI shows. `operator`:
+     *     additionally workload actions (override, exclude, approve-once) and pausing automation.
+     *     `admin`: additionally defaults, policies, settings, clusters, tokens and users. Each role
+     *     includes the ones before it.
+     * @enum {string}
+     */
+    UserRole: 'viewer' | 'operator' | 'admin'
+    /**
+     * @description Role of an API (machine) token (D-012); unchanged by the admin area.
+     * @enum {string}
+     */
+    TokenRole: 'agent' | 'ui' | 'admin'
+    /** @example alice */
+    Username: string
+    /** @description At least 8 characters; at most 72 bytes (bcrypt). */
+    Password: string
+    /** @description Why the change is made; stored in the audit log. */
+    ReasonText: string
+    /**
+     * @description Go duration.
+     * @example 10m
+     * @example 168h
+     */
+    Duration: string
+    /**
+     * @description Who made a change. `user`: a local user (`name` = username). `token`: an API token
+     *     (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`).
+     */
+    Actor: {
+      /** @enum {string} */
+      type: 'user' | 'token' | 'system'
+      name: string
+      /** @description The user role or token role at the time of the change. */
+      role?: string
+    }
+    ChangeReason: {
+      reason: components['schemas']['ReasonText']
+    }
+    LoginRequest: {
+      username: string
+      password: string
+    }
+    Me: {
+      /** @enum {string} */
+      authMethod: 'session' | 'token'
+      role: components['schemas']['UserRole']
+      /** @description The logged-in user; only with `authMethod = session`. */
+      user?: components['schemas']['User']
+      /** @description Only with `authMethod = token`. */
+      tokenId?: string
+      /** @description Send as `X-CSRF-Token` on writes; only with `authMethod = session`. */
+      csrfToken?: string
+      /** Format: date-time */
+      sessionExpiresAt?: string
+    }
+    PasswordChange: {
+      currentPassword: string
+      newPassword: components['schemas']['Password']
+    }
+    User: {
+      username: components['schemas']['Username']
+      displayName: string
+      role: components['schemas']['UserRole']
+      disabled: boolean
+      mustChangePassword: boolean
+      /** Format: date-time */
+      createdAt: string
+      /** @description Actor name; absent for the bootstrap admin. */
+      createdBy?: string
+      /** Format: date-time */
+      updatedAt?: string
+      /** Format: date-time */
+      lastLoginAt?: string
+      /**
+       * Format: date-time
+       * @description Present while login is locked after failed attempts.
+       */
+      lockedUntil?: string
+      /** Format: date-time */
+      deletedAt?: string
+      version: number
+    }
+    UserList: {
+      items: components['schemas']['User'][]
+    }
+    UserCreate: {
+      username: components['schemas']['Username']
+      displayName?: string
+      role: components['schemas']['UserRole']
+      password: components['schemas']['Password']
+      /** @default true */
+      mustChangePassword: boolean
+      reason: components['schemas']['ReasonText']
+    }
+    UserUpdate: {
+      displayName?: string
+      role?: components['schemas']['UserRole']
+      disabled?: boolean
+      reason: components['schemas']['ReasonText']
+    }
+    PasswordReset: {
+      password?: components['schemas']['Password']
+      reason: components['schemas']['ReasonText']
+    }
+    PasswordResetResult: {
+      /** @description The generated password, shown once; absent when `password` was given. */
+      temporaryPassword?: string
+      mustChangePassword: boolean
+    }
+    TokenInfo: {
+      id: string
+      role: components['schemas']['TokenRole']
+      cluster?: components['schemas']['ClusterName']
+      description: string
+      /** Format: date-time */
+      createdAt: string
+      /** @description Actor name; absent for tokens seeded from configuration. */
+      createdBy?: string
+      /** Format: date-time */
+      expiresAt?: string
+      /**
+       * Format: date-time
+       * @description Updated at most once a minute.
+       */
+      lastUsedAt?: string
+      /** Format: date-time */
+      revokedAt?: string
+    }
+    TokenList: {
+      items: components['schemas']['TokenInfo'][]
+    }
+    TokenCreate: {
+      role: components['schemas']['TokenRole']
+      cluster?: components['schemas']['ClusterName']
+      description: string
+      /**
+       * Format: date-time
+       * @description Absent means the token does not expire.
+       */
+      expiresAt?: string
+      reason: components['schemas']['ReasonText']
+    }
+    TokenCreated: {
+      token: components['schemas']['TokenInfo']
+      /** @description The token value. Shown once; the hub cannot return it again. */
+      value: string
+    }
+    /** @enum {string} */
+    SettingsSection: 'recommender' | 'pricing'
+    /** @description One recommender profile (WO-04). Fractions are 0.15 for +15 %. */
+    RecommenderProfileSettings: {
+      name: components['schemas']['Profile']
+      window: components['schemas']['Duration']
+      cpuPercentile: number
+      memoryPercentile: number
+      /** @description Window of the memory peak; absent or 0 means the whole window. */
+      memoryPeakWindow?: components['schemas']['Duration']
+      cpuHeadroom: number
+      memoryBuffer: number
+    }
+    RecommenderSettings: {
+      /** @description Time between scheduled recommender runs. */
+      interval: components['schemas']['Duration']
+      /** @description Recommendation history retention (the latest per workload is always kept). */
+      retention: components['schemas']['Duration']
+      /** @description Exactly one entry per built-in profile (`dev`, `production`, `high-availability`). */
+      profiles: components['schemas']['RecommenderProfileSettings'][]
+    }
+    RecommenderSettingsDoc: {
+      /** @description 0 = never saved (values from the hub configuration file). */
+      version: number
+      /** Format: date-time */
+      updatedAt?: string
+      updatedBy?: components['schemas']['Actor']
+      reason?: string
+      value: components['schemas']['RecommenderSettings']
+    }
+    RecommenderSettingsUpdate: {
+      value: components['schemas']['RecommenderSettings']
+      reason: components['schemas']['ReasonText']
+    }
+    /**
+     * @description Adjusts the rates of one cluster. A fixed rate replaces the rate from the pricing metrics
+     *     (or the default rate); the discount then applies to whichever rate is used.
+     */
+    ClusterPricingAdjustment: {
+      cluster: components['schemas']['ClusterName']
+      /** @description Savings Plans / EDP discount, percent off the rate. */
+      discountPercent?: number
+      cpuCoreHourUSD?: number
+      memoryGiBHourUSD?: number
+    }
+    PricingSettings: {
+      /** @description Discount for clusters without their own entry. */
+      defaultDiscountPercent?: number
+      /** @description At most one entry per cluster. */
+      clusters: components['schemas']['ClusterPricingAdjustment'][]
+    }
+    PricingSettingsDoc: {
+      version: number
+      /** Format: date-time */
+      updatedAt?: string
+      updatedBy?: components['schemas']['Actor']
+      reason?: string
+      value: components['schemas']['PricingSettings']
+    }
+    PricingSettingsUpdate: {
+      value: components['schemas']['PricingSettings']
+      reason: components['schemas']['ReasonText']
+    }
+    Settings: {
+      recommender: components['schemas']['RecommenderSettingsDoc']
+      pricing: components['schemas']['PricingSettingsDoc']
+    }
+    SettingsVersion: {
+      section: components['schemas']['SettingsSection']
+      version: number
+      /** @description `RecommenderSettings` or `PricingSettings`, by `section`. */
+      value: Record<string, never>
+      /** Format: date-time */
+      createdAt: string
+      actor: components['schemas']['Actor']
+      reason: string
+    }
+    SettingsVersionList: {
+      items: components['schemas']['SettingsVersion'][]
+      continue?: string
+    }
+    /**
+     * @description `global-default` (`ro-global-defaults`, priority 0, every cluster), `cluster-default`
+     *     (`ro-cluster-defaults`, priority 10, one cluster), `policy` (named, priority 1-899999),
+     *     `workload-override` (`ro-override-…`, priority 900000, one workload). The agent layers the
+     *     default types under the winning policy and the override above it (D-022).
+     * @enum {string}
+     */
+    HubPolicyType: 'global-default' | 'cluster-default' | 'policy' | 'workload-override'
+    /**
+     * @description Where a cluster's policies come from (D-022). `hub`: hub-managed policies only (Git CRs are
+     *     still reported). `git`: no hub-managed policies are sent and the admin pages are read-only
+     *     for that cluster. `both`: both.
+     * @enum {string}
+     */
+    ClusterPolicySource: 'hub' | 'git' | 'both'
+    /**
+     * @description `hub`: a CR labelled `managed-by=hub`; `git`: any other CR.
+     * @enum {string}
+     */
+    PolicyOrigin: 'hub' | 'git'
+    /**
+     * @description Writes to a `prod` cluster ask for confirmation in the UI and some need an admin.
+     * @enum {string}
+     */
+    Environment: 'prod' | 'non-prod'
+    NamespacedWorkloadRef: {
+      kind: components['schemas']['WorkloadKind']
+      namespace: string
+      name: string
+    }
+    /** @description Mirrors `RightsizingPolicy.spec.selector` (api/v1alpha1). All set criteria must match. */
+    PolicySelector: {
+      namespaces?: string[]
+      excludeNamespaces?: string[]
+      matchLabels?: {
+        [key: string]: string
+      }
+      kinds?: components['schemas']['WorkloadKind'][]
+      workloads?: components['schemas']['NamespacedWorkloadRef'][]
+    }
+    CPUPolicy: {
+      mode?: components['schemas']['Mode']
+      /** @enum {string} */
+      limits?: 'keep' | 'remove' | 'ratio'
+      /** @description Required iff `limits = ratio`. */
+      limitRatio?: string
+    }
+    MemoryPolicy: {
+      mode?: components['schemas']['Mode']
+      limitEqualsRequest?: boolean
+    }
+    /** @description Either `schedule` + `duration` (recurring) or `start` + `end` (one-off). */
+    TimeWindow: {
+      /** @description 5-field cron expression. */
+      schedule?: string
+      duration?: components['schemas']['Duration']
+      /** Format: date-time */
+      start?: string
+      /** Format: date-time */
+      end?: string
+      /** @description IANA name; default UTC. */
+      timeZone?: string
+    }
+    ApplyPolicy: {
+      strategy?: components['schemas']['Strategy']
+      fallbackAfter?: components['schemas']['Duration']
+      maintenanceWindows?: components['schemas']['TimeWindow'][]
+      freezeWindows?: components['schemas']['TimeWindow'][]
+    }
+    RollbackPolicy: {
+      watchDuration?: components['schemas']['Duration']
+      oomKills?: number
+      restarts?: number
+      throttlingRatio?: string
+    }
+    Guardrails: {
+      learningPeriod?: components['schemas']['Duration']
+      minConfidence?: string
+      maxChangePercent?: number
+      minCPU?: components['schemas']['Quantity']
+      minMemory?: components['schemas']['Quantity']
+      cooldown?: components['schemas']['Duration']
+      rollback?: components['schemas']['RollbackPolicy']
+    }
+    HPATargetBounds: {
+      minUtilization?: number
+      maxUtilization?: number
+    }
+    HPAPolicy: {
+      coordinate?: boolean
+      targetBounds?: components['schemas']['HPATargetBounds']
+    }
+    JVMPolicy: {
+      detect?: boolean
+    }
+    /**
+     * @description Mirrors `RightsizingPolicy.spec` (api/v1alpha1, `kubectl explain rsp.spec`). Unset fields
+     *     inherit from the next lower layer. Validated by the shared validator
+     *     (`api/v1alpha1/validate`) exactly like the CRD.
+     */
+    RightsizingPolicySpec: {
+      selector?: components['schemas']['PolicySelector']
+      priority?: number
+      profile?: components['schemas']['Profile']
+      cpu?: components['schemas']['CPUPolicy']
+      memory?: components['schemas']['MemoryPolicy']
+      apply?: components['schemas']['ApplyPolicy']
+      guardrails?: components['schemas']['Guardrails']
+      hpa?: components['schemas']['HPAPolicy']
+      jvm?: components['schemas']['JVMPolicy']
+    }
+    /**
+     * @description Body of create and update. For the default types `name` and `spec.priority` are set by the
+     *     hub (and ignored if sent); for `policy` both are required. `clusters` empty means every
+     *     cluster; `cluster-default` needs exactly one.
+     */
+    PolicyInput: {
+      type: components['schemas']['HubPolicyType']
+      name?: string
+      description?: string
+      clusters?: components['schemas']['ClusterName'][]
+      spec: components['schemas']['RightsizingPolicySpec']
+      /**
+       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+       *     audited with the change.
+       */
+      overrideReadiness?: boolean
+      reason: components['schemas']['ReasonText']
+    }
+    /** @description A policy as in `PolicyInput`, without reason, for `POST /v1/admin/preview`. */
+    PolicyDraft: {
+      type: components['schemas']['HubPolicyType']
+      name?: string
+      description?: string
+      clusters?: components['schemas']['ClusterName'][]
+      /** @description Required for `workload-override`. */
+      workloadId?: components['schemas']['WorkloadID']
+      spec: components['schemas']['RightsizingPolicySpec']
+    }
+    AdminPolicy: {
+      /** Format: uuid */
+      id: string
+      type: components['schemas']['HubPolicyType']
+      /** @description Name of the RightsizingPolicy CR on the clusters. */
+      name: string
+      description?: string
+      /** @description Equal to `spec.priority`. */
+      priority: number
+      /** @description Clusters the policy is sent to; empty means every cluster. */
+      clusters: components['schemas']['ClusterName'][]
+      /** @description Only for `workload-override`. */
+      workloadId?: components['schemas']['WorkloadID']
+      spec: components['schemas']['RightsizingPolicySpec']
+      /** @description Increases with every change; the ETag is `"<version>"`. */
+      version: number
+      /** Format: date-time */
+      createdAt: string
+      createdBy: components['schemas']['Actor']
+      /** Format: date-time */
+      updatedAt: string
+      updatedBy: components['schemas']['Actor']
+      /** Format: date-time */
+      deletedAt?: string
+    }
+    AdminPolicyList: {
+      items: components['schemas']['AdminPolicy'][]
+    }
+    PolicyVersion: {
+      version: number
+      /** @enum {string} */
+      operation: 'create' | 'update' | 'delete' | 'revert'
+      /** @description Source version of a `revert`. */
+      revertedFrom?: number
+      name: string
+      description?: string
+      priority: number
+      clusters: components['schemas']['ClusterName'][]
+      spec: components['schemas']['RightsizingPolicySpec']
+      /** @description True if the policy was deleted in this version. */
+      deleted: boolean
+      /** Format: date-time */
+      createdAt: string
+      actor: components['schemas']['Actor']
+      reason: string
+    }
+    PolicyVersionList: {
+      items: components['schemas']['PolicyVersion'][]
+      continue?: string
+    }
+    PolicyRevert: {
+      version: number
+      reason: components['schemas']['ReasonText']
+    }
+    /**
+     * @description One RightsizingPolicy CR on a cluster, as the agent sees it. `valid` is the result of the
+     *     shared validator; an invalid hub-managed policy is not materialised (its old CR, if any,
+     *     stays) and `message` says why; for a Git CR it is informational only.
+     */
+    PolicyInventoryItem: {
+      name: string
+      source: components['schemas']['PolicyOrigin']
+      priority: number
+      /** @description `metadata.generation`; 0 for a hub policy the agent could not materialise. */
+      generation: number
+      valid: boolean
+      message?: string
+      /** Format: uuid */
+      hubPolicyId?: string
+      hubVersion?: number
+      hubPolicyType?: components['schemas']['HubPolicyType']
+      /** @description Workloads for which this policy is the winning policy (or applied override). */
+      matchedWorkloads?: number
+      spec?: components['schemas']['RightsizingPolicySpec']
+    }
+    ClusterPolicyInventory: {
+      cluster: components['schemas']['ClusterName']
+      /** Format: date-time */
+      reportedAt?: string
+      /** @description Config version the agent had applied when it reported. */
+      configVersion?: string
+      items: components['schemas']['PolicyInventoryItem'][]
+    }
+    PolicyInventoryList: {
+      items: components['schemas']['ClusterPolicyInventory'][]
+    }
+    /**
+     * @description A hypothetical change for the preview. `upsert` with `policyId` replaces that policy; without
+     *     it, adds a new one (a `workload-override` for a workload that already has one replaces it).
+     *     `delete` needs `policyId`.
+     */
+    PolicyChange: {
+      /** @enum {string} */
+      op: 'upsert' | 'delete'
+      /** Format: uuid */
+      policyId?: string
+      policy?: components['schemas']['PolicyDraft']
+    }
+    PreviewRequest: {
+      changes: components['schemas']['PolicyChange'][]
+      /**
+       * @description Maximum number of `items`; the totals always cover every workload.
+       * @default 200
+       */
+      limit: number
+    }
+    ImpactItem: {
+      workloadId: components['schemas']['WorkloadID']
+      cluster: components['schemas']['ClusterName']
+      namespace: string
+      kind: components['schemas']['WorkloadKind']
+      name: string
+      before: components['schemas']['EffectiveModes']
+      after: components['schemas']['EffectiveModes']
+      /** @description Winning policy name before the change. */
+      policyBefore?: string
+      policyAfter?: string
+      monthlySavingsUSD?: components['schemas']['Savings']
+    }
+    ImpactPreview: {
+      workloadsEvaluated: number
+      /** @description Workloads whose CPU or memory mode changes. */
+      workloadsChanged: number
+      /**
+       * @description Estimated monthly savings of the resources whose mode becomes `auto-patch` (CPU savings
+       *     of workloads whose CPU mode becomes auto-patch, likewise memory).
+       */
+      savingsIntoAutoPatchUSD: components['schemas']['Savings']
+      /** @description Likewise for resources that leave `auto-patch`. */
+      savingsOutOfAutoPatchUSD: components['schemas']['Savings']
+      /** @description Changed workloads, by savings descending, at most `limit`. */
+      items: components['schemas']['ImpactItem'][]
+      truncated: boolean
+      /** @description E.g. validation problems of a draft, or clusters whose labels are unknown. */
+      warnings?: string[]
+    }
+    /** @description Pause state of one cluster (or of the fleet). */
+    Automation: {
+      paused: boolean
+      reason?: string
+      by?: components['schemas']['Actor']
+      /**
+       * Format: date-time
+       * @description When the current state was set.
+       */
+      since?: string
+      /**
+       * Format: date-time
+       * @description Only while paused; the hub resumes at this time.
+       */
+      resumeAt?: string
+      /** @description 0 = never changed. The ETag is `"<version>"`. */
+      version: number
+    }
+    AutomationUpdate: {
+      paused: boolean
+      reason: components['schemas']['ReasonText']
+      /**
+       * Format: date-time
+       * @description Only with `paused = true`; must be in the future.
+       */
+      resumeAt?: string
+    }
+    FleetAutomation: {
+      fleet: components['schemas']['Automation']
+      clusters: {
+        cluster: components['schemas']['ClusterName']
+        automation: components['schemas']['Automation']
+        /** @description Effective state (cluster or fleet paused). */
+        paused: boolean
+      }[]
+    }
+    AgentConfigSync: {
+      agentVersion?: string
+      /** Format: date-time */
+      lastHeartbeatAt?: string
+      /** Format: date-time */
+      lastConfigPullAt?: string
+      /** @description Current config version the hub serves this cluster. */
+      configVersion: string
+      /** @description Config version the agent last reported as applied. */
+      appliedConfigVersion?: string
+      /** @description `appliedConfigVersion = configVersion`. */
+      inSync: boolean
+    }
+    ClusterAdmin: {
+      name: components['schemas']['ClusterName']
+      description: string
+      environment?: components['schemas']['Environment']
+      /** @description Owning team. */
+      owner: string
+      policySource: components['schemas']['ClusterPolicySource']
+      /** Format: date-time */
+      createdAt?: string
+      /** Format: date-time */
+      updatedAt?: string
+      updatedBy?: components['schemas']['Actor']
+      /** Format: date-time */
+      deletedAt?: string
+      /** @description Version of the metadata; the ETag is `"<version>"`. */
+      version: number
+      automation: components['schemas']['Automation']
+      /** @description Effective pause (cluster or fleet). */
+      paused: boolean
+      agent: components['schemas']['AgentConfigSync']
+      policyInventory?: components['schemas']['ClusterPolicyInventory']
+      /** @description Informational, e.g. `aws`. */
+      provider?: string
+      /** @description Informational. */
+      region?: string
+      metrics: components['schemas']['MetricsBinding']
+      readiness: components['schemas']['ReadinessSummary']
+    }
+    ClusterCreate: {
+      name: components['schemas']['ClusterName']
+      description?: string
+      environment: components['schemas']['Environment']
+      owner?: string
+      /** @default both */
+      policySource: components['schemas']['ClusterPolicySource']
+      /** @description Informational, e.g. `aws`. */
+      provider?: string
+      /** @description Informational. */
+      region?: string
+      /** @description Default: datasource `local`, label `cluster`, value = the cluster name. */
+      metrics?: components['schemas']['MetricsBinding']
+      /** @default true */
+      createAgentToken: boolean
+      reason: components['schemas']['ReasonText']
+    }
+    ClusterCreated: {
+      cluster: components['schemas']['ClusterAdmin']
+      agentToken?: components['schemas']['TokenCreated']
+    }
+    ClusterUpdate: {
+      description?: string
+      environment?: components['schemas']['Environment']
+      owner?: string
+      policySource?: components['schemas']['ClusterPolicySource']
+      /** @description Informational, e.g. `aws`. */
+      provider?: string
+      /** @description Informational. */
+      region?: string
+      metrics?: components['schemas']['MetricsBinding']
+      reason: components['schemas']['ReasonText']
+    }
+    ClusterConfig: {
+      cluster: components['schemas']['ClusterName']
+      /** @description Opaque; changes whenever anything in this document changes. */
+      configVersion: string
+      /** Format: date-time */
+      generatedAt: string
+      policySource: components['schemas']['ClusterPolicySource']
+      /**
+       * @description The complete set of hub-managed policies for the cluster: the agent deletes
+       *     hub-labelled CRs that are not listed.
+       */
+      policies: components['schemas']['ConfigPolicy'][]
+      flags: components['schemas']['ConfigFlags']
+      approvals: components['schemas']['ConfigApproval'][]
+      /** @description For the agent's `agent.version` check. */
+      hubVersion?: string
+      /** @description Oldest agent version this hub supports (`agent.version` check). */
+      minAgentVersion?: string
+    }
+    ConfigPolicy: {
+      /**
+       * Format: uuid
+       * @description Annotation `resource-optimizer.oz.io/hub-policy-id`.
+       */
+      id: string
+      /** @description Name of the CR. */
+      name: string
+      type: components['schemas']['HubPolicyType']
+      /** @description Annotation `resource-optimizer.oz.io/hub-version`. */
+      version: number
+      /** @description Equal to `spec.priority`. */
+      priority: number
+      spec: components['schemas']['RightsizingPolicySpec']
+    }
+    ConfigFlags: {
+      /** @description Cluster or fleet paused. Behaves like a cluster-wide freeze (reason `Paused`). */
+      paused: boolean
+      /**
+       * @description Which pause is in effect (`fleet` if both).
+       * @enum {string}
+       */
+      pauseScope?: 'cluster' | 'fleet'
+      pauseReason?: string
+      /** Format: date-time */
+      pausedAt?: string
+      /**
+       * Format: date-time
+       * @description Informational; the hub ends the pause, the agent does not.
+       */
+      resumeAt?: string
+      /**
+       * @description A readiness re-check is pending (D-025): the agent re-runs its self-checks if
+       *     `recheckRequestedAt` is newer than its last run, and reports them in the next batch.
+       */
+      recheck?: boolean
+      /** Format: date-time */
+      recheckRequestedAt?: string
+    }
+    /**
+     * @description An approve-once grant (D-024). The agent applies the recommendation `recommendationID` of the
+     *     workload once, treating its `audit` resources as `auto-patch`, with every guardrail, if that
+     *     is still the latest recommendation and `expiresAt` has not passed. It then emits `applied`
+     *     with reason `ApprovedOnce` and `details.approvalId`; the hub marks the approval consumed and
+     *     stops sending it.
+     */
+    ConfigApproval: {
+      /** Format: uuid */
+      id: string
+      workload: components['schemas']['WorkloadRef']
+      /** Format: uuid */
+      recommendationID: string
+      /** Format: date-time */
+      expiresAt: string
+      /** @description Actor name, for the event message. */
+      approvedBy: string
+      /** Format: date-time */
+      approvedAt: string
+    }
+    ApprovalRequest: {
+      /** Format: uuid */
+      recommendationID: string
+      reason: components['schemas']['ReasonText']
+      /**
+       * Format: date-time
+       * @description Default 24 h from now; at most 7 days.
+       */
+      expiresAt?: string
+      /**
+       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+       *     audited with the change.
+       */
+      overrideReadiness?: boolean
+    }
+    Approval: {
+      /** Format: uuid */
+      id: string
+      workloadId: components['schemas']['WorkloadID']
+      /** Format: uuid */
+      recommendationID: string
+      approvedBy: components['schemas']['Actor']
+      /** Format: date-time */
+      approvedAt: string
+      /** Format: date-time */
+      expiresAt: string
+      reason: string
+      /**
+       * @description `superseded`: replaced by a newer approval or a newer recommendation.
+       * @enum {string}
+       */
+      state: 'pending' | 'consumed' | 'expired' | 'superseded'
+      /** Format: date-time */
+      consumedAt?: string
+      /**
+       * Format: uuid
+       * @description The agent's `applied` / `ApprovedOnce` event.
+       */
+      consumedEventId?: string
+    }
+    /**
+     * @description `spec` without `selector` and `priority` (the hub sets both; sending them is a `400`, code
+     *     `invalid_override`).
+     */
+    WorkloadOverrideInput: {
+      description?: string
+      spec: components['schemas']['RightsizingPolicySpec']
+      /**
+       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+       *     audited with the change.
+       */
+      overrideReadiness?: boolean
+      reason: components['schemas']['ReasonText']
+    }
+    /**
+     * @description A precedence layer, lowest first: `built-in` (documented global defaults), `global-default`
+     *     (hub `ro-global-defaults`), `cluster-default-chart` (agent chart value `clusterDefaults`),
+     *     `cluster-default` (hub `ro-cluster-defaults`), `policy` (the winning RightsizingPolicy, hub
+     *     or Git), `workload-override` (hub), `annotation` (workload annotations, D-005).
+     * @enum {string}
+     */
+    LayerSource:
+      | 'built-in'
+      | 'global-default'
+      | 'cluster-default-chart'
+      | 'cluster-default'
+      | 'policy'
+      | 'workload-override'
+      | 'annotation'
+    PolicyLayer: {
+      source: components['schemas']['LayerSource']
+      /** @description Policy name (or annotation key for `annotation`). */
+      name?: string
+      origin?: components['schemas']['PolicyOrigin']
+      /**
+       * Format: uuid
+       * @description Hub policy id, for hub-managed layers.
+       */
+      policyId?: string
+      priority?: number
+      /**
+       * @description False for a matching policy that lost on priority (listed so the UI can explain it) and
+       *     for an invalid policy.
+       */
+      applied: boolean
+      /** @description Why a layer was not applied, e.g. "priority 100 < 200 of payments". */
+      note?: string
+      /** @description The fields this layer sets. */
+      spec?: components['schemas']['RightsizingPolicySpec']
+    }
+    EffectiveField: {
+      /**
+       * @description JSON path in the spec, e.g. `cpu.mode`, `guardrails.rollback.oomKills`.
+       * @example cpu.mode
+       */
+      path: string
+      /** @description The effective value as a string; lists and objects as JSON. */
+      value: string
+      source: components['schemas']['LayerSource']
+      /** @description Name of the policy (or annotation key) that set it. */
+      name?: string
+    }
+    EffectivePolicy: {
+      workloadId: components['schemas']['WorkloadID']
+      /** @description Lowest precedence first. */
+      layers: components['schemas']['PolicyLayer'][]
+      fields: components['schemas']['EffectiveField'][]
+      modes: components['schemas']['EffectiveModes']
+      /** @description Modes the agent last reported; absent if never reported. */
+      agentModes?: components['schemas']['EffectiveModes']
+      /** @description Winning policy the agent last reported. */
+      agentPolicy?: string
+      /** @description E.g. "workload labels unknown; matchLabels selectors assumed not to match". */
+      warnings?: string[]
+    }
+    /** @enum {string} */
+    ConfigTargetType:
+      | 'settings'
+      | 'policy'
+      | 'workload-override'
+      | 'approval'
+      | 'cluster'
+      | 'automation'
+      | 'token'
+      | 'user'
+      | 'datasource'
+      | 'readiness'
+    /**
+     * @description CamelCase action of a configuration change (`docs/contracts/events.md`).
+     * @enum {string}
+     */
+    ConfigAction:
+      | 'SettingsUpdated'
+      | 'PolicyCreated'
+      | 'PolicyUpdated'
+      | 'PolicyDeleted'
+      | 'PolicyReverted'
+      | 'OverrideSet'
+      | 'OverrideCleared'
+      | 'WorkloadApproved'
+      | 'ClusterCreated'
+      | 'ClusterUpdated'
+      | 'ClusterDeleted'
+      | 'AutomationPaused'
+      | 'AutomationResumed'
+      | 'TokenCreated'
+      | 'TokenRevoked'
+      | 'UserCreated'
+      | 'UserUpdated'
+      | 'UserDeleted'
+      | 'PasswordReset'
+      | 'DatasourceCreated'
+      | 'DatasourceUpdated'
+      | 'DatasourceDeleted'
+      | 'ReadinessChanged'
+    ConfigTarget: {
+      type: components['schemas']['ConfigTargetType']
+      /**
+       * @description Policy or approval id, settings section, cluster name (`*` for the fleet automation),
+       *     token id or username.
+       */
+      id: string
+      /** @description Display name, e.g. the policy name. */
+      name?: string
+      cluster?: components['schemas']['ClusterName']
+      workloadId?: components['schemas']['WorkloadID']
+    }
+    /**
+     * @description One configuration change (audit type `config_changed`). `before` and `after` are the
+     *     target's API representation before and after the change (`null` on create / delete),
+     *     never including password hashes or token values.
+     */
+    ConfigChange: {
+      /** Format: uuid */
+      id: string
+      /** @enum {string} */
+      type: 'config_changed'
+      /** Format: date-time */
+      time: string
+      actor: components['schemas']['Actor']
+      action: components['schemas']['ConfigAction']
+      target: components['schemas']['ConfigTarget']
+      /** @description The reason given with the change. */
+      reason: string
+      /** @description Version of the target after the change, if it is versioned. */
+      version?: number
+      before?: Record<string, never> | null
+      after?: Record<string, never> | null
+    }
+    ConfigChangeList: {
+      items: components['schemas']['ConfigChange'][]
+      continue?: string
+    }
+    /** @enum {string} */
+    DatasourceType: 'prometheus' | 'victoriametrics' | 'thanos' | 'mimir' | 'amp'
+    /** @enum {string} */
+    DatasourceAuthType: 'none' | 'bearer' | 'basic' | 'sigv4' | 'mtls'
+    /** @description AWS SigV4 (Amazon Managed Prometheus); credentials come from IRSA / Pod Identity. */
+    DatasourceSigV4: {
+      region: string
+      /** @default aps */
+      service: string
+      /** @description Role to assume; absent = the hub's own identity. */
+      roleARN?: string
+    }
+    DatasourceTLSInput: {
+      /** @description PEM; not secret, returned as `caConfigured`. */
+      caCert?: string
+      /** @description PEM (mTLS). */
+      clientCert?: string
+      /** @description PEM (mTLS). Write-only. */
+      clientKey?: string
+      insecureSkipVerify?: boolean
+    }
+    /**
+     * @description Secret fields (`token`, `password`, `tls.clientKey`) are write-only. On update, omitted
+     *     secret fields keep the stored values.
+     */
+    DatasourceAuthInput: {
+      type: components['schemas']['DatasourceAuthType']
+      /** @description For `bearer`. */
+      token?: string
+      /** @description For `basic`. */
+      username?: string
+      /** @description For `basic`. */
+      password?: string
+      sigv4?: components['schemas']['DatasourceSigV4']
+      tls?: components['schemas']['DatasourceTLSInput']
+    }
+    /** @description The stored auth without secrets. */
+    DatasourceAuthInfo: {
+      type: components['schemas']['DatasourceAuthType']
+      username?: string
+      sigv4?: components['schemas']['DatasourceSigV4']
+      /** @description A token, password or client key is stored. */
+      secretConfigured: boolean
+      caConfigured?: boolean
+      clientCertConfigured?: boolean
+      insecureSkipVerify?: boolean
+    }
+    DatasourceInput: {
+      name: string
+      type: components['schemas']['DatasourceType']
+      /**
+       * Format: uri
+       * @description Query base URL (`/api/v1/query` is appended).
+       */
+      url: string
+      auth?: components['schemas']['DatasourceAuthInput']
+      /** @description On update, remove the stored secrets. */
+      clearSecrets?: boolean
+      /** @description Extra request headers, e.g. `X-Scope-OrgID`. Not secret. */
+      headers?: {
+        [key: string]: string
+      }
+      timeout?: components['schemas']['Duration']
+      /** @description Most points per series per query; the recommender chunks queries to fit. */
+      maxPoints?: number
+      reason: components['schemas']['ReasonText']
+    }
+    Datasource: {
+      /** @description `local` for the built-in datasource, otherwise a UUID. */
+      id: string
+      name: string
+      type: components['schemas']['DatasourceType']
+      url: string
+      builtIn: boolean
+      auth: components['schemas']['DatasourceAuthInfo']
+      headers: {
+        [key: string]: string
+      }
+      timeout?: components['schemas']['Duration']
+      maxPoints?: number
+      /** @description Clusters bound to it. */
+      usedBy: components['schemas']['ClusterName'][]
+      version: number
+      /** Format: date-time */
+      createdAt?: string
+      createdBy?: components['schemas']['Actor']
+      /** Format: date-time */
+      updatedAt?: string
+      updatedBy?: components['schemas']['Actor']
+    }
+    DatasourceList: {
+      items: components['schemas']['Datasource'][]
+    }
+    /** @description Scrape job names, only used to make diagnoses precise. */
+    MetricsJobNames: {
+      cadvisor?: string[]
+      kubeStateMetrics?: string[]
+    }
+    /**
+     * @description Where a cluster's metrics are (D-025). Every query uses
+     *     `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the
+     *     registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster
+     *     Prometheus). Defaults: `local`, `cluster`, the cluster name.
+     */
+    MetricsBinding: {
+      datasourceId: string
+      clusterLabel: string
+      /** @description Default the cluster name. */
+      clusterLabelValue?: string
+      extraMatchers?: string[]
+      jobNames?: components['schemas']['MetricsJobNames']
+    }
+    DatasourceTestRequest: {
+      binding?: components['schemas']['MetricsBinding']
+    }
+    DatasourceTestResult: {
+      /** @description No blocking check failed. */
+      ok: boolean
+      latencyMs?: number
+      /** @description What the binding's matchers found. */
+      found?: {
+        containerSeries?: number
+        pods?: number
+        nodes?: number
+      }
+      /** @description Existing values of the cluster label (suggestions when it does not match). */
+      labelValues?: string[]
+      checks: components['schemas']['ReadinessCheck'][]
+    }
+    /**
+     * @description Each state includes the ones before it (docs/contracts/readiness.md).
+     * @enum {string}
+     */
+    ReadinessState: 'Registered' | 'AgentConnected' | 'MetricsOK' | 'ReadyAudit' | 'AutomationReady'
+    /** @enum {string} */
+    ReadinessSeverity: 'blocking' | 'warning' | 'info'
+    /** @enum {string} */
+    ReadinessStatus: 'pass' | 'warn' | 'fail' | 'unknown'
+    /** @enum {string} */
+    ReadinessCategory:
+      | 'datasource'
+      | 'metrics'
+      | 'pricing'
+      | 'agent'
+      | 'rbac'
+      | 'apply'
+      | 'webhook'
+      | 'nodes'
+      | 'integration'
+      | 'policy'
+    /**
+     * @description Stable check id from the catalog (docs/contracts/readiness.md, api/v1alpha1/readiness).
+     * @example metrics.ksm-owners
+     * @example rbac.resize
+     */
+    ReadinessCheckID: string
+    ReadinessCheck: {
+      id: components['schemas']['ReadinessCheckID']
+      category: components['schemas']['ReadinessCategory']
+      severity: components['schemas']['ReadinessSeverity']
+      /** @enum {string} */
+      source: 'hub' | 'agent'
+      /** @description For blocking checks, the state that needs this check to pass. */
+      gates?: components['schemas']['ReadinessState']
+      status: components['schemas']['ReadinessStatus']
+      message: string
+      /** @description Exact command or values snippet that fixes it. */
+      remediation?: string
+      /** @enum {string} */
+      remediationType?: 'command' | 'yaml' | 'text'
+      docsURL?: string
+      /** Format: date-time */
+      checkedAt: string
+      details?: {
+        [key: string]: string
+      }
+    }
+    /** @description Result of the SelfSubjectAccessReviews of one capability (check `rbac.<name>`). */
+    AgentCapability: {
+      /** @enum {string} */
+      name: 'read' | 'resize' | 'rollout' | 'hpa' | 'evict' | 'policies' | 'events'
+      granted: boolean
+      /** @description ClusterRole rules to add, each as JSON (`{"apiGroups":[…],"resources":[…],"verbs":[…]}`). */
+      missing?: string[]
+      message?: string
+    }
+    ReadinessSummary: {
+      state: components['schemas']['ReadinessState']
+      /** @description Blocking checks not passing. */
+      blocking: number
+      /** @description Warning checks with status warn or fail. */
+      warnings: number
+      /** Format: date-time */
+      checkedAt?: string
+    }
+    ClusterReadiness: {
+      cluster: components['schemas']['ClusterName']
+      state: components['schemas']['ReadinessState']
+      /** Format: date-time */
+      stateSince?: string
+      /**
+       * Format: date-time
+       * @description Newest result.
+       */
+      checkedAt?: string
+      summary: {
+        blocking: number
+        warnings: number
+        unknown: number
+      }
+      /** @description Absent at AutomationReady. */
+      nextState?: components['schemas']['ReadinessState']
+      /** @description Ids of the blocking checks that keep the cluster from `nextState`. */
+      blockedBy?: components['schemas']['ReadinessCheckID'][]
+      capabilities?: components['schemas']['AgentCapability'][]
+      /**
+       * Format: date-time
+       * @description Present while a re-check is pending.
+       */
+      recheckRequestedAt?: string
+      /** @description One result per catalog check, in catalog order. */
+      checks: components['schemas']['ReadinessCheck'][]
+    }
+    RecheckAccepted: {
+      /** Format: date-time */
+      requestedAt: string
+      /** @description Hub metrics checks queued. */
+      hubChecks: boolean
+      /** @description Recheck flag set in the cluster config. */
+      agentRecheck: boolean
+    }
+    ReadinessHistoryEntry: {
+      /** Format: date-time */
+      time: string
+      /** @enum {string} */
+      kind: 'state' | 'check'
+      fromState?: components['schemas']['ReadinessState']
+      toState?: components['schemas']['ReadinessState']
+      checkId?: components['schemas']['ReadinessCheckID']
+      fromStatus?: components['schemas']['ReadinessStatus']
+      toStatus?: components['schemas']['ReadinessStatus']
+      message?: string
+    }
+    ReadinessHistory: {
+      items: components['schemas']['ReadinessHistoryEntry'][]
+      continue?: string
+    }
+    /** @enum {string} */
+    InstallFormat: 'helm' | 'values' | 'argocd'
+    InstallSnippet: {
+      format: components['schemas']['InstallFormat']
+      /** @description Shell commands (`helm`), a values file (`values`) or an Application manifest (`argocd`). */
+      content: string
+      /**
+       * @example install.sh
+       * @example values.yaml
+       * @example application.yaml
+       */
+      filename: string
+      /** @description Snippet for `argocd-cm` so Argo CD ignores fields owned by `resource-optimizer` (D-006). */
+      argocdIgnoreDifferences: string
+      notes?: string[]
     }
     /**
      * @description RFC 9457 problem details; the single error schema for every endpoint. `code` is a stable
@@ -956,8 +3032,84 @@ export interface components {
         'application/problem+json': components['schemas']['Problem']
       }
     }
+    /** @description The change conflicts with the current state (`code` says how). */
+    Conflict: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/problem+json': components['schemas']['Problem']
+      }
+    }
+    /** @description `If-Match` does not match the current version (code `version_conflict`). */
+    PreconditionFailed: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/problem+json': components['schemas']['Problem']
+      }
+    }
+    /** @description `If-Match` is required (code `precondition_required`). */
+    PreconditionRequired: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/problem+json': components['schemas']['Problem']
+      }
+    }
+    /** @description Too many failed attempts (code `rate_limited` or `account_locked`). */
+    TooManyRequests: {
+      headers: {
+        /** @description Seconds until the next attempt is allowed. */
+        'Retry-After'?: number
+        [name: string]: unknown
+      }
+      content: {
+        'application/problem+json': components['schemas']['Problem']
+      }
+    }
+    /** @description Unknown policy id. */
+    PolicyNotFound: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/problem+json': components['schemas']['Problem']
+      }
+    }
+    /** @description Unknown datasource id. */
+    DatasourceNotFound: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/problem+json': components['schemas']['Problem']
+      }
+    }
+    /** @description Unknown username. */
+    UserNotFound: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/problem+json': components['schemas']['Problem']
+      }
+    }
   }
   parameters: {
+    /** @description Required when the request is authenticated with the session cookie. */
+    CSRFToken: string
+    /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+    IfMatch: string
+    /** @description ETag (`"<version>"`) of the object being changed; checked when given (`412` if stale). */
+    IfMatchOptional: string
+    /** @description `local` or a UUID. */
+    DatasourceID: string
+    PolicyID: string
+    Username: components['schemas']['Username']
+    PageLimit: number
     /** @description Cluster name. */
     Cluster: components['schemas']['ClusterName']
     /** @description Maximum number of items in this page. */
@@ -974,7 +3126,10 @@ export interface components {
     Continue: string
   }
   requestBodies: never
-  headers: never
+  headers: {
+    /** @description `"<version>"` of the returned object; send it back in `If-Match`. */
+    ETag: string
+  }
   pathItems: never
 }
 export type $defs = Record<string, never>
@@ -1397,6 +3552,1631 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['RecomputeAccepted']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  getClusterConfig: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description ETag of a previous response. */
+        'If-None-Match'?: string
+      }
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Cluster configuration. */
+      200: {
+        headers: {
+          /** @description `"<configVersion>"`. */
+          ETag?: string
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClusterConfig']
+        }
+      }
+      /** @description Not modified since the given ETag. */
+      304: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  login: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['LoginRequest']
+      }
+    }
+    responses: {
+      /** @description Logged in. */
+      200: {
+        headers: {
+          /** @description `ro_session=<opaque>; HttpOnly; SameSite=Strict; Path=/` */
+          'Set-Cookie'?: string
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Me']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      429: components['responses']['TooManyRequests']
+    }
+  }
+  logout: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Logged out. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  getMe: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Identity. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Me']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  changeOwnPassword: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PasswordChange']
+      }
+    }
+    responses: {
+      /** @description Password changed. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      429: components['responses']['TooManyRequests']
+    }
+  }
+  getSettings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Settings. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Settings']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  getRecommenderSettings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Recommender settings. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RecommenderSettingsDoc']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  putRecommenderSettings: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RecommenderSettingsUpdate']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RecommenderSettingsDoc']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  getPricingSettings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Pricing settings. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PricingSettingsDoc']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  putPricingSettings: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PricingSettingsUpdate']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PricingSettingsDoc']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  listSettingsVersions: {
+    parameters: {
+      query?: {
+        limit?: components['parameters']['PageLimit']
+        /** @description Token from a previous page's `continue` field. */
+        continue?: components['parameters']['Continue']
+      }
+      header?: never
+      path: {
+        section: components['schemas']['SettingsSection']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Versions. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SettingsVersionList']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  listPolicies: {
+    parameters: {
+      query?: {
+        /** @description Only policies sent to this cluster (fleet-wide policies included). */
+        cluster?: components['schemas']['ClusterName']
+        type?: components['schemas']['HubPolicyType'][]
+        includeDeleted?: boolean
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Policies. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AdminPolicyList']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  createPolicy: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PolicyInput']
+      }
+    }
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AdminPolicy']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
+    }
+  }
+  getPolicy: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        policyId: components['parameters']['PolicyID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Policy. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AdminPolicy']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['PolicyNotFound']
+    }
+  }
+  updatePolicy: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        policyId: components['parameters']['PolicyID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PolicyInput']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AdminPolicy']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['PolicyNotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  deletePolicy: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        policyId: components['parameters']['PolicyID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeReason']
+      }
+    }
+    responses: {
+      /** @description Deleted. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AdminPolicy']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['PolicyNotFound']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  listPolicyVersions: {
+    parameters: {
+      query?: {
+        limit?: components['parameters']['PageLimit']
+        /** @description Token from a previous page's `continue` field. */
+        continue?: components['parameters']['Continue']
+      }
+      header?: never
+      path: {
+        policyId: components['parameters']['PolicyID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Versions. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PolicyVersionList']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['PolicyNotFound']
+    }
+  }
+  revertPolicy: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        policyId: components['parameters']['PolicyID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PolicyRevert']
+      }
+    }
+    responses: {
+      /** @description Reverted. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AdminPolicy']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['PolicyNotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  getPolicyInventory: {
+    parameters: {
+      query?: {
+        cluster?: components['schemas']['ClusterName'][]
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Inventory per cluster. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PolicyInventoryList']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  previewPolicyChange: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PreviewRequest']
+      }
+    }
+    responses: {
+      /** @description Impact. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ImpactPreview']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  createCluster: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClusterCreate']
+      }
+    }
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClusterCreated']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
+    }
+  }
+  getClusterAdmin: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Cluster. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClusterAdmin']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  deleteCluster: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeReason']
+      }
+    }
+    responses: {
+      /** @description Deleted. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  updateCluster: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClusterUpdate']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClusterAdmin']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  setClusterAutomation: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description ETag (`"<version>"`) of the object being changed; checked when given (`412` if stale). */
+        'If-Match'?: components['parameters']['IfMatchOptional']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AutomationUpdate']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Automation']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+      412: components['responses']['PreconditionFailed']
+    }
+  }
+  getFleetAutomation: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Automation state. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FleetAutomation']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  setFleetAutomation: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description ETag (`"<version>"`) of the object being changed; checked when given (`412` if stale). */
+        'If-Match'?: components['parameters']['IfMatchOptional']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AutomationUpdate']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Automation']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      412: components['responses']['PreconditionFailed']
+    }
+  }
+  getEffectivePolicy: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. */
+        id: components['parameters']['WorkloadID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Effective policy. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['EffectivePolicy']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['WorkloadNotFound']
+    }
+  }
+  getWorkloadOverride: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. */
+        id: components['parameters']['WorkloadID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Override. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AdminPolicy']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['WorkloadNotFound']
+    }
+  }
+  putWorkloadOverride: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description ETag (`"<version>"`) of the object being changed; checked when given (`412` if stale). */
+        'If-Match'?: components['parameters']['IfMatchOptional']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. */
+        id: components['parameters']['WorkloadID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WorkloadOverrideInput']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AdminPolicy']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['WorkloadNotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  deleteWorkloadOverride: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. */
+        id: components['parameters']['WorkloadID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeReason']
+      }
+    }
+    responses: {
+      /** @description Cleared. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['WorkloadNotFound']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  approveRecommendation: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. */
+        id: components['parameters']['WorkloadID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ApprovalRequest']
+      }
+    }
+    responses: {
+      /** @description Approved. */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Approval']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['WorkloadNotFound']
+      409: components['responses']['Conflict']
+    }
+  }
+  listTokens: {
+    parameters: {
+      query?: {
+        cluster?: components['schemas']['ClusterName']
+        includeRevoked?: boolean
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Tokens, newest first. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TokenList']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  createToken: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TokenCreate']
+      }
+    }
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TokenCreated']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  revokeToken: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        tokenId: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeReason']
+      }
+    }
+    responses: {
+      /** @description Revoked. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TokenInfo']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  listUsers: {
+    parameters: {
+      query?: {
+        includeDeleted?: boolean
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Users, ordered by username. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['UserList']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  createUser: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UserCreate']
+      }
+    }
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['User']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
+    }
+  }
+  getUser: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        username: components['parameters']['Username']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description User. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['User']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['UserNotFound']
+    }
+  }
+  deleteUser: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        username: components['parameters']['Username']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeReason']
+      }
+    }
+    responses: {
+      /** @description Deleted. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['UserNotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  updateUser: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        username: components['parameters']['Username']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UserUpdate']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['User']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['UserNotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  resetUserPassword: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        username: components['parameters']['Username']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PasswordReset']
+      }
+    }
+    responses: {
+      /** @description Reset. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PasswordResetResult']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['UserNotFound']
+    }
+  }
+  queryConfigAudit: {
+    parameters: {
+      query?: {
+        /** @description Changes whose target belongs to this cluster. */
+        cluster?: components['schemas']['ClusterName']
+        targetType?: components['schemas']['ConfigTargetType'][]
+        targetId?: string
+        workloadId?: components['schemas']['WorkloadID']
+        /** @description Actor name (username or `token:<id>`). */
+        actor?: string
+        action?: components['schemas']['ConfigAction'][]
+        /** @description Inclusive lower bound on time. */
+        from?: string
+        /** @description Exclusive upper bound on time. */
+        to?: string
+        order?: 'asc' | 'desc'
+        limit?: components['parameters']['PageLimit']
+        /** @description Token from a previous page's `continue` field. */
+        continue?: components['parameters']['Continue']
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Changes. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ConfigChangeList']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  listDatasources: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Datasources, ordered by name. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DatasourceList']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  createDatasource: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DatasourceInput']
+      }
+    }
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Datasource']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
+    }
+  }
+  getDatasource: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Datasource. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Datasource']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+    }
+  }
+  updateDatasource: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DatasourceInput']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Datasource']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  deleteDatasource: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeReason']
+      }
+    }
+    responses: {
+      /** @description Deleted. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  testDatasource: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description `local` or a UUID. */
+        datasourceId: components['parameters']['DatasourceID']
+      }
+      cookie?: never
+    }
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['DatasourceTestRequest']
+      }
+    }
+    responses: {
+      /** @description Check results. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DatasourceTestResult']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['DatasourceNotFound']
+    }
+  }
+  getClusterReadiness: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Readiness. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClusterReadiness']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  recheckClusterReadiness: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Re-check queued. */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RecheckAccepted']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  getClusterReadinessHistory: {
+    parameters: {
+      query?: {
+        /** @description Inclusive start. Default `to` minus 7 days. */
+        from?: components['parameters']['From']
+        /** @description Exclusive end. Default now. */
+        to?: components['parameters']['To']
+        limit?: components['parameters']['PageLimit']
+        /** @description Token from a previous page's `continue` field. */
+        continue?: components['parameters']['Continue']
+      }
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description History. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ReadinessHistory']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  getClusterInstall: {
+    parameters: {
+      query: {
+        format: components['schemas']['InstallFormat']
+        /** @description Include the webhook install. */
+        webhook?: boolean
+        /** @description Webhook certificates from cert-manager (otherwise self-signed). */
+        certManager?: boolean
+      }
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Install instructions. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InstallSnippet']
         }
       }
       400: components['responses']['BadRequest']

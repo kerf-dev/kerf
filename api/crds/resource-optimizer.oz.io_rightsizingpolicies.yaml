@@ -372,6 +372,42 @@ spec:
                     maxItems: 64
                     type: array
                     x-kubernetes-list-type: set
+                  workloads:
+                    description: |-
+                      Workloads restricts the policy to the listed workloads: a workload matches if it equals any
+                      entry. Empty means no restriction. Like every criterion it is combined with the others (AND).
+                      The hub uses it for UI workload overrides (D-022). Agents older than this field ignore it,
+                      so the hub also sets namespaces and kinds to narrow such a policy.
+                    items:
+                      description: NamespacedWorkloadRef identifies one workload in
+                        the cluster.
+                      properties:
+                        kind:
+                          description: Kind of the workload.
+                          enum:
+                          - Deployment
+                          - StatefulSet
+                          - DaemonSet
+                          - CronJob
+                          type: string
+                        name:
+                          description: Name of the workload.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                        namespace:
+                          description: Namespace of the workload.
+                          maxLength: 63
+                          minLength: 1
+                          type: string
+                      required:
+                      - kind
+                      - name
+                      - namespace
+                      type: object
+                    maxItems: 100
+                    type: array
+                    x-kubernetes-list-type: atomic
                 type: object
             type: object
           status:
