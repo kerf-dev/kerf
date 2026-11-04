@@ -46,6 +46,13 @@ test.describe('smoke', () => {
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)))
   })
 
+  test('opportunities: facet filters show counts from the facets endpoint', async ({ page }) => {
+    await open(page, '/opportunities')
+    await page.getByRole('button', { name: 'Namespace', exact: true }).click()
+    const payments = page.getByRole('option', { name: /^payments\s+\d+$/ })
+    await expect(payments).toBeVisible()
+  })
+
   test('opportunities: search narrows results and URL keeps state', async ({ page }) => {
     await open(page, '/opportunities?q=ledger')
     const rows = page.getByTestId('opportunity-row')
@@ -64,6 +71,9 @@ test.describe('smoke', () => {
     await expect(page).toHaveURL(/\/workloads\/[^/]+\/[^/]+\/[^/]+\/[^/]+$/)
     await expect(page.getByText('Why this recommendation')).toBeVisible()
     await expect(page.getByText('Recommended resources')).toBeVisible()
+    // D-016: confidence formula and pricing source
+    await expect(page.getByTestId('confidence-factors')).toContainText('Coverage')
+    await expect(page.getByTestId('pricing')).toContainText(/core·h/)
     const usage = page.locator('[data-testid=chart] canvas').first()
     await expect(usage).toBeVisible()
     await page.getByRole('radio', { name: /Memory/ }).click()

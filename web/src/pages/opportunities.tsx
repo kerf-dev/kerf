@@ -22,7 +22,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { api, unwrap } from '@/api/client'
-import { useClusters, useWorkloads } from '@/api/queries'
+import { useClusters, useFacets, useWorkloads } from '@/api/queries'
 import {
   MODES,
   RISK_FLAGS,
@@ -220,14 +220,49 @@ export default function OpportunitiesPage() {
   const query = { ...filterQuery, limit: s.size, ...(cursor ? { continue: cursor } : {}) }
   const list = useWorkloads(query)
   const clusters = useClusters()
-  // Facet options: the API has no facet endpoint, so namespaces come from one large unfiltered page.
-  const facets = useWorkloads({ limit: 500, sort: 'name' })
-  const namespaces = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const w of facets.data?.items ?? []) m.set(w.namespace, (m.get(w.namespace) ?? 0) + 1)
-    for (const n of s.namespace) if (!m.has(n)) m.set(n, 0)
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-  }, [facets.data, s.namespace])
+  // Facet options with counts from GET /v1/workloads/facets (D-016). Each facet is counted without its
+  // own filter, so a multi-select keeps showing the other values. Hubs without the endpoint fall back
+  // to static values and the namespaces of one large page.
+  const { sort: _sort, order: _order, ...facetQuery } = filterQuery
+  const facets = useFacets(facetQuery)
+  const fallback = useWorkloads({ limit: 500, sort: 'name' }, { enabled: facets.isError })
+  const options = useMemo(() => {
+    const withSelected = (counts: { value: string; count?: number }[], selected: string[]) => {
+      const have = new Set(counts.map((c) => c.value))
+      return [...counts, ...selected.filter((v) => !have.has(v)).map((value) => ({ value, count: 0 }))]
+    }
+    const f = facets.data
+    if (f) {
+      const count = (xs: { value: string; count: number }[]) => new Map(xs.map((x) => [x.value, x.count]))
+      const kinds = count(f.kinds)
+      const modes = count(f.modes)
+      const flags = count(f.riskFlags)
+      return {
+        clusters: withSelected(f.clusters, s.cluster),
+        namespaces: withSelected(f.namespaces, s.namespace),
+        kinds: WORKLOAD_KINDS.map((k) => ({ value: k, count: kinds.get(k) ?? 0 })),
+        modes: MODES.map((m) => ({ value: m, count: modes.get(m) ?? 0 })),
+        riskFlags: RISK_FLAGS.map((r) => ({ value: r, count: flags.get(r) ?? 0 })),
+      }
+    }
+    const ns = new Map<string, number>()
+    for (const w of fallback.data?.items ?? []) ns.set(w.namespace, (ns.get(w.namespace) ?? 0) + 1)
+    return {
+      clusters: withSelected(
+        (clusters.data?.items ?? []).map((c) => ({ value: c.name, count: c.counts.workloads })),
+        s.cluster,
+      ),
+      namespaces: withSelected(
+        [...ns.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([value, count]) => ({ value, count })),
+        s.namespace,
+      ),
+      kinds: WORKLOAD_KINDS.map((k) => ({ value: k, count: undefined as number | undefined })),
+      modes: MODES.map((m) => ({ value: m, count: undefined as number | undefined })),
+      riskFlags: RISK_FLAGS.map((r) => ({ value: r, count: undefined as number | undefined })),
+    }
+  }, [facets.data, fallback.data, clusters.data, s.cluster, s.namespace])
 
   const sorting: SortingState = [
     { id: s.sort, desc: (s.order ?? (s.sort === 'name' ? 'asc' : 'desc')) === 'desc' },
@@ -466,14 +501,14 @@ export default function OpportunitiesPage() {
         </div>
         <FacetFilter
           title="Cluster"
-          options={(clusters.data?.items ?? []).map((c) => ({ value: c.name, count: c.counts.workloads }))}
+          options={options.clusters}
           selected={s.cluster}
           onToggle={(v) => toggle('cluster', v)}
           onClear={() => update({ cluster: [] })}
         />
         <FacetFilter
           title="Namespace"
-          options={namespaces.map(([n, count]) => ({ value: n, count }))}
+          options={options.namespaces}
           selected={s.namespace}
           onToggle={(v) => toggle('namespace', v)}
           onClear={() => update({ namespace: [] })}
@@ -481,21 +516,25 @@ export default function OpportunitiesPage() {
         />
         <FacetFilter
           title="Kind"
-          options={WORKLOAD_KINDS.map((k) => ({ value: k }))}
+          options={options.kinds}
           selected={s.kind}
           onToggle={(v) => toggle('kind', v)}
           onClear={() => update({ kind: [] })}
         />
         <FacetFilter
           title="Mode"
-          options={MODES.map((m) => ({ value: m, label: m, icon: MODE_INFO[m].icon }))}
+          options={options.modes.map((m) => ({ ...m, label: m.value, icon: MODE_INFO[m.value].icon }))}
           selected={s.mode}
           onToggle={(v) => toggle('mode', v)}
           onClear={() => update({ mode: [] })}
         />
         <FacetFilter
           title="Risk"
-          options={RISK_FLAGS.map((f) => ({ value: f, label: RISK_INFO[f].label, icon: RISK_INFO[f].icon }))}
+          options={options.riskFlags.map((f) => ({
+            ...f,
+            label: RISK_INFO[f.value].label,
+            icon: RISK_INFO[f.value].icon,
+          }))}
           selected={s.riskFlag}
           onToggle={(v) => toggle('riskFlag', v)}
           onClear={() => update({ riskFlag: [] })}

@@ -32,6 +32,22 @@ import {
 import { cn } from '@/lib/utils'
 import { workloadPath } from '@/lib/workload-id'
 
+/** Stable color per cluster (alphabetical index), so a cluster has the same color in every chart. */
+function clusterColor(c: ReturnType<typeof useChartColors>, name: string | undefined, all: string[]) {
+  const i = Math.max(0, [...all].sort().indexOf(name ?? ''))
+  return c.series[i % c.series.length]!
+}
+
+/**
+ * Drops the leading stretch where every series is zero (before the first recommender run), keeping one
+ * zero point, so a young installation does not show 29 empty days and a spike.
+ */
+function trimLeadingZeros<P extends { total: number }>(series: { points: P[] }[]): number {
+  const n = Math.max(0, ...series.map((s) => s.points.length))
+  for (let i = 0; i < n; i++) if (series.some((s) => (s.points[i]?.total ?? 0) > 0)) return Math.max(0, i - 1)
+  return 0
+}
+
 export function OverviewPage() {
   const summary = useSummary()
   const s = summary.data
@@ -161,7 +177,10 @@ function Tile({
 function SavingsTile({ summary }: { summary?: Summary }) {
   const trend = useSavingsTrend('30d', 'none')
   const c = useChartColors()
-  const pts = useMemo(() => trend.data?.series[0]?.points ?? [], [trend.data])
+  const pts = useMemo(() => {
+    const p = trend.data?.series[0]?.points ?? []
+    return p.slice(trimLeadingZeros([{ points: p }]))
+  }, [trend.data])
   const first = pts[0]?.total
   const option = useMemo(
     () => ({
@@ -336,12 +355,22 @@ function SavingsTrendCard({ className }: { className?: string }) {
   const [range, setRange] = useState<TimeRange>('30d')
   const trend = useSavingsTrend(range, 'cluster')
   const c = useChartColors()
-  const series = useMemo(() => (trend.data?.series ?? []).filter((s) => s.points.length), [trend.data])
+  const series = useMemo(() => {
+    const all = (trend.data?.series ?? []).filter((s) => s.points.length)
+    const start = trimLeadingZeros(all)
+    return all.map((s) => ({ ...s, points: s.points.slice(start) }))
+  }, [trend.data])
+  // All clusters (also empty ones) so indices match the by-cluster card.
+  const names = useMemo(() => (trend.data?.series ?? []).map((s) => s.cluster ?? ''), [trend.data])
+  const trimmedFrom =
+    trend.data && series[0]?.points[0] && series[0].points[0].time > trend.data.from
+      ? series[0].points[0].time
+      : undefined
   const option = useMemo(() => {
     const base = baseOption(c)
     return {
       ...base,
-      color: c.series,
+      color: series.map((x) => clusterColor(c, x.cluster, names)),
       legend: { show: false },
       tooltip: {
         ...base.tooltip,
@@ -358,7 +387,7 @@ function SavingsTrendCard({ className }: { className?: string }) {
         ...axisStyle(c),
         axisLabel: { ...axisStyle(c).axisLabel, formatter: (v: number) => formatUSD(v, { compact: true }) },
       },
-      series: series.map((s, i) => ({
+      series: series.map((s) => ({
         name: s.cluster ?? 'Fleet',
         type: 'line',
         stack: 'total',
@@ -374,15 +403,15 @@ function SavingsTrendCard({ className }: { className?: string }) {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: alpha(c.series[i % 6]!, 0.32) },
-              { offset: 1, color: alpha(c.series[i % 6]!, 0.04) },
+              { offset: 0, color: alpha(clusterColor(c, s.cluster, names), 0.32) },
+              { offset: 1, color: alpha(clusterColor(c, s.cluster, names), 0.04) },
             ],
           },
         },
         data: s.points.map((p) => [p.time, p.total]),
       })),
     }
-  }, [series, c])
+  }, [series, c, names])
   return (
     <Card className={className}>
       <CardHeader>
@@ -421,10 +450,18 @@ function SavingsTrendCard({ className }: { className?: string }) {
                   key={s.cluster ?? i}
                   className="flex items-center gap-1.5 text-xs text-muted-foreground"
                 >
-                  <span className="size-2 rounded-sm" style={{ background: c.series[i % 6] }} />
+                  <span
+                    className="size-2 rounded-sm"
+                    style={{ background: clusterColor(c, s.cluster, names) }}
+                  />
                   {s.cluster}
                 </span>
               ))}
+              {trimmedFrom ? (
+                <span className="ml-auto text-xs text-muted-foreground">
+                  Data since {formatDateTime(trimmedFrom, true)}
+                </span>
+              ) : null}
             </div>
             <Chart
               option={option}
@@ -460,7 +497,12 @@ function ClusterSavingsCard({
       <CardContent className="space-y-1 pt-3">
         {!summary
           ? Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="mb-3 h-14 w-full" />)
-          : clusters.map((cl, i) => {
+          : clusters.map((cl) => {
+              const color = clusterColor(
+                c,
+                cl.cluster,
+                clusters.map((x) => x.cluster),
+              )
               const share = summary.fleet.monthlySavingsUSD.total
                 ? cl.monthlySavingsUSD.total / summary.fleet.monthlySavingsUSD.total
                 : 0
@@ -472,7 +514,7 @@ function ClusterSavingsCard({
                 >
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="flex min-w-0 items-center gap-2 text-[13px] font-medium">
-                      <span className="size-2 shrink-0 rounded-sm" style={{ background: c.series[i % 6] }} />
+                      <span className="size-2 shrink-0 rounded-sm" style={{ background: color }} />
                       <span className="truncate">{cl.cluster}</span>
                     </span>
                     <span className="text-[13px] font-semibold tabular">
@@ -488,7 +530,7 @@ function ClusterSavingsCard({
                       className="h-full rounded-full transition-all group-hover:opacity-90"
                       style={{
                         width: `${(cl.monthlySavingsUSD.total / max) * 100}%`,
-                        background: c.series[i % 6],
+                        background: color,
                       }}
                     />
                   </div>
