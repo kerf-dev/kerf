@@ -3,6 +3,7 @@ resource-optimizer web UI → {{ include "web.fullname" . }}.{{ .Release.Namespa
 NodePort {{ .Values.service.nodePort }}{{ if eq (int .Values.service.nodePort) 30090 }} (k3d dev: http://localhost:19090){{ end }}
 {{- end }}
 Hub upstream: {{ .Values.hub.upstream }}  ·  token Secret: {{ include "web.tokenSecret" . }}
-{{- if and (not .Values.token.existingSecret) (not .Values.token.value) }}
-WARNING: no hub token configured; the UI will show "Not authorized".
+Sign-in: hub session cookie{{ if .Values.auth.anonymousRead }}; without a session the UI is read-only (ui token){{ else }}; anonymous access disabled, every page needs a login{{ end }}.
+{{- if and .Values.auth.anonymousRead (not .Values.token.existingSecret) (not .Values.token.value) }}
+WARNING: no hub token configured; without a login the UI will show "Not authorized".
 {{- end }}

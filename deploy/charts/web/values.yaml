@@ -14,8 +14,16 @@ hub:
   # it per request with the cluster DNS, which does not apply search domains: use the full name.
   upstream: hub.resource-optimizer.svc.cluster.local:8080
 
-# Bearer token with role `ui` (D-012), mounted into nginx and added to every proxied request.
-# It never reaches the browser. Either reference an existing Secret or let the chart create one.
+# Sign-in (D-023): users log in against the hub, which sets an HttpOnly session cookie; nginx forwards
+# only that cookie and sends no bearer token for those requests.
+auth:
+  # Without a session, add the read-only `ui` token below so the dashboards work without a login
+  # (anonymous viewer, docs/contracts/admin.md §3). false: every page needs a login.
+  anonymousRead: true
+
+# Bearer token with role `ui` (D-012), mounted into nginx and added to requests without a session
+# (when auth.anonymousRead). It never reaches the browser. Reference an existing Secret or let the
+# chart create one.
 token:
   existingSecret: ""
   existingSecretKey: token

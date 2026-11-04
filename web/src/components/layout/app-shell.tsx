@@ -1,24 +1,42 @@
 import {
   ActivityIcon,
+  BadgeDollarSignIcon,
   CommandIcon,
+  DatabaseIcon,
   FlaskConicalIcon,
+  GaugeIcon,
+  HistoryIcon,
+  KeyRoundIcon,
   LayoutDashboardIcon,
+  Loader2Icon,
+  LogInIcon,
+  LogOutIcon,
   MonitorIcon,
   MoonIcon,
   PiggyBankIcon,
+  ScrollTextIcon,
   SearchIcon,
   ServerIcon,
+  SlidersHorizontalIcon,
+  SparklesIcon,
   SunIcon,
   TrendingDownIcon,
+  UsersIcon,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router'
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { useAuth, useLogout, type Auth } from '@/api/auth'
 import { useSummary } from '@/api/queries'
+import type { UserRole } from '@/api/types'
+import { RoleBadge } from '@/components/admin/common'
+import { ChangePasswordDialog } from '@/components/layout/change-password'
+import { Toaster } from '@/components/ui/toast'
 import { useTheme, type Theme } from '@/components/theme-provider'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -29,37 +47,37 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { formatDateTime, formatNumber, formatUSD, relativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CommandPalette } from './command-palette'
+import { Logo } from './logo'
 
-export const NAV = [
+interface NavItem {
+  to: string
+  label: string
+  icon: typeof ActivityIcon
+  end?: boolean
+  /** Lowest role that sees the item (signed-in users only). */
+  min?: UserRole
+}
+
+export const NAV: NavItem[] = [
   { to: '/', label: 'Overview', icon: LayoutDashboardIcon, end: true },
   { to: '/opportunities', label: 'Opportunities', icon: TrendingDownIcon },
   { to: '/clusters', label: 'Clusters', icon: ServerIcon },
   { to: '/activity', label: 'Activity', icon: ActivityIcon },
-] as const
+]
 
-function Logo() {
-  return (
-    <div className="flex items-center gap-2.5">
-      <div className="relative flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_60%,var(--chart-2))] shadow-sm ring-1 ring-black/5">
-        <svg viewBox="0 0 32 32" className="size-5" aria-hidden>
-          <path
-            d="M7 22 13 14.5l4.5 4 7.5-9"
-            fill="none"
-            stroke="white"
-            strokeWidth="2.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <circle cx="25" cy="9.5" r="2.2" fill="white" />
-        </svg>
-      </div>
-      <div className="hidden leading-tight lg:block">
-        <div className="text-[13px] font-semibold tracking-tight">Resource Optimizer</div>
-        <div className="text-[11px] text-muted-foreground">Kubernetes rightsizing</div>
-      </div>
-    </div>
-  )
-}
+/** The admin area (plan §4): operators see automation, policies and audit; the rest is admin-only. */
+export const ADMIN_NAV: NavItem[] = [
+  { to: '/admin', label: 'Automation', icon: GaugeIcon, end: true, min: 'operator' },
+  { to: '/admin/policies', label: 'Policies', icon: ScrollTextIcon, min: 'operator' },
+  { to: '/admin/defaults', label: 'Defaults', icon: SlidersHorizontalIcon, min: 'admin' },
+  { to: '/admin/recommender', label: 'Recommender', icon: SparklesIcon, min: 'admin' },
+  { to: '/admin/pricing', label: 'Pricing', icon: BadgeDollarSignIcon, min: 'admin' },
+  { to: '/admin/datasources', label: 'Metrics sources', icon: DatabaseIcon, min: 'admin' },
+  { to: '/admin/access', label: 'Access', icon: UsersIcon, min: 'admin' },
+  { to: '/admin/audit', label: 'Audit', icon: HistoryIcon, min: 'operator' },
+]
+
+export const visibleAdminNav = (auth: Auth) => ADMIN_NAV.filter((n) => auth.can(n.min ?? 'viewer'))
 
 function Freshness() {
   const { data } = useSummary()
@@ -145,54 +163,158 @@ function useMediaQuery(q: string) {
   return m
 }
 
-function Sidebar() {
+function NavRow({ n, wide }: { n: NavItem; wide: boolean }) {
+  return (
+    <Tooltip content={wide ? null : n.label} side="right">
+      <span className="block">
+        <NavLink
+          to={n.to}
+          end={n.end ?? false}
+          className={({ isActive }) =>
+            cn(
+              'group flex h-9 items-center justify-center gap-2.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 lg:justify-start',
+              isActive
+                ? 'bg-sidebar-accent text-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]'
+                : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-foreground',
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <n.icon
+                className={cn(
+                  'size-4 shrink-0',
+                  isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
+                )}
+              />
+              <span className="hidden lg:inline">{n.label}</span>
+            </>
+          )}
+        </NavLink>
+      </span>
+    </Tooltip>
+  )
+}
+
+function NavHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <div className="hidden px-2 pt-3 pb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground/80 uppercase first:pt-0 lg:block">
+        {children}
+      </div>
+      <div className="mx-2 my-2 border-t border-sidebar-border first:hidden lg:hidden" />
+    </>
+  )
+}
+
+function Sidebar({ auth }: { auth: Auth }) {
   const wide = useMediaQuery('(min-width: 1024px)')
+  const admin = visibleAdminNav(auth)
   return (
     <aside className="w-16 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:w-60">
       <div className="sticky top-0 flex h-dvh flex-col">
         <div className="flex h-14 items-center justify-center px-4 lg:justify-start">
           <Logo />
         </div>
-        <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 px-2.5 pt-2 lg:px-3">
-          <div className="hidden px-2 pb-1.5 text-[11px] font-medium tracking-wide text-muted-foreground/80 uppercase lg:block">
-            Rightsizing
-          </div>
+        <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pt-2 lg:px-3">
+          <NavHeading>Rightsizing</NavHeading>
           {NAV.map((n) => (
-            <Tooltip key={n.to} content={wide ? null : n.label} side="right">
-              <span className="block">
-                <NavLink
-                  to={n.to}
-                  end={'end' in n ? n.end : false}
-                  className={({ isActive }) =>
-                    cn(
-                      'group flex h-9 items-center justify-center gap-2.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 lg:justify-start',
-                      isActive
-                        ? 'bg-sidebar-accent text-foreground shadow-[inset_0_0_0_1px_var(--sidebar-border)]'
-                        : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-foreground',
-                    )
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      <n.icon
-                        className={cn(
-                          'size-4 shrink-0',
-                          isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
-                        )}
-                      />
-                      <span className="hidden lg:inline">{n.label}</span>
-                    </>
-                  )}
-                </NavLink>
-              </span>
-            </Tooltip>
+            <NavRow key={n.to} n={n} wide={wide} />
           ))}
+          {admin.length ? (
+            <>
+              <NavHeading>Administration</NavHeading>
+              <div data-testid="admin-nav" className="flex flex-col gap-0.5">
+                {admin.map((n) => (
+                  <NavRow key={n.to} n={n} wide={wide} />
+                ))}
+              </div>
+            </>
+          ) : null}
         </nav>
         <div className="border-t border-sidebar-border p-2.5 lg:p-3">
           <Freshness />
         </div>
       </div>
     </aside>
+  )
+}
+
+function initials(name: string) {
+  const parts = name
+    .trim()
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || name.slice(0, 2).toUpperCase()
+}
+
+/** Signed-in user (name, role, change password, sign out) or a Sign in button. */
+function UserMenu({ auth, onChangePassword }: { auth: Auth; onChangePassword: () => void }) {
+  const logout = useLogout()
+  const navigate = useNavigate()
+  const loc = useLocation()
+  if (auth.loading) return <div className="size-8 animate-pulse rounded-full bg-muted" aria-hidden />
+  if (!auth.signedIn) {
+    // A hub without the admin API (404 on /v1/me) has no sign-in to offer.
+    if (auth.error) return null
+    return (
+      <Button asChild variant="outline" size="sm" data-testid="sign-in">
+        <Link to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`}>
+          <LogInIcon /> Sign in
+        </Link>
+      </Button>
+    )
+  }
+  const u = auth.me?.user
+  const name = u?.displayName || u?.username || 'Signed in'
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="flex h-8 items-center gap-2 rounded-full border bg-card py-0.5 pr-2.5 pl-0.5 text-[13px] shadow-xs transition-colors outline-none hover:border-ring/40 focus-visible:ring-[3px] focus-visible:ring-ring/30"
+          data-testid="user-menu"
+          aria-label={`Account: ${name}`}
+        >
+          <span className="flex size-7 items-center justify-center rounded-full bg-primary/14 text-[11px] font-semibold text-primary">
+            {initials(name)}
+          </span>
+          <span className="hidden max-w-28 truncate font-medium md:inline">{u?.username}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        <div className="flex items-center gap-2.5 px-2 py-2">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/14 text-xs font-semibold text-primary">
+            {initials(name)}
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-medium">{name}</div>
+            <div className="truncate text-xs text-muted-foreground">{u?.username}</div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between px-2 pb-2">
+          <RoleBadge role={auth.role} />
+          {auth.me?.sessionExpiresAt ? (
+            <span className="text-[11px] text-muted-foreground">
+              Session until {formatDateTime(auth.me.sessionExpiresAt, true)}
+            </span>
+          ) : null}
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onChangePassword}>
+          <KeyRoundIcon /> Change password
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          data-testid="sign-out"
+          onSelect={() =>
+            logout.mutate(undefined, {
+              onSettled: () => navigate('/login', { replace: true }),
+            })
+          }
+        >
+          <LogOutIcon /> Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -238,6 +360,13 @@ function MockMenu() {
       return 'normal'
     }
   })
+  const [anonymous, setAnonymous] = useState(() => {
+    try {
+      return localStorage.getItem('ro-mock-anonymous') ?? 'viewer'
+    } catch {
+      return 'viewer'
+    }
+  })
   if (!__MOCK_API__) return null
   return (
     <DropdownMenu>
@@ -250,7 +379,7 @@ function MockMenu() {
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-52">
+      <DropdownMenuContent className="w-64">
         <DropdownMenuLabel>Mock scenario</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={scenario}
@@ -271,17 +400,46 @@ function MockMenu() {
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuLabel>Without a session</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={anonymous}
+          onValueChange={(v) => {
+            try {
+              localStorage.setItem('ro-mock-anonymous', v)
+            } catch {
+              /* ignore */
+            }
+            setAnonymous(v)
+            window.location.reload()
+          }}
+        >
+          <DropdownMenuRadioItem value="viewer">Read-only viewer (ui token)</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="none">Login required</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
-          Data is generated in the browser by MSW from the hub OpenAPI contract.
+          Data is generated in the browser by MSW from the hub OpenAPI contract. Users: admin, operator,
+          viewer (password dev-password).
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
 
+function Splash() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center" aria-busy="true">
+      <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
+      <span className="sr-only">Loading</span>
+    </div>
+  )
+}
+
 export function AppShell() {
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [pwOpen, setPwOpen] = useState(false)
   const loc = useLocation()
+  const auth = useAuth()
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -296,6 +454,12 @@ export function AppShell() {
     window.scrollTo({ top: 0 })
   }, [loc.pathname])
 
+  // No session and no anonymous read access: everything needs a login (D-023).
+  if (auth.loginRequired)
+    return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
+  if (auth.loading) return <Splash />
+  const mustChange = !!auth.me?.user?.mustChangePassword
+
   return (
     <div className="flex min-h-dvh">
       <a
@@ -304,7 +468,7 @@ export function AppShell() {
       >
         Skip to content
       </a>
-      <Sidebar />
+      <Sidebar auth={auth} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur-md md:px-6 lg:px-8">
           <button
@@ -321,6 +485,7 @@ export function AppShell() {
             <MockMenu />
             <FleetSavings />
             <ThemeMenu />
+            <UserMenu auth={auth} onChangePassword={() => setPwOpen(true)} />
           </div>
         </header>
         <main id="main" className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 md:px-6 lg:px-8 lg:py-8">
@@ -328,6 +493,8 @@ export function AppShell() {
         </main>
       </div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <ChangePasswordDialog open={pwOpen || mustChange} forced={mustChange} onOpenChange={setPwOpen} />
+      <Toaster />
     </div>
   )
 }

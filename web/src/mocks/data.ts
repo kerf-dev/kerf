@@ -43,7 +43,7 @@ export const memQ = (bytes: number) => {
 }
 const roundUp = (v: number, step: number) => Math.ceil(v / step) * step
 
-interface ClusterSpec {
+export interface ClusterSpec {
   name: string
   description: string
   cpuPrice: number // USD per core-hour
@@ -56,7 +56,7 @@ interface ClusterSpec {
   nodes: number
 }
 
-const CLUSTERS: ClusterSpec[] = [
+export const CLUSTERS: ClusterSpec[] = [
   {
     name: 'prod-eu-west-1',
     description: 'Primary production · Ireland · m6i on-demand',
@@ -208,11 +208,14 @@ const VARIANTS = [
   'scheduler',
 ]
 
-/** Namespace → policy that sets the modes (per cluster index). */
-const POLICIES: Record<string, { name: string; cpu: Mode; memory: Mode; clusters: number[] }> = {
+/**
+ * Namespace → policy that sets the modes (per cluster index). The admin mocks (`admin-state.ts`)
+ * model the same policies as hub/Git RightsizingPolicies, so their layering reproduces these modes.
+ */
+export const POLICIES: Record<string, { name: string; cpu: Mode; memory: Mode; clusters: number[] }> = {
   payments: { name: 'payments-autopilot', cpu: 'auto-patch', memory: 'audit', clusters: [0] },
   notifications: { name: 'stateless-auto', cpu: 'auto-patch', memory: 'auto-patch', clusters: [0, 1] },
-  gateway: { name: 'stateless-auto', cpu: 'auto-patch', memory: 'auto-patch', clusters: [0] },
+  gateway: { name: 'stateless-auto', cpu: 'auto-patch', memory: 'auto-patch', clusters: [0, 1] },
   observability: { name: 'platform-auto', cpu: 'auto-patch', memory: 'auto-patch', clusters: [0, 1] },
   platform: { name: 'platform-auto', cpu: 'auto-patch', memory: 'auto-patch', clusters: [0, 1] },
   ledger: { name: 'ledger-hands-off', cpu: 'off', memory: 'off', clusters: [0, 1] },
@@ -280,7 +283,7 @@ export interface MockDb {
   events: AuditEvent[]
 }
 
-const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z')
+export const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z')
 
 function sumSavings(xs: { cpu: number; memory: number; total: number }[]) {
   const s = { cpu: 0, memory: 0, total: 0 }
@@ -985,7 +988,7 @@ function pick2(v: Resources['requests'], keys: readonly ('cpu' | 'memory')[]) {
 }
 
 /** Drops undefined values so responses only carry fields that are set. */
-function clean<T extends object>(o: T): T {
+export function clean<T extends object>(o: T): T {
   return JSON.parse(JSON.stringify(o)) as T
 }
 

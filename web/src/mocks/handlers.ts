@@ -1,11 +1,10 @@
-import { delay, http, HttpResponse } from 'msw'
+import { http, HttpResponse } from 'msw'
 import type {
   AuditEventList,
   ClusterList,
   EventType,
   FleetSummary,
   Mode,
-  Problem,
   RiskFlag,
   SavingsTrend,
   UsageSeries,
@@ -16,7 +15,6 @@ import type {
   WorkloadModel,
 } from './types'
 import {
-  buildDb,
   chooseStep,
   goDuration,
   parseStep,
@@ -27,62 +25,17 @@ import {
   usageSeries,
   type MockDb,
 } from './data'
+import { adminHandlers, decorateClusters, decorateDetail, decorateHistory } from './admin'
+import { dec, enc, gate, problem } from './core'
 
-/**
- * Mock scenarios for checking UI states by hand: set `localStorage['ro-mock-scenario']` to
- * `empty` (a fleet with no clusters), `error` (every call fails with 500) or `slow` (2 s latency).
- * The mock-mode menu in the top bar sets it.
- */
-export type Scenario = 'normal' | 'empty' | 'error' | 'slow'
-export function currentScenario(): Scenario {
-  try {
-    return (globalThis.localStorage?.getItem('ro-mock-scenario') as Scenario | null) ?? 'normal'
-  } catch {
-    return 'normal'
-  }
-}
+export { currentScenario, getDb, getAdmin, resetDb, timing, type Scenario } from './core'
 
-let db: MockDb | undefined
-export function getDb(): MockDb {
-  db ??= buildDb()
-  return db
-}
-export function resetDb(now?: number) {
-  db = buildDb(now)
-}
-
-const EMPTY_DB = (): MockDb => ({ ...getDb(), clusters: [], workloads: [], byId: new Map(), events: [] })
-
-function problem(status: number, code: string, title: string, detail?: string) {
-  const body: Problem = { type: 'about:blank', title, status, code, ...(detail ? { detail } : {}) }
-  return HttpResponse.json(body, { status, headers: { 'Content-Type': 'application/problem+json' } })
-}
-
-const enc = (n: number) => btoa(`o:${n}`)
-function dec(s: string | null): number {
-  if (!s) return 0
-  try {
-    const m = /^o:(\d+)$/.exec(atob(s))
-    return m ? Number(m[1]) : -1
-  } catch {
-    return -1
-  }
-}
-
-function range(url: URL, defaultDays = 7) {
-  const to = url.searchParams.get('to') ? Date.parse(url.searchParams.get('to')!) : getDb().now
+function range(url: URL, db: MockDb, defaultDays = 7) {
+  const to = url.searchParams.get('to') ? Date.parse(url.searchParams.get('to')!) : db.now
   const from = url.searchParams.get('from')
     ? Date.parse(url.searchParams.get('from')!)
     : to - defaultDays * 86400_000
   return { from, to }
-}
-
-async function gate(): Promise<{ db: MockDb } | Response> {
-  const sc = currentScenario()
-  if (import.meta.env.MODE !== 'test') await delay(sc === 'slow' ? 2000 : 120 + Math.random() * 260)
-  if (sc === 'error')
-    return problem(500, 'internal', 'Internal Server Error', 'mock scenario "error": the hub is unavailable')
-  return { db: sc === 'empty' ? EMPTY_DB() : getDb() }
 }
 
 function decodeId(raw: string | readonly string[] | undefined): string {
@@ -139,6 +92,8 @@ function filterWorkloads(db: MockDb, f: Filters): WorkloadModel[] {
 }
 
 export const handlers = [
+  ...adminHandlers,
+
   http.get('*/v1/summary', async () => {
     const g = await gate()
     if (g instanceof Response) return g
@@ -160,7 +115,7 @@ export const handlers = [
   http.get('*/v1/clusters', async () => {
     const g = await gate()
     if (g instanceof Response) return g
-    const body: ClusterList = { items: g.db.clusters }
+    const body: ClusterList = { items: decorateClusters(g.st, g.db, g.db.clusters) }
     return HttpResponse.json(body)
   }),
 
@@ -248,7 +203,7 @@ export const handlers = [
     if (resource !== 'cpu' && resource !== 'memory')
       return problem(400, 'invalid_resource', 'Bad Request', 'resource must be cpu or memory')
     const container = url.searchParams.get('container')
-    const { from, to } = range(url)
+    const { from, to } = range(url, g.db)
     if (!(from < to)) return problem(400, 'invalid_range', 'Bad Request', 'from must be before to')
     const rangeSec = (to - from) / 1000
     const step = parseStep(url.searchParams.get('step')) ?? chooseStep(rangeSec)
@@ -272,16 +227,16 @@ export const handlers = [
     if (w instanceof Response) return w
     const url = new URL(request.url)
     const limit = Number(url.searchParams.get('limit') ?? 100)
-    const { from, to } = range(url, 30)
+    const { from, to } = range(url, g.db, 30)
     const inRange = (t: string) => Date.parse(t) >= from && Date.parse(t) < to
-    const body: WorkloadHistory = {
+    const body: WorkloadHistory = decorateHistory(g.st, {
       workloadId: w.id,
       recommendations: w.history.filter((h) => inRange(h.generatedAt)).slice(0, limit),
       events: g.db.events
         .filter((e) => e.workloadId === w.id && inRange(e.time))
         .reverse()
         .slice(0, limit),
-    }
+    })
     return HttpResponse.json(body)
   }),
 
@@ -290,7 +245,7 @@ export const handlers = [
     if (g instanceof Response) return g
     const w = findWorkload(g.db, params.id)
     if (w instanceof Response) return w
-    return HttpResponse.json(toDetail(w, g.db))
+    return HttpResponse.json(decorateDetail(g.st, toDetail(w, g.db)))
   }),
 
   http.get('*/v1/savings/trend', async ({ request }) => {
@@ -299,7 +254,7 @@ export const handlers = [
     const url = new URL(request.url)
     const groupBy = url.searchParams.get('groupBy') ?? 'none'
     const clusters = url.searchParams.getAll('cluster')
-    const { from, to } = range(url)
+    const { from, to } = range(url, g.db)
     const step = parseStep(url.searchParams.get('step')) ?? chooseStep((to - from) / 1000)
     const names = g.db.clusters.map((c) => c.name).filter((n) => !clusters.length || clusters.includes(n))
     const per = savingsTrend(g.db, names, from / 1000, to / 1000, step)
