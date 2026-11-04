@@ -119,6 +119,6 @@ func (p Pricing) Fallback() bool { return p.Source != PricingSourceMetrics }
 
 // Pricing sources.
 const (
-	PricingSourceMetrics = "metrics"
-	PricingSourceDefault = "default"
+	PricingSourceMetrics = hubapi.PricingSourceMetrics
+	PricingSourceDefault = hubapi.PricingSourceDefault
 )

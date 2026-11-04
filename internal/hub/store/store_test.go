@@ -347,7 +347,6 @@ func TestInventoryAndHistory(t *testing.T) {
 	if views, _ := st.LoadWorkloads(ctx, WorkloadFilter{Cluster: "c1"}); len(views) != 2 {
 		t.Errorf("b not restored: %d", len(views))
 	}
-
 	// Recommendations: history, steps, latest.
 	insert(t, st, "c1", ids, result(a, t1, "100m", 1))
 	insert(t, st, "c1", ids, result(a, t2, "200m", 2), result(b, t2, "300m", 3))
@@ -376,6 +375,28 @@ func TestInventoryAndHistory(t *testing.T) {
 	views, _ = st.LoadWorkloads(ctx, WorkloadFilter{Cluster: "c1"})
 	if views[0].Rec == nil || !views[0].Rec.GeneratedAt.Equal(t3) || views[1].Rec == nil || !views[1].Rec.GeneratedAt.Equal(t2) {
 		t.Errorf("latest recs %+v %+v", views[0].Rec, views[1].Rec)
+	}
+
+	// A workload the agent reported after the run's data end is not deleted by that run; one last
+	// seen before the data end is.
+	fresh := wkey("c1", "fresh")
+	if err := st.UpsertStatuses(ctx, "c1", []hubapi.WorkloadStatus{{Workload: fresh.Ref(), Phase: "Pending",
+		Modes: hubapi.DefaultModes()}}, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Pool.Exec(ctx, `UPDATE workloads SET last_seen_at = $1 WHERE name = 'fresh'`, t3.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertInventoryAt(ctx, "c1", inventory(a), t3.Add(5*time.Minute), true, t3); err != nil {
+		t.Fatal(err)
+	}
+	views, _ = st.LoadWorkloads(ctx, WorkloadFilter{Cluster: "c1"})
+	keys = nil
+	for _, v := range views {
+		keys = append(keys, v.Key)
+	}
+	if !slices.Equal(keys, []hubapi.WorkloadKey{a, fresh}) {
+		t.Errorf("after a run with data end before fresh: live %v, want a and fresh (b deleted)", keys)
 	}
 }
 
@@ -414,7 +435,8 @@ func TestRunsAndSavings(t *testing.T) {
 		}
 		for c, v := range r.perC {
 			if err := st.RecordRunCluster(ctx, RunCluster{RunID: id, Cluster: c, AsOf: r.asOf, Status: "succeeded",
-				Savings: hubapi.Savings{CPU: v, Memory: v / 10}, Pricing: recommender.Pricing{Source: "metrics"}}); err != nil {
+				Savings: hubapi.Savings{CPU: v, Memory: v / 10}, Pricing: recommender.Pricing{Source: "metrics"},
+				FinishedAt: r.asOf.Add(time.Minute)}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -439,7 +461,7 @@ func TestRunsAndSavings(t *testing.T) {
 		t.Errorf("c1 last run %s, want the regular run's %s", last["c1"], lastFinished)
 	}
 
-	samples, err := st.SavingsSamples(ctx, nil, now.Add(-50*time.Hour), now)
+	samples, err := st.SavingsSamples(ctx, nil, now.Add(-50*time.Hour), now.Add(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,14 +472,14 @@ func TestRunsAndSavings(t *testing.T) {
 	}
 	var got []s
 	for _, x := range samples {
-		got = append(got, s{x.Cluster, x.AsOf.UTC(), x.CPU})
+		got = append(got, s{x.Cluster, x.At.UTC(), x.CPU})
 	}
 	want := []s{
 		{"c1", now.Add(-72 * time.Hour), 10}, // last before from
 		{"c2", now.Add(-72 * time.Hour), 1},  // last before from
 		{"c1", now.Add(-48 * time.Hour), 20},
-		{"c1", now, 30},
-		{"c2", now, 3},
+		{"c1", now.Add(time.Minute), 30}, // regular run: effective when it finished
+		{"c2", now.Add(time.Minute), 3},
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("samples\n got %v\nwant %v", got, want)

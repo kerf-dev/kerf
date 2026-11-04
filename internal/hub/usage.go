@@ -105,11 +105,11 @@ func (s *Server) getWorkloadUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Containers with usage, plus the recommended ones. Classic init containers (requests in KSM,
+	// no usage samples, never rightsized) would only render as empty charts.
 	names := map[string]bool{}
-	for _, m := range []series{usage, avg, req, lim} {
-		for c := range m {
-			names[c] = true
-		}
+	for c := range usage {
+		names[c] = true
 	}
 	if v.Rec != nil {
 		for _, c := range v.Rec.Containers {
