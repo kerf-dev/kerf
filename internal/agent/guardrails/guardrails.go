@@ -63,6 +63,9 @@ type Input struct {
 	HPACoupled    bool
 	LastAppliedAt *time.Time
 	RolledBackAt  *time.Time
+	// RolledBackResources are the resources the last rollback restored ("cpu", "memory");
+	// decreases of these are blocked until the cooldown after RolledBackAt ends. Empty means all.
+	RolledBackResources []string
 	// Tolerance is the relative change below which a value is left alone (default 5%).
 	Tolerance float64
 }
@@ -171,9 +174,9 @@ func Evaluate(in Input) Decision {
 		d.Message = fmt.Sprintf("last change at %s, cooldown %s", in.LastAppliedAt.UTC().Format(time.RFC3339), eff.Cooldown)
 		return d
 	}
-	if in.RolledBackAt != nil && in.Now.Sub(*in.RolledBackAt) < eff.Cooldown && hasDecrease(changes) {
+	if in.RolledBackAt != nil && in.Now.Sub(*in.RolledBackAt) < eff.Cooldown && hasDecrease(changes, in.RolledBackResources) {
 		d.Outcome, d.Reason = Blocked, v1alpha1.ReasonCooldown
-		d.Message = fmt.Sprintf("rolled back at %s; decreases blocked for %s", in.RolledBackAt.UTC().Format(time.RFC3339), eff.Cooldown)
+		d.Message = fmt.Sprintf("rolled back at %s; decreases of %s blocked for %s", in.RolledBackAt.UTC().Format(time.RFC3339), resList(in.RolledBackResources), eff.Cooldown)
 		return d
 	}
 	d.Outcome, d.Reason = Apply, v1alpha1.ReasonRecommendationApplied
@@ -200,19 +203,27 @@ func coverage(c hubclient.DataCoverage) (time.Duration, bool) {
 	return time.Duration(float64(w) * c.Ratio), true
 }
 
-func hasDecrease(changes []hubclient.ContainerChange) bool {
+func resList(rs []string) string {
+	if len(rs) == 0 {
+		return "cpu and memory"
+	}
+	return strings.Join(rs, " and ")
+}
+
+// hasDecrease reports whether a change decreases one of the resources (all if empty).
+func hasDecrease(changes []hubclient.ContainerChange, resources []string) bool {
 	for _, c := range changes {
 		if c.From == nil || c.To == nil {
 			continue
 		}
-		if dec(c.From.Requests, c.To.Requests) || dec(c.From.Limits, c.To.Limits) {
+		if dec(c.From.Requests, c.To.Requests, resources) || dec(c.From.Limits, c.To.Limits, resources) {
 			return true
 		}
 	}
 	return false
 }
 
-func dec(from, to *hubclient.ResourceValues) bool {
+func dec(from, to *hubclient.ResourceValues, resources []string) bool {
 	if from == nil || to == nil {
 		return false
 	}
@@ -224,7 +235,8 @@ func dec(from, to *hubclient.ResourceValues) bool {
 		qb, errB := resource.ParseQuantity(b)
 		return errA == nil && errB == nil && qa.Cmp(qb) < 0
 	}
-	return less(to.CPU, from.CPU) || less(to.Memory, from.Memory)
+	in := func(r string) bool { return len(resources) == 0 || slices.Contains(resources, r) }
+	return (in("cpu") && less(to.CPU, from.CPU)) || (in("memory") && less(to.Memory, from.Memory))
 }
 
 func flagged(rec *hubclient.WorkloadRecommendation, c hubclient.ContainerRecommendation, flag v1alpha1.RiskFlag) bool {

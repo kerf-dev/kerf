@@ -23,11 +23,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
 	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/tomer1983/resource-optimizer/internal/agent"
 	"github.com/tomer1983/resource-optimizer/internal/agent/controller"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
 	"github.com/tomer1983/resource-optimizer/internal/agent/hubstub"
@@ -91,6 +93,13 @@ func run(args []string) error {
 		leaderElect    = fs.Bool("leader-elect", false, "enable leader election (for more than one replica)")
 		logLevel       = fs.String("log-level", "info", "debug, info, warn or error")
 		unsupported    labelSelectors
+
+		healthEnabled    = fs.Bool("health-watch", true, "watch workloads after each change and roll back on a breach (WO-08)")
+		healthInterval   = fs.Duration("health-check-interval", 15*time.Second, "how often a watched workload is re-evaluated (pod events act immediately)")
+		metricsURL       = fs.String("metrics-url", "http://victoria-metrics.hub.svc:8428", "Prometheus-compatible endpoint for the CPU throttling ratio; empty disables it")
+		metricsTokenFile = fs.String("metrics-token-file", "", "optional bearer token file for --metrics-url")
+		cadvisorFallback = fs.Bool("health-cadvisor-fallback", false, "read throttling from the kubelets' cAdvisor (needs nodes/proxy) when --metrics-url fails")
+		minThrottleWin   = fs.Duration("health-min-throttling-window", 2*time.Minute, "time after a change before throttling is evaluated")
 	)
 	fs.Var(&unsupported, "unsupported-node-selector", "label selector (k=v,k2=v2; empty value = key exists) of nodes where in-place resize is not used; repeatable")
 	if err := fs.Parse(args); err != nil {
@@ -124,6 +133,7 @@ func run(args []string) error {
 	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                  scheme,
+		Cache:                   cache.Options{DefaultTransform: cache.TransformStripManagedFields()},
 		Metrics:                 metricsserver.Options{BindAddress: *metricsAddr},
 		HealthProbeBindAddress:  *probeAddr,
 		LeaderElection:          *leaderElect,
@@ -165,6 +175,12 @@ func run(args []string) error {
 	ctx := ctrl.SetupSignalHandler()
 	trigger, err := r.SetupWithManager(ctx, mgr)
 	if err != nil {
+		return err
+	}
+	if err := agent.SetupHealth(mgr, r, agent.HealthConfig{
+		Enabled: *healthEnabled, MetricsURL: *metricsURL, MetricsTokenFile: *metricsTokenFile,
+		CadvisorFallback: *cadvisorFallback, CheckInterval: *healthInterval, MinThrottlingWindow: *minThrottleWin,
+	}, log.With("component", "health")); err != nil {
 		return err
 	}
 	puller := &controller.Puller{
