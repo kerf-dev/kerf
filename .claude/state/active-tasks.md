@@ -30,11 +30,13 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-11 | HPA coordination | 3 | done | local_9125207c | wo-11-hpa | – | |
 | WO-14d | UI: recommendation history series, recompute, D-019 | 2 | done | local_9fadb724 | wo-14d-web | – | |
 | WO-19 | Admin: contract (+ onboarding/readiness contract) | 4 | done | local_7697cfde | wo-19-admin-contract | – | Migrations 0007–0010 assigned |
-| WO-20 | Admin: hub | 4 | in-progress | local_9125207c | wo-20-admin-hub | – | |
-| WO-21 | Admin: agent | 4 | in-progress | local_11de0a00 | wo-21-admin-agent | – | |
-| WO-22 | Admin: web (+ onboarding wizard, readiness UI) | 4 | in-progress | local_9fadb724 | wo-22-admin-web | – | MSW first |
-| WO-25 | Onboarding, metrics sources, readiness | 4 | in-progress | local_14a53b46 | wo-25-onboarding | wiring waits for WO-20/21 | plan docs/plans/cluster-onboarding.md |
-| WO-24 | Admin: e2e | 4 | todo | – | wo-24-admin-e2e | WO-20/21/22/25 | |
+| WO-20 | Admin: hub | 4 | done | local_9125207c | wo-20-admin-hub | – | merged 70e02d1 |
+| WO-21 | Admin: agent | 4 | done | local_11de0a00 | wo-21-admin-agent | – | merged d2a50b6 |
+| WO-21b | Approve-once keeps field ownership (D-027) | 4 | in-progress | local_11de0a00 | wo-21b-approve-ownership | – | |
+| WO-22 | Admin: web (+ onboarding wizard, readiness UI) | 4 | done | local_9fadb724 | wo-22-admin-web | – | merged 3070005 |
+| WO-22b | Admin web polish (overflow, sync state, git read-only) | 4 | in-progress | local_9fadb724 | wo-22b-admin-polish | – | |
+| WO-25 | Onboarding, metrics sources, readiness | 4 | in-progress (phase 2) | local_14a53b46 | wo-25-onboarding-p2 | – | phase 1 merged 56424f9; D-026 |
+| WO-24 | Admin: e2e | 4 | todo | – | wo-24-admin-e2e | WO-25 p2, WO-21b (shared spokes) | |
 
 ## Open questions for the user
 - Token with GitHub `workflow` scope needed to activate `ci/github-workflows/` (user, morning).
@@ -54,3 +56,4 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-04 Final e2e on main 6fbfeda: 1 test-side failure (WO-13 guard blocks 1-replica RestartContainer) fixed in WO-09c; with it g1/g2 PASS back to back (16 tests). WO-09c and WO-13b merged (93695ad), make ci exit 0, agent redeployed main-93695ad, pricing redeployed from main. UI checked in browser: overview, opportunities, workload detail render with live data ($10,015/mo fleet savings, 693 workloads incl. ~60 deleted test workloads → WO-04e).
 - 2026-11-04 WO-04e merged (4dc9320), make ci exit 0, hub deployed main-4dc9320 (migration 0006 applied); deleted test workloads pruned after one agent pull (693 → 451 workloads, 0 ghosts). Morning report: docs/STATUS.md.
 - 2026-11-04 WO-19 merged (59539ee): hub.yaml 19 → 90 operations, purely additive (no removed ops/props, no new required fields on existing schemas); migrations 0007–0010; shared validator api/v1alpha1/validate. `make ci` exit 0, web gen:api:check + typecheck pass. WO-20/21/22/25 started in parallel.
+- 2026-11-04 WO-20, WO-21, WO-22 and WO-25 phase 1 merged (9325962; only go.mod overlapped). `make ci` exit 0 (lint 0 issues, Postgres tests), `make web-verify` exit 0 (25/25 Playwright). Deployed hub, agents (both spokes, CRDs re-applied) and web at main-9325962; migrations 0007–0010 applied, dev users seeded. Live: admin login via API and UI; hub policy → CR on ro-spoke-1 in 22 s, delete and pause/resume followed on the next pull; audit rows carry actor, reason, before/after. D-026, D-027 logged. Started WO-25 phase 2, WO-21b, WO-22b.
