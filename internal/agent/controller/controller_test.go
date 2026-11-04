@@ -627,7 +627,7 @@ func TestDedupD017(t *testing.T) {
 	eventually(t, 10*time.Second, "new id seen", func() error {
 		rsr, err := getRSR(name)
 		if err != nil || rsr.Spec.Source.RecommendationID != r.ID {
-			return fmt.Errorf("rsr source not updated yet (%v)", err)
+			return fmt.Errorf("rsr source not updated yet: %w", err)
 		}
 		return nil
 	})
