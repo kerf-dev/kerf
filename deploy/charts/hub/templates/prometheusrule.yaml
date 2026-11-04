@@ -1,0 +1,106 @@
+{{- /* Alerts on the series of docs/contracts/metrics.md and the component prefixes it allows
+(ro_recommender_*, ro_pricing_*, ro_webhook_*, ro_hub_*). */}}
+{{- $pr := .Values.prometheusRule }}
+{{- if $pr.enabled }}
+{{- $kind := $pr.kind | default "PrometheusRule" }}
+{{- if not (has $kind (list "PrometheusRule" "VMRule")) }}{{ fail "prometheusRule.kind must be PrometheusRule or VMRule" }}{{ end }}
+{{- $a := $pr.alerts }}
+{{- $interval := include "hub.c.durationSeconds" .Values.config.recommender.interval | int }}
+{{- $recStale := $a.recommenderStale.staleAfter | default (printf "%ds" (mul 2 $interval)) }}
+{{- $recStaleS := include "hub.c.durationSeconds" $recStale | int }}
+{{- $priceStaleS := include "hub.c.durationSeconds" ($a.pricingStale.staleAfter | default "30m") | int }}
+apiVersion: {{ ternary "monitoring.coreos.com/v1" "operator.victoriametrics.com/v1beta1" (eq $kind "PrometheusRule") }}
+kind: {{ $kind }}
+metadata:
+  name: {{ include "hub.fullname" . }}
+  namespace: {{ $pr.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+    {{- with $pr.labels }}{{ toYaml . | nindent 4 }}{{ end }}
+spec:
+  groups:
+    - name: resource-optimizer
+      rules:
+        {{- if $a.agentOffline.enabled }}
+        - alert: ResourceOptimizerAgentOffline
+          expr: max by (cluster) (ro_cluster_readiness{check="agent.connected"}) == 0
+          for: {{ $a.agentOffline.for }}
+          labels:
+            severity: {{ $a.agentOffline.severity }}
+            {{- with $pr.additionalLabels }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: "resource-optimizer agent of cluster {{`{{ $labels.cluster }}`}} is offline"
+            description: "The hub has not received a config pull from the agent of {{`{{ $labels.cluster }}`}} within 3 pull intervals (readiness check agent.connected). Nothing new is applied on that cluster."
+        {{- end }}
+        {{- if $a.readinessBlocking.enabled }}
+        - alert: ResourceOptimizerReadinessBlocking
+          expr: count by (cluster) (max by (cluster, check) (ro_cluster_readiness{severity="blocking"}) == 0) > 0
+          for: {{ $a.readinessBlocking.for }}
+          labels:
+            severity: {{ $a.readinessBlocking.severity }}
+            {{- with $pr.additionalLabels }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: "{{`{{ $value }}`}} blocking readiness check(s) failing on cluster {{`{{ $labels.cluster }}`}}"
+            description: "Cluster {{`{{ $labels.cluster }}`}} cannot reach Automation ready. See the cluster's readiness page in the UI (docs/contracts/readiness.md)."
+        {{- end }}
+        {{- if $a.recommenderFailing.enabled }}
+        - alert: ResourceOptimizerRecommenderFailing
+          expr: sum(increase(ro_recommender_runs_total{status=~"failed|partial"}[{{ mul 2 $interval }}s])) > 0
+          for: {{ $a.recommenderFailing.for }}
+          labels:
+            severity: {{ $a.recommenderFailing.severity }}
+            {{- with $pr.additionalLabels }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: "resource-optimizer recommender runs are failing"
+            description: "{{`{{ $value }}`}} recommender run(s) ended failed or partial within the last 2 recommender intervals. Check the hub logs (\"recommender run finished\")."
+        {{- end }}
+        {{- if $a.recommenderStale.enabled }}
+        - alert: ResourceOptimizerRecommenderStale
+          expr: time() - max by (cluster) (ro_recommender_last_success_timestamp_seconds) > {{ $recStaleS }}
+          for: {{ $a.recommenderStale.for }}
+          labels:
+            severity: {{ $a.recommenderStale.severity }}
+            {{- with $pr.additionalLabels }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: "No successful recommender run for cluster {{`{{ $labels.cluster }}`}} in {{ $recStale }}"
+            description: "The last successful recommender run for {{`{{ $labels.cluster }}`}} is older than {{ $recStale }} (2 recommender intervals); its recommendations are getting stale."
+        {{- end }}
+        {{- if $a.noLeader.enabled }}
+        - alert: ResourceOptimizerNoHubLeader
+          expr: max(ro_hub_leader) == 0
+          for: {{ $a.noLeader.for }}
+          labels:
+            severity: {{ $a.noLeader.severity }}
+            {{- with $pr.additionalLabels }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: "No resource-optimizer hub replica is the leader"
+            description: "No hub replica holds the leader lock: the recommender, readiness checks and sweeps are not running (D-028)."
+        {{- end }}
+        {{- if $a.webhookErrors.enabled }}
+        - alert: ResourceOptimizerWebhookErrors
+          expr: |-
+            sum by (cluster) (rate(ro_webhook_admissions_total{result="error"}[10m]))
+              / sum by (cluster) (rate(ro_webhook_admissions_total[10m])) > {{ $a.webhookErrors.ratio }}
+          for: {{ $a.webhookErrors.for }}
+          labels:
+            severity: {{ $a.webhookErrors.severity }}
+            {{- with $pr.additionalLabels }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: "resource-optimizer webhook admission errors on cluster {{`{{ $labels.cluster }}`}}"
+            description: "{{`{{ $value | humanizePercentage }}`}} of pod admissions end in error; those pods start with their template resources (failurePolicy Ignore). See ro_webhook_admissions_total by reason."
+        {{- end }}
+        {{- if $a.pricingStale.enabled }}
+        - alert: ResourceOptimizerPricingStale
+          expr: (time() - max(ro_pricing_last_success_timestamp_seconds) > {{ $priceStaleS }}) or absent(ro_pricing_last_success_timestamp_seconds)
+          for: {{ $a.pricingStale.for }}
+          labels:
+            severity: {{ $a.pricingStale.severity }}
+            {{- with $pr.additionalLabels }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: "resource-optimizer pricing has not refreshed for {{ $a.pricingStale.staleAfter }}"
+            description: "The pricing service has had no successful refresh for {{ $a.pricingStale.staleAfter }} (or is not running): cost series (ro_node_hourly_cost_usd, ...) go stale and savings fall back to the default rates."
+        {{- end }}
+        {{- with $pr.additionalRules }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

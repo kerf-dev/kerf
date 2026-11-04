@@ -22,3 +22,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "pricing.caEnabled" -}}
+{{- $ca := .Values.hub.caBundle | default dict -}}
+{{- if or $ca.existingConfigMap $ca.existingSecret $ca.pem -}}true{{- end -}}
+{{- end -}}

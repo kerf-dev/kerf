@@ -1,0 +1,62 @@
+# Every production feature on, EKS-like (rendered by `make charts-lint`). Non-root on 8080 needs
+# the WO-18c image.
+global:
+  imageRegistry: 123456789012.dkr.ecr.eu-west-1.amazonaws.com
+  imagePullSecrets: [{name: ecr-pull}]
+  externalSecrets:
+    secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}
+
+image:
+  repository: resource-optimizer/web
+  tag: 0.2.0
+  digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+hub:
+  upstream: hub.resource-optimizer.svc.cluster.local:8080
+
+replicaCount: 2
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+priorityClassName: resource-optimizer
+serviceAccount:
+  create: true
+
+containerPort: 8080
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  runAsGroup: 101
+  fsGroup: 101
+  seccompProfile: {type: RuntimeDefault}
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: {drop: [ALL]}
+
+token:
+  externalSecret:
+    enabled: true
+    remoteRef: {key: resource-optimizer/web/hub-token, property: token}
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+  hosts:
+    - host: ro.example.com
+  tls:
+    - hosts: [ro.example.com]
+
+networkPolicy:
+  enabled: true
+  ingress:
+    from:
+      - ipBlock: {cidr: 10.0.0.0/16}

@@ -1,0 +1,1 @@
+{{- include "pricing.c.serviceMonitor" (dict "ctx" . "port" "http-metrics") }}

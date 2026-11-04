@@ -1,0 +1,463 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  name: rightsizingrecommendations.resource-optimizer.oz.io
+spec:
+  group: resource-optimizer.oz.io
+  names:
+    categories:
+    - resource-optimizer
+    kind: RightsizingRecommendation
+    listKind: RightsizingRecommendationList
+    plural: rightsizingrecommendations
+    shortNames:
+    - rsr
+    singular: rightsizingrecommendation
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.targetRef.kind
+      name: Kind
+      type: string
+    - jsonPath: .spec.targetRef.name
+      name: Target
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.strategy
+      name: Strategy
+      type: string
+    - jsonPath: .status.effective.cpuMode
+      name: CPU
+      type: string
+    - jsonPath: .status.effective.memoryMode
+      name: Memory
+      type: string
+    - jsonPath: .status.nextWindow
+      name: Next Window
+      priority: 1
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          RightsizingRecommendation is the agent's record of the change for one workload. One per
+          workload, in the workload's namespace, written only by the agent.
+
+          Naming: by convention metadata.name equals the workload name; if two workloads of different
+          kinds share a name, the later one is named "<name>-<lowercase kind>". Consumers (webhook,
+          health watch) must therefore look recommendations up by spec.targetRef (cache index
+          IndexTargetRef), never by name.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              RightsizingRecommendationSpec is the change the agent wants for one workload.
+              Written only by the agent.
+            properties:
+              containers:
+                description: Containers are the recommended values, after guardrails
+                  (clamping, floors) were applied.
+                items:
+                  description: ContainerRecommendation is the recommended resources
+                    for one container.
+                  properties:
+                    limits:
+                      additionalProperties:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      description: Limits for cpu and/or memory. A missing key means
+                        "unchanged / not set".
+                      maxProperties: 2
+                      type: object
+                      x-kubernetes-validations:
+                      - message: only cpu and memory are supported
+                        rule: self.all(k, k == 'cpu' || k == 'memory')
+                    name:
+                      description: Name of the container (regular or init/sidecar
+                        container).
+                      maxLength: 63
+                      minLength: 1
+                      type: string
+                    removeLimits:
+                      description: 'RemoveLimits lists resources whose limit is to
+                        be removed (e.g. cpu with limits: remove).'
+                      items:
+                        description: ResourceName is the name identifying various
+                          resources in a ResourceList.
+                        enum:
+                        - cpu
+                        - memory
+                        type: string
+                      maxItems: 2
+                      type: array
+                      x-kubernetes-list-type: set
+                    requests:
+                      additionalProperties:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      description: Requests for cpu and/or memory. A missing key means
+                        "unchanged / not set".
+                      maxProperties: 2
+                      type: object
+                      x-kubernetes-validations:
+                      - message: only cpu and memory are supported
+                        rule: self.all(k, k == 'cpu' || k == 'memory')
+                  required:
+                  - name
+                  type: object
+                maxItems: 64
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              hpa:
+                description: |-
+                  HPA is the HPA utilization target applied together with the containers (WO-11): set when
+                  the workload's HPA scales on the utilization of a resource whose requests change.
+                properties:
+                  averageUtilization:
+                    description: AverageUtilization target in percent.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  name:
+                    description: Name of the HPA, in the same namespace.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                  resource:
+                    description: Resource the HPA scales on (Resource metric, Utilization
+                      target).
+                    enum:
+                    - cpu
+                    - memory
+                    type: string
+                required:
+                - averageUtilization
+                - name
+                - resource
+                type: object
+              source:
+                description: Source is the hub recommendation this was built from.
+                properties:
+                  confidence:
+                    description: Confidence (0-1, decimal string) as reported by the
+                      hub. Informational.
+                    maxLength: 8
+                    type: string
+                  generatedAt:
+                    description: GeneratedAt is when the hub generated the recommendation.
+                    format: date-time
+                    type: string
+                  recommendationID:
+                    description: 'RecommendationID is the hub''s recommendation id
+                      (hub API: WorkloadRecommendation.id).'
+                    maxLength: 64
+                    minLength: 1
+                    type: string
+                  riskFlags:
+                    description: RiskFlags as reported by the hub. Informational.
+                    items:
+                      description: RiskFlag is a property of a recommendation the
+                        hub computed (WO-04). Values match the hub API.
+                      type: string
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-type: set
+                required:
+                - generatedAt
+                - recommendationID
+                type: object
+              strategy:
+                description: |-
+                  Strategy currently in effect. After an in-place fallback the agent sets this to rollout,
+                  which also stops the webhook from injecting values.
+                enum:
+                - in-place
+                - rollout
+                - deferred
+                type: string
+              targetRef:
+                description: TargetRef is the workload, in the same namespace.
+                properties:
+                  apiVersion:
+                    description: APIVersion of the workload, e.g. apps/v1 or batch/v1.
+                    type: string
+                  kind:
+                    description: Kind of the workload.
+                    enum:
+                    - Deployment
+                    - StatefulSet
+                    - DaemonSet
+                    - CronJob
+                    type: string
+                  name:
+                    description: Name of the workload.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+            required:
+            - containers
+            - source
+            - strategy
+            - targetRef
+            type: object
+          status:
+            description: RightsizingRecommendationStatus is the observed state of
+              a RightsizingRecommendation.
+            properties:
+              appliedAt:
+                description: AppliedAt is when the most recent change became live.
+                format: date-time
+                type: string
+              appliedRecommendationID:
+                description: AppliedRecommendationID is the hub recommendation id
+                  that is live.
+                type: string
+              conditions:
+                description: 'Conditions: PolicyResolved, Applied, Blocked, HealthWatch.'
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              effective:
+                description: Effective is the resolved policy for the workload.
+                properties:
+                  cpuMode:
+                    description: CPUMode is the effective CPU mode.
+                    enum:
+                    - "off"
+                    - audit
+                    - auto-patch
+                    type: string
+                  cpuModeSource:
+                    description: CPUModeSource is the precedence level CPUMode came
+                      from.
+                    enum:
+                    - global-default
+                    - cluster-default
+                    - policy
+                    - annotation
+                    type: string
+                  memoryMode:
+                    description: MemoryMode is the effective memory mode.
+                    enum:
+                    - "off"
+                    - audit
+                    - auto-patch
+                    type: string
+                  memoryModeSource:
+                    description: MemoryModeSource is the precedence level MemoryMode
+                      came from.
+                    enum:
+                    - global-default
+                    - cluster-default
+                    - policy
+                    - annotation
+                    type: string
+                  policy:
+                    description: Policy is the name of the winning RightsizingPolicy,
+                      empty if none matched.
+                    type: string
+                  profile:
+                    description: Profile is the effective recommender profile.
+                    enum:
+                    - dev
+                    - production
+                    - high-availability
+                    type: string
+                  strategy:
+                    description: Strategy is the effective configured strategy (before
+                      any fallback).
+                    enum:
+                    - in-place
+                    - rollout
+                    - deferred
+                    type: string
+                required:
+                - cpuMode
+                - cpuModeSource
+                - memoryMode
+                - memoryModeSource
+                - profile
+                - strategy
+                type: object
+              nextWindow:
+                description: NextWindow is when the next maintenance window opens,
+                  set while the phase is Deferred.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the spec generation the status
+                  refers to.
+                format: int64
+                type: integer
+              phase:
+                description: Phase of the recommendation.
+                enum:
+                - Pending
+                - Applying
+                - Applied
+                - Blocked
+                - RolledBack
+                - Released
+                - Deferred
+                type: string
+              previous:
+                description: Previous holds the values that were live before the most
+                  recent apply. Used by rollback.
+                items:
+                  description: ContainerResources are the requests and limits of one
+                    container. Only cpu and memory are used.
+                  properties:
+                    limits:
+                      additionalProperties:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      description: Limits for cpu and/or memory. A missing key means
+                        "unchanged / not set".
+                      maxProperties: 2
+                      type: object
+                      x-kubernetes-validations:
+                      - message: only cpu and memory are supported
+                        rule: self.all(k, k == 'cpu' || k == 'memory')
+                    name:
+                      description: Name of the container (regular or init/sidecar
+                        container).
+                      maxLength: 63
+                      minLength: 1
+                      type: string
+                    requests:
+                      additionalProperties:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      description: Requests for cpu and/or memory. A missing key means
+                        "unchanged / not set".
+                      maxProperties: 2
+                      type: object
+                      x-kubernetes-validations:
+                      - message: only cpu and memory are supported
+                        rule: self.all(k, k == 'cpu' || k == 'memory')
+                  required:
+                  - name
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              previousHPATarget:
+                description: |-
+                  PreviousHPATarget is the HPA target that was live before the most recent apply (WO-11),
+                  restored by a rollback together with the containers.
+                format: int32
+                minimum: 1
+                type: integer
+              rolledBackAt:
+                description: RolledBackAt is when the most recent rollback happened
+                  (cooldown for decreases starts here).
+                format: date-time
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
