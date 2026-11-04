@@ -47,6 +47,8 @@ tags:
     description: Audit log queries.
   - name: ui
     description: Read-only endpoints for the web UI.
+  - name: admin
+    description: Operator endpoints (role `admin` only).
 paths:
   /v1/clusters/{cluster}/recommendations:
     parameters:
@@ -612,6 +614,45 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/admin/recompute:
+    post:
+      tags: [admin]
+      operationId: recompute
+      security:
+        - bearerAuth: [admin]
+      summary: Run the recommender now
+      description: |
+        Queues a recommender run (D-019) for one cluster (`cluster`) or for all registered
+        clusters, and returns at once with the run id. The run starts as soon as no other run is
+        in progress; it uses usage data up to the last full recommender step (5 minutes by
+        default) before it starts, like a scheduled run. A request for the same scope that
+        arrives while an earlier one is still queued gets that run's id (`coalesced: true`)
+        instead of queuing another.
+
+        Completion is visible through the existing endpoints: `lastRecommenderRunAt` of the
+        cluster in `GET /v1/clusters` moves past `requestedAt`, and the agent endpoint returns
+        the new recommendations.
+      parameters:
+        - name: cluster
+          in: query
+          description: Only this cluster. Default all clusters.
+          schema:
+            $ref: '#/components/schemas/ClusterName'
+      responses:
+        '202':
+          description: Run queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecomputeAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     bearerAuth:
@@ -1555,6 +1596,24 @@ components:
                 type: array
                 items:
                   $ref: '#/components/schemas/SavingsPoint'
+    RecomputeAccepted:
+      type: object
+      required: [runId, requestedAt, coalesced]
+      properties:
+        runId:
+          type: string
+          format: uuid
+          description: Id of the queued run (UUIDv7).
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+          description: The requested cluster; absent for a run over all clusters.
+        requestedAt:
+          type: string
+          format: date-time
+          description: When the run was first requested (for a coalesced request, the earlier one).
+        coalesced:
+          type: boolean
+          description: True when an already queued run for the same scope was returned.
     Problem:
       type: object
       description: |

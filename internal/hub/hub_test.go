@@ -390,16 +390,23 @@ func TestAgentEventsAndAudit(t *testing.T) {
 	e.problem(e.do("POST", "/v1/clusters/c1/events", tokC1, tooMany), 413, "batch_too_large")
 	e.problem(e.do("POST", "/v1/clusters/c1/events", tokC1, "nope"), 400, "invalid_json")
 
-	// ro_actions_total counts stored events once per resource, with the cluster label.
+	// ro_actions_total counts stored events once per resource, with the workload labels.
 	ms := e.metrics()
+	wl := func(k hubapi.WorkloadKey, l map[string]string) map[string]string {
+		l["cluster"], l["namespace"], l["workload_kind"], l["workload"] = k.Cluster, k.Namespace, k.Kind, k.Name
+		return l
+	}
 	for _, want := range []struct {
 		labels map[string]string
 		value  string
 	}{
-		{map[string]string{"cluster": "c1", "type": "applied", "resource": "cpu", "strategy": "in-place"}, "2"},
-		{map[string]string{"cluster": "c1", "type": "applied", "resource": "memory"}, "1"},
-		{map[string]string{"cluster": "c1", "type": "skipped", "resource": "", "strategy": ""}, "1"},
-		{map[string]string{"cluster": "c2", "type": "applied", "resource": "cpu"}, "1"},
+		{wl(kCheckout, map[string]string{"type": "applied", "resource": "cpu", "strategy": "in-place"}), "1"},
+		{wl(kFrontend, map[string]string{"type": "applied", "resource": "cpu", "strategy": "in-place"}), "1"},
+		{wl(kCheckout, map[string]string{"type": "applied", "resource": "memory"}), "1"},
+		{wl(kLedger, map[string]string{"type": "blocked", "resource": "memory"}), "1"},
+		{wl(kCheckout, map[string]string{"type": "skipped", "resource": "", "strategy": ""}), "1"},
+		{wl(key("c1", "ghost", hubapi.KindDaemonSet, "nothing"), map[string]string{"type": "skipped"}), "1"},
+		{wl(kAPI, map[string]string{"type": "applied", "resource": "cpu"}), "1"},
 	} {
 		if v, ok := ms.find("ro_actions_total", want.labels); !ok || v != want.value {
 			t.Errorf("ro_actions_total%v = %q (found %v), want %s", want.labels, v, ok, want.value)

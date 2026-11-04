@@ -99,7 +99,7 @@ func (s *Server) getWorkloadUsage(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusBadGateway, "metrics_unavailable", "Metrics backend query failed: "+err.Error())
 		return
 	}
-	steps, err := s.Store.RecommendationSteps(r.Context(), v.DBID, from, to)
+	steps, err := s.Store.RecommendationSteps(r.Context(), v.DBID, from.Add(-step), to)
 	if err != nil {
 		s.internal(w, r, err)
 		return
@@ -129,10 +129,24 @@ func (s *Server) getWorkloadUsage(w http.ResponseWriter, r *http.Request) {
 	if resource == "memory" {
 		out.Unit = "bytes"
 	}
+	var origin *time.Time
+	for _, set := range []series{usage, avg, req, lim} {
+		for _, pts := range set {
+			if len(pts) > 0 {
+				t := time.Unix(int64(pts[0][0]), 0)
+				origin = &t
+				break
+			}
+		}
+		if origin != nil {
+			break
+		}
+	}
+	grid := usageGrid(from, to, step, origin)
 	for _, n := range sorted {
 		out.Containers = append(out.Containers, hubapi.ContainerSeries{
 			Name: n, Usage: nonNil(usage[n]), UsageAvg: nonNil(avg[n]), Request: nonNil(req[n]), Limit: nonNil(lim[n]),
-			Recommendation: recommendationPoints(steps, n, resource, from, to, step),
+			Recommendation: recommendationPoints(steps, n, resource, grid),
 		})
 	}
 	writeJSON(w, out)
@@ -145,11 +159,43 @@ func nonNil(p []hubapi.Point) []hubapi.Point {
 	return p
 }
 
-// recommendationPoints is the step function of the recommended request of one container.
-func recommendationPoints(steps []storeStep, container, resource string, from, to time.Time, step time.Duration) []hubapi.Point {
+// usageGrid returns the timestamps for the recommendation series: the grid of the metric series
+// (VictoriaMetrics aligns range queries to multiples of step, Prometheus starts at from), so the
+// recommendation shares the x values of usage, request and limit. origin is any timestamp of
+// the metric series, nil without any (then the grid is aligned like VictoriaMetrics). The grid
+// covers (from - step, to): the first point may precede from, like the metric series' first point.
+func usageGrid(from, to time.Time, step time.Duration, origin *time.Time) []time.Time {
+	sec := int64(step / time.Second)
+	if sec <= 0 {
+		return nil
+	}
+	o := alignDown(from, step).Unix()
+	if origin != nil {
+		o = origin.Unix()
+	}
+	// First grid point after from - step.
+	lo := from.Unix() - sec
+	start := o + ((lo-o)/sec)*sec
+	for start <= lo {
+		start += sec
+	}
+	for start-sec > lo {
+		start -= sec
+	}
+	var out []time.Time
+	for t := start; t < to.Unix() || (t == to.Unix() && to.Nanosecond() > 0); t += sec {
+		out = append(out, time.Unix(t, 0).UTC())
+	}
+	return out
+}
+
+// recommendationPoints is the step function of the recommended request of one container,
+// sampled at grid: at each time, the latest recommendation generated at or before it. steps are
+// oldest first; times before the first recommendation have no point.
+func recommendationPoints(steps []storeStep, container, resource string, grid []time.Time) []hubapi.Point {
 	pts := []hubapi.Point{}
 	i := -1
-	for t := from; t.Before(to); t = t.Add(step) { // to is exclusive
+	for _, t := range grid {
 		for i+1 < len(steps) && !steps[i+1].At.After(t) {
 			i++
 		}

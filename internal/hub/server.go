@@ -29,6 +29,8 @@ type Server struct {
 	RecCfg  recommender.Config
 	Metrics *Metrics
 	Log     *slog.Logger
+	// Job runs the recommender; POST /v1/admin/recompute queues runs on it.
+	Job *Job
 	// Now is the clock (tests).
 	Now func() time.Time
 
@@ -86,6 +88,7 @@ func (s *Server) Handler() http.Handler {
 	route("GET /v1/workloads/{id}/usage", ui, s.getWorkloadUsage)
 	route("GET /v1/workloads/{id}/history", ui, s.getWorkloadHistory)
 	route("GET /v1/savings/trend", ui, s.getSavingsTrend)
+	route("POST /v1/admin/recompute", []string{hubapi.RoleAdmin}, s.recompute)
 
 	mux.Handle("GET /metrics", promhttp.HandlerFor(s.Metrics.Registry, promhttp.HandlerOpts{}))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok\n")) })
@@ -253,10 +256,39 @@ func (s *Server) heartbeat(ctx context.Context, cluster, version string) {
 
 // ---- responses ----
 
+// recompute serves POST /v1/admin/recompute (D-019).
+func (s *Server) recompute(w http.ResponseWriter, r *http.Request) {
+	cluster := r.URL.Query().Get("cluster")
+	if cluster != "" {
+		if !hubapi.ClusterNameRE.MatchString(cluster) {
+			badRequest(w, r, "invalid_cluster", "Invalid cluster name.")
+			return
+		}
+		exists, err := s.Store.ClusterExists(r.Context(), cluster)
+		if err != nil {
+			s.internal(w, r, err)
+			return
+		}
+		if !exists {
+			writeProblem(w, r, http.StatusNotFound, "cluster_not_found", "Unknown cluster "+cluster+".")
+			return
+		}
+	}
+	if s.Job == nil { // always set by cmd/hub
+		s.internal(w, r, errors.New("no recommender job"))
+		return
+	}
+	id, at, coalesced := s.Job.Trigger(context.WithoutCancel(r.Context()), cluster)
+	s.Log.InfoContext(r.Context(), "recompute requested", "run", id, "cluster", cluster, "coalesced", coalesced)
+	writeJSONStatus(w, http.StatusAccepted, hubapi.RecomputeAccepted{RunID: id.String(), Cluster: cluster, RequestedAt: at.UTC(), Coalesced: coalesced})
+}
+
 // writeJSON writes a 200 JSON response.
-func writeJSON(w http.ResponseWriter, v any) {
+func writeJSON(w http.ResponseWriter, v any) { writeJSONStatus(w, http.StatusOK, v) }
+
+func writeJSONStatus(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
 	enc := json.NewEncoder(w)
 	_ = enc.Encode(v)
 }
