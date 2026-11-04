@@ -165,11 +165,13 @@ func TestInPlaceCPU(t *testing.T) {
 
 // Scenario 3: in-place memory decrease on a JVM workload restarts the container, not the pod.
 // On nodes with swap the agent must refuse in-place memory changes instead (D-007, WO-06).
+// Two replicas: a single replica whose resize restarts the container is blocked (WO-13, see
+// TestSingleReplicaRestartIsBlocked).
 func TestInPlaceJVMMemory(t *testing.T) {
 	t.Parallel()
 	cl := env.Spoke1
 	ns := newNamespace(t, cl, "jvm")
-	a := app{Name: "jvm", JVM: true, Requests: rl("200m", "512Mi"), Limits: rl("", "512Mi"), Resize: corev1.RestartContainer}
+	a := app{Name: "jvm", JVM: true, Replicas: 2, Requests: rl("200m", "512Mi"), Limits: rl("", "512Mi"), Resize: corev1.RestartContainer}
 	deploy(t, cl, ns, a)
 	before := snapshot(t, cl, ns, "jvm")
 	policy(t, cl, ns, ns, v1alpha1.RightsizingPolicySpec{
@@ -205,6 +207,34 @@ func TestInPlaceJVMMemory(t *testing.T) {
 		case q(a.MemReq).Cmp(want) != 0:
 			t.Errorf("pod %s memory request %s, want %s", name, a.MemReq, want.String())
 		}
+	}
+}
+
+// reasonSingleReplicaUnsafe is WO-13's blocked reason (not yet in api/v1alpha1/wellknown.go).
+const reasonSingleReplicaUnsafe = "SingleReplicaUnsafe"
+
+// WO-13: a single-replica workload is not changed in a way that takes its only pod down. An
+// in-place memory resize with resizePolicy RestartContainer restarts the container, so it is
+// blocked (unless the workload opts in with resource-optimizer.oz.io/allow-disruption).
+func TestSingleReplicaRestartIsBlocked(t *testing.T) {
+	t.Parallel()
+	cl := env.Spoke1
+	ns := newNamespace(t, cl, "single")
+	deploy(t, cl, ns, app{Name: "jvm", JVM: true, Requests: rl("200m", "512Mi"), Limits: rl("", "512Mi"), Resize: corev1.RestartContainer})
+	before := snapshot(t, cl, ns, "jvm")
+	gen := getDeployment(t, cl, ns, "jvm").Generation
+	policy(t, cl, ns, ns, v1alpha1.RightsizingPolicySpec{
+		CPU:        &v1alpha1.CPUPolicy{Mode: v1alpha1.ModeAudit},
+		Memory:     &v1alpha1.MemoryPolicy{Mode: v1alpha1.ModeAutoPatch},
+		Apply:      &v1alpha1.ApplyPolicy{Strategy: v1alpha1.StrategyInPlace},
+		Guardrails: relaxed(),
+	})
+	waitReason(t, cl, ns, deployment, "jvm", reasonSingleReplicaUnsafe, env.ApplyTimeout)
+	if after := snapshot(t, cl, ns, "jvm"); fmt.Sprint(after) != fmt.Sprint(before) {
+		t.Errorf("single-replica pod changed: %v -> %v", before, after)
+	}
+	if d := getDeployment(t, cl, ns, "jvm"); d.Generation != gen {
+		t.Errorf("deployment changed (generation %d -> %d)", gen, d.Generation)
 	}
 }
 
