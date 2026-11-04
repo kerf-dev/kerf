@@ -18,3 +18,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- else if .Values.auth.bootstrapAdmin.password -}}{{ include "hub.fullname" . }}-bootstrap-admin
 {{- end -}}
 {{- end -}}
+
+{{/* Secret holding the datasource secrets encryption key (D-025). */}}
+{{- define "hub.datasourceKeySecret" -}}{{ default (printf "%s-datasource-key" (include "hub.fullname" .)) .Values.onboarding.secretsKey.existingSecret }}{{- end -}}

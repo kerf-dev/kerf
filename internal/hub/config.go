@@ -58,6 +58,31 @@ type Config struct {
 	Auth        AuthConfig        `json:"auth"`
 	Recommender RecommenderConfig `json:"recommender"`
 	History     HistoryConfig     `json:"history"`
+	Onboarding  OnboardingConfig  `json:"onboarding"`
+}
+
+// OnboardingConfig configures datasources, readiness checks and install snippets (D-025).
+type OnboardingConfig struct {
+	// SecretsKeyFile holds the datasource secrets encryption key(s), one per line, the first
+	// encrypts (a mounted Secret; env HUB_DATASOURCE_KEY_FILE). Empty: datasources with a secret
+	// (bearer, basic, mTLS) cannot be created.
+	SecretsKeyFile string `json:"secretsKeyFile"`
+	// DocsBaseURL is the base of the readiness docs links (docsURL = <base>/readiness#<check>).
+	DocsBaseURL string `json:"docsBaseURL"`
+	// CheckInterval: how often the metrics checks run per cluster (default 1h).
+	CheckInterval Duration `json:"checkInterval"`
+	// AgentPullInterval is the agents' config pull interval (agent.connected: within 3 of them;
+	// default 1m).
+	AgentPullInterval Duration `json:"agentPullInterval"`
+	// HubVersion and MinAgentVersion are sent to agents for the agent.version check.
+	HubVersion      string `json:"hubVersion"`
+	MinAgentVersion string `json:"minAgentVersion"`
+	// Install snippets: the hub URL as agents reach it, and the chart references
+	// (oci://registry/path/<chart>, <repo URL>|<chart>, or a local chart path).
+	HubURL       string `json:"hubURL"`
+	AgentChart   string `json:"agentChart"`
+	WebhookChart string `json:"webhookChart"`
+	ChartVersion string `json:"chartVersion"`
 }
 
 // DevSeed registers clusters and tokens at startup. Development only.
@@ -213,6 +238,7 @@ func DefaultConfig() Config {
 		TokenCacheTTL:     Duration(30 * time.Second),
 		Recommender:       RecommenderConfig{Interval: Duration(24 * time.Hour), Strategy: "percentile"},
 		History:           HistoryConfig{FullResolution: Duration(7 * 24 * time.Hour), Retention: Duration(90 * 24 * time.Hour)},
+		Onboarding:        OnboardingConfig{CheckInterval: Duration(time.Hour), AgentPullInterval: Duration(time.Minute)},
 	}
 }
 
@@ -229,11 +255,12 @@ func LoadConfig(path string) (Config, error) {
 		}
 	}
 	for env, dst := range map[string]*string{
-		"HUB_DATABASE_URL":   &cfg.DatabaseURL,
-		"HUB_PROMETHEUS_URL": &cfg.PrometheusURL,
-		"HUB_LISTEN":         &cfg.Listen,
-		"HUB_MIGRATIONS_DIR": &cfg.MigrationsDir,
-		"HUB_DEV_TOKENS_DIR": &cfg.DevSeed.TokensDir,
+		"HUB_DATABASE_URL":        &cfg.DatabaseURL,
+		"HUB_PROMETHEUS_URL":      &cfg.PrometheusURL,
+		"HUB_LISTEN":              &cfg.Listen,
+		"HUB_MIGRATIONS_DIR":      &cfg.MigrationsDir,
+		"HUB_DEV_TOKENS_DIR":      &cfg.DevSeed.TokensDir,
+		"HUB_DATASOURCE_KEY_FILE": &cfg.Onboarding.SecretsKeyFile,
 	} {
 		if v := os.Getenv(env); v != "" {
 			*dst = v

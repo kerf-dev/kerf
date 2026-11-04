@@ -32,6 +32,8 @@ type Server struct {
 	Log     *slog.Logger
 	// Job runs the recommender; POST /v1/admin/recompute queues runs on it.
 	Job *Job
+	// Onb serves datasources, readiness and install (D-025); nil answers 501 (InitOnboarding).
+	Onb *Onboarding
 	// Now is the clock (tests).
 	Now func() time.Time
 
@@ -138,24 +140,23 @@ func (s *Server) Handler() http.Handler {
 	route("DELETE /v1/admin/users/{username}", accessAdmin, s.deleteUser)
 	route("POST /v1/admin/users/{username}/reset-password", accessAdmin, s.resetUserPassword)
 	route("GET /v1/audit/config", accessViewer, s.queryConfigAudit)
-	// Onboarding and readiness (D-025): WO-25.
-	for _, rt := range []struct {
-		pattern string
-		a       access
-	}{
-		{"GET /v1/admin/datasources", accessViewer},
-		{"POST /v1/admin/datasources", accessAdmin},
-		{"GET /v1/admin/datasources/{datasourceId}", accessViewer},
-		{"PUT /v1/admin/datasources/{datasourceId}", accessAdmin},
-		{"DELETE /v1/admin/datasources/{datasourceId}", accessAdmin},
-		{"POST /v1/admin/datasources/{datasourceId}/test", accessAdmin},
-		{"GET /v1/clusters/{cluster}/readiness", accessViewer},
-		{"POST /v1/clusters/{cluster}/readiness/recheck", accessOperator},
-		{"GET /v1/clusters/{cluster}/readiness/history", accessViewer},
-		{"GET /v1/admin/clusters/{cluster}/install", accessAdmin},
-	} {
-		route(rt.pattern, rt.a, notImplemented)
-	}
+	// Onboarding and readiness (D-025).
+	route("GET /v1/admin/datasources", accessViewer, s.listDatasources)
+	route("POST /v1/admin/datasources", accessAdmin, s.createDatasource)
+	route("GET /v1/admin/datasources/{datasourceId}", accessViewer, s.getDatasource)
+	route("PUT /v1/admin/datasources/{datasourceId}", accessAdmin, s.updateDatasource)
+	route("DELETE /v1/admin/datasources/{datasourceId}", accessAdmin, s.deleteDatasource)
+	route("POST /v1/admin/datasources/{datasourceId}/test", accessAdmin, s.testDatasource)
+	route("GET /v1/clusters/{cluster}/readiness", accessViewer, s.getClusterReadiness)
+	route("POST /v1/clusters/{cluster}/readiness/recheck", accessOperator, s.recheckClusterReadiness)
+	route("GET /v1/clusters/{cluster}/readiness/history", accessViewer, s.getClusterReadinessHistory)
+	route("GET /v1/admin/clusters/{cluster}/install", accessAdmin, s.getClusterInstall)
+	// Pricing service (D-026).
+	route("GET /v1/internal/metrics-bindings", accessPricing, s.listMetricsBindings)
+	route("GET /v1/internal/datasources/{datasourceId}/api/v1/query", accessPricing, s.proxyQuery)
+	route("POST /v1/internal/datasources/{datasourceId}/api/v1/query", accessPricing, s.proxyQuery)
+	route("GET /v1/internal/datasources/{datasourceId}/api/v1/query_range", accessPricing, s.proxyQuery)
+	route("POST /v1/internal/datasources/{datasourceId}/api/v1/query_range", accessPricing, s.proxyQuery)
 
 	mux.Handle("GET /metrics", promhttp.HandlerFor(s.Metrics.Registry, promhttp.HandlerOpts{}))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok\n")) })

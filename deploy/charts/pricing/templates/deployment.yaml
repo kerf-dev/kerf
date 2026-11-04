@@ -50,6 +50,10 @@ spec:
             {{- if eq .Values.provider "aws" }}
             - --aws-pricing-region={{ .Values.aws.pricingRegion }}
             {{- end }}
+            {{- if .Values.hub.url }}
+            - --hub-url={{ .Values.hub.url }}
+            - --hub-token-file=/etc/resource-optimizer/hub-token/token
+            {{- end }}
           {{- if and (eq .Values.provider "aws") .Values.aws.region }}
           env:
             - name: AWS_REGION
@@ -71,17 +75,35 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
-          {{- if .Values.prices }}
+          {{- if or .Values.prices .Values.hub.url }}
           volumeMounts:
+            {{- if .Values.prices }}
             - name: prices
-              mountPath: /etc/resource-optimizer
+              mountPath: /etc/resource-optimizer/prices.yaml
+              subPath: prices.yaml
               readOnly: true
+            {{- end }}
+            {{- if .Values.hub.url }}
+            - name: hub-token
+              mountPath: /etc/resource-optimizer/hub-token
+              readOnly: true
+            {{- end }}
           {{- end }}
-      {{- if .Values.prices }}
+      {{- if or .Values.prices .Values.hub.url }}
       volumes:
+        {{- if .Values.prices }}
         - name: prices
           configMap:
             name: {{ include "pricing.fullname" . }}-prices
+        {{- end }}
+        {{- if .Values.hub.url }}
+        - name: hub-token
+          secret:
+            secretName: {{ required "hub.tokenSecret.name is required with hub.url" .Values.hub.tokenSecret.name }}
+            items:
+              - key: {{ .Values.hub.tokenSecret.key }}
+                path: token
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}

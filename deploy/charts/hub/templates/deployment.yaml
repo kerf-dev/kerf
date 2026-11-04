@@ -58,6 +58,11 @@ spec:
               mountPath: /etc/hub/bootstrap-admin
               readOnly: true
             {{- end }}
+            {{- if or .Values.onboarding.secretsKey.create .Values.onboarding.secretsKey.existingSecret }}
+            - name: datasource-key
+              mountPath: /etc/hub/datasource-key
+              readOnly: true
+            {{- end }}
       volumes:
         - name: config
           configMap:
@@ -77,4 +82,12 @@ spec:
             items:
               - key: {{ .Values.auth.bootstrapAdmin.existingSecretKey }}
                 path: password
+        {{- end }}
+        {{- if or .Values.onboarding.secretsKey.create .Values.onboarding.secretsKey.existingSecret }}
+        - name: datasource-key
+          secret:
+            secretName: {{ include "hub.datasourceKeySecret" . }}
+            items:
+              - key: {{ .Values.onboarding.secretsKey.existingSecretKey }}
+                path: key
         {{- end }}

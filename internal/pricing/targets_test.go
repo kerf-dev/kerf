@@ -2,9 +2,9 @@ package pricing
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -136,71 +136,65 @@ func TestDiscoveryTargetsError(t *testing.T) {
 	}
 }
 
-// memBindings and memDS are small in-memory stand-ins for the hub tables.
-type memBindings map[string]hubapi.MetricsBinding
-
-func (m memBindings) Bindings(context.Context) (map[string]hubapi.MetricsBinding, error) {
-	return m, nil
-}
-
-type memDS struct{ recs map[string]datasource.Record }
-
-func (m *memDS) ListDatasources(context.Context) ([]datasource.Record, error) { return nil, nil }
-func (m *memDS) GetDatasource(_ context.Context, id string) (datasource.Record, error) {
-	r, ok := m.recs[id]
-	if !ok {
-		return r, datasource.ErrNotFound
-	}
-	return r, nil
-}
-func (m *memDS) InsertDatasource(_ context.Context, r datasource.Record) error {
-	m.recs[r.ID] = r
-	return nil
-}
-func (m *memDS) UpdateDatasource(context.Context, datasource.Record) error { return nil }
-func (m *memDS) DeleteDatasource(context.Context, string, int, hubapi.Actor) error {
-	return nil
-}
-func (m *memDS) UsedBy(context.Context) (map[string][]string, error) { return nil, nil }
-func (m *memDS) UpsertLocal(context.Context, string) error           { return nil }
-
-func TestRegistryTargets(t *testing.T) {
+func TestHubTargets(t *testing.T) {
+	// the datasource behind the hub's proxy
 	remote := &recordingVM{
-		labels: func(string) []string {
+		labels: func(q string) []string {
 			return []string{labelRow("ro-spoke-2", "p1", "c6a.2xlarge", "spot", "eu-west-1", "eu-west-1b")}
 		},
 		alloc: func(string) []string { return nil },
 	}
 	rs := remote.server(t)
 	defer rs.Close()
-	key := make([]byte, datasource.KeySize)
-	_, _ = rand.Read(key)
-	c, _ := datasource.NewCipher(key)
-	reg := &datasource.Registry{Repo: &memDS{recs: map[string]datasource.Record{}}, Cipher: c}
-	ds, err := reg.Create(context.Background(), hubapi.DatasourceInput{Name: "mimir", Type: "mimir", URL: rs.URL,
-		Auth: &hubapi.DatasourceAuthInput{Type: "bearer", Token: "tok"}}, hubapi.Actor{Type: "user", Name: "a"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	rt := &RegistryTargets{Registry: reg, Bindings: memBindings{"ro-spoke-2": {DatasourceID: ds.ID, ClusterLabel: "k8s_cluster", ClusterLabelValue: "prod-eu1"}}}
-	targets, err := rt.Targets(context.Background())
-	if err != nil || len(targets) != 1 || targets[0].Cluster != "ro-spoke-2" || targets[0].BaseURL != rs.URL {
+	var auth []string
+	var paths []string
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = append(auth, r.Header.Get("Authorization"))
+		paths = append(paths, r.URL.Path)
+		switch {
+		case r.URL.Path == "/v1/internal/metrics-bindings":
+			fmt.Fprint(w, `{"items":[{"cluster":"ro-spoke-1","binding":{"datasourceId":"local","clusterLabel":"cluster","clusterLabelValue":"ro-spoke-1"},"bound":false},`+
+				`{"cluster":"ro-spoke-2","binding":{"datasourceId":"ds-1","clusterLabel":"k8s_cluster","clusterLabelValue":"prod-eu1"},"bound":true}]}`)
+		case strings.HasPrefix(r.URL.Path, "/v1/internal/datasources/ds-1/api/v1/query"):
+			res, err := http.Get(rs.URL + "/api/v1/query?" + r.URL.RawQuery)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer res.Body.Close()
+			b, _ := io.ReadAll(res.Body)
+			_, _ = w.Write(b)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer hub.Close()
+	ht := &HubTargets{HubURL: hub.URL + "/", Token: func() (string, error) { return "pricing-tok", nil }}
+	targets, err := ht.Targets(context.Background())
+	if err != nil || len(targets) != 1 || targets[0].Cluster != "ro-spoke-2" || targets[0].BaseURL != hub.URL+"/v1/internal/datasources/ds-1" {
 		t.Fatalf("targets %v %+v", err, targets)
 	}
-	nodes, err := (&Discovery{VMURL: rs.URL, ClusterRegex: "ro-spoke-2", Targets: rt}).Nodes(context.Background())
+	nodes, err := (&Discovery{VMURL: rs.URL, ClusterRegex: "ro-spoke-2", Targets: ht}).Nodes(context.Background())
 	if err != nil || len(nodes) != 1 || nodes[0].Cluster != "ro-spoke-2" {
 		t.Fatalf("nodes %v %+v", err, nodes)
 	}
-	var authed bool
-	for _, a := range remote.auth {
-		authed = authed || a == "Bearer tok"
+	for i, a := range auth {
+		if a != "Bearer pricing-tok" {
+			t.Errorf("request %s without the pricing token: %q", paths[i], a)
+		}
 	}
-	if !authed {
-		t.Errorf("datasource auth not used: %v", remote.auth)
+	for _, q := range remote.queries {
+		if strings.Contains(q, "label_replace") && !strings.Contains(q, `k8s_cluster="prod-eu1"`) {
+			t.Errorf("proxied query without the binding: %s", q)
+		}
 	}
 
-	bad := &RegistryTargets{Registry: reg, Bindings: memBindings{"x": {DatasourceID: "missing", ClusterLabel: "cluster"}}}
+	bad := &HubTargets{HubURL: hub.URL + "/nope", Token: func() (string, error) { return "x", nil }}
 	if _, err := bad.Targets(context.Background()); err == nil {
-		t.Error("missing datasource accepted")
+		t.Error("404 accepted")
+	}
+	noTok := &HubTargets{HubURL: hub.URL, Token: func() (string, error) { return "", errors.New("no file") }}
+	if _, err := noTok.Targets(context.Background()); err == nil {
+		t.Error("token error ignored")
 	}
 }
