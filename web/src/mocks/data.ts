@@ -707,13 +707,27 @@ function buildWorkload(
     )
 
   const coverage = ageDays >= 14 ? between(r, 0.88, 1) : Math.min(1, ageDays / 14) * between(r, 0.85, 1)
-  let confidence = round2(
-    Math.min(
-      0.99,
-      coverage * 0.75 + between(r, 0.12, 0.24) - (restarting ? 0.12 : 0) - (shortLived ? 0.1 : 0),
-    ),
-  )
-  if (confidence < 0.1) confidence = 0.1
+  const windowSec = 336 * 3600
+  const coveredSec = Math.round(Math.min(windowSec, ageDays * 86400) * coverage)
+  // D-016: per-container confidence = Σ score × weight; the workload's is the minimum over containers.
+  const samplesScore = round2(Math.min(1, coveredSec / (7 * 86400)) * (shortLived ? between(r, 0.4, 0.6) : 1))
+  for (const c of containers) {
+    const variance = round2(
+      c.sidecar || c.init
+        ? between(r, 0.85, 0.97)
+        : restarting
+          ? between(r, 0.4, 0.58)
+          : between(r, 0.62, 0.95),
+    )
+    const f = {
+      coverage: { score: round2(coverage), weight: 0.4 },
+      samples: { score: samplesScore, weight: 0.2 },
+      variance: { score: variance, weight: 0.4 },
+    }
+    const conf = round2(f.coverage.score * 0.4 + f.samples.score * 0.2 + f.variance.score * 0.4)
+    c.explanation.confidenceFactors = { ...f, confidence: conf }
+  }
+  const confidence = Math.min(...containers.map((c) => c.explanation.confidenceFactors!.confidence))
   const flags = new Set<RiskFlag>(containers.flatMap((c) => c.riskFlags))
   if (hpa) flags.add('hpa-coupled')
   if (restarting) flags.add('restarting')
@@ -722,8 +736,6 @@ function buildWorkload(
   const riskFlags = [...flags]
   const savings = sumSavings(containers.map((c) => c.savings))
 
-  const windowSec = 336 * 3600
-  const coveredSec = Math.round(Math.min(windowSec, ageDays * 86400) * coverage)
   const generatedAt = iso(lastRun - Math.floor(r() * 600) * 1000)
   const recId = uuid(r)
   const mkRec = (
@@ -743,6 +755,7 @@ function buildWorkload(
     confidence: conf,
     riskFlags,
     monthlySavingsUSD: s,
+    pricing: { source: 'metrics', cpuCoreHourUSD: spec.cpuPrice, memoryGiBHourUSD: spec.memPrice },
     dataCoverage: {
       ratio: round2(coverage),
       window: '336h0m0s',

@@ -162,6 +162,31 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/workloads/facets': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Filter values with workload counts (D-016)
+     * @description Counts of live workloads per filter value, for building the filters of the workload list.
+     *     Takes the same filters as `GET /v1/workloads`. Each facet is counted with every filter
+     *     applied except its own (so a multi-select keeps showing the other values of that facet);
+     *     `total` applies all filters and equals `WorkloadList.total`. A workload counts once per
+     *     distinct value: in `modes` under both its CPU and its memory mode, in `riskFlags` under each
+     *     of its flags. Values with zero workloads are omitted. Items are sorted by value.
+     */
+    get: operations['getWorkloadFacets']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/workloads/{id}': {
     parameters: {
       query?: never
@@ -242,7 +267,9 @@ export interface paths {
      * Estimated monthly savings over time
      * @description At each step: the sum of the estimated monthly savings of the recommendation that was
      *     latest at that time, over the workloads live at that time. Estimated, not realized
-     *     (realized savings are WO-17).
+     *     (realized savings are WO-17). Points are aligned to multiples of `step` (UTC); a point at
+     *     time `t` holds the value at the end of its bucket, `min(t + step, to)`, so with the default
+     *     `to` (now) the last point equals the current `GET /v1/summary` totals.
      */
     get: operations['getSavingsTrend']
     put?: never
@@ -385,6 +412,19 @@ export interface components {
       riskFlags: components['schemas']['RiskFlag'][]
       monthlySavingsUSD: components['schemas']['Savings']
       dataCoverage: components['schemas']['DataCoverage']
+      pricing?: components['schemas']['RecommendationPricing']
+    }
+    /**
+     * @description Rates used for `monthlySavingsUSD` (D-016). `source` is `metrics` when they come from the
+     *     pricing series (`ro_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when
+     *     the cluster had no pricing series and the hub's configured fallback rate was used.
+     *     Absent on recommendations computed before the field existed.
+     */
+    RecommendationPricing: {
+      /** @enum {string} */
+      source: 'metrics' | 'default'
+      cpuCoreHourUSD: number
+      memoryGiBHourUSD: number
     }
     RecommendationList: {
       cluster: components['schemas']['ClusterName']
@@ -507,6 +547,27 @@ export interface components {
       window: string
       cpu?: components['schemas']['ResourceExplanation']
       memory?: components['schemas']['ResourceExplanation']
+      confidenceFactors?: components['schemas']['ConfidenceFactors']
+    }
+    ConfidenceFactor: {
+      /** @description Factor score, 0 (worst) to 1 (best). */
+      score: components['schemas']['Decimal']
+      /** @description Weight of the factor; the weights sum to 1. */
+      weight: components['schemas']['Decimal']
+    }
+    /**
+     * @description How this container's confidence was computed (D-016): `confidence` = sum of score x weight.
+     *     The workload's `confidence` is the minimum over its containers.
+     *     `coverage`: fraction of the window's steps with usage data. `samples`: number of samples
+     *     relative to the hub's full-confidence sample count. `variance`: stability of CPU usage,
+     *     1 / (1 + coefficient of variation); 1 means no variance.
+     *     Absent on recommendations computed before the field existed.
+     */
+    ConfidenceFactors: {
+      coverage: components['schemas']['ConfidenceFactor']
+      samples: components['schemas']['ConfidenceFactor']
+      variance: components['schemas']['ConfidenceFactor']
+      confidence: components['schemas']['Decimal']
     }
     ModeCounts: {
       off: number
@@ -604,6 +665,20 @@ export interface components {
       total: number
       /** @description Present when more pages exist. */
       continue?: string
+    }
+    FacetCount: {
+      value: string
+      count: number
+    }
+    WorkloadFacets: {
+      /** @description Workloads matching all filters (equals `WorkloadList.total`). */
+      total: number
+      clusters: components['schemas']['FacetCount'][]
+      /** @description Namespace names across clusters (the `namespace` filter matches names in any cluster). */
+      namespaces: components['schemas']['FacetCount'][]
+      kinds: components['schemas']['FacetCount'][]
+      modes: components['schemas']['FacetCount'][]
+      riskFlags: components['schemas']['FacetCount'][]
     }
     WorkloadDetail: {
       id: components['schemas']['WorkloadID']
@@ -991,6 +1066,41 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['WorkloadList']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  getWorkloadFacets: {
+    parameters: {
+      query?: {
+        cluster?: components['schemas']['ClusterName'][]
+        namespace?: string[]
+        kind?: components['schemas']['WorkloadKind'][]
+        /** @description Matches if the CPU or the memory mode is one of the values. */
+        mode?: components['schemas']['Mode'][]
+        /** @description Matches if the workload has any of the flags. */
+        riskFlag?: components['schemas']['RiskFlag'][]
+        /** @description Minimum total estimated monthly savings in USD. */
+        minSavings?: number
+        /** @description Case-insensitive substring match on namespace and workload name. */
+        q?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Facets. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkloadFacets']
         }
       }
       400: components['responses']['BadRequest']
