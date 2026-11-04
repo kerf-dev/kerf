@@ -20,10 +20,12 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
@@ -132,8 +134,12 @@ func run(args []string) error {
 		return err
 	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                  scheme,
-		Cache:                   cache.Options{DefaultTransform: cache.TransformStripManagedFields()},
+		Scheme: scheme,
+		// Pods are cached for the health watch: strip their managedFields. Never strip workloads':
+		// the agent reads its own field ownership from them (release, D-006).
+		Cache: cache.Options{ByObject: map[client.Object]cache.ByObject{
+			&corev1.Pod{}: {Transform: cache.TransformStripManagedFields()},
+		}},
 		Metrics:                 metricsserver.Options{BindAddress: *metricsAddr},
 		HealthProbeBindAddress:  *probeAddr,
 		LeaderElection:          *leaderElect,

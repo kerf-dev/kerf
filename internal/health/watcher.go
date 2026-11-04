@@ -229,6 +229,10 @@ func (w *Watcher) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result,
 	}
 	log := w.Log.With("rsr", req.String())
 	now := w.now()
+	if rsr.Status.Phase == v1alpha1.PhaseRolledBack {
+		w.stopWatching(rsr.UID)
+		return ctrl.Result{}, w.finishRollback(ctx, &rsr)
+	}
 	if rsr.Status.Phase != v1alpha1.PhaseApplied || rsr.Status.AppliedAt == nil {
 		w.stopWatching(rsr.UID)
 		if c := meta.FindStatusCondition(rsr.Status.Conditions, v1alpha1.ConditionHealthWatch); c != nil && c.Status == metav1.ConditionTrue {
@@ -289,12 +293,8 @@ func (w *Watcher) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result,
 			log.WarnContext(ctx, "rollback threshold exceeded but the agent is read-only", "reason", b.reason, "message", b.message)
 			return ctrl.Result{RequeueAfter: w.Cfg.CheckInterval}, nil
 		}
-		if err := w.rollback(ctx, &rsr, obj, b, st); err != nil {
-			rollbackErrors.Inc()
-			return ctrl.Result{}, err
-		}
 		w.stopWatching(rsr.UID)
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, w.rollback(ctx, &rsr, obj, b)
 	}
 	return ctrl.Result{RequeueAfter: min(w.Cfg.CheckInterval, end.Sub(now)+time.Second)}, nil
 }

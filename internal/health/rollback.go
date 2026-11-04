@@ -144,49 +144,11 @@ func changes(from, to []v1alpha1.ContainerRecommendation, resources []string) []
 	return out
 }
 
-// rollback restores the previous values of the breached resources with the strategy that applied
-// them, then marks the RSR RolledBack and emits rolled_back.
-func (w *Watcher) rollback(ctx context.Context, rsr *v1alpha1.RightsizingRecommendation, obj client.Object, b *breach, st *watchState) error {
-	kind := rsr.Spec.TargetRef.Kind
-	restored := RestoreTargets(rsr.Spec.Containers, rsr.Status.Previous, b.resources)
-	strategy := rsr.Spec.Strategy
-	recID := rsr.Status.AppliedRecommendationID
-	log := w.Log.With("rsr", rsr.Namespace+"/"+rsr.Name, "reason", b.reason, "strategy", strategy)
-
-	if strategy == v1alpha1.StrategyInPlace {
-		own := map[corev1.ResourceName]bool{}
-		for _, r := range b.resources {
-			own[corev1.ResourceName(r)] = true
-		}
-		pods, err := workload.Pods(ctx, w.Reader, obj)
-		if err != nil {
-			return err
-		}
-		for i := range pods {
-			if _, err := apply.Resize(ctx, w.Client, &pods[i], restored, own, recID); err != nil {
-				w.emitFailed(rsr, obj, st, fmt.Errorf("resize pod %s back: %w", pods[i].Name, err))
-				return err
-			}
-		}
-	} else {
-		// Re-apply everything we own (SSA would delete owned fields left out), with the breached
-		// resources back at their previous values.
-		own := apply.OwnedResources(obj)
-		for _, r := range b.resources {
-			own[corev1.ResourceName(r)] = true
-		}
-		ann := map[string]string{v1alpha1.AnnotationManaged: "true"}
-		for _, k := range []string{v1alpha1.AnnotationRecommendationID, v1alpha1.AnnotationPreviousResources} {
-			if v, ok := obj.GetAnnotations()[k]; ok {
-				ann[k] = v
-			}
-		}
-		if err := apply.ApplyTemplate(ctx, w.Client, obj, kind, restored, own, ann); err != nil {
-			w.emitFailed(rsr, obj, st, fmt.Errorf("restore pod template: %w", err))
-			return err
-		}
-	}
-
+// rollback records the decision first (phase RolledBack, so the agent stops keeping the applied
+// values live and the webhook stops injecting them), then restores the previous values of the
+// breached resources with the strategy that applied them and emits rolled_back. If the restore
+// fails, the reconcile of the RolledBack RSR retries it (finishRollback).
+func (w *Watcher) rollback(ctx context.Context, rsr *v1alpha1.RightsizingRecommendation, obj client.Object, b *breach) error {
 	now := metav1.NewTime(w.now())
 	key := client.ObjectKeyFromObject(rsr)
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -204,8 +166,150 @@ func (w *Watcher) rollback(ctx context.Context, rsr *v1alpha1.RightsizingRecomme
 	if err != nil {
 		return fmt.Errorf("mark rolled back: %w", err)
 	}
-	rollbacks.WithLabelValues(b.reason, string(strategy)).Inc()
-	log.WarnContext(ctx, "rolled back", "message", b.message, "resources", b.resources)
+	rollbacks.WithLabelValues(b.reason, string(rsr.Spec.Strategy)).Inc()
+	w.Log.WarnContext(ctx, "rolling back", "rsr", key.String(), "reason", b.reason, "strategy", rsr.Spec.Strategy,
+		"message", b.message, "resources", b.resources)
+	return w.restore(ctx, rsr, obj, b)
+}
+
+// rolledBackResources are the resources a rollback with this reason restores.
+func rolledBackResources(rsr *v1alpha1.RightsizingRecommendation, reason string) []string {
+	if r := ResourcesForReason(reason); r != nil {
+		return r
+	}
+	return ChangedResources(rsr.Status.Previous, rsr.Spec.Containers)
+}
+
+// finishRollback re-runs the restore of a RolledBack RSR whose restore has not been confirmed
+// (it failed, or the agent restarted in between). It does nothing once the live values match.
+func (w *Watcher) finishRollback(ctx context.Context, rsr *v1alpha1.RightsizingRecommendation) error {
+	c := meta.FindStatusCondition(rsr.Status.Conditions, v1alpha1.ConditionHealthWatch)
+	if rsr.Status.RolledBackAt == nil || c == nil || c.Status != metav1.ConditionFalse ||
+		(c.Reason != v1alpha1.ReasonOOMKills && c.Reason != v1alpha1.ReasonRestarts && c.Reason != v1alpha1.ReasonThrottling) {
+		return nil
+	}
+	at := rsr.Status.RolledBackAt.Time
+	w.state.mu.Lock()
+	done := w.state.restored[rsr.UID].Equal(at)
+	w.state.mu.Unlock()
+	if done {
+		return nil
+	}
+	obj, err := workload.New(rsr.Spec.TargetRef.Kind)
+	if err != nil {
+		return nil //nolint:nilerr // not a workload kind we manage
+	}
+	if err := w.Client.Get(ctx, client.ObjectKey{Namespace: rsr.Namespace, Name: rsr.Spec.TargetRef.Name}, obj); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	b := &breach{reason: c.Reason, resources: rolledBackResources(rsr, c.Reason), message: c.Message}
+	restored := RestoreTargets(rsr.Spec.Containers, rsr.Status.Previous, b.resources)
+	live, err := w.liveMatches(ctx, rsr, obj, restored, b.resources)
+	if err != nil {
+		return err
+	}
+	if live {
+		w.markRestored(rsr)
+		return nil
+	}
+	return w.restore(ctx, rsr, obj, b)
+}
+
+func (w *Watcher) markRestored(rsr *v1alpha1.RightsizingRecommendation) {
+	w.state.mu.Lock()
+	defer w.state.mu.Unlock()
+	w.state.restored[rsr.UID] = rsr.Status.RolledBackAt.Time
+	delete(w.state.restoreFailed, rsr.UID)
+}
+
+func ownSet(resources []string) map[corev1.ResourceName]bool {
+	own := map[corev1.ResourceName]bool{}
+	for _, r := range resources {
+		own[corev1.ResourceName(r)] = true
+	}
+	return own
+}
+
+// liveMatches reports whether the workload already runs the restored values.
+func (w *Watcher) liveMatches(ctx context.Context, rsr *v1alpha1.RightsizingRecommendation, obj client.Object,
+	restored []v1alpha1.ContainerRecommendation, resources []string) (bool, error) {
+	own := ownSet(resources)
+	if rsr.Spec.Strategy == v1alpha1.StrategyInPlace {
+		pods, err := workload.Pods(ctx, w.Reader, obj)
+		if err != nil {
+			return false, err
+		}
+		for i := range pods {
+			if apply.ObserveResize(&pods[i], restored, own).State == apply.ResizeNeeded {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+	spec := workload.PodSpec(obj)
+	for _, t := range restored {
+		c, ok := workload.FindContainer(spec, t.Name)
+		if !ok {
+			continue
+		}
+		for r := range own {
+			if !qEqual(c.Resources.Requests, t.Requests, r) {
+				return false, nil
+			}
+			if _, want := t.Limits[r]; want && !qEqual(c.Resources.Limits, t.Limits, r) {
+				return false, nil
+			}
+			if _, has := c.Resources.Limits[r]; has && slices.Contains(t.RemoveLimits, r) {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
+// restore writes the previous values and emits rolled_back once it succeeded.
+func (w *Watcher) restore(ctx context.Context, rsr *v1alpha1.RightsizingRecommendation, obj client.Object, b *breach) error {
+	kind := rsr.Spec.TargetRef.Kind
+	restored := RestoreTargets(rsr.Spec.Containers, rsr.Status.Previous, b.resources)
+	strategy := rsr.Spec.Strategy
+	recID := rsr.Status.AppliedRecommendationID
+
+	if strategy == v1alpha1.StrategyInPlace {
+		own := ownSet(b.resources)
+		pods, err := workload.Pods(ctx, w.Reader, obj)
+		if err != nil {
+			return err
+		}
+		for i := range pods {
+			if _, err := apply.Resize(ctx, w.Client, &pods[i], restored, own, recID); err != nil {
+				w.emitFailed(rsr, obj, fmt.Errorf("resize pod %s back: %w", pods[i].Name, err))
+				return err
+			}
+		}
+	} else {
+		// Re-apply everything we own (SSA would delete owned fields left out), with the breached
+		// resources back at their previous values. Read the workload uncached: the cache does not
+		// necessarily hold its managedFields.
+		if err := w.Reader.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+			return err
+		}
+		own := apply.OwnedResources(obj)
+		for _, r := range b.resources {
+			own[corev1.ResourceName(r)] = true
+		}
+		ann := map[string]string{v1alpha1.AnnotationManaged: "true"}
+		for _, k := range []string{v1alpha1.AnnotationRecommendationID, v1alpha1.AnnotationPreviousResources} {
+			if v, ok := obj.GetAnnotations()[k]; ok {
+				ann[k] = v
+			}
+		}
+		if err := apply.ApplyTemplate(ctx, w.Client, obj, kind, restored, own, ann); err != nil {
+			w.emitFailed(rsr, obj, fmt.Errorf("restore pod template: %w", err))
+			return err
+		}
+	}
+	w.markRestored(rsr)
+	w.Log.WarnContext(ctx, "rolled back", "rsr", rsr.Namespace+"/"+rsr.Name, "reason", b.reason, "strategy", strategy)
 	if w.Emitter != nil {
 		w.Emitter.Emit(rsr, obj, hubclient.Event{
 			Type: hubclient.EventRolledBack, Reason: b.reason, RecommendationID: recID, Strategy: string(strategy),
@@ -216,12 +320,17 @@ func (w *Watcher) rollback(ctx context.Context, rsr *v1alpha1.RightsizingRecomme
 	return nil
 }
 
-// emitFailed emits failed RollbackError once per watch (the rollback itself is retried).
-func (w *Watcher) emitFailed(rsr *v1alpha1.RightsizingRecommendation, obj client.Object, st *watchState, err error) {
-	if w.Emitter == nil || st.failed {
+// emitFailed emits failed RollbackError once per rollback (the restore itself is retried).
+func (w *Watcher) emitFailed(rsr *v1alpha1.RightsizingRecommendation, obj client.Object, err error) {
+	rollbackErrors.Inc()
+	at := rsr.Status.RolledBackAt.Time
+	w.state.mu.Lock()
+	seen := w.state.restoreFailed[rsr.UID].Equal(at)
+	w.state.restoreFailed[rsr.UID] = at
+	w.state.mu.Unlock()
+	if w.Emitter == nil || seen {
 		return
 	}
-	st.failed = true
 	w.Emitter.Emit(rsr, obj, hubclient.Event{Type: hubclient.EventFailed, Reason: v1alpha1.ReasonRollbackError,
 		RecommendationID: rsr.Status.AppliedRecommendationID, Strategy: string(rsr.Spec.Strategy),
 		Message: err.Error(), Details: map[string]string{"error": err.Error()}})
