@@ -1,0 +1,79 @@
+# WO-24 hand-over (admin area: end-to-end)
+
+Branch `wo-24-admin-e2e` from origin/main b92ee28. Owns `test/e2e/`, `make/e2e.mk` (plus this
+hand-over). Decisions D-022..D-027. Suite docs: `test/e2e/README.md` ("Admin area").
+Nothing was deployed and no product code was changed.
+
+## What was added
+
+- `test/e2e/admin_client_test.go`: session client (login as the dev users `viewer`/`operator`/
+  `admin`, `ro_session` cookie, `X-CSRF-Token`, one session per user for the whole suite, logout
+  at the end), helpers for policies, approvals, pause, clusters, readiness, config audit, the
+  spoke-2 lock and the hub sweep. Types come from `internal/hub/hubapi`, so the suite fails to
+  compile if the contract changes under it.
+- `test/e2e/admin_test.go`: the scenarios below.
+- `TestHubUnreachable` now takes the spoke-2 lock around its apply and its outage.
+- `make e2e-clean` also sweeps the hub; `make e2e-unblock` (run before and after every `make e2e`)
+  also restores the agent's `pods/resize` rule and a scaled-down kube-state-metrics.
+- `E2E_PARALLEL` default 16 → 32 (more tests; those waiting for the spoke-2 lock hold a slot).
+
+| WO # | Test | Where | Notes |
+|---|---|---|---|
+| 1, 4 | `TestAdminPolicy` | spoke-1 | create (audit) → hub CR v1 → update auto-patch (If-Match) → CR v2, `Applied` → actor in `PolicyCreated/Updated` → revert to v1 → v3, CR audit, agent resolves audit, `PolicyReverted` → delete → CR gone |
+| 2 | `TestAdminPause` | spoke-2 | operator pause; waits until the agent applied the paused config before switching a workload to auto-patch; one `blocked/Paused`; rollback (restarts) still happens; resume → `Applied`; audit rows name the operator |
+| 3 | `TestApproveOnce` | spoke-1 | operator approve, `applied/ApprovedOnce`, in-place, approval `consumed`, `WorkloadApproved` row; next recommendation id is not applied (pods and applied-event count unchanged for 105 s) |
+| 5 | `TestGitPolicyUntouched` | spoke-1 | hub policy with a Git CR's name: CR untouched (generation, UID, labels, annotations, spec) also after the hub policy is deleted; inventory: Git item valid, hub item invalid with generation 0 |
+| 6 | `TestAdminRoles` | test cluster | viewer 403 on writes; operator 403 on global defaults, policies, settings; 403 `csrf_invalid` without the token; operator pause/resume of a non-prod cluster |
+| 7 | `TestApproveOnceArgoCD` | spoke-1 | approve once, rollout, Argo CD self-heal app: agent keeps ownership, hard sync + 75 s self-heal keep the value |
+| 8 | `TestOnboarding` | `e2e-onb-*` | datasource test with ro-spoke-1's label, registration with the binding, recheck runs metrics checks, state `Registered`, 409 `cluster_not_automation_ready`, operator override 403, admin override 201 + `after.overrideReadiness`, cluster deleted |
+| 9 | `TestReadiness/{ro-spoke-1,ro-spoke-2}` | both | recheck answered by the agent → `AutomationReady`, all capabilities granted |
+| 10 | `TestReadinessRBAC` | spoke-2 | `pods/resize` rule removed → `ReadyAudit`, `rbac.resize` fail, `ReadinessChanged` (system/readiness), 409 on auto-patch; restored (cleanup registered before the change, also `make e2e-unblock`) → `AutomationReady` |
+| 11 | `TestReadinessKSMDown` | spoke-2 | skipped unless `RO_E2E_DISRUPTIVE=1`; **not run** (no approval to scale kube-state-metrics) |
+| 12 | – | – | optional Playwright smoke: not done |
+
+**Spoke-2 lock.** A pause is cluster-wide, a missing `pods/resize` fails in-place resizes, and the hub
+outage hides rechecks, so these phases are serialised by one in-process mutex: the hub outage, the
+pause section, the RBAC section, the KSM section, the spoke-2 readiness check, and the two "switch to
+auto-patch → Applied" phases on spoke-2. Setup (deploy, wait for recommendations) runs in parallel.
+The spoke-1 admin workloads request 100m (not 250m) to stay within spoke-1's 8 cores.
+
+**Hub objects.** Tests delete the policies and clusters they create and resume what they paused
+(`t.Cleanup`). Before the scenarios, and in `make e2e-clean`, the suite sweeps policies and clusters
+named `e2e-*` and pauses whose reason starts with `e2e ` (left by a killed run).
+
+## Results (shared environment, 2026-11-04 UTC)
+
+Hub and agents main-5d25dd7, web main-cbc813c, both spokes AutomationReady at the start.
+
+| Run | Result | Time |
+|---|---|---|
+| quick (`TestAdminRoles|TestOnboarding|TestReadiness`) | PASS | 1.7 min |
+| 1 | PASS — every test (3 skips: JVM memory on swap nodes, KSM without the flag, the sweep helper) | 17m59s |
+| 2 (back to back) | PASS — same | 16m38s |
+
+`make e2e && make e2e`: 34 min wall in total; each run is well under 30 min (go test 1072 s and
+984 s). The longest test is still WO-09's `TestHubUnreachable` (its outage plus waiting for the
+spoke-2 lock); the admin scenarios finish within 10 min.
+
+No leftovers after the runs: no `e2e-*` hub policies, no pause, no e2e namespaces or CRs, the
+`pods/resize` rule in place on both spokes, both spokes AutomationReady; the sweep at the start of
+run 2 found nothing to clean.
+Each run leaves two soft-deleted clusters (`e2e-roles-*`, `e2e-onb-*`) in the hub database: the API
+has only a soft delete.
+
+## Findings for other tracks (no product bug found)
+
+- **Gating of cluster-less policies (WO-25, by design):** a policy without `clusters` (or a global
+  default) is gated against every registered cluster. In dev that includes `synth-a`/`synth-b`,
+  which are never AutomationReady, so any fleet-wide auto-patch policy is refused unless an admin
+  overrides it. The suite always lists clusters explicitly. Worth a line in the admin UI.
+- **Onboarding a cluster bound to an existing spoke's label** makes the hub recommend that spoke's
+  workloads a second time under the new name until the cluster is deleted (the WO asks for this
+  binding; the scenario lasts a few seconds).
+- Readiness timings seen live: recheck → agent answer + new state 30–50 s; `pods/resize` removed →
+  `ReadyAudit` in 30 s; restored → `AutomationReady` in 50 s.
+
+## Not done
+
+- Scenario 11 not run (needs `RO_E2E_DISRUPTIVE=1` and the user's OK); compiled and skipped.
+- Scenario 12 (Playwright smoke) not written (optional).
