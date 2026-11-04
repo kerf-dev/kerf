@@ -133,3 +133,18 @@ a configurable cluster label key/value and extra matchers. Query results are re-
 name. Readiness is computed from hub-side metrics checks and agent self-checks (RBAC per capability, resize support,
 webhook, Argo CD config). `auto-patch` requires the state *Automation ready*; an admin can override it with a
 reason, and the override is audited. Plan: `docs/plans/cluster-onboarding.md`.
+
+## D-026 Datasource secrets stay in the hub; pricing queries through a hub proxy — Accepted (2026-11-04)
+Datasource credentials never leave the hub process. The pricing service does not read the hub database or the
+encryption key. Instead the hub exposes two internal endpoints for a `pricing` service token: one lists cluster
+bindings (no secrets) and one runs an instant/range PromQL query against a named datasource, adding the auth
+itself. Additive contract change (WO-25 phase 2). The phase-1 "read the hub DB" mode in pricing is removed.
+Agent self-check RBAC: read CRDs, MutatingWebhookConfigurations and EndpointSlices is granted by default; reading
+`argocd-cm` is a chart value (`selfCheck.argocd.enabled`, default true, a namespaced Role limited to that one
+ConfigMap by `resourceNames`). The webhook dry-run check (needs `create pods`) stays opt-in, off by default.
+
+## D-027 Approve-once keeps field ownership until the next recommendation — Accepted (2026-11-04)
+After an approve-once apply the agent keeps the `resource-optimizer` field manager on the changed fields, so Argo CD
+`ignoreDifferences` (D-006) keeps protecting them from self-heal. Ownership is released (as for audit mode today) only
+when a newer recommendation arrives for the workload, the workload is excluded (mode `off`), or the approval is
+revoked. Without this, Argo CD with self-heal would silently revert every approved change.
