@@ -25,8 +25,14 @@ Build tag `e2e`: `make test` / `go test ./...` never run it. Log: `bin/e2e.log`.
 | 4 (03:13) | wo-09-e2e final | PASS (1–7, 9, 11; 3 skip-by-design) | 12.7 min |
 | 5 (03:26) | wo-09-e2e final, back to back | PASS | 14.4 min |
 | 8+10 only (03:51) | wo-09b-e2e | PASS: `TestWebhook` (both subtests), `TestRollback` (OOM, restarts) | 7.9 min |
-| B1_ROW |
-| B2_ROW |
+| b1 (03:59) | wo-09b-e2e | all pass except 11: another track's agent redeploy (wo12, 04:11) rewrote the token Secret mid-outage → outage now re-armed automatically | 17.9 min |
+| c1 (04:19) | + outage hold | 11 pass (re-armed after a second redeploy at 04:27); 3 failed: hub answered 500 to agent pulls 04:28–04:43 (hub redeployed 04:43) | 24.7 min |
+| c2 (04:44) | same | all pass except 3: WO-12 (merged meanwhile) makes `-Xmx` JVMs memory audit-only (`JVMFixedHeap`) | 19.4 min |
+| d1 (05:04) | + main/WO-12, JVM via MaxRAMPercentage | Argo app stuck Progressing: all scenarios at once overcommitted the 8-core spoke-1 node (pods Pending) → stopped | – |
+| **e1 (05:12)** | final (152fdd7): 250m test requests | **PASS** — all 15 tests (3 skip-by-design), recompute trigger live | **12.1 min** |
+| **e2 (05:25)** | final, back to back | **PASS** | **15.3 min** |
+
+e1 + e2 are the `make e2e && make e2e` check on main 0596898..ece1564 (WO-04b/07/08/12 merged, recompute deployed).
 
 No leftovers after the runs (namespaces, policies, Argo apps); the spoke-2 agent token and the
 webhook replicas are back to their originals. The killed run 3 left a directory `e2e/e2e-argocd-208b17/`
@@ -45,9 +51,12 @@ Scenario 3 skips on purpose (see findings).
   aligned to 5-min steps) gives a new workload a recommendation 3–15 min after it starts; the first can
   rest on a few samples, so applying scenarios start in audit and switch to auto-patch once the hub
   recommends a real decrease.
-- **Recompute (D-019):** the suite calls `POST /v1/admin/recompute` (admin token from `hub-dev-tokens`)
-  at most every 2 minutes while it waits, once the hub has it. Not on main yet (404): it then waits for
-  the periodic run, as in the runs above. With the trigger the suite should take ~5–8 minutes.
+- **Recompute (D-019):** the suite calls `POST /v1/admin/recompute` (admin token from `hub-dev-tokens`,
+  202) at most every 2 minutes while it waits; on a 404 it falls back to the periodic run. With it,
+  all scenarios except 11 finish in 3–7 minutes. The suite's length (12–15 min) is now scenario 11's
+  outage (`hubStaleAfter` 5m + 90 s), which no trigger can shorten.
+- CPU budget: all scenarios start at once on spoke-1 (one 8-core node, ~2.6 cores of shared
+  workloads), so over-provisioned test workloads request 250m (`overCPU`); at 500m pods went Pending.
 - Argo CD: per-scenario Application in `argocd` on `e2e/<namespace>/` of the in-cluster git repo (the
   main `workloads` app only syncs the repo root), D-006 settings copied from `argocd/workloads`.
 - Scenario 4 forces a real kubelet `Infeasible` resize with the policy floor `guardrails.minCPU: 16`
@@ -70,8 +79,16 @@ Scenario 3 skips on purpose (see findings).
   changes with `UnsupportedNode`. Scenario 3 asserts that and that pods are untouched, then skips.
   Exercising RestartContainer needs a swap-free node (WO-01) or an agent option to ignore swap on dev
   clusters.
-- **Shared agents changed under runs 1–2** (WO-08 builds deployed ~02:22 and ~02:42 UTC). Run 1's
-  `TestArgoCD/release` timeout coincided with the first swap and has not reproduced since.
+- **Shared components changed under runs**: agent builds of WO-08 (~02:22, ~02:42) and WO-12 (04:11,
+  04:27 UTC) were deployed during runs; each `helm upgrade` of the agent rewrites the token Secret
+  (scenario 11 now re-arms its outage when that happens). Run 1's `TestArgoCD/release` timeout
+  coincided with the first swap and has not reproduced since. CLAUDE.md now asks tracks to check for
+  running e2e namespaces before deploying agent/webhook.
+- **Hub incident 04:28–04:43 UTC**: the hub answered HTTP 500 to every agent pull until it was replaced
+  by `hub:wo12-dd3a826` at 04:43:12 (likely a schema change applied under the old hub); spoke agents
+  were offline (`HubUnreachable`) meanwhile.
+- **WO-12** makes JVMs with a fixed `-Xmx` memory audit-only (`JVMFixedHeap`); scenario 3's JVM now
+  sizes its heap with `-XX:MaxRAMPercentage`, and `TestJVMFixedHeapIsAuditOnly` covers the guard.
 - Rollback timings seen live: OOM → `RolledBack` 70 s after the memory change (most of it ConfigMap
   propagation); 3 restarts → `RolledBack` 110 s after the crash switch (CrashLoopBackOff backoff).
 
@@ -79,4 +96,5 @@ Scenario 3 skips on purpose (see findings).
 
 - CI: `ci/github-workflows/e2e.yaml` needs a token with `workflow` scope to move to `.github/workflows/`
   and an 8-core runner; not run in CI yet. The WO's DoD asks for 3 consecutive passes locally and in CI.
-- Switch to the recompute trigger is automatic once D-019 lands; re-measure the suite time then.
+- Scenario 11 could drop to ~2 minutes if the agent's `hubStaleAfter` were configurable per test (it is
+  a chart value shared by every track on spoke-2, so the suite does not change it).
