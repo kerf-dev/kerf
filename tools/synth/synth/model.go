@@ -129,7 +129,6 @@ func New(sc *Scenario, opt Options) (*Generator, error) {
 			cm.Workloads = append(cm.Workloads, &w)
 		}
 		for _, w := range expandFleet(sc, cs, window) {
-			w := w
 			if err := w.validate(); err != nil {
 				return nil, fmt.Errorf("generated workload: %w", err)
 			}
@@ -413,7 +412,7 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 
 	switch w.Kind {
 	case KindCronJob:
-		g.cronJobs(w, wt, r, newPod)
+		g.cronJobs(w, wt, newPod)
 	default:
 		slots := w.Replicas
 		if w.HPA != nil {
@@ -502,7 +501,7 @@ func (g *Generator) hpaReplicas(w *WorkloadSpec, shape []float64, wt *WorkloadTr
 	return per
 }
 
-func (g *Generator) cronJobs(w *WorkloadSpec, wt *WorkloadTrace, r *rnd, newPod func(key string, start, end, rev int, node *Node, name, ok, on string)) {
+func (g *Generator) cronJobs(w *WorkloadSpec, wt *WorkloadTrace, newPod func(key string, start, end, rev int, node *Node, name, ok, on string)) {
 	tl := g.Timeline
 	every, off, dur := w.Schedule.Every.D(), w.Schedule.Offset.D(), w.Schedule.Duration.D()
 	day := tl.Start.Truncate(24 * time.Hour)
@@ -675,7 +674,8 @@ func (g *Generator) simContainer(r *rnd, w *WorkloadSpec, ci int, p *PodTrace, c
 				used = cpuLim * r.uniform(0.95, 0.995)
 				thr = clamp(0.25+0.7*(x-1), 0.25, 0.95)
 			case x > 0.6:
-				thr = 0.2 * math.Pow((x-0.6)/0.4, 2)
+				y := (x - 0.6) / 0.4
+				thr = 0.2 * y * y
 			}
 		}
 		ct.CPU[k], ct.Throttled[k], ct.Periods[k] = used, thr, per
