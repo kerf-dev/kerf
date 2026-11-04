@@ -1,0 +1,76 @@
+{{- if .Values.stubHub.enabled }}
+# Local development only: a stub of the hub's agent endpoints (`agent stub-hub`), serving the
+# recommendations in .Values.stubHub.recommendations. Auth is disabled.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent.fullname" . }}-stub-hub
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+data:
+  recommendations.yaml: |
+{{ toYaml .Values.stubHub.recommendations | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agent.fullname" . }}-stub-hub
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: stub-hub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: resource-optimizer-stub-hub
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: resource-optimizer-stub-hub
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        resource-optimizer.oz.io/skip-webhook: "true"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: stub-hub
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["stub-hub", "--listen=:8080", "--recommendations=/etc/stub-hub/recommendations.yaml"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: recs
+              mountPath: /etc/stub-hub
+      volumes:
+        - name: recs
+          configMap:
+            name: {{ include "agent.fullname" . }}-stub-hub
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agent.fullname" . }}-stub-hub
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: resource-optimizer-stub-hub
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+{{- end }}

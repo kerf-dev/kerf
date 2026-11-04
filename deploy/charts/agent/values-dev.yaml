@@ -1,0 +1,3 @@
+# Local k3d development (picked up by dev/scripts/tilt-deploy.sh and `make deploy-agent`).
+pullInterval: 30s
+reportInterval: 5s
