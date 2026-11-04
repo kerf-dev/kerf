@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -170,6 +171,9 @@ type run struct {
 	pauseMsg   string
 	// approval is the approve-once grant being applied (D-024); nil otherwise.
 	approval *hubclient.ConfigApproval
+	// approvedApply: this reconcile applied an approval (the Applied condition then says
+	// ApprovedOnce, which keeps the field ownership after it, D-027).
+	approvedApply bool
 }
 
 func (w *run) reconcile() (ctrl.Result, error) {
@@ -261,10 +265,17 @@ func (w *run) release() error {
 	r := w.r
 	auto := autoSet(w.eff)
 	want := map[corev1.ResourceName]bool{}
-	if usesTemplate(w.strategy) {
-		want = auto
-	}
 	owned := apply.OwnedResources(w.obj)
+	if usesTemplate(w.strategy) {
+		want = maps.Clone(auto)
+		held, why := w.approvedHold(owned)
+		for res := range held {
+			want[res] = true
+		}
+		if why != "" {
+			w.log.Info("releasing the field ownership of an approved change", "why", why, "recommendation", w.rsr.Status.AppliedRecommendationID)
+		}
+	}
 	drop := false
 	for res := range owned {
 		if !want[res] {
@@ -1167,7 +1178,13 @@ func (w *run) writeStatus() error {
 		if w.note != "" {
 			applied += "; " + w.note
 		}
-		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionTrue, v1alpha1.ReasonRecommendationApplied, applied)
+		appliedReason := v1alpha1.ReasonRecommendationApplied
+		if w.approvedApply || (approvedLive(w.prev) && st.AppliedRecommendationID == w.prev.AppliedRecommendationID) {
+			// Remembered across restarts: the approved values keep their field ownership (D-027).
+			appliedReason = v1alpha1.ReasonApprovedOnce
+			applied += " (approved once)"
+		}
+		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionTrue, appliedReason, applied)
 	} else {
 		// The reason is the latest decision (e.g. ModeAudit for a Released workload): the phase
 		// already says Released, and the reason lets a restarted agent recognise events it emitted.
@@ -1321,6 +1338,7 @@ func (w *run) emit(e hubclient.Event, slot string, values []v1alpha1.ContainerRe
 		e.Message = "approved once by " + a.ApprovedBy + ": " + e.Message
 		r.Admin.Consume(a.ID, w.now)
 		w.approval = nil
+		w.approvedApply = true
 		w.log.Info("approval applied", "approval", a.ID, "recommendation", e.RecommendationID, "approvedBy", a.ApprovedBy)
 	}
 	if slot != "" {
@@ -1562,4 +1580,76 @@ func (w *run) approve() {
 	if raised {
 		w.approval = a
 	}
+}
+
+// approvedLive reports whether the live values come from an approve-once apply (D-024).
+func approvedLive(st v1alpha1.RightsizingRecommendationStatus) bool {
+	if st.Phase != v1alpha1.PhaseApplied {
+		return false
+	}
+	c := meta.FindStatusCondition(st.Conditions, v1alpha1.ConditionApplied)
+	return c != nil && c.Status == metav1.ConditionTrue && c.Reason == v1alpha1.ReasonApprovedOnce
+}
+
+// approvedHold returns the owned template resources the agent keeps after an approve-once apply
+// although they are in audit (D-027): Argo CD's ignoreDifferences on the resource-optimizer field
+// manager then keeps self-heal from reverting the approved values. The hold ends for a resource
+// set to off, and for all of them when the health watch rolled the change back or a newer
+// recommendation recommends different values (a new recommendation id with the same values
+// within the tolerance does not end it). why says why a hold ended in this reconcile.
+func (w *run) approvedHold(owned map[corev1.ResourceName]bool) (map[corev1.ResourceName]bool, string) {
+	if w.rsr == nil || !approvedLive(w.prev) || len(owned) == 0 {
+		return nil, ""
+	}
+	if w.rec != nil && w.rec.ID != w.rsr.Status.AppliedRecommendationID &&
+		!sameAdvice(recValues(w.rec), w.rsr.Spec.Containers, owned, w.r.tolerance()) {
+		return nil, "newer recommendation " + w.rec.ID
+	}
+	held := map[corev1.ResourceName]bool{}
+	var off []string
+	for res := range owned {
+		switch w.eff.Mode(string(res)) {
+		case v1alpha1.ModeAudit:
+			held[res] = true
+		case v1alpha1.ModeOff:
+			off = append(off, string(res))
+		}
+	}
+	if len(off) > 0 {
+		slices.Sort(off)
+		return held, strings.Join(off, " and ") + " set to off"
+	}
+	return held, ""
+}
+
+// sameAdvice reports whether rec recommends, for the resources res, the values of targets
+// within tol (relative): every target request has a recommended request close to it, and every
+// target limit the hub also recommends is close to it.
+func sameAdvice(rec, targets []v1alpha1.ContainerRecommendation, res map[corev1.ResourceName]bool, tol float64) bool {
+	near := func(a, b resource.Quantity) bool {
+		fa, fb := float64(a.MilliValue()), float64(b.MilliValue())
+		m := max(fa, fb)
+		return fa == fb || (m > 0 && (fa-fb)/m <= tol && (fb-fa)/m <= tol)
+	}
+	for _, t := range targets {
+		i := slices.IndexFunc(rec, func(c v1alpha1.ContainerRecommendation) bool { return c.Name == t.Name })
+		if i < 0 {
+			return false
+		}
+		c := rec[i]
+		for r := range res {
+			if q, ok := t.Requests[r]; ok {
+				if got, ok := c.Requests[r]; !ok || !near(q, got) {
+					return false
+				}
+			}
+			// Limits only where the hub recommends one (it may leave them to the settings).
+			if q, ok := t.Limits[r]; ok {
+				if got, ok := c.Limits[r]; ok && !near(q, got) {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }

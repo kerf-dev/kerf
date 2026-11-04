@@ -114,7 +114,8 @@ message, hub id/version/type, spec) plus the hub policies without a CR (generati
    to its namespace and kind.
    - Run `make agent-crds` on every spoke before or with the WO-21 deploy.
    - I applied it on ro-spoke-1 for the live check (see below).
-4. **Open point (approve-once + rollout + Argo CD):** "the workload stays in audit" (D-024) means
+4. **Open point (approve-once + rollout + Argo CD):** decided as D-027, implemented in WO-21b (below).
+   Original note: "the workload stays in audit" (D-024) means
    the agent does not keep ownership of the template fields after the change. On an Argo CD app
    with selfHeal, Argo CD then reverts the approved values at its next sync. In-place approvals are
    unaffected until the next rollout. If approved values should stick on GitOps workloads, the agent
@@ -198,3 +199,75 @@ Cleanup:
   ConfigMap.
 - `kubectl get rsp` on ro-spoke-1: none.
 - **ro-spoke-1 still runs this branch's agent** (main 59539ee + WO-21) until you deploy main.
+
+## WO-21b: approve-once keeps field ownership (D-027)
+
+Branch `wo-21b-approve-ownership` from origin/main 51d7612. Changed: `internal/agent/controller`
+only (`reconciler.go`, `admin_test.go`); `rbac.yaml` untouched (WO-25 p2 owns it).
+
+**Behaviour**
+- An approve-once apply sets the RSR `Applied` condition reason to `ApprovedOnce` ("… is live
+  (approved once)"). That condition reason is the persisted marker, so it survives agent restarts.
+- While it holds, `release()` keeps the `resource-optimizer` field manager on the template resources
+  the agent owns that are still in `audit`. Argo CD's `ignoreDifferences.managedFieldsManagers`
+  (D-006) then keeps self-heal from reverting them. HPA targets of the change are kept the same way.
+- The hold ends:
+  - per resource set to `off` (annotation, policy or override); the other resource stays held;
+  - for all resources when the hub's recommendation has a new id **and** different values (beyond
+    the tolerance) for the held resources, compared with the applied targets; requests always,
+    limits where the hub recommends one;
+  - when the change was rolled back (phase no longer Applied).
+
+  A release emits no event (logged: "releasing the field ownership of an approved change", why).
+  The values stay until Argo CD (or anyone) changes them. Release still waits for a freeze or pause.
+- An auto-patch apply, or a new approved apply, replaces the marker as before.
+
+**Interpretation to confirm:** D-027 says "a newer recommendation arrives". The hub issues a new
+recommendation id on every recommender run, even when the values do not change. Releasing on any new
+id would hand approved values back to Argo CD at the next run (daily in production). So only a new
+id with **different values** counts as newer. If you want the literal reading (any new id), it is a
+one-line change in `approvedHold`.
+
+**Not implemented: "approval revoked".** The contract has no revocation: approval states are only
+`pending | consumed | expired | superseded`, and consumed approvals are no longer sent to the
+agent. The agent has no signal after consumption. Today an operator ends the hold by setting the
+workload to `off` (Exclude) or by turning it to `auto-patch`. If revocation is wanted, the
+contract needs it first (e.g. `ConfigFlags`/`ClusterConfig.revokedApprovals[]` with the
+recommendation ids); the agent hook is `approvedHold`.
+
+**Verification**
+- `make test-agent` all ok (controller 85.2%); `make lint` 0 issues.
+- envtest `TestApprovedOwnership`:
+  - after the approved rollout the agent still owns cpu and memory
+  - an Argo-style non-forced apply of the Git values conflicts
+  - a new id with the same values keeps the hold
+  - different values release it with no value change and no `released` event; the Git apply then
+    restores the Git values
+- envtest `TestApprovedOwnershipModeOff`: cpu off releases cpu only; mode off releases all.
+- `TestSameAdvice` (table); existing approve-once tests unchanged and green.
+- **Live, ro-spoke-1 with Argo CD (2026-11-04 10:56–11:05 UTC).** Agent `wo21b-cc82649`, real
+  WO-20 hub.
+
+  Setup:
+  - Deployment `argo-approve` (Git: 300m/128Mi, audit, rollout) in `e2e/wo21b-live` of the
+    in-cluster git server.
+  - Application `wo21b-live`: automated, prune, selfHeal, `RespectIgnoreDifferences`,
+    `managedFieldsManagers: [resource-optimizer]`.
+  - A Git-free policy relaxing the guardrails for the namespace.
+
+  Results:
+  1. Approved the current recommendation through `POST /v1/workloads/{id}/approve` (admin token).
+     At 11:01:48: `applied/ApprovedOnce {approvalId, approvedBy: token:3}`, template 150m/64Mi,
+     hub approval state `consumed`.
+  2. Field managers: `resource-optimizer`, `argocd-controller`. Applied condition `ApprovedOnce`.
+  3. After a hard refresh and about 2 minutes: Application `Synced`/`Healthy`, no new sync
+     operation (last one was the initial sync), template still 150m/64Mi.
+  4. Git commit adding `cpu-mode: "off"`. At 11:03:46 the agent logged "cpu set to off" and
+     released cpu only. Argo CD self-heal restored cpu to 300m within about a second; memory stayed
+     owned and held at 64Mi.
+  5. Not exercised live: the newer-recommendation release (it needs the hub to change its values);
+     covered by envtest.
+
+  Cleanup: Application deleted (cascade), `e2e/wo21b-live` removed from Git (1825e99), namespace
+  and policy deleted, agent rolled back to helm revision 20 (`main-9325962`, as deployed by the
+  orchestrator).
