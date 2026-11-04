@@ -30,9 +30,10 @@ rules:
     verbs: ["get", "list"]
   # Pods: read for in-place status; patch only for the previous-resources annotation, resize
   # through the pods/resize subresource (D-007).
+  # Pods are also watched by the health watch (restarts, OOM kills).
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list"{{ if not .Values.readOnly }}, "patch"{{ end }}]
+    verbs: ["get", "list", "watch"{{ if not .Values.readOnly }}, "patch"{{ end }}]
   {{- if not .Values.readOnly }}
   - apiGroups: [""]
     resources: ["pods/resize"]
@@ -42,6 +43,12 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get", "list", "watch"]
+  {{- if and .Values.health.enabled .Values.health.cadvisorFallback }}
+  # Health watch: CPU throttling from the kubelets' cAdvisor when the hub's metrics are unreachable.
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    verbs: ["get"]
+  {{- end }}
   # HPA detection (D-011).
   - apiGroups: ["autoscaling"]
     resources: ["horizontalpodautoscalers"]

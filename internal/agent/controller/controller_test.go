@@ -608,3 +608,69 @@ func TestPolicyCRD(t *testing.T) {
 		t.Fatalf("effective %+v", e)
 	}
 }
+
+// TestDedupD017: skipped/blocked are emitted once per (workload, type, reason) until the reason or
+// the proposed values change; a new recommendation id alone does not re-emit.
+func TestDedupD017(t *testing.T) {
+	needEnv(t)
+	const name = "dedup"
+	if err := argoApply(t, deploymentApply(name, nil, "500m", "256Mi"), false); err != nil {
+		t.Fatal(err)
+	}
+	r := recFor(name, "250m", "200Mi")
+	r.ID = "11111111-1111-4111-a111-111111111111"
+	setRec(r)
+	eventually(t, 20*time.Second, "skipped", wantEvent(name, hubclient.EventSkipped, v1alpha1.ReasonModeAudit))
+
+	r.ID = "22222222-2222-4222-a222-222222222222" // new hub run, same values
+	setRec(r)
+	eventually(t, 10*time.Second, "new id seen", func() error {
+		rsr, err := getRSR(name)
+		if err != nil || rsr.Spec.Source.RecommendationID != r.ID {
+			return fmt.Errorf("rsr source not updated yet: %w", err)
+		}
+		return nil
+	})
+	time.Sleep(time.Second)
+	if n := countEvents(name, hubclient.EventSkipped, v1alpha1.ReasonModeAudit); n != 1 {
+		t.Fatalf("same values under a new id re-emitted: %d events", n)
+	}
+
+	r = recFor(name, "300m", "200Mi") // values change
+	r.ID = "33333333-3333-4333-a333-333333333333"
+	setRec(r)
+	eventually(t, 20*time.Second, "re-emitted on new values", func() error {
+		if n := countEvents(name, hubclient.EventSkipped, v1alpha1.ReasonModeAudit); n != 2 {
+			return fmt.Errorf("%d events", n)
+		}
+		return nil
+	})
+}
+
+// TestRolledBackStays: after a rollback (WO-08) the phase stays RolledBack while the next
+// recommendation is blocked by the rollback cooldown.
+func TestRolledBackStays(t *testing.T) {
+	needEnv(t)
+	const name = "rolled-back"
+	if err := argoApply(t, deploymentApply(name, map[string]string{v1alpha1.AnnotationMode: "auto-patch", v1alpha1.AnnotationStrategy: "rollout"}, "500m", "256Mi"), false); err != nil {
+		t.Fatal(err)
+	}
+	setRec(recFor(name, "250m", "200Mi"))
+	eventually(t, 20*time.Second, "applied", wantPhase(name, v1alpha1.PhaseApplied))
+	rsr, _ := getRSR(name)
+	now := metav1.Now()
+	rsr.Status.Phase = v1alpha1.PhaseRolledBack
+	rsr.Status.RolledBackAt = &now
+	rsr.Status.Conditions = append(rsr.Status.Conditions, metav1.Condition{Type: v1alpha1.ConditionHealthWatch, Status: metav1.ConditionFalse,
+		Reason: v1alpha1.ReasonOOMKills, Message: "test", LastTransitionTime: now})
+	if err := k8s.Status().Update(testCtx, rsr); err != nil {
+		t.Fatal(err)
+	}
+	r := recFor(name, "240m", "150Mi")
+	r.ID = "44444444-4444-4444-a444-444444444444"
+	setRec(r)
+	eventually(t, 20*time.Second, "blocked by cooldown", wantEvent(name, hubclient.EventBlocked, v1alpha1.ReasonCooldown))
+	if err := wantPhase(name, v1alpha1.PhaseRolledBack)(); err != nil {
+		t.Fatal(err)
+	}
+}

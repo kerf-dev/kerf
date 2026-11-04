@@ -29,8 +29,12 @@ in `audit_events` (`db/migrations/0001_init.sql`), counts them in `ro_actions_to
 | `released` | The workload left `auto-patch`; field ownership was released so Argo CD restores Git values (D-006). | `ModeChanged` |
 | `failed` | An API call needed for an action failed after retries. | `ApplyError`, `ResizeError`, `RollbackError`, `ReleaseError` |
 
-`skipped` and `blocked` are emitted **only on change**: once per (workload, recommendation id,
-reason), not on every loop iteration.
+`skipped` and `blocked` are emitted **only on change** (D-017): once per (workload, type, reason)
+until the reason or the proposed values change, not on every loop iteration and not again just
+because the hub issued a new recommendation id for the same values. A change that is applied,
+rolled back or released starts over, so the next skip or block is reported again. Per-resource
+blocks inside an applied change (`Throttled`, `OOMKilled`, `RestartPolicyRequired`) follow the
+same rule per resource.
 
 Reasons are CamelCase and identical to the `Reason*` constants in `api/v1alpha1/wellknown.go`, to
 the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the `reason` label of
