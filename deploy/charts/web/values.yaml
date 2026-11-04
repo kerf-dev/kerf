@@ -1,0 +1,40 @@
+# Defaults for a real installation. Development overrides: values-dev.yaml.
+image:
+  repository: localhost:5005/resource-optimizer/web
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# Set by Tilt (unused: the UI reads every cluster through the hub).
+clusterName: ""
+
+replicaCount: 2
+
+hub:
+  # host:port of the hub API Service (the WO-04 chart names it after its release, `hub`). nginx resolves
+  # it per request with the cluster DNS, which does not apply search domains: use the full name.
+  upstream: hub.resource-optimizer.svc.cluster.local:8080
+
+# Bearer token with role `ui` (D-012), mounted into nginx and added to every proxied request.
+# It never reaches the browser. Either reference an existing Secret or let the chart create one.
+token:
+  existingSecret: ""
+  existingSecretKey: token
+  # Only for development; prefer existingSecret (e.g. from External Secrets / sealed secrets).
+  value: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  nodePort: null        # e.g. 30090 with type NodePort
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

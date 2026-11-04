@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Resource Optimizer</title>
+    <script src="/theme-init.js"></script>
+    <style>
+      .ro-splash {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #f8fafc;
+      }
+      .dark .ro-splash {
+        background: #15171c;
+      }
+      .ro-splash span {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: #0d9488;
+        animation: ro-pulse 1.1s ease-in-out infinite;
+      }
+      @keyframes ro-pulse {
+        50% {
+          transform: scale(0.82);
+          opacity: 0.6;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="ro-splash" aria-hidden="true"><span></span></div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
