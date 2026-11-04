@@ -34,6 +34,17 @@ clusters: ""
 defaultRegion: ""
 logLevel: info
 
+# Clusters bound to other datasources (D-025) are discovered through the hub's query proxy with a
+# token of role pricing (D-026); empty url = only vmURL (clusters without a binding).
+hub:
+  url: ""
+  tokenSecret:
+    name: ""
+    key: token
+    # create: true makes the chart create the Secret from `token` (local development only).
+    create: false
+    token: ""
+
 serviceAccount:
   create: true
   name: ""

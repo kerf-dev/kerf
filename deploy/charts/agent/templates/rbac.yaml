@@ -73,6 +73,19 @@ rules:
   - apiGroups: ["resource-optimizer.oz.io"]
     resources: ["rightsizingrecommendations/status"]
     verbs: ["get", "update", "patch"]
+  # Self-checks (D-025, D-026): CRD schema currency, the webhook configuration.
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["get", "list"]
+  {{- if .Values.selfCheck.webhookDryRun }}
+  # Webhook dry-run self-check: pods are created with dryRun=All only.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create"]
+  {{- end }}
   # Kubernetes Events on RightsizingRecommendations (docs/contracts/events.md).
   - apiGroups: ["events.k8s.io"]
     resources: ["events"]
@@ -150,6 +163,64 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: {{ include "agent.fullname" . }}-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "agent.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+---
+# Self-check: the webhook Service's EndpointSlices (the webhook runs in the release namespace).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "agent.fullname" . }}-selfcheck
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "agent.fullname" . }}-selfcheck
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "agent.fullname" . }}-selfcheck
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "agent.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- $argo := .Values.selfCheck.argocd }}
+{{- if and .Values.selfCheck.enabled $argo.enabled (or $argo.force (lookup "v1" "Namespace" "" $argo.namespace)) }}
+---
+# Self-check integration.argocd: read argocd-cm only (D-026).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "agent.fullname" . }}-argocd-cm
+  namespace: {{ $argo.namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["argocd-cm"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "agent.fullname" . }}-argocd-cm
+  namespace: {{ $argo.namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "agent.fullname" . }}-argocd-cm
 subjects:
   - kind: ServiceAccount
     name: {{ include "agent.fullname" . }}

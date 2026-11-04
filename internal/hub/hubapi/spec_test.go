@@ -151,6 +151,10 @@ var schemaTypes = map[string]any{
 	"ReadinessHistoryEntry": ReadinessHistoryEntry{},
 	"ReadinessHistory":      ReadinessHistory{},
 	"InstallSnippet":        InstallSnippet{},
+	"ClusterMetricsBinding": ClusterMetricsBinding{},
+	"MetricsBindingList":    MetricsBindingList{},
+	"PromQueryForm":         PromQueryForm{},
+	"PromQueryResponse":     PromQueryResponse{},
 
 	// RightsizingPolicy spec: the CRD types are the Go mirror (api/v1alpha1).
 	"RightsizingPolicySpec": v1alpha1.RightsizingPolicySpec{},
@@ -190,7 +194,7 @@ var enumLists = map[string][]string{
 	"ClusterPolicySource": {PolicySourceHub, PolicySourceGit, PolicySourceBoth},
 	"Environment":         {EnvironmentProd, EnvironmentNonProd},
 	"SettingsSection":     {SettingsRecommender, SettingsPricing},
-	"TokenRole":           {RoleAgent, RoleUI, RoleAdmin},
+	"TokenRole":           {RoleAgent, RoleUI, RoleAdmin, RolePricing},
 	"ReadinessState":      readinessStates(),
 	"ReadinessStatus":     readinessStatuses(),
 	"ReadinessCategory":   readinessCategories(),

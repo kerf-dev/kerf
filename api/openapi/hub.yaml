@@ -66,6 +66,8 @@ tags:
     description: Administration (admin area, D-022). Roles per operation.
   - name: auth
     description: Login, logout and the caller's identity (D-023).
+  - name: internal
+    description: Service endpoints for the pricing service (token role `pricing`, D-026).
 paths:
   /v1/clusters/{cluster}/recommendations:
     parameters:
@@ -2369,6 +2371,158 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/DatasourceNotFound'
+  /v1/internal/metrics-bindings:
+    get:
+      tags: [internal]
+      operationId: listMetricsBindings
+      security:
+        - bearerAuth: [pricing]
+      summary: Metrics binding of every registered cluster (pricing service)
+      description: |
+        The binding of every registered, not deleted cluster (D-025, D-026). `bound` is false for a
+        cluster without a stored binding: its metrics are in datasource `local` with label `cluster`
+        = its name. Never contains datasource secrets. An `admin` token may call it too.
+      responses:
+        '200':
+          description: Bindings by cluster.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsBindingList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/internal/datasources/{datasourceId}/api/v1/query:
+    parameters:
+      - $ref: '#/components/parameters/DatasourceID'
+    get:
+      tags: [internal]
+      operationId: proxyInstantQuery
+      security:
+        - bearerAuth: [pricing]
+      summary: Instant PromQL query against a datasource (pricing service)
+      description: |
+        Runs the query against the datasource with the datasource's auth and headers, which never
+        leave the hub (D-026), and returns the datasource's response unchanged (the Prometheus
+        HTTP API `/api/v1/query` format, including its errors and status code). Only `query`,
+        `time` and `timeout` are forwarded. POST with a form body is accepted too.
+      parameters:
+        - $ref: '#/components/parameters/PromQuery'
+        - name: time
+          in: query
+          schema:
+            type: string
+        - name: timeout
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/PromQueryResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+    post:
+      tags: [internal]
+      operationId: proxyInstantQueryPost
+      security:
+        - bearerAuth: [pricing]
+      summary: Instant PromQL query against a datasource (form body)
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PromQueryForm'
+      responses:
+        '200':
+          $ref: '#/components/responses/PromQueryResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /v1/internal/datasources/{datasourceId}/api/v1/query_range:
+    parameters:
+      - $ref: '#/components/parameters/DatasourceID'
+    get:
+      tags: [internal]
+      operationId: proxyRangeQuery
+      security:
+        - bearerAuth: [pricing]
+      summary: Range PromQL query against a datasource (pricing service)
+      description: |
+        As the instant query, for `/api/v1/query_range`: `query`, `start`, `end`, `step` and
+        `timeout` are forwarded.
+      parameters:
+        - $ref: '#/components/parameters/PromQuery'
+        - name: start
+          in: query
+          schema:
+            type: string
+        - name: end
+          in: query
+          schema:
+            type: string
+        - name: step
+          in: query
+          schema:
+            type: string
+        - name: timeout
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/PromQueryResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+    post:
+      tags: [internal]
+      operationId: proxyRangeQueryPost
+      security:
+        - bearerAuth: [pricing]
+      summary: Range PromQL query against a datasource (form body)
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PromQueryForm'
+      responses:
+        '200':
+          $ref: '#/components/responses/PromQueryResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/DatasourceNotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
   /v1/clusters/{cluster}/readiness:
     parameters:
       - $ref: '#/components/parameters/Cluster'
@@ -2508,7 +2662,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      description: Opaque token with role `agent` (per cluster), `ui` or `admin` (D-012).
+      description: Opaque token with role `agent` (per cluster), `ui`, `admin` (D-012) or `pricing` (D-026).
     sessionAuth:
       type: apiKey
       in: cookie
@@ -2541,6 +2695,13 @@ components:
       in: header
       required: false
       description: ETag (`"<version>"`) of the object being changed; checked when given (`412` if stale).
+      schema:
+        type: string
+    PromQuery:
+      name: query
+      in: query
+      required: true
+      description: PromQL expression.
       schema:
         type: string
     DatasourceID:
@@ -2621,6 +2782,18 @@ components:
       schema:
         type: string
   responses:
+    BadGateway:
+      description: The datasource could not be reached.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PromQueryResult:
+      description: The datasource's Prometheus HTTP API response, unchanged (also for its own errors).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PromQueryResponse'
     BadRequest:
       description: The request is malformed or fails validation.
       content:
@@ -3776,8 +3949,10 @@ components:
       enum: [viewer, operator, admin]
     TokenRole:
       type: string
-      description: Role of an API (machine) token (D-012); unchanged by the admin area.
-      enum: [agent, ui, admin]
+      description: |
+        Role of an API (machine) token (D-012). `pricing` (D-026) is the pricing service: only
+        `/v1/internal/*` (metrics bindings and the datasource query proxy); no cluster.
+      enum: [agent, ui, admin, pricing]
     Username:
       type: string
       pattern: '^[a-z0-9][a-z0-9._-]{1,62}$'
@@ -5423,6 +5598,58 @@ components:
           type: array
           items:
             type: string
+    ClusterMetricsBinding:
+      type: object
+      description: A cluster's metrics binding for the pricing service (D-026).
+      required: [cluster, binding, bound]
+      properties:
+        cluster:
+          type: string
+        binding:
+          $ref: '#/components/schemas/MetricsBinding'
+        bound:
+          type: boolean
+          description: false = no stored binding (datasource local, label cluster = the name).
+    MetricsBindingList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterMetricsBinding'
+    PromQueryForm:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+        time:
+          type: string
+        start:
+          type: string
+        end:
+          type: string
+        step:
+          type: string
+        timeout:
+          type: string
+    PromQueryResponse:
+      type: object
+      description: Prometheus HTTP API response (`status`, `data`, `errorType`, `error`), passed through.
+      required: [status]
+      additionalProperties: true
+      properties:
+        status:
+          type: string
+          enum: [success, error]
+        data:
+          type: object
+          additionalProperties: true
+        errorType:
+          type: string
+        error:
+          type: string
     MetricsBinding:
       type: object
       description: |

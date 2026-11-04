@@ -32,6 +32,8 @@ var (
 	accessOperator = access{tokens: []string{hubapi.RoleAdmin}, session: hubapi.UserRoleOperator}
 	accessAdmin    = access{tokens: []string{hubapi.RoleAdmin}, session: hubapi.UserRoleAdmin}
 	accessSession  = access{session: hubapi.UserRoleViewer}
+	// accessPricing: the pricing service's token (D-026) or an admin token.
+	accessPricing = access{tokens: []string{hubapi.RolePricing}}
 )
 
 // Principal is the authenticated caller.

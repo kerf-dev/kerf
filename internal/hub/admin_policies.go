@@ -108,7 +108,13 @@ func (s *Server) createPolicy(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out, err := s.Store.CreatePolicy(r.Context(), p, s.change(r, hubapi.ActionPolicyCreated, in.Reason))
+	extra, ok := s.readinessGate(w, r, p.Clusters, setsAutoPatch(p.Spec), in.OverrideReadiness)
+	if !ok {
+		return
+	}
+	c := s.change(r, hubapi.ActionPolicyCreated, in.Reason)
+	c.AfterExtra = extra
+	out, err := s.Store.CreatePolicy(r.Context(), p, c)
 	if err != nil {
 		s.storeError(w, r, err, "policy")
 		return
@@ -161,13 +167,24 @@ func (s *Server) updatePolicy(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusConflict, "policy_deleted", "The policy is deleted; revert it to a version first.")
 		return
 	}
+	gateClusters := next.Clusters
+	if cur.Type == v1alpha1.HubPolicyTypeWorkloadOverride {
+		k, _ := hubapi.ParseWorkloadID(cur.WorkloadID)
+		gateClusters = []string{k.Cluster}
+	}
+	extra, ok := s.readinessGate(w, r, gateClusters, newAutoPatch(cur, next), in.OverrideReadiness)
+	if !ok {
+		return
+	}
+	ch := s.change(r, hubapi.ActionPolicyUpdated, in.Reason)
+	ch.AfterExtra = extra
 	out, err := s.Store.UpdatePolicy(r.Context(), cur.ID, ver, func(c hubapi.AdminPolicy, _ func(int) (hubapi.PolicyVersion, error)) (hubapi.AdminPolicy, string, int, error) {
 		if c.DeletedAt != nil {
 			return c, "", 0, store.ErrNotFound
 		}
 		c.Name, c.Description, c.Clusters, c.Priority, c.Spec = next.Name, next.Description, next.Clusters, next.Priority, next.Spec
 		return c, hubapi.PolicyOpUpdate, 0, nil
-	}, s.change(r, hubapi.ActionPolicyUpdated, in.Reason))
+	}, ch)
 	if err != nil {
 		s.storeError(w, r, err, "policy")
 		return
@@ -481,6 +498,29 @@ func (s *Server) normaliseOverride(w http.ResponseWriter, r *http.Request, k hub
 	return p, true
 }
 
+// newAutoPatch reports whether an update enables auto-patch: next sets it and cur did not, or
+// next reaches clusters cur did not (readiness gating, D-025).
+func newAutoPatch(cur, next hubapi.AdminPolicy) bool {
+	if !setsAutoPatch(next.Spec) {
+		return false
+	}
+	if !setsAutoPatch(cur.Spec) || cur.DeletedAt != nil {
+		return true
+	}
+	if len(next.Clusters) == 0 {
+		return len(cur.Clusters) != 0
+	}
+	if len(cur.Clusters) == 0 {
+		return false
+	}
+	for _, c := range next.Clusters {
+		if !slices.Contains(cur.Clusters, c) {
+			return true
+		}
+	}
+	return false
+}
+
 func setsAutoPatch(spec v1alpha1.RightsizingPolicySpec) bool {
 	return (spec.CPU != nil && spec.CPU.Mode == v1alpha1.ModeAutoPatch) || (spec.Memory != nil && spec.Memory.Mode == v1alpha1.ModeAutoPatch)
 }
@@ -545,10 +585,21 @@ func (s *Server) putWorkloadOverride(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cur, err := s.Store.GetOverride(r.Context(), v.Key)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		s.storeError(w, r, err, "override")
+		return
+	}
+	gated := setsAutoPatch(next.Spec) && (errors.Is(err, store.ErrNotFound) || cur.DeletedAt != nil || !setsAutoPatch(cur.Spec))
+	extra, ok := s.readinessGate(w, r, []string{v.Key.Cluster}, gated, in.OverrideReadiness)
+	if !ok {
+		return
+	}
+	change := s.change(r, hubapi.ActionOverrideSet, in.Reason)
+	change.AfterExtra = extra
 	var out hubapi.AdminPolicy
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		out, err = s.Store.CreatePolicy(r.Context(), next, s.change(r, hubapi.ActionOverrideSet, in.Reason))
+		out, err = s.Store.CreatePolicy(r.Context(), next, change)
 	case err != nil:
 	case ifv == nil:
 		writeProblem(w, r, http.StatusPreconditionRequired, hubapi.CodePreconditionRequired, "The workload has an override: replacing it needs If-Match.")
@@ -560,7 +611,7 @@ func (s *Server) putWorkloadOverride(w http.ResponseWriter, r *http.Request) {
 			}
 			c.Description, c.Spec = next.Description, next.Spec
 			return c, hubapi.PolicyOpUpdate, 0, nil
-		}, s.change(r, hubapi.ActionOverrideSet, in.Reason))
+		}, change)
 	}
 	if err != nil {
 		s.storeError(w, r, err, "override")
@@ -625,7 +676,12 @@ func (s *Server) approveRecommendation(w http.ResponseWriter, r *http.Request) {
 		}
 		exp = in.ExpiresAt.UTC()
 	}
+	extra, ok := s.readinessGate(w, r, []string{v.Key.Cluster}, true, in.OverrideReadiness)
+	if !ok {
+		return
+	}
 	c := s.change(r, hubapi.ActionWorkloadApproved, in.Reason)
+	c.AfterExtra = extra
 	a, err := s.Store.CreateApproval(r.Context(), v.Key, v.Rec.ID, exp, c.Actor, in.Reason, c)
 	if err != nil {
 		s.internal(w, r, err)
