@@ -36,21 +36,47 @@ func cpuBelow(limit string) func(*workloadRec) (bool, string) {
 // auto-patch, so the agent applies a representative recommendation.
 func armed(t *testing.T, cl cluster, name, ns, workload, below string, spec v1alpha1.RightsizingPolicySpec) {
 	t.Helper()
-	spec.CPU.Mode = v1alpha1.ModeAudit
+	armedFor(t, cl, corev1.ResourceCPU, name, ns, workload, below, spec)
+}
+
+// armedFor is armed for either resource: res starts in audit and switches to auto-patch once the
+// hub recommends a request below `below`.
+func armedFor(t *testing.T, cl cluster, res corev1.ResourceName, name, ns, workload, below string, spec v1alpha1.RightsizingPolicySpec) {
+	t.Helper()
+	setMode := func(s *v1alpha1.RightsizingPolicySpec, m v1alpha1.Mode) {
+		if res == corev1.ResourceMemory {
+			s.Memory.Mode = m
+		} else {
+			s.CPU.Mode = m
+		}
+	}
+	setMode(&spec, v1alpha1.ModeAudit)
 	p := policy(t, cl, name, ns, spec)
-	rec := waitHubRecommendation(t, cl, ns, deployment, workload, cpuBelow(below))
-	t.Logf("hub recommends cpu %s for %s; switching cpu to auto-patch", rec.Containers[0].Recommended.Requests.CPU, workload)
+	cond := cpuBelow(below)
+	if res == corev1.ResourceMemory {
+		cond = memoryBelow(below)
+	}
+	rec := waitHubRecommendation(t, cl, ns, deployment, workload, cond)
+	t.Logf("hub recommends %v for %s; switching %s to auto-patch", rec.Containers[0].Recommended.Requests, workload, res)
 	eventually(t, time.Minute, 2*time.Second, "policy switched to auto-patch", func() (bool, string) {
 		var cur v1alpha1.RightsizingPolicy
 		if err := cl.C.Get(ctx(t), client.ObjectKeyFromObject(p), &cur); err != nil {
 			return false, err.Error()
 		}
-		cur.Spec.CPU.Mode = v1alpha1.ModeAutoPatch
+		setMode(&cur.Spec, v1alpha1.ModeAutoPatch)
 		if err := cl.C.Update(ctx(t), &cur); err != nil {
 			return false, err.Error()
 		}
 		return true, ""
 	})
+}
+
+// memoryBelow accepts a recommendation whose first container's memory request is below limit.
+func memoryBelow(limit string) func(*workloadRec) (bool, string) {
+	return func(r *workloadRec) (bool, string) {
+		got := r.Containers[0].Recommended.Requests.Memory
+		return got != "" && q(got).Cmp(resource.MustParse(limit)) < 0, "memory " + got
+	}
 }
 
 // Scenario 1: audit mode. The hub recommends, nothing changes in the cluster.
@@ -308,12 +334,6 @@ func TestArgoCD(t *testing.T) {
 	})
 }
 
-// Scenario 8: webhook (WO-07).
-func TestWebhook(t *testing.T) {
-	// TODO(WO-07): scale-out gets the recommended values; webhook down does not block pod creation.
-	t.Skip("waiting for WO-07 (admission webhook, branch wo-07-webhook)")
-}
-
 // Scenario 9: guardrails.
 func TestGuardrails(t *testing.T) {
 	t.Parallel()
@@ -382,12 +402,6 @@ func TestGuardrails(t *testing.T) {
 			t.Fatalf("applied cpu %s, want a decrease capped at 20%% (400m..500m)", applied.String())
 		}
 	})
-}
-
-// Scenario 10: rollback (WO-08).
-func TestRollback(t *testing.T) {
-	// TODO(WO-08): OOM kills / restarts / throttling after an apply roll back to status.previous.
-	t.Skip("waiting for WO-08 (health watch and rollback, branch wo-08-health)")
 }
 
 // waitEvent waits for a hub audit event (the agent reports within seconds; the default timeout
