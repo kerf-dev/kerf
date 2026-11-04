@@ -78,3 +78,13 @@ coordinating policy.
 ## Known
 - `internal/health` `TestThrottlingRollback` is flaky on origin/main too (2 of 3 runs failed there:
   `cpu after rollback = 100m`, then `already exists` on rerun) — WO-08.
+
+## Live definition of done (2026-11-04, main-a18528f / main-33a939f)
+Copy of `dev/workloads/hpa-cpu` in namespace `wo11-hpa` with `mode: auto-patch` and a policy with
+`hpa.coordinate: true`, `learningPeriod: 0s`, `minConfidence: "0"`, on both spokes:
+- ro-spoke-1, 05:52:59 UTC: one `applied` event, "cpu request 100m->70m, memory limit 64Mi->32Mi;
+  HPA hpa-cpu cpu target 60% -> 86%", one new ReplicaSet; the HPA's `spec.metrics` owned by
+  `resource-optimizer` (Apply). ro-spoke-2, 05:55:19 UTC: same change, then `skipped/NoSignificantChange`.
+- The next hub run is stable (currentTarget 86, recommendedTarget 86, request 70m: no ratcheting).
+- Replicas: 2 in every 30 s sample before and for 12 min (spoke-1) / 10 min (spoke-2) after the
+  change; utilization ~40 % of 60 before, ~50-66 % of 86 after (same ratio). Test resources deleted.
