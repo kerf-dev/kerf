@@ -253,3 +253,17 @@ func TestHeapBound(t *testing.T) {
 		}
 	}
 }
+
+// TestPaused (D-022): a hub pause blocks every change like a freeze; audit workloads stay skipped.
+func TestPaused(t *testing.T) {
+	in := base()
+	in.Paused, in.PauseMessage = true, "automation is paused in the hub (cluster): incident"
+	d := Evaluate(in)
+	if d.Outcome != Blocked || d.Reason != v1alpha1.ReasonPaused || d.Message != in.PauseMessage || len(d.Proposed) == 0 {
+		t.Fatalf("got %+v", d)
+	}
+	in.Effective = policy.Resolve(policy.Workload{Namespace: "d", Kind: v1alpha1.KindDeployment, Name: "w"}, nil, nil)
+	if d := Evaluate(in); d.Outcome != Skipped || d.Reason != v1alpha1.ReasonModeAudit {
+		t.Fatalf("audit while paused: %+v", d)
+	}
+}

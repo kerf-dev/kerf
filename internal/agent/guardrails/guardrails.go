@@ -5,7 +5,8 @@
 // Order of checks (the first match decides the workload-level outcome):
 //
 //  1. no auto-patch resource                    -> skipped ModeOff / ModeAudit
-//  2. hub not reachable / recommendation stale  -> blocked HubUnreachable, skipped RecommendationStale
+//  2. hub not reachable / automation paused (D-022) / recommendation stale
+//     -> blocked HubUnreachable, blocked Paused, skipped RecommendationStale
 //  3. hpa-coupled without HPA coordination (D-011, WO-11), learning period, confidence, freeze window, maintenance window -> blocked
 //  4. per container and resource: clamp decreases to maxChangePercent, floors, never decrease a
 //     throttled / oom-killed resource (Throttled / OOMKilled), JVM/Python memory needs
@@ -79,6 +80,10 @@ type Input struct {
 	Tolerance float64
 	// Disruption describes single-replica protection (WO-13); nil skips the check.
 	Disruption *apply.Disruption
+	// Paused: automation is paused in the hub config (D-022); like a cluster-wide freeze, nothing
+	// new is applied. PauseMessage describes it.
+	Paused       bool
+	PauseMessage string
 }
 
 // Refusal is a per-resource guardrail that removed part of a change.
@@ -139,6 +144,13 @@ func Evaluate(in Input) Decision {
 	}
 	if !in.HubFresh {
 		return block(v1alpha1.ReasonHubUnreachable, "hub unreachable: no fresh recommendation, nothing new is applied")
+	}
+	if in.Paused {
+		msg := in.PauseMessage
+		if msg == "" {
+			msg = "automation is paused in the hub"
+		}
+		return block(v1alpha1.ReasonPaused, "%s", msg)
 	}
 	if !policy.SettingsMatch(eff.Settings(), in.Rec.Settings) {
 		return Decision{Outcome: Skipped, Reason: v1alpha1.ReasonRecommendationStale, Proposed: proposed,

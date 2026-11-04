@@ -122,17 +122,56 @@ func (c *Client) ListRecommendations(ctx context.Context, etag string) ([]Worklo
 	}
 }
 
-// ReportWorkloadStatus upserts workload statuses, split into batches of MaxBatch.
-func (c *Client) ReportWorkloadStatus(ctx context.Context, agentVersion string, items []WorkloadStatus) error {
-	for start := 0; start < len(items); start += MaxBatch {
+// ReportWorkloadStatus upserts workload statuses, split into batches of MaxBatch. The batch
+// fields besides Items (agentVersion, configVersion, policyInventory, capabilities, checks) are
+// sent with the first request; configVersion and agentVersion with every one. A batch without
+// items is still sent when it carries an inventory, capabilities or checks.
+func (c *Client) ReportWorkloadStatus(ctx context.Context, batch WorkloadStatusBatch) error {
+	items := batch.Items
+	if len(items) == 0 && batch.PolicyInventory == nil && batch.Capabilities == nil && batch.Checks == nil {
+		return nil
+	}
+	for start := 0; start == 0 || start < len(items); start += MaxBatch {
 		end := min(start+MaxBatch, len(items))
+		body := WorkloadStatusBatch{AgentVersion: batch.AgentVersion, ConfigVersion: batch.ConfigVersion,
+			Items: append([]WorkloadStatus{}, items[start:end]...)}
+		if start == 0 {
+			body.PolicyInventory, body.Capabilities, body.Checks = batch.PolicyInventory, batch.Capabilities, batch.Checks
+		}
 		var res BatchResult
-		body := WorkloadStatusBatch{AgentVersion: agentVersion, Items: items[start:end]}
 		if _, _, err := c.do(ctx, http.MethodPost, c.path("workload-status"), nil, nil, body, &res); err != nil {
 			return err
 		}
+		if end >= len(items) {
+			break
+		}
 	}
 	return nil
+}
+
+// GetConfig fetches the cluster's hub configuration (D-022). etag is the ETag of the previous
+// successful call ("" for none); on 304 it returns ErrNotModified. A hub that predates the admin
+// area answers 404 (see IsNotFound).
+func (c *Client) GetConfig(ctx context.Context, etag string) (*ClusterConfig, string, error) {
+	hdr := http.Header{}
+	if etag != "" {
+		hdr.Set("If-None-Match", etag)
+	}
+	var cfg ClusterConfig
+	status, respHdr, err := c.do(ctx, http.MethodGet, c.path("config"), nil, hdr, nil, &cfg)
+	if err != nil {
+		return nil, "", err
+	}
+	if status == http.StatusNotModified {
+		return nil, etag, ErrNotModified
+	}
+	return &cfg, respHdr.Get("ETag"), nil
+}
+
+// IsNotFound reports whether err is a 404 or 501 from the hub (an endpoint it does not serve).
+func IsNotFound(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusNotFound || apiErr.StatusCode == http.StatusNotImplemented)
 }
 
 // ReportEvents sends one batch of at most MaxBatch events.
