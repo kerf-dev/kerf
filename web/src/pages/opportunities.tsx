@@ -19,7 +19,7 @@ import {
   SearchXIcon,
   XIcon,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { api, unwrap } from '@/api/client'
 import { useClusters, useFacets, useWorkloads } from '@/api/queries'
@@ -103,21 +103,37 @@ const DEFAULT_HIDDEN: VisibilityState = {
 }
 const VIS_KEY = 'ro-opportunities-columns-v1'
 
+/**
+ * Default columns depend on the width: on a tablet the table would otherwise scroll sideways from the
+ * start, with the requests hidden under the pinned savings column. Only explicit choices are stored, so
+ * the defaults keep following the screen until the reader picks columns.
+ */
+function defaultHidden(): VisibilityState {
+  const w = window.innerWidth
+  if (w < 1024) return { ...DEFAULT_HIDDEN, modes: false, phase: false, confidence: false, riskFlags: false }
+  if (w < 1280) return { ...DEFAULT_HIDDEN, confidence: false, riskFlags: false }
+  return DEFAULT_HIDDEN
+}
+
 function useColumnVisibility() {
-  const [vis, setVis] = useState<VisibilityState>(() => {
+  const [vis, setVisState] = useState<VisibilityState>(() => {
     try {
-      return { ...DEFAULT_HIDDEN, ...(JSON.parse(localStorage.getItem(VIS_KEY) ?? '{}') as VisibilityState) }
+      return { ...defaultHidden(), ...(JSON.parse(localStorage.getItem(VIS_KEY) ?? '{}') as VisibilityState) }
     } catch {
-      return DEFAULT_HIDDEN
+      return defaultHidden()
     }
   })
-  useEffect(() => {
-    try {
-      localStorage.setItem(VIS_KEY, JSON.stringify(vis))
-    } catch {
-      /* ignore */
-    }
-  }, [vis])
+  const setVis = useCallback((u: VisibilityState | ((prev: VisibilityState) => VisibilityState)) => {
+    setVisState((prev) => {
+      const next = typeof u === 'function' ? u(prev) : u
+      try {
+        localStorage.setItem(VIS_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [])
   return [vis, setVis] as const
 }
 
@@ -570,6 +586,8 @@ export default function OpportunitiesPage() {
                 {total === 1 ? '' : 's'}
                 {activeFilters ? ' match your filters' : ''}
               </>
+            ) : list.isError ? (
+              'Workloads unavailable'
             ) : (
               <Skeleton className="h-4 w-32" />
             )}
