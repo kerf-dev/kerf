@@ -38,7 +38,7 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-25 | Onboarding, metrics sources, readiness | 4 | done | local_14a53b46 | wo-25-onboarding-p2 | – | p1 56424f9, p2 5d25dd7; D-026 |
 | WO-25b | Gate revert; spoke-2 argocd check unknown | 4 | done | local_14a53b46 | wo-25b-readiness-fixes | – | |
 | WO-22c | Readiness UI aligned with real hub | 4 | done | local_9fadb724 | wo-22c-readiness-align | – | |
-| WO-21c | Drift repair survives new recommendation ids | 4 | in-progress | local_11de0a00 | wo-21c-drift-repair | – | found by WO-24 |
+| WO-21c | Drift repair survives new recommendation ids | 4 | done | local_11de0a00 | wo-21c-drift-repair | – | found by WO-24 |
 | WO-24 | Admin: e2e (+ onboarding/readiness scenarios) | 4 | in-progress | local_7697cfde | wo-24-admin-e2e | – | KSM scenario opt-in pending user OK |
 
 ## Open questions for the user
@@ -66,3 +66,4 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-04 11:48 UTC: a WO-25b agent deploy to ro-spoke-2 overlapped a WO-24 e2e run; the e2e-* namespace pre-check missed it (the RBAC scenario creates no namespace), and helm failed on a ClusterRole field conflict with `e2e.test`. WO-24's runs were not disturbed. Fix: the suite now creates an `e2e-run-<id>` marker namespace on both spokes for the whole run, and drops its field ownership after restoring Helm-owned objects.
 - 2026-11-04 WO-25b (revert gated by readiness; spoke-2 argocd check) and WO-22c (readiness UI matches the real hub) merged (1e72c9e). `make ci` + `make web-verify` (31/31) green. Hub, web, agents deployed at main-1e72c9e; both spokes AutomationReady, integration.argocd passes on both. WO-24 final back-to-back runs started.
 - 2026-11-04 WO-24 found an agent bug (confirmed): drift repair (`keepLive`, reconciler.go ~479) requires AppliedRecommendationID == rec.ID, but the hub issues a new id every run, so drift is never repaired after the next recommender run. Assigned as WO-21c. WO-24 holds off its own recomputes in the drift window meanwhile; a TestWebhook failure attributed to this bug doesn't block merging WO-24.
+- 2026-11-04 WO-24 (admin + onboarding e2e; e2e-run markers; field-ownership cleanup) and WO-21c (drift repair adopts new ids within tolerance; rollback compares values; approve-once hold kept) merged (6237bfc). `make ci` green. Agents deployed at main-6237bfc. WO-24's pair before this merge: run 1 PASS 16m10s (spoke-1 on wo21c), run 2 PASS 14m06s (main-1e72c9e; spoke-1 agent restarted 33 s in by the WO-21c rollback, during setup). Final back-to-back on main (WO-24b, hold-off removed) started.
