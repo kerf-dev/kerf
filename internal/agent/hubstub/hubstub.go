@@ -27,7 +27,7 @@ type Server struct {
 	tokens   map[string]string // token -> cluster ("" = admin, any cluster)
 	recs     map[string][]hubclient.WorkloadRecommendation
 	statuses map[string]map[string]hubclient.WorkloadStatus // cluster -> ns/kind/name
-	events   map[string][]hubclient.Event                  // cluster -> events in arrival order
+	events   map[string][]hubclient.Event                   // cluster -> events in arrival order
 	eventIDs map[string]bool
 	down     bool
 	requests map[string]int
