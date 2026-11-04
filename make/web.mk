@@ -4,6 +4,8 @@
 WEB_DIR        := web
 WEB_IMAGE      ?= localhost:5005/resource-optimizer/web
 WEB_TAG        ?= dev-$(shell date +%Y%m%d-%H%M%S)
+# Expand once: a recursive $(shell date) would give docker push and helm different tags.
+WEB_TAG        := $(WEB_TAG)
 WEB_CONTEXT    ?= k3d-ro-hub
 WEB_NAMESPACE  ?= resource-optimizer
 # Real hub for `web-dev-live` (WO-04 NodePort 30080) and its development `ui` token

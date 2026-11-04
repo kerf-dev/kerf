@@ -3,6 +3,8 @@
 AGENT_IMAGE      ?= localhost:5005/resource-optimizer/agent
 AGENT_IMAGE_PULL ?= k3d-ro-registry:5005/resource-optimizer/agent
 AGENT_TAG        ?= dev-$(shell date +%Y%m%d-%H%M%S)
+# Expand once: a recursive $(shell date) would give docker push and helm different tags.
+AGENT_TAG        := $(AGENT_TAG)
 AGENT_CHART      := deploy/charts/agent
 AGENT_NAMESPACE  ?= resource-optimizer
 AGENT_CLUSTERS   ?= ro-spoke-1 ro-spoke-2
