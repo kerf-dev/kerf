@@ -85,10 +85,10 @@ func (r *Runner) Run(ctx context.Context) {
 	}
 	once := func() {
 		res := r.RunOnce(ctx)
-		failing := 0
+		var failing []string
 		for _, c := range res.Checks {
 			if c.Status != "pass" {
-				failing++
+				failing = append(failing, c.ID+"="+c.Status)
 			}
 		}
 		log.InfoContext(ctx, "self-checks done", "checks", len(res.Checks), "notPassing", failing)
