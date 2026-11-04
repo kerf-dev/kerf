@@ -28,12 +28,12 @@ import (
 const testCluster = "envtest"
 
 var (
-	k8s      client.Client
-	stub     *hubstub.Server
-	recsMu   sync.Mutex
-	recs     = map[string]hubclient.WorkloadRecommendation{}
-	testCtx  context.Context
-	skipEnv  string
+	k8s     client.Client
+	stub    *hubstub.Server
+	recsMu  sync.Mutex
+	recs    = map[string]hubclient.WorkloadRecommendation{}
+	testCtx context.Context
+	skipEnv string
 )
 
 // setRec adds or replaces the stub hub recommendation of a workload.
@@ -162,4 +162,3 @@ func eventually(t *testing.T, timeout time.Duration, what string, f func() error
 	}
 	t.Fatalf("%s: %v", what, err)
 }
-
