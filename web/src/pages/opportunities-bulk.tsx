@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { BanIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError, unwrap } from '@/api/client'
-import { writes } from '@/api/admin'
+import { useGitOnlyClusters, writes } from '@/api/admin'
 import { useAuth } from '@/api/auth'
 import { useClusters } from '@/api/queries'
 import type { Mode, RightsizingPolicySpec, WorkloadRow } from '@/api/types'
@@ -63,7 +63,11 @@ export function BulkBar({ selected, onClear }: { selected: Map<string, WorkloadR
       if (open === 'mode') setModes({})
     }
   }, [open])
-  const rows = [...selected.values()]
+  const git = useGitOnlyClusters()
+  const all = [...selected.values()]
+  // Workload overrides are hub policies, which Git-only clusters never receive (D-022): skip those.
+  const rows = all.filter((w) => !git.has(w.cluster))
+  const skipped = all.length - rows.length
   const savings = rows.reduce((s, w) => s + (w.monthlySavingsUSD?.total ?? 0), 0)
   const target = open === 'exclude' ? { cpu: 'off' as Mode, memory: 'off' as Mode } : modes
   const spec = prune({
@@ -115,8 +119,8 @@ export function BulkBar({ selected, onClear }: { selected: Map<string, WorkloadR
         testId="bulk-dialog"
         title={
           open === 'exclude'
-            ? `Exclude ${formatNumber(selected.size)} workloads`
-            : `Set the mode of ${formatNumber(selected.size)} workloads`
+            ? `Exclude ${formatNumber(rows.length)} workloads`
+            : `Set the mode of ${formatNumber(rows.length)} workloads`
         }
         description="Creates or updates one workload override per workload. Agents apply them on their next pull; annotations on a workload still win."
         prodClusters={prod}
@@ -127,7 +131,7 @@ export function BulkBar({ selected, onClear }: { selected: Map<string, WorkloadR
               ? 'Exclude workloads'
               : 'Set mode'
         }
-        confirmDisabled={!Object.keys(spec).length || !preview.data}
+        confirmDisabled={!rows.length || !Object.keys(spec).length || !preview.data}
         reasonPlaceholder={
           open === 'exclude'
             ? 'e.g. batch jobs owned by data-platform'
@@ -173,12 +177,22 @@ export function BulkBar({ selected, onClear }: { selected: Map<string, WorkloadR
         }}
         successMessage={
           open === 'exclude'
-            ? `Excluded ${formatNumber(selected.size)} workloads`
-            : `Mode set for ${formatNumber(selected.size)} workloads`
+            ? `Excluded ${formatNumber(rows.length)} workloads`
+            : `Mode set for ${formatNumber(rows.length)} workloads`
         }
       >
+        {skipped ? (
+          <Callout
+            tone="muted"
+            title={`${formatNumber(skipped)} selected workload${skipped === 1 ? ' is' : 's are'} skipped`}
+          >
+            They run on Git-only clusters (
+            {[...new Set(all.filter((w) => git.has(w.cluster)).map((w) => w.cluster))].join(', ')}), which
+            take their policies from Git.
+          </Callout>
+        ) : null}
         {open === 'mode' ? (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 @lg:grid-cols-2">
             <ModeField
               label="CPU mode"
               value={modes.cpu}

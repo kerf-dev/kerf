@@ -152,3 +152,28 @@ Screenshots: `docs/screenshots/` (`make web-screenshots`). New captures:
   every policy and on the defaults.
 - **Custom recommender profiles:** not in the contract (WO-19 deviation 7).
 - **Not redeployed** (as asked). When the hub supports login, run `make deploy-web` with a new tag.
+
+## WO-22b (admin polish)
+
+Branch `wo-22b-admin-polish` from origin/main `9325962`; deployed as `web:wo22b-59ff5d7`.
+- **Mode controls:** the CPU/memory segmented controls and the form grids use container queries (the
+  form column is a `@container`), so they stack by the width they actually get. Playwright checks
+  this at a 1060 px viewport (~800 px content).
+- **`/admin/clusters[/:name]`:** redirects to `/clusters[/:name]`. Nothing in the UI links to it.
+- **Git-only clusters (`policySource: git`):**
+  - Cluster defaults are read-only, with an explanation.
+  - The policy editor cannot target them.
+  - Defaults and policy editors say which clusters a change will not reach.
+  - The workload card hides override/exclude; Approve once stays, since approvals are not policies.
+  - Bulk actions skip those workloads.
+  - In the mock, `dr-eu-central-1` is Git-only.
+- **Pricing rates per cluster:** not added. No existing endpoint provides them; rates exist only per
+  recommendation (`WorkloadDetail.recommendation.pricing`).
+- **"Policy sync: Syncing"** is the hub's own `AgentConfigSync.inSync` flag, so the UI does not compare
+  versions itself. Live, both spokes settled to `inSync: true` (10:48 UTC). Two hub/agent oddities seen
+  read-only on ro-spoke-1:
+  1. `policyInventory` (reportedAt 10:46:48) still lists `orch-live-check`, which was deleted at
+     10:46:57. Inventory is only refreshed on full batches.
+  2. The hub's `configVersion` is `c-bd98dd27a0127536` both now and in that report, when the policy
+     still existed. Either the version does not cover that policy (it had no target clusters), or
+     the agent reported before materialising it. Worth a look in WO-20/WO-21.
