@@ -1,0 +1,10 @@
+{{- if .Values.prices }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pricing.fullname" . }}-prices
+  labels: {{- include "pricing.labels" . | nindent 4 }}
+data:
+  prices.yaml: |
+    {{- .Values.prices | nindent 4 }}
+{{- end }}

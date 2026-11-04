@@ -1,0 +1,94 @@
+{{- if not (has .Values.provider (list "static" "aws")) }}
+{{- fail "provider must be static or aws" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pricing.fullname" . }}
+  labels: {{- include "pricing.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels: {{- include "pricing.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "pricing.labels" . | nindent 8 }}
+      annotations:
+        checksum/prices: {{ .Values.prices | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "pricing.serviceAccountName" . }}
+      automountServiceAccountToken: {{ eq .Values.provider "aws" }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pricing
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --provider={{ .Values.provider }}
+            - --vm-url={{ .Values.vmURL }}
+            - --listen=:{{ .Values.service.port }}
+            - --interval={{ .Values.interval }}
+            - --price-ttl={{ .Values.priceTTL }}
+            - --node-lookback={{ .Values.nodeLookback }}
+            - --cpu-memory-weight={{ .Values.cpuMemoryWeight }}
+            - --cluster-name={{ .Values.clusterName }}
+            - --log-level={{ .Values.logLevel }}
+            {{- with .Values.clusters }}
+            - --clusters={{ . }}
+            {{- end }}
+            {{- with .Values.defaultRegion }}
+            - --default-region={{ . }}
+            {{- end }}
+            {{- if eq .Values.provider "aws" }}
+            - --aws-pricing-region={{ .Values.aws.pricingRegion }}
+            {{- end }}
+          {{- if and (eq .Values.provider "aws") .Values.aws.region }}
+          env:
+            - name: AWS_REGION
+              value: {{ .Values.aws.region | quote }}
+          {{- end }}
+          ports:
+            - name: http-metrics
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet: {path: /healthz, port: http-metrics}
+            periodSeconds: 20
+          readinessProbe:
+            httpGet: {path: /readyz, port: http-metrics}
+            periodSeconds: 10
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          {{- if .Values.prices }}
+          volumeMounts:
+            - name: prices
+              mountPath: /etc/resource-optimizer
+              readOnly: true
+          {{- end }}
+      {{- if .Values.prices }}
+      volumes:
+        - name: prices
+          configMap:
+            name: {{ include "pricing.fullname" . }}-prices
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

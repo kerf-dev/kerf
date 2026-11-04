@@ -1,0 +1,61 @@
+# Name of the cluster this runs in (the hub). Becomes the `cluster` label of the service's own
+# ro_pricing_* and Go runtime series; cost series carry the priced spoke's cluster instead.
+clusterName: ro-hub
+
+image:
+  repository: ghcr.io/tomer1983/resource-optimizer/pricing
+  tag: ""          # defaults to the chart appVersion
+  pullPolicy: IfNotPresent
+
+# static | aws
+provider: static
+# Static provider: inline price file (format of dev/prices.yaml). Empty = the file baked into the
+# image (/etc/resource-optimizer/prices.yaml, a copy of dev/prices.yaml).
+prices: ""
+
+aws:
+  # AWS Pricing API endpoint region (us-east-1, eu-central-1 or ap-south-1).
+  pricingRegion: us-east-1
+  # Region for SDK defaults (spot price calls use each node's region).
+  region: ""
+
+# Prometheus-compatible query URL holding the spokes' kube-state-metrics node series.
+vmURL: http://victoria-metrics.monitoring.svc:8428
+# Node discovery / pricing interval, and how long a fetched price is reused.
+interval: 5m
+priceTTL: 24h
+# A node is priced until this long after its last kube_node_labels sample.
+nodeLookback: 10m
+# Weight of 1 vCPU in GiB of memory for the cost split; "0" derives it per instance family (fallback 9).
+cpuMemoryWeight: "0"
+# PromQL regex of cluster label values to price; empty = every cluster with node metrics.
+clusters: ""
+# Region for nodes without topology.kubernetes.io/region or zone labels.
+defaultRegion: ""
+logLevel: info
+
+serviceAccount:
+  create: true
+  name: ""
+  # e.g. eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role> (pricing:GetProducts, ec2:DescribeSpotPriceHistory)
+  annotations: {}
+
+service:
+  port: 9090
+  # Scraped by the hub vmagent's annotated-services job (honor_labels: true keeps `cluster`).
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: /metrics
+
+replicas: 1
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
