@@ -33,7 +33,9 @@ func live(args []string) error {
 	scenario := fs.String("scenario", "tools/synth/scenarios/fleet-default.yaml", "scenario YAML file (the one that was backfilled)")
 	vmURL := fs.String("vm-url", "http://localhost:18428", "VictoriaMetrics base URL")
 	interval := fs.Duration("interval", time.Minute, "how often to write new samples")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	sc, err := synth.LoadScenario(*scenario)
 	if err != nil {
 		return err
@@ -52,8 +54,11 @@ func readLiveState(q *prom, sc *synth.Scenario) (liveState, error) {
 	for i, c := range sc.Clusters {
 		sel := fmt.Sprintf(`cluster=%q, scenario=%q`, c.Name, sc.Name)
 		start, err := q.scalar(fmt.Sprintf(`max(last_over_time(synth_scenario_start_timestamp_seconds{%s}[35d]))`, sel), now)
-		if err != nil || math.IsNaN(start) {
-			return st, fmt.Errorf("cluster %s: no backfill of scenario %q found in VictoriaMetrics (run `make synth-backfill` first): %v", c.Name, sc.Name, err)
+		if err != nil {
+			return st, fmt.Errorf("cluster %s: %w", c.Name, err)
+		}
+		if math.IsNaN(start) {
+			return st, fmt.Errorf("cluster %s: no backfill of scenario %q found in VictoriaMetrics (run `make synth-backfill` first)", c.Name, sc.Name)
 		}
 		anchor, _ := q.scalar(fmt.Sprintf(`max(last_over_time(synth_scenario_anchor_timestamp_seconds{%s}[35d]))`, sel), now)
 		seedStr, err := q.label(fmt.Sprintf(`last_over_time(synth_scenario_start_timestamp_seconds{%s}[35d])`, sel), "seed", now)
@@ -61,8 +66,11 @@ func readLiveState(q *prom, sc *synth.Scenario) (liveState, error) {
 			return st, err
 		}
 		last, err := q.scalar(fmt.Sprintf(`max(tlast_over_time(kube_node_labels{cluster=%q}[35d]))`, c.Name), now)
-		if err != nil || math.IsNaN(last) {
-			return st, fmt.Errorf("cluster %s: cannot find the last sample: %v", c.Name, err)
+		if err != nil {
+			return st, fmt.Errorf("cluster %s: last sample: %w", c.Name, err)
+		}
+		if math.IsNaN(last) {
+			return st, fmt.Errorf("cluster %s: no kube_node_labels samples found", c.Name)
 		}
 		cur := liveState{start: time.Unix(int64(start), 0), anchor: time.Unix(int64(anchor), 0), last: time.Unix(int64(last), 0)}
 		cur.seed, err = strconv.ParseInt(seedStr, 10, 64)
