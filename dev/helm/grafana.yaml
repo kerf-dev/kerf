@@ -1,0 +1,74 @@
+# grafana-community/grafana on ro-hub, namespace monitoring. NodePort 30300 -> http://localhost:13000
+# Dashboards: every *.json under the repo's dashboards/ directory is packed into ConfigMap
+# `grafana-dashboards` by dev/scripts/sync-dashboards.sh and file-provisioned into folder "resource-optimizer".
+adminUser: admin
+adminPassword: admin # dev only
+
+testFramework:
+  enabled: false
+initChownData:
+  enabled: false
+persistence:
+  enabled: false
+sidecar:
+  dashboards:
+    enabled: false
+  datasources:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
+  limits:
+    memory: 384Mi
+
+service:
+  type: NodePort
+  port: 80
+  nodePort: 30300
+
+grafana.ini:
+  analytics:
+    check_for_updates: false
+    check_for_plugin_updates: false
+    reporting_enabled: false
+  news:
+    news_feed_enabled: false
+  auth.anonymous:
+    enabled: true
+    org_role: Admin # dev only: edit dashboards without logging in
+  users:
+    default_theme: system
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: VictoriaMetrics
+        uid: victoriametrics
+        type: prometheus
+        access: proxy
+        url: http://victoria-metrics.monitoring.svc:8428
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: 30s
+          prometheusType: Prometheus
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: resource-optimizer
+        orgId: 1
+        folder: resource-optimizer
+        type: file
+        disableDeletion: false
+        allowUiUpdates: true
+        updateIntervalSeconds: 30
+        options:
+          path: /var/lib/grafana/dashboards/resource-optimizer
+
+dashboardsConfigMaps:
+  resource-optimizer: grafana-dashboards

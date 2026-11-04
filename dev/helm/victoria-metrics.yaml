@@ -1,0 +1,29 @@
+# vm/victoria-metrics-single on ro-hub, namespace monitoring. Service: victoria-metrics:8428 (NodePort 30428).
+server:
+  fullnameOverride: victoria-metrics
+  # Kept just above the longest synthetic backfill (WO-02: 30 days). VictoriaMetrics drops samples
+  # older than the retention period on ingest, so this cannot be shorter.
+  retentionPeriod: 35d
+  extraArgs:
+    # remote write / import from spokes and tools/synth must accept backfilled timestamps
+    search.latencyOffset: 5s
+    search.maxUniqueTimeseries: "1000000"
+  persistentVolume:
+    enabled: true
+    size: 4Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 768Mi
+  service:
+    annotations:
+      prometheus.io/scrape: "true" # picked up by the hub vmagent (dev/helm/vmagent-hub.yaml)
+      prometheus.io/port: "8428"
+    clusterIP: ""
+    type: NodePort
+    servicePort: 8428
+    nodePort: 30428
+  scrape:
+    enabled: false

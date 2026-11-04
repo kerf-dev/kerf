@@ -1,0 +1,52 @@
+# Hub cluster: VictoriaMetrics, Grafana, Postgres (+ hub/pricing charts via Tilt once they exist).
+# The k3s image is passed on the command line from dev/versions.env (K3S_IMAGE).
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: ro-hub
+servers: 1
+agents: 0
+kubeAPI:
+  hostIP: 127.0.0.1
+  hostPort: "16443"
+network: ro-dev
+registries:
+  use:
+    - k3d-ro-registry:5005        # images built by Tilt/e2e: push to localhost:5005
+    - k3d-ro-dockerio-cache:5000  # pull-through cache for docker.io, kept across dev-down
+  config: |
+    mirrors:
+      docker.io:
+        endpoint:
+          - http://k3d-ro-dockerio-cache:5000
+ports:
+  # host port -> NodePort on the hub node. See dev/README.md for the full table.
+  - port: 127.0.0.1:18428:30428 # VictoriaMetrics
+    nodeFilters: [server:0:direct]
+  - port: 127.0.0.1:13000:30300 # Grafana
+    nodeFilters: [server:0:direct]
+  - port: 127.0.0.1:15432:30432 # Postgres
+    nodeFilters: [server:0:direct]
+  - port: 127.0.0.1:18080:30080 # reserved: hub API (WO-04)
+    nodeFilters: [server:0:direct]
+  - port: 127.0.0.1:19090:30090 # reserved: pricing metrics (WO-03)
+    nodeFilters: [server:0:direct]
+options:
+  k3d:
+    wait: true
+    timeout: 180s
+    disableLoadbalancer: true
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik,servicelb,metrics-server
+        nodeFilters: [server:*]
+      - arg: --disable-helm-controller
+        nodeFilters: [server:*]
+      # Docker Desktop disks are often >85% full; don't let kubelet evict/taint for that in dev.
+      - arg: --kubelet-arg=eviction-hard=imagefs.available<1%,nodefs.available<1%
+        nodeFilters: [server:*]
+      - arg: --kubelet-arg=eviction-minimum-reclaim=imagefs.available=1%,nodefs.available=1%
+        nodeFilters: [server:*]
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: false

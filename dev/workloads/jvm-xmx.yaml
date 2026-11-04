@@ -1,0 +1,43 @@
+# JVM with a fixed -Xmx128m on the command line: the heap cannot use the generous memory request, so
+# memory looks overprovisioned, but going below Xmx + native overhead would OOM it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jvm-xmx
+  labels:
+    app: jvm-xmx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jvm-xmx
+  template:
+    metadata:
+      labels:
+        app: jvm-xmx
+    spec:
+      containers:
+        - name: app
+          image: eclipse-temurin:21.0.13_9-jdk-alpine-3.23
+          command: ["java", "-Xmx128m", "-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1", "/app/Load.java"]
+          env:
+            - name: LIVE_MB
+              value: "48"
+          resizePolicy:
+            - resourceName: cpu
+              restartPolicy: NotRequired
+            - resourceName: memory
+              restartPolicy: RestartContainer
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 768Mi
+          volumeMounts:
+            - name: src
+              mountPath: /app
+      volumes:
+        - name: src
+          configMap:
+            name: jvm-app
