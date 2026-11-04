@@ -17,14 +17,15 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-08 | Health watch and rollback | 2 | done | local_11de0a00 | wo-08-health | – | Merged incl. D-017 |
 | WO-08b | Agent fixes: dedup check, double release, non-UUID ids | 2 | done | local_11de0a00 | wo-08b-agent-fixes | – | |
 | WO-09 | End-to-end suite incl. Argo CD | 2 | done | local_038e4612 | wo-09-e2e | – | Merged; 2 consecutive passes (12.7/14.4 min) |
-| WO-09b | E2E: webhook (8) and rollback (10) scenarios | 2 | in-progress | local_038e4612 | wo-09b-e2e | – | |
+| WO-09b | E2E: webhook (8) and rollback (10) scenarios | 2 | done | local_038e4612 | wo-09b-e2e | – | |
 | WO-14 | Web UI | 1 | done | local_9fadb724 | wo-14-web | – | Merged; http://localhost:19090 |
 | WO-14c | Web polish: deps, D-016 consumption | 1 | done | local_9fadb724 | wo-14c-web-polish | – | Merged; npm audit clean |
 | WO-12 | JVM-aware memory | 3 | done | local_14a53b46 | wo-12-jvm | – | |
-| WO-13 | Single replica / OnDelete | 3 | in-progress | local_ed8cb3f5 | wo-13-single-replica | – | |
-| WO-10 | Deferred strategy and windows | 3 | in-progress | local_11de0a00 | wo-10-windows | – | |
-| WO-11 | HPA coordination | 3 | in-progress | local_9125207c | wo-11-hpa | – | |
-| WO-14d | UI: recommendation history series, recompute, D-019 | 2 | in-progress | local_9fadb724 | wo-14d-web | – | |
+| WO-13 | Single replica / OnDelete | 3 | in-progress | local_ed8cb3f5 | wo-13-single-replica | – | live checks on ro-spoke-1 |
+| WO-04d | Hub: trend partial-day bucket, intermittent default pricing | 2 | todo | local_9125207c | wo-04d-hub | WO-11 live check | |
+| WO-10 | Deferred strategy and windows | 3 | review | local_11de0a00 | wo-10-windows | – | |
+| WO-11 | HPA coordination | 3 | review | local_9125207c | wo-11-hpa | – | |
+| WO-14d | UI: recommendation history series, recompute, D-019 | 2 | done | local_9fadb724 | wo-14d-web | – | |
 
 ## Open questions for the user
 - Token with GitHub `workflow` scope needed to activate `ci/github-workflows/` (user, morning).
@@ -39,3 +40,4 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-04 Phase-3 work-orders WO-10..WO-13 written; WO-12 and WO-13 started.
 - 2026-11-04 Merged WO-04c (hub wo04c-1 already live) and WO-08b; `make ci` exit 0. WO-09b first run: 8 and 10 pass; 11 broke when WO-12 redeployed the spoke-2 agent mid-run — spoke deploys frozen until the rerun ends. WO-10 and WO-11 started.
 - 2026-11-04 Incident 04:30–04:43 UTC: WO-11 deployed the hub with a second migration 0003 (WO-12's 0003 already applied) → recommendations 500s; WO-11 rolled back to WO-12's image. Fix: orchestrator assigns migration numbers (0003 WO-12, 0004 WO-11, 0005 WO-10) and is the only one deploying the hub (CLAUDE.md). WO-12 merged (126d69e), make ci green.
+- 2026-11-04 Merged WO-09b (e2e: 15 tests pass twice, 12–15 min), WO-11 (0004), WO-10 (0005; reconciler conflict with WO-11 resolved by hand), WO-14d. `make ci` with Postgres tests exit 0; web typecheck + 49 unit tests pass. Deployed everything from main as main-ae156de (hub, web, CRDs, agent, webhook); hub/web smoke 200. WO-10/WO-11 live checks pending (status review).

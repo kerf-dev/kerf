@@ -99,3 +99,13 @@ and Tilt connect agents without manual Secret handling. Real clusters use an ext
 ## D-019 Admin recompute trigger — Accepted (2026-11-04)
 `POST /v1/admin/recompute` (role `admin`, optional `?cluster=`) starts a recommender run immediately and returns
 202 with the run id. Used by the e2e suite and operators; the scheduled interval is unchanged.
+
+## D-020 HPA coupling lifted — Accepted (2026-11-04)
+WO-11 replaces D-011's audit-only rule: workloads with a CPU/memory utilization HPA get a request change together
+with a new HPA `averageUtilization` target (kept within 40–90 %), applied in one `rollout`. HPAs on external/custom
+metrics or pinned at `maxReplicas` stay audit-only. D-011 remains in force for workloads where that guard applies.
+
+## D-021 Hub deploys and migrations are centralized — Accepted (2026-11-04)
+After two hub outages caused by parallel deploys with colliding migration numbers, only the orchestrator deploys the
+hub (from `main`, after merging), and the orchestrator assigns `db/migrations` numbers. Spoke deploys check that no
+`make e2e` is running first.
