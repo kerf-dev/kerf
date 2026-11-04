@@ -33,7 +33,9 @@ var (
 	recsMu  sync.Mutex
 	recs    = map[string]hubclient.WorkloadRecommendation{}
 	testCtx context.Context
-	skipEnv string
+	// testReconciler is the reconciler under test.
+	testReconciler *Reconciler
+	skipEnv        string
 )
 
 // setRec adds or replaces the stub hub recommendation of a workload.
@@ -115,6 +117,7 @@ func runSuite(m *testing.M) int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	testCtx = ctx
+	testReconciler = r
 	trigger, err := r.SetupWithManager(ctx, mgr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "setup:", err)

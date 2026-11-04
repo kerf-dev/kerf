@@ -42,7 +42,6 @@ const (
 	condReasonNotBlocked = "NotBlocked"
 	condReasonApplying   = "Applying"
 	condReasonPending    = "Pending"
-	condReasonReleased   = "Released"
 )
 
 // Config configures the reconciler.
@@ -74,7 +73,7 @@ type Reconciler struct {
 
 	mu sync.Mutex
 	// last holds, per workload and dedup slot, the signature of the last event emitted there (D-017).
-	last map[string]string
+	last map[string]signature
 }
 
 func requestName(kind v1alpha1.WorkloadKind, name string) string { return string(kind) + "/" + name }
@@ -273,14 +272,19 @@ func (w *run) release() error {
 		}
 		details["previousMode"], details["newMode"] = string(prevMode), string(newMode)
 	}
-	w.emit(hubclient.Event{Type: hubclient.EventReleased, Reason: v1alpha1.ReasonModeChanged,
-		Strategy: string(w.rsr.Spec.Strategy), Resources: left, Details: details,
-		RecommendationID: w.rsr.Status.AppliedRecommendationID,
-		Message:          fmt.Sprintf("%s left auto-patch; field ownership released", strings.Join(left, " and "))}, "", nil)
 	if len(auto) == 0 {
 		w.rsr.Status.Phase = v1alpha1.PhaseReleased
 		w.reason, w.message = v1alpha1.ReasonModeChanged, "workload left auto-patch; field ownership released"
 	}
+	// Persist the new effective modes before emitting: the event is edge-triggered on the stored
+	// modes, so a reconcile that fails later must not emit it again (exactly once).
+	if err := w.writeStatus(); err != nil {
+		return fmt.Errorf("record release: %w", err)
+	}
+	w.emit(hubclient.Event{Type: hubclient.EventReleased, Reason: v1alpha1.ReasonModeChanged,
+		Strategy: string(w.rsr.Spec.Strategy), Resources: left, Details: details,
+		RecommendationID: w.rsr.Status.AppliedRecommendationID,
+		Message:          fmt.Sprintf("%s left auto-patch; field ownership released", strings.Join(left, " and "))}, "", nil)
 	return nil
 }
 
@@ -432,14 +436,14 @@ func (w *run) decide() (ctrl.Result, error) {
 			}
 		}
 		w.emit(hubclient.Event{Type: evType, Reason: dec.Reason, Message: dec.Message,
-			RecommendationID: w.rec.ID, Resources: refusedResources(dec)}, slotDecision, dec.Proposed)
+			RecommendationID: w.rec.ID, Resources: refusedResources(dec)}, slotDecision, recValues(w.rec))
 		return ctrl.Result{}, nil
 	}
 
 	// Apply.
 	for _, ref := range dec.Refusals {
 		w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: ref.Reason, Message: ref.Message,
-			RecommendationID: w.rec.ID, Resources: []string{ref.Resource}}, "refusal/"+ref.Resource, dec.Proposed)
+			RecommendationID: w.rec.ID, Resources: []string{ref.Resource}}, "refusal/"+ref.Resource, recValues(w.rec))
 	}
 	if w.strategy == v1alpha1.StrategyInPlace {
 		res, err := w.startInPlace(dec)
@@ -631,7 +635,7 @@ func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous 
 	if err := apply.ApplyTemplate(w.ctx, r.Client, w.obj, w.kind, targets, own, w.ownAnnotations(recID, previous)); err != nil {
 		w.reason, w.message = v1alpha1.ReasonApplyError, err.Error()
 		w.emit(hubclient.Event{Type: hubclient.EventFailed, Reason: v1alpha1.ReasonApplyError, RecommendationID: recID,
-			Strategy: string(strategy), Message: err.Error(), Details: map[string]string{"error": err.Error()}}, "failed/"+v1alpha1.ReasonApplyError, recID)
+			Strategy: string(strategy), Message: err.Error(), Details: map[string]string{"error": err.Error()}}, "failed/"+v1alpha1.ReasonApplyError+"/"+recID, nil)
 		return fmt.Errorf("apply %s: %w", w.k, err)
 	}
 	changes := diff(previous, targets, own)
@@ -684,7 +688,7 @@ func (w *run) startInPlace(dec guardrails.Decision) (ctrl.Result, error) {
 		}
 		w.reason, w.message = v1alpha1.ReasonUnsupportedNode, why
 		w.emit(hubclient.Event{Type: hubclient.EventBlocked, Reason: v1alpha1.ReasonUnsupportedNode,
-			RecommendationID: w.rec.ID, Message: why}, slotDecision, dec.Targets)
+			RecommendationID: w.rec.ID, Message: why}, slotDecision, recValues(w.rec))
 		return ctrl.Result{}, nil
 	}
 	previous := w.liveValues()
@@ -730,7 +734,7 @@ func (w *run) progressInPlace() (ctrl.Result, error) {
 					continue
 				}
 				w.emit(hubclient.Event{Type: hubclient.EventFailed, Reason: v1alpha1.ReasonResizeError, RecommendationID: recID,
-					Strategy: string(v1alpha1.StrategyInPlace), Message: err.Error(), Details: map[string]string{"error": err.Error()}}, "failed/"+v1alpha1.ReasonResizeError, recID)
+					Strategy: string(v1alpha1.StrategyInPlace), Message: err.Error(), Details: map[string]string{"error": err.Error()}}, "failed/"+v1alpha1.ReasonResizeError+"/"+recID, nil)
 				return ctrl.Result{}, fmt.Errorf("resize pod %s: %w", pods[i].Name, err)
 			}
 			done = false
@@ -1020,11 +1024,9 @@ func (w *run) writeStatus() error {
 		}
 		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionTrue, v1alpha1.ReasonRecommendationApplied, applied)
 	} else {
-		r := reason
-		if st.Phase == v1alpha1.PhaseReleased {
-			r = condReasonReleased
-		}
-		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionFalse, r, message)
+		// The reason is the latest decision (e.g. ModeAudit for a Released workload): the phase
+		// already says Released, and the reason lets a restarted agent recognise events it emitted.
+		setCond(st, v1alpha1.ConditionApplied, metav1.ConditionFalse, reason, message)
 	}
 	if blocked {
 		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionTrue, reason, message)
@@ -1071,27 +1073,107 @@ func setCond(st *v1alpha1.RightsizingRecommendationStatus, typ string, status me
 // slotDecision is the dedup slot of workload-level skipped/blocked events.
 const slotDecision = "decision"
 
+// signature identifies a de-duplicated event: type, reason and resources must match exactly, the
+// values (the hub's recommended values) within the agent's tolerance.
+type signature struct {
+	head   string
+	values []v1alpha1.ContainerRecommendation
+}
+
+// recValues are the hub's recommended values of a recommendation, independent of the live
+// values (which change with the phase), for de-duplication.
+func recValues(rec *hubclient.WorkloadRecommendation) []v1alpha1.ContainerRecommendation {
+	if rec == nil {
+		return nil
+	}
+	var out []v1alpha1.ContainerRecommendation
+	for _, c := range rec.Containers {
+		cr := v1alpha1.ContainerRecommendation{ContainerResources: v1alpha1.ContainerResources{Name: c.Name}}
+		conv := func(v *hubclient.ResourceValues) corev1.ResourceList {
+			if v == nil {
+				return nil
+			}
+			l := corev1.ResourceList{}
+			for res, s := range map[corev1.ResourceName]string{corev1.ResourceCPU: v.CPU, corev1.ResourceMemory: v.Memory} {
+				if q, err := resource.ParseQuantity(s); err == nil && s != "" {
+					l[res] = q
+				}
+			}
+			return l
+		}
+		cr.Requests, cr.Limits = conv(c.Recommended.Requests), conv(c.Recommended.Limits)
+		for _, r := range c.RemoveLimits {
+			cr.RemoveLimits = append(cr.RemoveLimits, corev1.ResourceName(r))
+		}
+		out = append(out, cr)
+	}
+	return out
+}
+
+// valuesClose reports whether two value sets have the same containers, resources and limit
+// removals, with every quantity within tol (relative) of the other.
+func valuesClose(a, b []v1alpha1.ContainerRecommendation, tol float64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	near := func(x, y corev1.ResourceList) bool {
+		if len(x) != len(y) {
+			return false
+		}
+		for k, qx := range x {
+			qy, ok := y[k]
+			if !ok {
+				return false
+			}
+			fx, fy := float64(qx.MilliValue()), float64(qy.MilliValue())
+			if fx == fy {
+				continue
+			}
+			if m := max(fx, fy); m == 0 || (fx-fy)/m > tol || (fy-fx)/m > tol {
+				return false
+			}
+		}
+		return true
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || !near(a[i].Requests, b[i].Requests) || !near(a[i].Limits, b[i].Limits) ||
+			!slices.Equal(a[i].RemoveLimits, b[i].RemoveLimits) {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *Reconciler) tolerance() float64 {
+	if r.Cfg.Tolerance > 0 {
+		return r.Cfg.Tolerance
+	}
+	return guardrails.DefaultTolerance
+}
+
 // emit sends an event to the hub buffer and records it as a Kubernetes Event on the RSR.
 //
 // With a non-empty slot the event is de-duplicated (D-017): it is emitted only when its type,
-// reason, resources or the values it is about (proposed values for skipped/blocked) differ from
-// the last event emitted in that slot for the workload. A new recommendation id alone does not
-// re-emit. An applied, rolled_back or released event resets the workload's slots.
-func (w *run) emit(e hubclient.Event, slot string, values any) {
+// reason or resources differ from the last event emitted in that slot for the workload, or the
+// hub's recommended values moved by more than the tolerance. A new recommendation id alone does
+// not re-emit. An applied, rolled_back or released event resets the workload's slots.
+func (w *run) emit(e hubclient.Event, slot string, values []v1alpha1.ContainerRecommendation) {
 	r := w.r
 	e.Workload = hubclient.WorkloadRef{Namespace: w.k.Namespace, Kind: w.k.Kind, Name: w.k.Name}
 	if slot != "" {
-		vb, _ := json.Marshal(values)
-		sig := strings.Join([]string{e.Type, e.Reason, strings.Join(e.Resources, ","), string(vb)}, "|")
+		sig := signature{head: strings.Join([]string{e.Type, e.Reason, strings.Join(e.Resources, ",")}, "|"), values: values}
 		key := w.k.String() + "|" + slot
 		r.mu.Lock()
 		if r.last == nil {
-			r.last = map[string]string{}
+			r.last = map[string]signature{}
 		}
 		last, known := r.last[key]
-		r.last[key] = sig
+		same := known && last.head == sig.head && valuesClose(last.values, sig.values, r.tolerance())
+		if !same {
+			r.last[key] = sig
+		}
 		r.mu.Unlock()
-		if last == sig || (!known && slot == slotDecision && w.alreadyRecorded(e, vb)) {
+		if same || (!known && slot == slotDecision && w.alreadyRecorded(e)) {
 			return
 		}
 	}
@@ -1152,16 +1234,14 @@ func (r *Reconciler) Emit(rsr *v1alpha1.RightsizingRecommendation, obj client.Ob
 }
 
 // alreadyRecorded makes the decision slot survive agent restarts: the previous status already
-// carries this reason and the spec already holds these values.
-func (w *run) alreadyRecorded(e hubclient.Event, values []byte) bool {
+// carries this reason, and (unless values are live) the spec already held values within the
+// tolerance of the ones just written.
+func (w *run) alreadyRecorded(e hubclient.Event) bool {
 	if w.rsr == nil {
 		return false
 	}
-	if w.prev.Phase != v1alpha1.PhaseApplied {
-		spec, _ := json.Marshal(w.prevSpec.Containers)
-		if string(spec) != string(values) {
-			return false
-		}
+	if w.prev.Phase != v1alpha1.PhaseApplied && !valuesClose(w.prevSpec.Containers, w.rsr.Spec.Containers, w.r.tolerance()) {
+		return false
 	}
 	switch e.Type {
 	case hubclient.EventBlocked:
