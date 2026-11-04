@@ -16,10 +16,12 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
 	"github.com/tomer1983/resource-optimizer/internal/pricing"
 )
 
@@ -37,6 +39,8 @@ type options struct {
 	selfCluster   string
 	pricingRegion string
 	logLevel      string
+	databaseURL   string
+	secretsKey    string
 }
 
 func main() {
@@ -55,6 +59,8 @@ func main() {
 	fs.StringVar(&o.selfCluster, "cluster-name", envOr("CLUSTER_NAME", "ro-hub"), "cluster this service runs in (cluster label of its own ro_pricing_* series)")
 	fs.StringVar(&o.pricingRegion, "aws-pricing-region", pricing.DefaultPricingRegion, "aws provider: AWS Pricing API endpoint region")
 	fs.StringVar(&o.logLevel, "log-level", envOr("LOG_LEVEL", "info"), "debug, info, warn or error")
+	fs.StringVar(&o.databaseURL, "database-url", envOr("PRICING_DATABASE_URL", ""), "hub Postgres URL: read clusters' metrics bindings and datasources (D-025); empty = only --vm-url")
+	fs.StringVar(&o.secretsKey, "secrets-key-file", envOr("PRICING_SECRETS_KEY_FILE", ""), "file with the hub's datasource secrets key (needed with --database-url)")
 	_ = fs.Parse(os.Args[1:])
 
 	var lvl slog.Level
@@ -81,7 +87,15 @@ func run(ctx context.Context, o options, log *slog.Logger) error {
 	}
 	provider := pricing.NewCached(base, o.priceTTL, log)
 	splitter := &pricing.Splitter{Provider: provider, Fixed: o.cpuWeight, Log: log}
-	disc := &pricing.Discovery{VMURL: o.vmURL, ClusterRegex: o.clusters, DefaultRegion: o.defaultRegion, Lookback: o.nodeLookback}
+	disc := &pricing.Discovery{VMURL: o.vmURL, ClusterRegex: o.clusters, DefaultRegion: o.defaultRegion, Lookback: o.nodeLookback, Log: log}
+	if o.databaseURL != "" {
+		targets, closeDB, err := bindingTargets(ctx, o)
+		if err != nil {
+			return err
+		}
+		defer closeDB()
+		disc.Targets = targets
+	}
 	exp := pricing.NewExporter(disc, provider, splitter, log)
 
 	reg := prometheus.NewRegistry()
@@ -133,6 +147,24 @@ func newProvider(ctx context.Context, o options) (pricing.Provider, error) {
 		return pricing.NewAWS(cfg, o.pricingRegion), nil
 	}
 	return nil, fmt.Errorf("unknown --provider %q (want static or aws)", o.provider)
+}
+
+// bindingTargets reads metrics bindings and datasources from the hub database (read-only), so
+// clusters bound to other datasources are discovered there (D-025).
+func bindingTargets(ctx context.Context, o options) (*pricing.RegistryTargets, func(), error) {
+	if o.secretsKey == "" {
+		return nil, nil, errors.New("--database-url needs --secrets-key-file")
+	}
+	cipher, err := datasource.LoadCipher(o.secretsKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	pool, err := pgxpool.New(ctx, o.databaseURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open database: %w", err)
+	}
+	pg := &datasource.PG{DB: pool}
+	return &pricing.RegistryTargets{Registry: &datasource.Registry{Repo: pg, Cipher: cipher}, Bindings: pg}, pool.Close, nil
 }
 
 func envOr(k, def string) string {

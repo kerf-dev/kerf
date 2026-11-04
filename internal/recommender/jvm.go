@@ -95,7 +95,7 @@ func IsJVMImage(image string) bool { return jvmImage.MatchString(image) }
 // ContainerImages returns the images of each workload container (kube_pod_container_info).
 func (q Queries) ContainerImages(lookback time.Duration) string {
 	wrap := lastOver(lookback)
-	perPod := fmt.Sprintf("max by (cluster, namespace, pod, container, image) (%s)", wrap("kube_pod_container_info"+q.sel()))
+	perPod := fmt.Sprintf("max by (cluster, namespace, pod, container, image) (%s)", q.rel(wrap("kube_pod_container_info"+q.sel())))
 	return fmt.Sprintf("max by (%s, container, image) (\n%s\n* on (cluster, namespace, pod) group_left (workload_kind, workload)\n%s\n)",
 		WorkloadLabels, perPod, q.PodWorkload(nil, wrap))
 }
