@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -23,7 +25,9 @@ func verify(args []string) error {
 	var c common
 	c.register(fs, "tools/synth/scenarios/fleet-default.yaml")
 	vmURL := fs.String("vm-url", "http://localhost:18428", "VictoriaMetrics base URL")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	g, err := c.generator()
 	if err != nil {
 		return err
@@ -31,8 +35,11 @@ func verify(args []string) error {
 	q := &prom{base: strings.TrimRight(*vmURL, "/"), client: &http.Client{Timeout: 2 * time.Minute}}
 	// The data ends at the backfill time, not now: evaluate at the newest sample.
 	end, err := q.scalar(`max(tlast_over_time(kube_node_labels{cluster=~"synth-.*"}[35d]))`, time.Now())
-	if err != nil || math.IsNaN(end) {
-		return fmt.Errorf("no synthetic data found: %v", err)
+	if err != nil {
+		return fmt.Errorf("looking for synthetic data: %w", err)
+	}
+	if math.IsNaN(end) {
+		return errors.New("no synthetic data found in VictoriaMetrics")
 	}
 	at := time.Unix(int64(end), 0)
 	days := g.Scenario.Days
@@ -177,10 +184,19 @@ type prom struct {
 	client *http.Client
 }
 
+func (p *prom) post(form url.Values) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, p.base+"/api/v1/query", strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return p.client.Do(req)
+}
+
 // label returns label `name` of the single series an instant query returns.
 func (p *prom) label(expr, name string, at time.Time) (string, error) {
 	form := url.Values{"query": {expr}, "time": {strconv.FormatInt(at.Unix(), 10)}}
-	resp, err := p.client.PostForm(p.base+"/api/v1/query", form)
+	resp, err := p.post(form)
 	if err != nil {
 		return "", err
 	}
@@ -204,7 +220,7 @@ func (p *prom) label(expr, name string, at time.Time) (string, error) {
 // scalar evaluates an instant query and returns the single value (NaN for an empty result).
 func (p *prom) scalar(expr string, at time.Time) (float64, error) {
 	form := url.Values{"query": {expr}, "time": {strconv.FormatInt(at.Unix(), 10)}}
-	resp, err := p.client.PostForm(p.base+"/api/v1/query", form)
+	resp, err := p.post(form)
 	if err != nil {
 		return 0, err
 	}
@@ -229,7 +245,9 @@ func (p *prom) scalar(expr string, at time.Time) (float64, error) {
 	}
 	if r.Data.ResultType == "scalar" {
 		var v [2]any
-		json.Unmarshal(r.Data.Result, &v)
+		if err := json.Unmarshal(r.Data.Result, &v); err != nil {
+			return 0, err
+		}
 		vec = append(vec, struct {
 			Value [2]any `json:"value"`
 		}{v})
