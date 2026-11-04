@@ -137,6 +137,33 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              hpa:
+                description: |-
+                  HPA is the HPA utilization target applied together with the containers (WO-11): set when
+                  the workload's HPA scales on the utilization of a resource whose requests change.
+                properties:
+                  averageUtilization:
+                    description: AverageUtilization target in percent.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  name:
+                    description: Name of the HPA, in the same namespace.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                  resource:
+                    description: Resource the HPA scales on (Resource metric, Utilization
+                      target).
+                    enum:
+                    - cpu
+                    - memory
+                    type: string
+                required:
+                - averageUtilization
+                - name
+                - resource
+                type: object
               source:
                 description: Source is the hub recommendation this was built from.
                 properties:
@@ -404,6 +431,13 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              previousHPATarget:
+                description: |-
+                  PreviousHPATarget is the HPA target that was live before the most recent apply (WO-11),
+                  restored by a rollback together with the containers.
+                format: int32
+                minimum: 1
+                type: integer
               rolledBackAt:
                 description: RolledBackAt is when the most recent rollback happened
                   (cooldown for decreases starts here).
