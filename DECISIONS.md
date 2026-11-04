@@ -126,3 +126,10 @@ model. The machine tokens (`agent`, `ui`, `admin`) are unchanged.
 ## D-024 Approve once — Accepted (2026-11-04, user)
 Operators can approve the current recommendation of a workload in `audit` mode. The hub records the approval for
 that recommendation id. The agent applies it once, with all guardrails, and the workload stays in audit.
+
+## D-025 Metrics sources and cluster readiness — Accepted (2026-11-04)
+Each cluster is bound to a datasource (Prometheus-compatible: Prometheus, VictoriaMetrics, Thanos, Mimir, AMP) with
+a configurable cluster label key/value and extra matchers. Query results are re-labelled to the registered cluster
+name. Readiness is computed from hub-side metrics checks and agent self-checks (RBAC per capability, resize support,
+webhook, Argo CD config). `auto-patch` requires the state *Automation ready*; an admin can override it with a
+reason, and the override is audited. Plan: `docs/plans/cluster-onboarding.md`.
