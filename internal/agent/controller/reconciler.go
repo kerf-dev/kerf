@@ -1279,6 +1279,7 @@ func (w *run) report() {
 		cr := workload.ToAPI(c.Name, c.Resources)
 		st.Live = append(st.Live, toHubResources(cr))
 	}
+	st.JVM = workload.JVMReport(live, w.eff.JVMDetect)
 	if w.rsr != nil {
 		st.Phase = string(w.rsr.Status.Phase)
 		if st.Phase == "" {

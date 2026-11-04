@@ -179,9 +179,14 @@ func recommendContainer(c ContainerData, w WorkloadData, req Request, strategy S
 				e.Notes = append(e.Notes, "oom-killed; not decreased")
 			}
 		}
+		limitFollows := s.MemoryLimitEqualsRequest == nil || *s.MemoryLimitEqualsRequest
+		jvm := planJVM(c, cfg.JVM)
+		if jvm != nil {
+			v = jvm.raiseRequest(v, limitFollows, e)
+		}
 		memReq = roundUp(v, cfg.MemoryStepBytes)
 		e.RoundedTo = FormatMemory(cfg.MemoryStepBytes)
-		if s.MemoryLimitEqualsRequest == nil || *s.MemoryLimitEqualsRequest {
+		if limitFollows {
 			memLim = memReq
 			e.LimitRule = "equals request"
 		} else {
@@ -196,6 +201,11 @@ func recommendContainer(c ContainerData, w WorkloadData, req Request, strategy S
 					memLim = memReq
 					e.Notes = append(e.Notes, "limit raised to the request")
 				}
+			}
+		}
+		if jvm != nil {
+			for _, f := range jvm.explain(memLim, e) {
+				flags[f] = true
 			}
 		}
 		expl.Memory = e
