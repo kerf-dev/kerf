@@ -1,0 +1,2839 @@
+{
+  "uid": "ro-workload",
+  "title": "Rightsizing / Workload drill-down",
+  "description": "Why a workload got its recommendation: usage percentiles over the window, current and recommended requests/limits, throttling, OOM kills and automation events.",
+  "tags": [
+    "resource-optimizer"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "timezone": "browser",
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "weekStart": "",
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "links": [
+    {
+      "title": "resource-optimizer",
+      "type": "dashboards",
+      "tags": [
+        "resource-optimizer"
+      ],
+      "asDropdown": false,
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link",
+      "tooltip": "",
+      "url": ""
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "name": "Automation events",
+        "enable": true,
+        "hide": false,
+        "iconColor": "#FF9830",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "expr": "sum by (type, reason) (increase(ro_actions_total{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}[2m])) > 0",
+        "step": "1m",
+        "titleFormat": "{{type}}",
+        "textFormat": "{{reason}}",
+        "tagKeys": "type,reason",
+        "useValueForTime": false,
+        "refId": "Anno"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "selected": true,
+          "text": "VictoriaMetrics",
+          "value": "victoriametrics"
+        },
+        "regex": "",
+        "hide": 0,
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false,
+        "options": [],
+        "description": "Prometheus-compatible data source with the hub's VictoriaMetrics (or Prometheus)."
+      },
+      {
+        "name": "cluster",
+        "label": "Cluster",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(ro_workload_mode, cluster)",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(ro_workload_mode, cluster)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "regex": "",
+        "hide": 0,
+        "multi": false,
+        "includeAll": false,
+        "options": [],
+        "description": "",
+        "current": {}
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(ro_workload_mode{cluster=\"$cluster\"}, namespace)",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(ro_workload_mode{cluster=\"$cluster\"}, namespace)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "regex": "",
+        "hide": 0,
+        "multi": false,
+        "includeAll": false,
+        "options": [],
+        "description": "",
+        "current": {}
+      },
+      {
+        "name": "workload",
+        "label": "Workload",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(ro_workload_mode{cluster=\"$cluster\", namespace=\"$namespace\"}, workload)",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(ro_workload_mode{cluster=\"$cluster\", namespace=\"$namespace\"}, workload)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "regex": "",
+        "hide": 0,
+        "multi": false,
+        "includeAll": false,
+        "options": [],
+        "description": "",
+        "current": {}
+      },
+      {
+        "name": "kind",
+        "label": "Kind",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(ro_workload_mode{cluster=\"$cluster\", namespace=\"$namespace\", workload=\"$workload\"}, workload_kind)",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(ro_workload_mode{cluster=\"$cluster\", namespace=\"$namespace\", workload=\"$workload\"}, workload_kind)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "regex": "",
+        "hide": 0,
+        "multi": false,
+        "includeAll": false,
+        "options": [],
+        "description": "Workload kind (normally a single value).",
+        "current": {}
+      },
+      {
+        "name": "container",
+        "label": "Container",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(ro_recommendation_memory_bytes{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}, container)",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(ro_recommendation_memory_bytes{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}, container)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "regex": "",
+        "hide": 0,
+        "multi": true,
+        "includeAll": true,
+        "options": [],
+        "description": "",
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
+      },
+      {
+        "name": "window",
+        "label": "Percentile window",
+        "type": "custom",
+        "hide": 0,
+        "query": "7d,14d,28d",
+        "options": [
+          {
+            "text": "7d",
+            "value": "7d",
+            "selected": false
+          },
+          {
+            "text": "14d",
+            "value": "14d",
+            "selected": true
+          },
+          {
+            "text": "28d",
+            "value": "28d",
+            "selected": false
+          }
+        ],
+        "current": {
+          "selected": true,
+          "text": "14d",
+          "value": "14d"
+        },
+        "multi": false,
+        "includeAll": false,
+        "description": "Window of the P50/P95/P99/max lines. Profiles: dev 7d, production 14d, high-availability 28d."
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Recommendation",
+      "collapsed": false,
+      "panels": [],
+      "id": 1,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Monthly savings",
+      "description": "Estimated monthly savings of the selected containers (CPU + memory); negative = increase.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\"}))",
+          "legendFormat": "Savings",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 2,
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "–"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "id": 2,
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Confidence",
+      "description": "Recommendation confidence 0–1 = 0.6 × coverage + 0.2 × samples + 0.2 × stability. < 0.5 is flagged low-confidence; the agent applies at ≥ 0.7 by default.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max(ro_recommendation_confidence{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"})",
+          "legendFormat": "Confidence",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.7
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "–",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Data coverage",
+      "description": "Fraction of the recommendation window that has usage samples.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max(ro_recommendation_data_coverage_ratio{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"})",
+          "legendFormat": "Coverage",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 0.9
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "–",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "id": 4,
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Replicas",
+      "description": "Average number of running pods the hub used to compute savings.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max(ro_recommendation_average_replicas{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"})",
+          "legendFormat": "Replicas",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "–"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Recommendation age",
+      "description": "Time since the current recommendation was generated.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "time() - max(ro_recommendation_generated_timestamp_seconds{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"})",
+          "legendFormat": "Age",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 93600
+              },
+              {
+                "color": "red",
+                "value": 172800
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "–"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "id": 6,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "CPU mode",
+      "description": "Effective cpu mode (off / audit / auto-patch) as reported by the agent.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(\n  (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", resource=\"cpu\", mode=\"auto-patch\"}) == 1) * 2\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", resource=\"cpu\", mode=\"audit\"}) == 1) * 1\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", resource=\"cpu\", mode=\"off\"}) == 1) * 0\n)",
+          "legendFormat": "Mode",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "off",
+                  "color": "text",
+                  "index": 0
+                },
+                "1": {
+                  "text": "audit",
+                  "color": "blue",
+                  "index": 1
+                },
+                "2": {
+                  "text": "auto-patch",
+                  "color": "green",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "noValue": "unknown"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "id": 7,
+      "gridPos": {
+        "x": 6,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Memory mode",
+      "description": "Effective memory mode (off / audit / auto-patch) as reported by the agent.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(\n  (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", resource=\"memory\", mode=\"auto-patch\"}) == 1) * 2\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", resource=\"memory\", mode=\"audit\"}) == 1) * 1\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", resource=\"memory\", mode=\"off\"}) == 1) * 0\n)",
+          "legendFormat": "Mode",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "off",
+                  "color": "text",
+                  "index": 0
+                },
+                "1": {
+                  "text": "audit",
+                  "color": "blue",
+                  "index": 1
+                },
+                "2": {
+                  "text": "auto-patch",
+                  "color": "green",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "noValue": "unknown"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 10,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Phase",
+      "description": "Phase of the workload's RightsizingRecommendation: Pending → Applying → Applied, or Blocked / RolledBack / Released.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(\n  (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", phase=\"Released\"}) == 1) * 5\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", phase=\"RolledBack\"}) == 1) * 4\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", phase=\"Blocked\"}) == 1) * 3\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", phase=\"Applied\"}) == 1) * 2\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", phase=\"Applying\"}) == 1) * 1\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", phase=\"Pending\"}) == 1) * 0\n)",
+          "legendFormat": "Phase",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Pending",
+                  "color": "text",
+                  "index": 0
+                },
+                "1": {
+                  "text": "Applying",
+                  "color": "yellow",
+                  "index": 1
+                },
+                "2": {
+                  "text": "Applied",
+                  "color": "green",
+                  "index": 2
+                },
+                "3": {
+                  "text": "Blocked",
+                  "color": "orange",
+                  "index": 3
+                },
+                "4": {
+                  "text": "RolledBack",
+                  "color": "red",
+                  "index": 4
+                },
+                "5": {
+                  "text": "Released",
+                  "color": "purple",
+                  "index": 5
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "noValue": "unknown"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 14,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Risk flags",
+      "description": "Risk flags on the current recommendation. throttled / oom-killed: never decreased; restarting; hpa-coupled: audit only; sidecar; short-lived; low-confidence.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (rf) (max by (cluster, namespace, workload_kind, workload, rf) (\nlabel_replace(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace((((((((max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}))\n* on (cluster, namespace, workload_kind, workload) group_left (f_throttled)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", flag=\"throttled\"}), \"f_throttled\", \"throttled\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_oom_killed)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", flag=\"oom-killed\"}), \"f_oom_killed\", \"oom-killed\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_restarting)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", flag=\"restarting\"}), \"f_restarting\", \"restarting\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_hpa_coupled)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", flag=\"hpa-coupled\"}), \"f_hpa_coupled\", \"hpa-coupled\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_sidecar)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", flag=\"sidecar\"}), \"f_sidecar\", \"sidecar\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_short_lived)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", flag=\"short-lived\"}), \"f_short_lived\", \"short-lived\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_low_confidence)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", flag=\"low-confidence\"}), \"f_low_confidence\", \"low-confidence\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}) + 1)), \"rf\", \"$1\", \"f_throttled\", \"(.*)\"), \"rf\", \"|\", \"rf\", \"f_oom_killed\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_restarting\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_hpa_coupled\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_sidecar\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_short_lived\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_low_confidence\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"none\", \"rf\", \"\")\n))",
+          "legendFormat": "{{rf}}",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "noValue": "–"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 8,
+        "h": 4
+      }
+    },
+    {
+      "type": "table",
+      "title": "Containers: current vs recommended",
+      "description": "Per-pod requests and limits now (as reported by the hub) and what the hub recommends. 'none' = no limit set, or the recommendation removes it. $/mo = estimated monthly savings of that container.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"request\", source=\"current\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"request\", source=\"recommended\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"limit\", source=\"current\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"limit\", source=\"recommended\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_memory_bytes{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"request\", source=\"current\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_memory_bytes{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"request\", source=\"recommended\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_memory_bytes{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"limit\", source=\"current\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_memory_bytes{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"limit\", source=\"recommended\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\"}))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "I"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "container"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Container"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CPU req"
+              },
+              {
+                "id": "unit",
+                "value": "suffix: cores"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CPU req rec"
+              },
+              {
+                "id": "unit",
+                "value": "suffix: cores"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CPU lim"
+              },
+              {
+                "id": "unit",
+                "value": "suffix: cores"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              },
+              {
+                "id": "noValue",
+                "value": "none"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #D"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CPU lim rec"
+              },
+              {
+                "id": "unit",
+                "value": "suffix: cores"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              },
+              {
+                "id": "noValue",
+                "value": "none"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #E"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mem req"
+              },
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #F"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mem req rec"
+              },
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #G"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mem lim"
+              },
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "noValue",
+                "value": "none"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #H"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mem lim rec"
+              },
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "noValue",
+                "value": "none"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #I"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "$/mo"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        },
+        "sortBy": []
+      },
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "cluster": true,
+              "namespace": true,
+              "workload_kind": true,
+              "workload": true,
+              "Time": true
+            },
+            "indexByName": {
+              "container": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 3,
+              "Value #D": 4,
+              "Value #E": 5,
+              "Value #F": 6,
+              "Value #G": 7,
+              "Value #H": 8,
+              "Value #I": 9
+            },
+            "renameByName": {}
+          }
+        }
+      ],
+      "id": 11,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 6
+      }
+    },
+    {
+      "type": "row",
+      "title": "CPU",
+      "collapsed": false,
+      "panels": [],
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU usage vs request, limit and recommendation",
+      "description": "CPU usage of the workload's pods (rate of container_cpu_usage_seconds_total; the hub uses the max across pods per step), current request/limit from kube-state-metrics, the hub's recommended values, and P50/P95/P99/max of the max-of-pods usage over the last $window (dotted, 5m resolution). Production uses P95 over 14d + 15 % headroom.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (container) (\n  sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[$__rate_interval]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}} usage (max of pods)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "avg by (container) (\n  sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[$__rate_interval]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}} usage (avg of pods)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (container) (\n  max by (cluster, namespace, pod, container) (kube_pod_container_resource_requests{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", resource=\"cpu\"})\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}} current request",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (container) (\n  max by (cluster, namespace, pod, container) (kube_pod_container_resource_limits{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", resource=\"cpu\"})\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}} current limit",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"request\", source=\"recommended\"})",
+          "legendFormat": "{{container}} recommended request",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"limit\", source=\"recommended\"})",
+          "legendFormat": "{{container}} recommended limit",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "quantile_over_time(0.5, (\nmax by (container) (\n  sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[5m]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[5m]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[5m]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n)\n)\n)[$window:5m] @ end())",
+          "legendFormat": "{{container}} P50 ($window)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "G",
+          "interval": "30m"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "quantile_over_time(0.95, (\nmax by (container) (\n  sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[5m]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[5m]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[5m]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n)\n)\n)[$window:5m] @ end())",
+          "legendFormat": "{{container}} P95 ($window)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "H",
+          "interval": "30m"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "quantile_over_time(0.99, (\nmax by (container) (\n  sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[5m]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[5m]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[5m]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n)\n)\n)[$window:5m] @ end())",
+          "legendFormat": "{{container}} P99 ($window)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "I",
+          "interval": "30m"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max_over_time((\nmax by (container) (\n  sum by (cluster, namespace, pod, container) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[5m]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[5m]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[5m]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n)\n)\n)[$window:5m] @ end())",
+          "legendFormat": "{{container}} max ($window)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "J",
+          "interval": "30m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: cores",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 3,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisBorderShow": false,
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*usage \\(max of pods\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 20
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*usage \\(avg of pods\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "light-blue"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*current request"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*current limit"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*recommended request"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*recommended limit"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "dark-green"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* (P50|P95|P99|max) \\(.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dot",
+                  "dash": [
+                    0,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* P50 \\(.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "super-light-purple"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* P95 \\(.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "light-purple"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* P99 \\(.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* max \\(.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "dark-purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 12
+      }
+    },
+    {
+      "type": "row",
+      "title": "Memory",
+      "collapsed": false,
+      "panels": [],
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory usage vs request, limit and recommendation",
+      "description": "Working-set memory of the workload's pods (peak within each step, so short-lived pods show up), current request/limit from kube-state-metrics, the hub's recommended values, and P50/P95/P99/max of the max-of-pods working set over the last $window. Production uses max(P99, window peak) + 15 % buffer.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (container) (\n  max by (cluster, namespace, pod, container) (max_over_time(container_memory_working_set_bytes{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[$__rate_interval]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}} usage (max of pods)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "avg by (container) (\n  max by (cluster, namespace, pod, container) (max_over_time(container_memory_working_set_bytes{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[$__rate_interval]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}} usage (avg of pods)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (container) (\n  max by (cluster, namespace, pod, container) (kube_pod_container_resource_requests{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", resource=\"memory\"})\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}} current request",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (container) (\n  max by (cluster, namespace, pod, container) (kube_pod_container_resource_limits{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", resource=\"memory\"})\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}} current limit",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_memory_bytes{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"request\", source=\"recommended\"})",
+          "legendFormat": "{{container}} recommended request",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_memory_bytes{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\", container=~\"$container\", type=\"limit\", source=\"recommended\"})",
+          "legendFormat": "{{container}} recommended limit",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "quantile_over_time(0.5, (\nmax by (container) (\n  max by (cluster, namespace, pod, container) (max_over_time(container_memory_working_set_bytes{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[5m]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[5m]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[5m]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n)\n)\n)[$window:5m] @ end())",
+          "legendFormat": "{{container}} P50 ($window)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "G",
+          "interval": "30m"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "quantile_over_time(0.95, (\nmax by (container) (\n  max by (cluster, namespace, pod, container) (max_over_time(container_memory_working_set_bytes{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[5m]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[5m]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[5m]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n)\n)\n)[$window:5m] @ end())",
+          "legendFormat": "{{container}} P95 ($window)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "H",
+          "interval": "30m"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "quantile_over_time(0.99, (\nmax by (container) (\n  max by (cluster, namespace, pod, container) (max_over_time(container_memory_working_set_bytes{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[5m]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[5m]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[5m]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n)\n)\n)[$window:5m] @ end())",
+          "legendFormat": "{{container}} P99 ($window)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "I",
+          "interval": "30m"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max_over_time((\nmax by (container) (\n  max by (cluster, namespace, pod, container) (max_over_time(container_memory_working_set_bytes{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[5m]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[5m]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[5m]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[5m]))\n)\n)\n)[$window:5m] @ end())",
+          "legendFormat": "{{container}} max ($window)",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "J",
+          "interval": "30m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 1,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisBorderShow": false,
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*usage \\(max of pods\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 20
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*usage \\(avg of pods\\)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "light-blue"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*current request"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*current limit"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*recommended request"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*recommended limit"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "dark-green"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* (P50|P95|P99|max) \\(.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dot",
+                  "dash": [
+                    0,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* P50 \\(.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "super-light-purple"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* P95 \\(.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "light-purple"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* P99 \\(.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* max \\(.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "dark-purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 15,
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 24,
+        "h": 12
+      }
+    },
+    {
+      "type": "row",
+      "title": "Pressure and events",
+      "collapsed": false,
+      "panels": [],
+      "id": 16,
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU throttling ratio",
+      "description": "Share of CFS periods in which the container was throttled (max across pods). Only containers with a CPU limit are throttled. Sustained throttling sets the throttled flag and blocks CPU decreases.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "max by (container) (\n  sum by (cluster, namespace, pod, container) (rate(container_cpu_cfs_throttled_periods_total{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[$__rate_interval]))\n  / clamp_min(sum by (cluster, namespace, pod, container) (rate(container_cpu_cfs_periods_total{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", container!=\"\", container!=\"POD\"}[$__rate_interval])), 1)\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}}",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.05
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 1,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "No CFS data: no CPU limit set",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisBorderShow": false,
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 17,
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Restarts and OOM kills",
+      "description": "Container restarts per interval across the workload's pods, and the subset whose last termination reason is OOMKilled (kube-state-metrics, authoritative for OOM kills).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (container) (\n  sum by (cluster, namespace, pod, container) (increase(kube_pod_container_status_restarts_total{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\"}[$__interval]))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}} restarts",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (container) (\n  (sum by (cluster, namespace, pod, container) (increase(kube_pod_container_status_restarts_total{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\"}[$__interval]))\n  * on (cluster, namespace, pod, container) group_left ()\n  (max by (cluster, namespace, pod, container) (kube_pod_container_status_last_terminated_reason{cluster=\"$cluster\", namespace=\"$namespace\", container=~\"$container\", reason=\"OOMKilled\"}) == 1))\n  * on (cluster, namespace, pod) group_left ()\n  (\n  max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"ReplicaSet\"}[$__rate_interval]), \"replicaset\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, replicaset) group_left ()\n    max by (cluster, namespace, replicaset) (max_over_time(kube_replicaset_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (\n    label_replace(max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"Job\"}[$__rate_interval]), \"job_name\", \"$1\", \"owner_name\", \"(.*)\")\n    * on (cluster, namespace, job_name) group_left ()\n    max by (cluster, namespace, job_name) (max_over_time(kube_job_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n  )\n  or max by (cluster, namespace, pod) (max_over_time(kube_pod_owner{cluster=\"$cluster\", namespace=\"$namespace\", owner_kind=\"$kind\", owner_name=\"$workload\"}[$__rate_interval]))\n)\n)",
+          "legendFormat": "{{container}} OOM kills",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisBorderShow": false,
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*OOM kills"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*restarts"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "interval": "5m",
+      "id": 18,
+      "gridPos": {
+        "x": 12,
+        "y": 46,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "table",
+      "title": "Automation events for this workload",
+      "description": "Events the agent sent for this workload in the selected time range (ro_actions_total, counted by the hub). Shown as annotations on the graphs above.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (type, reason, resource, strategy) (increase(ro_actions_total{cluster=\"$cluster\", namespace=\"$namespace\", workload_kind=\"$kind\", workload=\"$workload\"}[$__range])) > 0",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "noValue": "No events in range",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Type"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "applied": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "skipped": {
+                        "color": "text",
+                        "index": 1
+                      },
+                      "blocked": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "fallback": {
+                        "color": "yellow",
+                        "index": 3
+                      },
+                      "rolled_back": {
+                        "color": "red",
+                        "index": 4
+                      },
+                      "released": {
+                        "color": "purple",
+                        "index": 5
+                      },
+                      "failed": {
+                        "color": "dark-red",
+                        "index": 6
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reason"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Reason"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "resource"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Resource"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "strategy"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Strategy"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Events"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": "",
+          "countRows": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Events",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "type": 0,
+              "reason": 1,
+              "resource": 2,
+              "strategy": 3,
+              "Value": 4
+            },
+            "renameByName": {}
+          }
+        }
+      ],
+      "id": 19,
+      "gridPos": {
+        "x": 0,
+        "y": 54,
+        "w": 24,
+        "h": 7
+      }
+    }
+  ]
+}
