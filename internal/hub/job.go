@@ -30,9 +30,8 @@ type Job struct {
 
 	mu sync.Mutex // one run at a time
 
-	pmu     sync.Mutex
-	pending map[string]queuedRun // runs requested through Trigger that have not started, by cluster ("" = all)
-	wg      sync.WaitGroup       // triggered runs (tests wait for them)
+	wakeOnce sync.Once
+	wake     chan struct{} // a recompute request was queued (RecomputeLoop polls now)
 
 	// Per cluster, guarded by mu: the last accepted regular run and since when runs look incomplete.
 	baseline   map[string]clusterBaseline
@@ -106,11 +105,6 @@ type clusterBaseline struct{ inventory, withRequests int }
 // minGuardedInventory: smaller clusters are not checked for incomplete metrics (a var for tests).
 var minGuardedInventory = 10
 
-type queuedRun struct {
-	id uuid.UUID
-	at time.Time
-}
-
 func (j *Job) now() time.Time {
 	if j.Now != nil {
 		return j.Now()
@@ -120,10 +114,26 @@ func (j *Job) now() time.Time {
 
 // Loop runs until ctx is done. With a backfill configured, the backfill runs are spread between
 // the regular runs (one backfill run whenever no regular run is due), newest first.
+//
+// With several hub replicas only the leader runs Loop (WO-18a); it starts again on every replica
+// that becomes leader. The run at start is skipped when a regular run succeeded within the last
+// min(interval, 5m), so a rolling update that moves the leadership twice runs once; the next
+// run then comes one interval after that run.
 func (j *Job) Loop(ctx context.Context) {
 	rc := j.Cfg.Recommender
+	reset := j.resetChan()
+	select { // a change signalled while another replica led is in the settings loaded below
+	case <-reset:
+	default:
+	}
+	rec, _, _ := j.loadSettings(ctx)
+	interval := rec.Interval
+	first := interval
 	if rc.RunOnStart == nil || *rc.RunOnStart {
-		if err := j.RunOnce(ctx, j.now(), false); err != nil {
+		if last, ok := j.recentRegularRun(ctx, interval); ok {
+			first = max(last.Add(interval).Sub(j.now()), time.Second)
+			j.Log.InfoContext(ctx, "recommender: a recent run exists; skipping the run at start", "lastRunAsOf", last.UTC(), "nextIn", first.Round(time.Second))
+		} else if err := j.RunOnce(ctx, j.now(), false); err != nil {
 			j.Log.ErrorContext(ctx, "recommender run failed", "err", err)
 		}
 	}
@@ -133,22 +143,29 @@ func (j *Job) Loop(ctx context.Context) {
 	} else if len(plan.Missing) > 0 || len(plan.Stale) > 0 {
 		j.Log.InfoContext(ctx, "backfill planned", "runs", len(plan.Missing), "replacing", len(plan.Stale))
 	}
-	rec, _, _ := j.loadSettings(ctx)
-	t := time.NewTicker(rec.Interval)
+	// A timer re-armed after each tick: the first tick may be shorter (skipped start run).
+	t := time.NewTimer(first)
 	defer t.Stop()
-	reset := j.resetChan()
+	tick := func() {
+		t.Reset(interval)
+		if err := j.RunOnce(ctx, j.now(), false); err != nil {
+			j.Log.ErrorContext(ctx, "recommender run failed", "err", err)
+		}
+	}
+	setInterval := func(d time.Duration) {
+		j.Log.InfoContext(ctx, "recommender interval changed", "interval", d)
+		interval = d
+		t.Reset(d)
+	}
 	for {
 		if plan != nil && (len(plan.Missing) > 0 || len(plan.Stale) > 0) {
 			select {
 			case <-ctx.Done():
 				return
 			case d := <-reset:
-				j.Log.InfoContext(ctx, "recommender interval changed", "interval", d)
-				t.Reset(d)
+				setInterval(d)
 			case <-t.C:
-				if err := j.RunOnce(ctx, j.now(), false); err != nil {
-					j.Log.ErrorContext(ctx, "recommender run failed", "err", err)
-				}
+				tick()
 			default:
 				j.backfillStep(ctx, plan)
 			}
@@ -158,14 +175,25 @@ func (j *Job) Loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case d := <-reset:
-			j.Log.InfoContext(ctx, "recommender interval changed", "interval", d)
-			t.Reset(d)
+			setInterval(d)
 		case <-t.C:
-			if err := j.RunOnce(ctx, j.now(), false); err != nil {
-				j.Log.ErrorContext(ctx, "recommender run failed", "err", err)
-			}
+			tick()
 		}
 	}
+}
+
+// recentRegularRun returns the as-of time of the last successful regular run when it is younger
+// than min(interval, 5m).
+func (j *Job) recentRegularRun(ctx context.Context, interval time.Duration) (time.Time, bool) {
+	last, ok, err := j.Store.LastRegularRunAsOf(ctx)
+	if err != nil {
+		j.Log.WarnContext(ctx, "recommender: last run", "err", err)
+		return time.Time{}, false
+	}
+	if !ok || j.now().Sub(last) >= min(interval, 5*time.Minute) {
+		return time.Time{}, false
+	}
+	return last, true
 }
 
 // BackfillPlan is the backfill work left: the as-of times to compute (newest first) and the
@@ -265,39 +293,139 @@ func alignDown(t time.Time, d time.Duration) time.Time {
 }
 
 // Trigger queues a recommender run now (POST /v1/admin/recompute, D-019) for cluster, or for all
-// clusters when cluster is "". The run starts once no other run is in progress, as of that
+// clusters when cluster is "". The request is stored in the database (WO-18a), so any replica
+// can take it; the leader's RecomputeLoop runs it once no other run is in progress, as of that
 // moment. A request whose scope already has a queued run that has not started gets that run
-// (coalesced). ctx must outlive the request.
-func (j *Job) Trigger(ctx context.Context, cluster string) (id uuid.UUID, requestedAt time.Time, coalesced bool) {
-	j.pmu.Lock()
-	defer j.pmu.Unlock()
-	if q, ok := j.pending[cluster]; ok {
-		return q.id, q.at, true
-	}
+// (coalesced).
+func (j *Job) Trigger(ctx context.Context, cluster, by string) (id uuid.UUID, requestedAt time.Time, coalesced bool, err error) {
 	id, _ = uuid.NewV7()
-	requestedAt = j.now()
-	if j.pending == nil {
-		j.pending = map[string]queuedRun{}
+	req, coalesced, err := j.Store.QueueRecompute(ctx, store.RecomputeRequest{ID: id, Cluster: cluster, RequestedAt: j.now(), RequestedBy: by})
+	if err != nil {
+		return uuid.Nil, time.Time{}, false, err
 	}
-	j.pending[cluster] = queuedRun{id: id, at: requestedAt}
-	j.wg.Add(1)
-	go func() {
-		defer j.wg.Done()
-		j.mu.Lock()
-		defer j.mu.Unlock()
-		j.pmu.Lock()
-		delete(j.pending, cluster)
-		j.pmu.Unlock()
-		j.Log.InfoContext(ctx, "recompute run started", "run", id, "cluster", cluster)
-		if err := j.runLocked(ctx, id, j.now(), false, cluster); err != nil {
-			j.Log.ErrorContext(ctx, "recompute run failed", "run", id, "cluster", cluster, "err", err)
+	if !coalesced {
+		j.Wake()
+		if err := j.Store.Notify(ctx, store.NotifyRecompute); err != nil {
+			j.Log.WarnContext(ctx, "notify recompute", "err", err) // the leader's poll finds it anyway
 		}
-	}()
-	return id, requestedAt, false
+	}
+	return req.ID, req.RequestedAt, coalesced, nil
 }
 
-// WaitTriggered waits for the runs queued through Trigger (tests).
-func (j *Job) WaitTriggered() { j.wg.Wait() }
+func (j *Job) wakeChan() chan struct{} {
+	j.wakeOnce.Do(func() { j.wake = make(chan struct{}, 1) })
+	return j.wake
+}
+
+// Wake makes RecomputeLoop look for queued requests now.
+func (j *Job) Wake() {
+	select {
+	case j.wakeChan() <- struct{}{}:
+	default:
+	}
+}
+
+// RecomputeLoop runs the queued recompute requests (leader only) until ctx is done: when woken
+// (Wake, a notification from another replica) and every poll interval.
+func (j *Job) RecomputeLoop(ctx context.Context) {
+	poll := j.Cfg.HA.RecomputePoll.D()
+	if poll <= 0 {
+		poll = 2 * time.Second
+	}
+	t := time.NewTicker(poll)
+	defer t.Stop()
+	lastPrune := time.Time{}
+	for {
+		j.drainRecomputes(ctx)
+		if time.Since(lastPrune) > time.Hour {
+			lastPrune = time.Now()
+			if n, err := j.Store.PruneRecomputes(ctx, time.Now().Add(-7*24*time.Hour)); err != nil {
+				j.Log.WarnContext(ctx, "prune recompute requests", "err", err)
+			} else if n > 0 {
+				j.Log.InfoContext(ctx, "old recompute requests pruned", "requests", n)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		case <-j.wakeChan():
+		}
+	}
+}
+
+// drainRecomputes runs queued requests one by one, each claimed only once the run lock is held
+// (until then it coalesces new requests for its scope).
+func (j *Job) drainRecomputes(ctx context.Context) {
+	for ctx.Err() == nil {
+		if !j.runClaimed(ctx) {
+			return
+		}
+	}
+}
+
+func (j *Job) runClaimed(ctx context.Context) bool {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	req, ok, err := j.Store.ClaimRecompute(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			j.Log.WarnContext(ctx, "claim recompute request", "err", err)
+		}
+		return false
+	}
+	if !ok {
+		return false
+	}
+	j.Log.InfoContext(ctx, "recompute run started", "run", req.ID, "cluster", req.Cluster, "requestedBy", req.RequestedBy)
+	msg := ""
+	if err := j.runLocked(ctx, req.ID, j.now(), false, req.Cluster); err != nil {
+		msg = err.Error()
+		j.Log.ErrorContext(ctx, "recompute run failed", "run", req.ID, "cluster", req.Cluster, "err", err)
+	}
+	if ctx.Err() != nil {
+		// Leadership lost mid-run: the next leader marks it interrupted and queues it again.
+		return false
+	}
+	if err := j.Store.FinishRecompute(ctx, req.ID, msg); err != nil {
+		j.Log.WarnContext(ctx, "finish recompute request", "run", req.ID, "err", err)
+	}
+	return true
+}
+
+// WaitTriggered waits until no recompute request is queued or running (tests; needs a running
+// RecomputeLoop).
+func (j *Job) WaitTriggered() {
+	deadline := time.Now().Add(time.Minute)
+	for time.Now().Before(deadline) {
+		n, err := j.Store.UnfinishedRecomputes(context.Background())
+		if err == nil && n == 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	j.Log.Error("WaitTriggered: recompute requests still unfinished after 1m")
+}
+
+// Takeover prepares a new leader (WO-18a): the runs and recompute requests the previous leader
+// left unfinished are marked failed (interrupted recompute requests are queued again), and the
+// per-cluster run gauges start from the database.
+func (j *Job) Takeover(ctx context.Context) error {
+	got, err := j.Store.RecoverInterrupted(ctx, func() uuid.UUID { id, _ := uuid.NewV7(); return id })
+	if err != nil {
+		return err
+	}
+	if got.Runs > 0 || got.Recomputes > 0 {
+		j.Log.WarnContext(ctx, "runs interrupted by a leader change marked failed", "runs", got.Runs, "recomputesQueuedAgain", got.Recomputes)
+	}
+	return j.Metrics.seedRunGauges(ctx, j.Store)
+}
+
+// ReloadInterval applies the stored recommender interval (another replica changed the settings).
+func (j *Job) ReloadInterval(ctx context.Context) {
+	rec, _, _ := j.loadSettings(ctx)
+	j.SetInterval(rec.Interval)
+}
 
 // RunOnce computes and stores recommendations for every registered cluster as of asOf.
 // Backfill runs (as of a past time) only add history: they never mark workloads deleted.

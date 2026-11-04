@@ -16,6 +16,7 @@ type Gauges struct {
 	checks *prometheus.GaugeVec
 	state  *prometheus.GaugeVec
 	mu     sync.Mutex
+	known  map[string]bool // clusters with series
 }
 
 // NewGauges creates the gauges; register them with Register.
@@ -44,6 +45,10 @@ func (g *Gauges) Register(reg prometheus.Registerer) error {
 func (g *Gauges) Set(cluster string, state rd.State, checks []hubapi.ReadinessCheck) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.known == nil {
+		g.known = map[string]bool{}
+	}
+	g.known[cluster] = true
 	pass := map[string]bool{}
 	for _, c := range checks {
 		pass[c.ID] = c.Status == string(rd.StatusPass)
@@ -68,6 +73,27 @@ func (g *Gauges) Set(cluster string, state rd.State, checks []hubapi.ReadinessCh
 func (g *Gauges) Delete(cluster string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.delete(cluster)
+}
+
+func (g *Gauges) delete(cluster string) {
 	g.checks.DeletePartialMatch(prometheus.Labels{"cluster": cluster})
 	g.state.DeletePartialMatch(prometheus.Labels{"cluster": cluster})
+	delete(g.known, cluster)
+}
+
+// Retain removes the series of every cluster not in clusters (deregistered, possibly through
+// another hub replica).
+func (g *Gauges) Retain(clusters []string) {
+	keep := map[string]bool{}
+	for _, c := range clusters {
+		keep[c] = true
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for c := range g.known {
+		if !keep[c] {
+			g.delete(c)
+		}
+	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 
 	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
 	"github.com/tomer1983/resource-optimizer/internal/recommender"
@@ -51,11 +52,17 @@ func Open(ctx context.Context, url string) (*Store, error) {
 // Close closes the pool.
 func (s *Store) Close() { s.Pool.Close() }
 
-// Migrate applies the goose migrations in fsys (db/migrations).
+// Migrate applies the goose migrations in fsys (db/migrations) under goose's Postgres session
+// locker (WO-18a): hub replicas starting together apply each migration once; the others wait
+// (up to 10 minutes) for the lock and then find nothing left to apply.
 func (s *Store) Migrate(ctx context.Context, fsys fs.FS) ([]string, error) {
 	db := stdlib.OpenDBFromPool(s.Pool)
 	defer db.Close()
-	p, err := goose.NewProvider(goose.DialectPostgres, db, fsys)
+	locker, err := lock.NewPostgresSessionLocker(lock.WithLockTimeout(1, 600))
+	if err != nil {
+		return nil, err
+	}
+	p, err := goose.NewProvider(goose.DialectPostgres, db, fsys, goose.WithSessionLocker(locker))
 	if err != nil {
 		return nil, err
 	}
