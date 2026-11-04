@@ -11,7 +11,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -275,8 +274,11 @@ func waitReason(t *testing.T, cl cluster, ns, kind, name, reason string, timeout
 	return r
 }
 
-// waitHubRecommendation waits until the hub has a recommendation for the workload.
-func waitHubRecommendation(t *testing.T, cl cluster, ns, kind, name string) *workloadRec {
+// waitHubRecommendation waits until the hub has a recommendation for the workload that
+// satisfies ok (any recommendation when ok is nil). The first hub run after a workload starts may
+// see only a few samples, so scenarios that assert on values pass a condition and wait for a
+// later run instead of judging the first one.
+func waitHubRecommendation(t *testing.T, cl cluster, ns, kind, name string, ok func(*workloadRec) (bool, string)) *workloadRec {
 	t.Helper()
 	var rec *workloadRec
 	eventually(t, env.ApplyTimeout, 10*time.Second, fmt.Sprintf("hub recommendation for %s/%s", ns, name), func() (bool, string) {
@@ -291,7 +293,11 @@ func waitHubRecommendation(t *testing.T, cl cluster, ns, kind, name string) *wor
 			return false, "no recommendation yet (phase " + d.Phase + ")"
 		}
 		rec = d.Recommendation
-		return true, ""
+		if ok == nil {
+			return true, ""
+		}
+		good, why := ok(rec)
+		return good, fmt.Sprintf("recommendation %s (coverage %s): %s", rec.ID, rec.DataCoverage.Covered, why)
 	})
 	return rec
 }
@@ -342,13 +348,6 @@ func getDeployment(t *testing.T, cl cluster, ns, name string) *appsv1.Deployment
 
 func templateCPU(d *appsv1.Deployment) *resource.Quantity {
 	return d.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu()
-}
-
-func ignoreNotFound(err error) error {
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
-	return err
 }
 
 // q parses a quantity (zero for "").

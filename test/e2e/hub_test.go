@@ -37,11 +37,15 @@ type containerRec struct {
 }
 
 type workloadRec struct {
-	ID          string         `json:"id"`
-	GeneratedAt time.Time      `json:"generatedAt"`
-	Containers  []containerRec `json:"containers"`
-	Confidence  float64        `json:"confidence"`
-	RiskFlags   []string       `json:"riskFlags"`
+	ID           string         `json:"id"`
+	GeneratedAt  time.Time      `json:"generatedAt"`
+	Containers   []containerRec `json:"containers"`
+	Confidence   float64        `json:"confidence"`
+	RiskFlags    []string       `json:"riskFlags"`
+	DataCoverage struct {
+		Covered string `json:"covered"`
+		Samples int    `json:"samples"`
+	} `json:"dataCoverage"`
 }
 
 type workloadDetail struct {
