@@ -34,6 +34,21 @@ const testDBPrefix = "ro_hub_test_"
 // newTestStore creates a fresh migrated database and returns a store on it.
 func newTestStore(t *testing.T, createOpts string) *store.Store {
 	t.Helper()
+	ctx := context.Background()
+	st, err := store.Open(ctx, newTestDB(t, createOpts))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(st.Close)
+	if _, err := st.Migrate(ctx, os.DirFS("../../db/migrations")); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return st
+}
+
+// newTestDB creates a fresh empty database, dropped at the end of the test, and returns its URL.
+func newTestDB(t *testing.T, createOpts string) string {
+	t.Helper()
 	base := os.Getenv("RO_TEST_DATABASE_URL")
 	if base == "" {
 		t.Skip("RO_TEST_DATABASE_URL not set; skipping Postgres integration test")
@@ -62,15 +77,7 @@ func newTestStore(t *testing.T, createOpts string) *store.Store {
 		admin.Close(ctx)
 	})
 	u.Path = "/" + name
-	st, err := store.Open(ctx, u.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(st.Close)
-	if _, err := st.Migrate(ctx, os.DirFS("../../db/migrations")); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return st
+	return u.String()
 }
 
 // ---- fake recommender loader ----
@@ -373,6 +380,11 @@ func newEnv(t *testing.T) *testEnv {
 		e.backfillAsOf = append(e.backfillAsOf, asOf.Truncate(fakeStep))
 	}
 	e.run(now, false)
+	// Recompute requests are queued in the database; the (single, leading) test hub runs them.
+	rctx, rcancel := context.WithCancel(ctx)
+	rdone := make(chan struct{})
+	go func() { defer close(rdone); job.RecomputeLoop(rctx) }()
+	t.Cleanup(func() { rcancel(); <-rdone })
 	srv.SetReady()
 	e.ts = httptest.NewServer(srv.Handler())
 	t.Cleanup(e.ts.Close)

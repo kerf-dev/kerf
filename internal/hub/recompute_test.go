@@ -113,7 +113,10 @@ func TestRecompute(t *testing.T) {
 	e.job.WaitTriggered()
 
 	// A cluster removed after the request: the run fails, nothing panics.
-	id, _, _ := e.job.Trigger(context.Background(), "gone")
+	id, _, _, err := e.job.Trigger(context.Background(), "gone", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
 	e.job.WaitTriggered()
 	var status string
 	if err := e.st.Pool.QueryRow(e.ctx, `SELECT status FROM recommender_runs WHERE id = $1`, id).Scan(&status); err != nil || status != "failed" {

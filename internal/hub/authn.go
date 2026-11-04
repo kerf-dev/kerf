@@ -146,8 +146,9 @@ func (s *Server) authenticate(a access, next http.HandlerFunc) http.Handler {
 func (s *Server) lookupToken(ctx context.Context, raw string) (store.Token, error) {
 	key := string(store.HashToken(raw))
 	now := s.now()
+	cacheOK := s.tokenCacheOK()
 	s.mu.Lock()
-	if e, ok := s.tokens[key]; ok && now.Before(e.expires) {
+	if e, ok := s.tokens[key]; ok && cacheOK && now.Before(e.expires) {
 		s.mu.Unlock()
 		return e.tok, nil
 	}
@@ -159,6 +160,9 @@ func (s *Server) lookupToken(ctx context.Context, raw string) (store.Token, erro
 	if err := s.Store.TouchToken(ctx, tok.ID, now); err != nil {
 		s.Log.WarnContext(ctx, "token last-used", "err", err)
 	}
+	if !cacheOK {
+		return tok, nil
+	}
 	s.mu.Lock()
 	if s.tokens == nil {
 		s.tokens = map[string]tokenEntry{}
@@ -168,12 +172,26 @@ func (s *Server) lookupToken(ctx context.Context, raw string) (store.Token, erro
 	return tok, nil
 }
 
-// forgetTokens drops the token cache (after a revocation).
-func (s *Server) forgetTokens() {
+// forgetTokens drops the token cache after a revocation, here and (notification) on the other
+// hub replicas.
+func (s *Server) forgetTokens(ctx context.Context) {
+	s.dropTokenCache()
+	if s.Coord != nil {
+		if err := s.Store.Notify(ctx, store.NotifyTokens); err != nil {
+			s.Log.WarnContext(ctx, "notify token revocation", "err", err)
+		}
+	}
+}
+
+func (s *Server) dropTokenCache() {
 	s.mu.Lock()
 	s.tokens = nil
 	s.mu.Unlock()
 }
+
+// tokenCacheOK: with several replicas the cache is used only while revocation notifications
+// reach this replica.
+func (s *Server) tokenCacheOK() bool { return s.Coord == nil || s.Coord.Listening() }
 
 // ---- login, logout, me ----
 

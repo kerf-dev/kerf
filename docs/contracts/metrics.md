@@ -121,6 +121,25 @@ Alert examples: `ro_cluster_readiness{severity="blocking"} == 0` (a blocking che
 `ro_cluster_readiness_state{state="AutomationReady"} == 0 and on(cluster) (sum by (cluster) (ro_workload_mode{mode="auto-patch"}) > 0)`
 (auto-patch workloads on a cluster that lost automation readiness).
 
+### Hub replicas (WO-18a, D-028)
+
+The hub may run as several replicas on one database. One of them, the leader, runs the
+recommender, the readiness checks and the sweeps. Labels: none (the scrape adds the pod); these
+two series have no `cluster` label because they describe the hub process, not a spoke.
+
+| Series | Type | Extra labels | Meaning |
+|---|---|---|---|
+| `ro_hub_leader` | gauge | – | 1 while this replica is the leader, 0 otherwise. `sum(ro_hub_leader)` is 1 in a healthy hub (0 during a failover, at most 15 s). |
+| `ro_hub_leader_transitions_total` | counter | – | changes of `ro_hub_leader` on this replica (acquired or lost); resets on restart, use `increase()`. |
+
+**Which replica exports what.** Series computed from the database are exported by the leader
+only, so N replicas never export N copies: every `ro_recommendation_*`, `ro_workload_mode`,
+`ro_workload_phase` and `ro_cluster_readiness*` series, and `ro_recommender_last_success_timestamp_seconds`,
+`ro_recommender_pricing_fallback`, `ro_recommender_recommendations`. After a failover they come
+from the new leader (they keep their values; only the scrape's pod label changes). Per-process
+series are exported by every replica and add up across replicas: `ro_actions_total` (events stored
+by that replica), `ro_hub_http_*`, `ro_recommender_runs_total`, `ro_recommender_run_duration_seconds`.
+
 ## 4. Reference PromQL
 
 Pod → workload. Each query returns 1 per pod with `workload_kind` and `workload` labels; `or` them

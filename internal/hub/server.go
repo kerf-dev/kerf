@@ -34,6 +34,9 @@ type Server struct {
 	Job *Job
 	// Onb serves datasources, readiness and install (D-025); nil answers 501 (InitOnboarding).
 	Onb *Onboarding
+	// Coord is the leader election and notification channel shared with the other hub replicas
+	// (WO-18a); nil = this process is the only hub and leads (tests).
+	Coord *Elector
 	// Now is the clock (tests).
 	Now func() time.Time
 
@@ -281,7 +284,11 @@ func (s *Server) recompute(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, errors.New("no recommender job"))
 		return
 	}
-	id, at, coalesced := s.Job.Trigger(context.WithoutCancel(r.Context()), cluster)
+	id, at, coalesced, err := s.Job.Trigger(r.Context(), cluster, PrincipalFrom(r.Context()).Actor().Name)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
 	s.Log.InfoContext(r.Context(), "recompute requested", "run", id, "cluster", cluster, "coalesced", coalesced)
 	writeJSONStatus(w, http.StatusAccepted, hubapi.RecomputeAccepted{RunID: id.String(), Cluster: cluster, RequestedAt: at.UTC(), Coalesced: coalesced})
 }
