@@ -243,17 +243,21 @@ func (s *Store) InsertRecommendations(ctx context.Context, runID uuid.UUID, ids 
 		containers, _ := json.Marshal(rec.Containers)
 		coverage, _ := json.Marshal(rec.DataCoverage)
 		pricing, _ := json.Marshal(r.Pricing)
+		var hpa []byte
+		if rec.HPA != nil {
+			hpa, _ = json.Marshal(rec.HPA)
+		}
 		batch.Queue(`INSERT INTO recommendations (id, workload_id, run_id, generated_at, strategy_name, settings, containers,
-			confidence, risk_flags, data_coverage, average_replicas, monthly_savings_cpu_usd, monthly_savings_memory_usd, pricing)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+			confidence, risk_flags, data_coverage, average_replicas, monthly_savings_cpu_usd, monthly_savings_memory_usd, pricing, hpa)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 			rec.ID, wid, runID, rec.GeneratedAt, rec.StrategyName, settings, containers, rec.Confidence, rec.RiskFlags,
-			coverage, rec.AverageReplicas, rec.MonthlySavingsUSD.CPU, rec.MonthlySavingsUSD.Memory, pricing)
+			coverage, rec.AverageReplicas, rec.MonthlySavingsUSD.CPU, rec.MonthlySavingsUSD.Memory, pricing, hpa)
 	}
 	return s.Pool.SendBatch(ctx, batch).Close()
 }
 
 const recColumns = `r.id, r.generated_at, r.strategy_name, r.settings, r.containers, r.confidence, r.risk_flags,
-	r.data_coverage, r.average_replicas, r.monthly_savings_cpu_usd, r.monthly_savings_memory_usd, r.pricing`
+	r.data_coverage, r.average_replicas, r.monthly_savings_cpu_usd, r.monthly_savings_memory_usd, r.pricing, r.hpa`
 
 type recRow struct {
 	id                             uuid.UUID
@@ -263,12 +267,12 @@ type recRow struct {
 	confidence                     float64
 	flags                          []string
 	replicas, cpuSav, memSav       float64
-	pricing                        []byte
+	pricing, hpa                   []byte
 }
 
 func (r *recRow) dest() []any {
 	return []any{&r.id, &r.generatedAt, &r.strategy, &r.settings, &r.containers, &r.confidence, &r.flags,
-		&r.coverage, &r.replicas, &r.cpuSav, &r.memSav, &r.pricing}
+		&r.coverage, &r.replicas, &r.cpuSav, &r.memSav, &r.pricing, &r.hpa}
 }
 
 func (r *recRow) build(ref hubapi.WorkloadRef) (*hubapi.WorkloadRecommendation, error) {
@@ -289,6 +293,13 @@ func (r *recRow) build(ref hubapi.WorkloadRef) (*hubapi.WorkloadRecommendation, 
 	if json.Unmarshal(r.pricing, &p) == nil && p.Source != "" {
 		rec.Pricing = &p
 	}
+	if len(r.hpa) > 0 {
+		var h hubapi.HPACoordination
+		if err := json.Unmarshal(r.hpa, &h); err != nil {
+			return nil, err
+		}
+		rec.HPA = &h
+	}
 	return &rec, nil
 }
 
@@ -301,12 +312,12 @@ type nullRecRow struct {
 	confidence                     *float64
 	flags                          []string
 	replicas, cpuSav, memSav       *float64
-	pricing                        []byte
+	pricing, hpa                   []byte
 }
 
 func (r *nullRecRow) dest() []any {
 	return []any{&r.id, &r.generatedAt, &r.strategy, &r.settings, &r.containers, &r.confidence, &r.flags,
-		&r.coverage, &r.replicas, &r.cpuSav, &r.memSav, &r.pricing}
+		&r.coverage, &r.replicas, &r.cpuSav, &r.memSav, &r.pricing, &r.hpa}
 }
 
 func (r *nullRecRow) row() *recRow {
@@ -315,7 +326,7 @@ func (r *nullRecRow) row() *recRow {
 	}
 	return &recRow{id: *r.id, generatedAt: *r.generatedAt, strategy: deref(r.strategy), settings: r.settings,
 		containers: r.containers, coverage: r.coverage, confidence: *r.confidence, flags: r.flags,
-		replicas: *r.replicas, cpuSav: *r.cpuSav, memSav: *r.memSav, pricing: r.pricing}
+		replicas: *r.replicas, cpuSav: *r.cpuSav, memSav: *r.memSav, pricing: r.pricing, hpa: r.hpa}
 }
 
 func round2(v float64) float64 { return math.Round(v*100) / 100 }

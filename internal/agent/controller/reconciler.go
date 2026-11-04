@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -134,6 +133,7 @@ type run struct {
 	prevSpec v1alpha1.RightsizingRecommendationSpec
 	reason   string
 	message  string
+	hpa      *hpaState // WO-11
 }
 
 func (w *run) reconcile() (ctrl.Result, error) {
@@ -245,6 +245,9 @@ func (w *run) release() error {
 		}
 	}
 
+	if err := w.releaseHPA(want); err != nil {
+		return err
+	}
 	if w.rsr == nil || w.prev.Effective == nil {
 		return nil
 	}
@@ -372,16 +375,27 @@ func (w *run) decide() (ctrl.Result, error) {
 			rolledBack = &t.Time
 		}
 	}
-	hpa, err := w.hpaCoupled()
+	hpa, err := w.planHPA()
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	dec := guardrails.Evaluate(guardrails.Input{
+	w.hpa = hpa
+	if w.hpa.coordinate && w.strategy == v1alpha1.StrategyInPlace {
+		w.strategy = v1alpha1.StrategyRollout // in-place is not used for HPA workloads (WO-11)
+	}
+	in := guardrails.Input{
 		Now: w.now, Effective: w.eff, Strategy: w.strategy, Rec: w.rec, HubFresh: w.fresh,
-		Containers: w.containersForEval(), HPACoupled: hpa,
+		Containers:    w.containersForEval(),
 		LastAppliedAt: lastApplied, RolledBackAt: rolledBack, Tolerance: r.Cfg.Tolerance,
 		RolledBackResources: w.rolledBackResources(),
-	})
+	}
+	w.hpa.guardrailInput(&in)
+	dec := guardrails.Evaluate(in)
+	if dec.Outcome == guardrails.Apply {
+		if msg := w.planTarget(w.hpa, dec); msg != "" {
+			dec = guardrails.Decision{Outcome: guardrails.Blocked, Reason: v1alpha1.ReasonHPACoupled, Message: msg, Proposed: dec.Proposed}
+		}
+	}
 
 	// Values of the current recommendation are live: keep them live (drift repair, silently).
 	if w.rsr != nil && w.rec != nil && len(auto) > 0 && w.prev.Phase == v1alpha1.PhaseApplied &&
@@ -514,6 +528,9 @@ func (w *run) keepLive() (ctrl.Result, error) {
 	}
 	targets := w.rsr.Spec.Containers
 	if w.rsr.Spec.Strategy != v1alpha1.StrategyInPlace {
+		if err := w.keepHPA(own); err != nil {
+			return ctrl.Result{}, err
+		}
 		if templateMatches(workload.PodSpec(w.obj), targets, own) && hasAll(apply.OwnedResources(w.obj), own) {
 			return ctrl.Result{}, nil
 		}
@@ -620,6 +637,11 @@ func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous 
 			return err
 		}
 		w.rsr.Status.Previous = previous
+		w.rsr.Status.PreviousHPATarget = nil
+		if w.hpa != nil && w.hpa.target != nil {
+			prev := w.hpa.prev
+			w.rsr.Status.PreviousHPATarget = &prev
+		}
 	} else {
 		status := w.rsr.Status.DeepCopy()
 		w.rsr.Spec.Strategy = v1alpha1.StrategyRollout
@@ -638,16 +660,25 @@ func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous 
 			Strategy: string(strategy), Message: err.Error(), Details: map[string]string{"error": err.Error()}}, "failed/"+v1alpha1.ReasonApplyError+"/"+recID, nil)
 		return fmt.Errorf("apply %s: %w", w.k, err)
 	}
+	// The HPA target follows in the same reconcile (WO-11). If it fails, the change is recorded as
+	// applied anyway and keepLive re-asserts the target on the next reconcile.
+	if err := w.applyHPATarget(w.hpa); err != nil {
+		w.emit(hubclient.Event{Type: hubclient.EventFailed, Reason: v1alpha1.ReasonApplyError, RecommendationID: recID,
+			Strategy: string(strategy), Message: "HPA target: " + err.Error(), Details: map[string]string{"error": err.Error()}},
+			"failed/"+v1alpha1.ReasonApplyError+"/hpa/"+recID, nil)
+		w.log.Warn("HPA target not applied; retried by drift repair", "err", err)
+	}
 	changes := diff(previous, targets, own)
+	hpaDetails, hpaMsg := w.hpa.details()
 	now := metav1.NewTime(w.now)
 	w.rsr.Status.Phase = v1alpha1.PhaseApplied
 	w.rsr.Status.AppliedAt = &now
 	w.rsr.Status.AppliedRecommendationID = recID
 	w.reason = v1alpha1.ReasonRecommendationApplied
-	w.message = "pod template patched, rollout started: " + guardrails.Summary(changes)
+	w.message = "pod template patched, rollout started: " + guardrails.Summary(changes) + hpaMsg
 	w.emit(hubclient.Event{Type: hubclient.EventApplied, Reason: v1alpha1.ReasonRecommendationApplied,
 		RecommendationID: recID, Strategy: string(v1alpha1.StrategyRollout), Resources: resourcesOf(changes),
-		Containers: changes, Message: w.message}, "", nil)
+		Containers: changes, Message: w.message, Details: hpaDetails}, "", nil)
 	w.log.Info("applied (rollout)", "recommendation", recID, "changes", guardrails.Summary(changes))
 	return nil
 }
@@ -873,34 +904,6 @@ func resourcesOf(changes []hubclient.ContainerChange) []string {
 	return out
 }
 
-func (w *run) hpaCoupled() (bool, error) {
-	var hpas autoscalingv2.HorizontalPodAutoscalerList
-	if err := w.r.Client.List(w.ctx, &hpas, client.InNamespace(w.k.Namespace)); err != nil {
-		return false, err
-	}
-	for _, h := range hpas.Items {
-		if h.Spec.ScaleTargetRef.Kind != string(w.kind) || h.Spec.ScaleTargetRef.Name != w.k.Name {
-			continue
-		}
-		for _, m := range h.Spec.Metrics {
-			var name corev1.ResourceName
-			var target autoscalingv2.MetricTarget
-			switch {
-			case m.Type == autoscalingv2.ResourceMetricSourceType && m.Resource != nil:
-				name, target = m.Resource.Name, m.Resource.Target
-			case m.Type == autoscalingv2.ContainerResourceMetricSourceType && m.ContainerResource != nil:
-				name, target = m.ContainerResource.Name, m.ContainerResource.Target
-			default:
-				continue
-			}
-			if (name == corev1.ResourceCPU || name == corev1.ResourceMemory) && target.Type == autoscalingv2.UtilizationMetricType {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
-}
-
 // findRSR looks a RightsizingRecommendation up by its target (never by name).
 func (r *Reconciler) findRSR(ctx context.Context, ns string, kind v1alpha1.WorkloadKind, name string) (*v1alpha1.RightsizingRecommendation, error) {
 	var list v1alpha1.RightsizingRecommendationList
@@ -937,6 +940,10 @@ func (w *run) upsertSpec(targets []v1alpha1.ContainerRecommendation, strategy v1
 			Confidence:       fmt.Sprintf("%.3g", w.rec.Confidence),
 			RiskFlags:        riskFlags(w.rec.RiskFlags),
 		},
+	}
+	if w.hpa != nil && w.hpa.target != nil {
+		t := *w.hpa.target
+		spec.HPA = &t
 	}
 	if w.rsr != nil {
 		if specEqual(w.rsr.Spec, spec) {

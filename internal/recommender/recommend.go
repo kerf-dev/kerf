@@ -57,11 +57,15 @@ func Recommend(req Request, strategy Strategy, cfg Config) (Result, bool) {
 		for _, f := range cr.RiskFlags {
 			workloadFlags[f] = true
 		}
-		rec.MonthlySavingsUSD = rec.MonthlySavingsUSD.Add(*cr.MonthlySavingsUSD)
 		rec.Containers = append(rec.Containers, cr)
 	}
 	if len(rec.Containers) == 0 {
 		return Result{}, false
+	}
+	// HPA coordination may adjust requests (and savings) of the coupled resource (WO-11).
+	rec.HPA = coordinateHPA(&rec, w, req, cfg)
+	for _, c := range rec.Containers {
+		rec.MonthlySavingsUSD = rec.MonthlySavingsUSD.Add(*c.MonthlySavingsUSD)
 	}
 	sort.Slice(rec.Containers, func(i, j int) bool {
 		a, b := rec.Containers[i], rec.Containers[j]

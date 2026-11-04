@@ -52,7 +52,7 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | `LearningPeriod` | `dataCoverage.covered` < `guardrails.learningPeriod`. |
 | `LowConfidence` | `confidence` < `guardrails.minConfidence`. |
 | `Cooldown` | Last change or rollback was less than `guardrails.cooldown` ago. |
-| `HPACoupled` | Workload has a CPU/memory-utilization HPA (D-011). |
+| `HPACoupled` | Workload has a CPU/memory-utilization HPA that is not coordinated: coordination is off in its policy, the HPA cannot be coordinated, or the new target would leave its bounds (D-011, WO-11). |
 | `Throttled` / `OOMKilled` | Decrease refused because the resource is under pressure. |
 | `FreezeWindow` | Inside an `apply.freezeWindows` entry. |
 | `OutsideMaintenanceWindow` | Strategy `deferred` and no maintenance window is open. |
@@ -102,7 +102,7 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | `resources` | if specific | `cpu`, `memory`, or both. Empty means the whole workload. |
 | `containers` | for applied/rolled_back | `from` = values before, `to` = values after. Only changed resources are listed. |
 | `message` | no | Human-readable, ≤ 1024 chars. |
-| `details` | no | String map; well-known keys: `oomKills`, `restarts`, `throttlingRatio`, `watchDuration`, `resizeStatus`, `previousMode`, `newMode`, `error`. |
+| `details` | no | String map; well-known keys: `oomKills`, `restarts`, `throttlingRatio`, `watchDuration`, `resizeStatus`, `previousMode`, `newMode`, `error`; on `applied` with HPA coordination (WO-11) `hpa`, `hpaResource`, `hpaTargetFrom`, `hpaTargetTo` (percent). |
 
 The hub adds `cluster` (from the URL path) and `receivedAt` when it stores an event; both are returned
 by `GET /v1/audit`.

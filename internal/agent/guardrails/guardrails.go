@@ -6,7 +6,7 @@
 //
 //  1. no auto-patch resource                    -> skipped ModeOff / ModeAudit
 //  2. hub not reachable / recommendation stale  -> blocked HubUnreachable, skipped RecommendationStale
-//  3. hpa-coupled (D-011), learning period, confidence, freeze window, maintenance window -> blocked
+//  3. hpa-coupled without HPA coordination (D-011, WO-11), learning period, confidence, freeze window, maintenance window -> blocked
 //  4. per container and resource: clamp decreases to maxChangePercent, floors, never decrease a
 //     throttled / oom-killed resource (Throttled / OOMKilled), JVM/Python memory needs
 //     RestartContainer for in-place (RestartPolicyRequired); changes below the tolerance are dropped
@@ -59,8 +59,12 @@ type Input struct {
 	// Containers of the pod template with their live values (template values for rollout,
 	// the running pods' values are compared by the in-place applier).
 	Containers []workload.Container
-	// HPACoupled is set when the agent itself found a CPU/memory-utilization HPA.
-	HPACoupled    bool
+	// HPACoupled is set when the agent itself found a CPU/memory-utilization HPA that blocks the
+	// change (WO-11: no coordination, or an HPA that cannot be coordinated); HPAMessage says why.
+	HPACoupled bool
+	HPAMessage string
+	// HPAChecked: the caller looked at the live HPA, so the hub's hpa-coupled flag alone does not block.
+	HPAChecked    bool
 	LastAppliedAt *time.Time
 	RolledBackAt  *time.Time
 	// RolledBackResources are the resources the last rollback restored ("cpu", "memory");
@@ -134,8 +138,12 @@ func Evaluate(in Input) Decision {
 			Message: fmt.Sprintf("recommendation settings %s differ from the effective policy %s; waiting for the next hub run",
 				fmtSettings(in.Rec.Settings), fmtSettings(eff.Settings()))}
 	}
-	if in.HPACoupled || slices.Contains(in.Rec.RiskFlags, string(v1alpha1.RiskHPACoupled)) {
-		return block(v1alpha1.ReasonHPACoupled, "workload has a CPU/memory-utilization HPA; audit-only until HPA coordination ships (D-011)")
+	if in.HPACoupled || (!in.HPAChecked && slices.Contains(in.Rec.RiskFlags, string(v1alpha1.RiskHPACoupled))) {
+		msg := in.HPAMessage
+		if msg == "" {
+			msg = "workload has a CPU/memory-utilization HPA; audit-only without HPA coordination (D-011)"
+		}
+		return block(v1alpha1.ReasonHPACoupled, "%s", msg)
 	}
 	if covered, ok := coverage(in.Rec.DataCoverage); !ok || covered < eff.LearningPeriod {
 		return block(v1alpha1.ReasonLearningPeriod, "data coverage %s is below the learning period %s", covered, eff.LearningPeriod)

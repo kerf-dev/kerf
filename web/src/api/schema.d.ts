@@ -451,6 +451,37 @@ export interface components {
       monthlySavingsUSD: components['schemas']['Savings']
       dataCoverage: components['schemas']['DataCoverage']
       pricing?: components['schemas']['RecommendationPricing']
+      hpa?: components['schemas']['HPACoordination']
+    }
+    /**
+     * @description HPA coordination (WO-11, lifts D-011). Present when the workload has a CPU- or
+     *     memory-utilization HPA (risk flag `hpa-coupled`). The HPA's utilization is the pod's usage
+     *     over the sum of its containers' requests of `metric`, so changing those requests changes
+     *     when it scales. With `recommendedTarget`, the recommended requests of `metric` and that
+     *     target keep `usage / (sum of requests x target)` unchanged: the agent may apply both in
+     *     one change (rollout) and the HPA scales as before. The target stays within 40-90 %
+     *     (or the current target if it is already outside); the requests were adjusted to keep it
+     *     there. Without `recommendedTarget` (`skipReason` set) the requests of `metric` must not
+     *     be changed by the agent.
+     */
+    HPACoordination: {
+      /** @description HPA name (same namespace as the workload). */
+      name: string
+      metric: components['schemas']['ResourceName']
+      /** @description Current `averageUtilization` target, percent. */
+      currentTarget: number
+      /** @description `averageUtilization` target to set together with the recommended requests, percent. */
+      recommendedTarget?: number
+      minReplicas?: number
+      maxReplicas?: number
+      /**
+       * @description Why the hub does not coordinate: the HPA was at `maxReplicas` in the window; it scales
+       *     on more than one utilization metric or on any other metric (pods, object, external);
+       *     a container has no request of `metric`; or keeping the target within bounds would
+       *     lower a request that must not decrease (throttled / oom-killed).
+       * @enum {string}
+       */
+      skipReason?: 'max-replicas-reached' | 'unsupported-metrics' | 'missing-request' | 'target-out-of-bounds'
     }
     /**
      * @description Rates used for `monthlySavingsUSD` (D-016). `source` is `metrics` when they come from the

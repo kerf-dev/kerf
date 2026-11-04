@@ -49,10 +49,11 @@ rules:
     resources: ["nodes/proxy"]
     verbs: ["get"]
   {{- end }}
-  # HPA detection (D-011).
+  # HPA detection (D-011); patched (server-side apply of the utilization target) for HPA
+  # coordination (WO-11).
   - apiGroups: ["autoscaling"]
     resources: ["horizontalpodautoscalers"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch"{{ if not .Values.readOnly }}, "patch"{{ end }}]
   # Our CRDs.
   - apiGroups: ["resource-optimizer.oz.io"]
     resources: ["rightsizingpolicies"]

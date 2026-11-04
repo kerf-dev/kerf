@@ -196,6 +196,19 @@ func (q Queries) HPAMetrics(lookback time.Duration) string {
 		lastOver(lookback)("kube_horizontalpodautoscaler_spec_target_metric"+q.sel()))
 }
 
+// HPAReplicaBounds returns spec.minReplicas or spec.maxReplicas (bound "min" or "max") per HPA.
+func (q Queries) HPAReplicaBounds(bound string, lookback time.Duration) string {
+	return fmt.Sprintf("max by (cluster, namespace, horizontalpodautoscaler) (%s)",
+		lastOver(lookback)("kube_horizontalpodautoscaler_spec_"+bound+"_replicas"+q.sel()))
+}
+
+// HPAPeakReplicas returns the highest current replica count of each HPA over window (WO-11: an HPA
+// at maxReplicas is not coordinated).
+func (q Queries) HPAPeakReplicas(window time.Duration) string {
+	return fmt.Sprintf("max by (cluster, namespace, horizontalpodautoscaler) (max_over_time(%s[%s]))",
+		"kube_horizontalpodautoscaler_status_current_replicas"+q.sel(), promDuration(window))
+}
+
 // Pricing returns the average hourly rate over the cluster's nodes and the node count.
 func (q Queries) Pricing(metric string, lookback time.Duration) (avg, count string) {
 	// max by node first: a pricing rollout briefly exposes two series per node (WO-03 hand-over).

@@ -31,6 +31,9 @@ const (
 	DefaultRollbackOOMs    = 1
 	DefaultRollbackRestart = 3
 	DefaultThrottlingRatio = 0.25
+	// HPA target bounds (WO-11), percent.
+	DefaultHPAMinTarget int32 = 40
+	DefaultHPAMaxTarget int32 = 90
 )
 
 var (
@@ -79,6 +82,12 @@ type Effective struct {
 	ThrottlingRatio  float64
 
 	JVMDetect bool
+
+	// HPA coordination (WO-11): change requests of an HPA's utilization resource only together
+	// with its target, which must stay within [HPAMinTarget, HPAMaxTarget] percent.
+	HPACoordinate bool
+	HPAMinTarget  int32
+	HPAMaxTarget  int32
 
 	// Warnings lists ignored invalid values (e.g. a bad annotation), for logs and status messages.
 	Warnings []string
@@ -239,6 +248,8 @@ func Resolve(w Workload, policies []v1alpha1.RightsizingPolicy, cluster *v1alpha
 		RollbackRestarts:         DefaultRollbackRestart,
 		ThrottlingRatio:          DefaultThrottlingRatio,
 		JVMDetect:                true,
+		HPAMinTarget:             DefaultHPAMinTarget,
+		HPAMaxTarget:             DefaultHPAMaxTarget,
 	}
 	if cluster != nil {
 		e.layer(cluster, v1alpha1.ModeSourceClusterDefault, "cluster default")
@@ -361,6 +372,23 @@ func (e *Effective) layer(s *v1alpha1.RightsizingPolicySpec, src v1alpha1.ModeSo
 	}
 	if s.JVM != nil && s.JVM.Detect != nil {
 		e.JVMDetect = *s.JVM.Detect
+	}
+	if h := s.HPA; h != nil {
+		if h.Coordinate != nil {
+			e.HPACoordinate = *h.Coordinate
+		}
+		if b := h.TargetBounds; b != nil {
+			if b.MinUtilization != nil {
+				e.HPAMinTarget = *b.MinUtilization
+			}
+			if b.MaxUtilization != nil {
+				e.HPAMaxTarget = *b.MaxUtilization
+			}
+			if e.HPAMinTarget > e.HPAMaxTarget {
+				e.warnf("%s: hpa.targetBounds min %d > max %d ignored", what, e.HPAMinTarget, e.HPAMaxTarget)
+				e.HPAMinTarget, e.HPAMaxTarget = DefaultHPAMinTarget, DefaultHPAMaxTarget
+			}
+		}
 	}
 }
 

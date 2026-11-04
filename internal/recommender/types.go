@@ -70,6 +70,13 @@ type HPA struct {
 	Name string `json:"name"`
 	// Metrics are "<metric_name>/<metric_target_type>", e.g. "cpu/utilization".
 	Metrics []string `json:"metrics,omitempty"`
+	// Targets are the averageUtilization targets in percent by resource ("cpu", "memory").
+	Targets map[string]float64 `json:"targets,omitempty"`
+	// MinReplicas and MaxReplicas are the HPA's bounds (0 when unknown).
+	MinReplicas float64 `json:"minReplicas,omitempty"`
+	MaxReplicas float64 `json:"maxReplicas,omitempty"`
+	// PeakReplicas is the highest current replica count over the loaded window.
+	PeakReplicas float64 `json:"peakReplicas,omitempty"`
 }
 
 // Coupled reports whether the HPA scales on CPU or memory utilization (D-011).
