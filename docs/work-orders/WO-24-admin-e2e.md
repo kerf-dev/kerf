@@ -1,9 +1,9 @@
 # WO-24 Admin area: end-to-end
 
 - **Phase / wave:** 4 / 2
-- **Depends on:** WO-20, WO-21, WO-22 merged and deployed
+- **Depends on:** WO-20, WO-21, WO-21b, WO-22, WO-25 merged and deployed (all on main, deployed at main-5d25dd7 or later)
 - **Owns:** `test/e2e/` (new admin scenarios), `make/e2e.mk`
-- **Decisions:** D-022, D-023, D-024
+- **Decisions:** D-022, D-023, D-024, D-025, D-026, D-027
 
 ## Deliverables
 These scenarios go in the existing suite; they drive the hub API as a logged-in user with a session cookie and CSRF token:
@@ -13,7 +13,12 @@ These scenarios go in the existing suite; they drive the hub API as a logged-in 
 4. Revert restores the previous policy version and the CR follows.
 5. A Git-managed CR is never modified or deleted, and is listed read-only in the inventory.
 6. Roles: a viewer gets 403 on writes; an operator can pause but cannot edit defaults.
-7. Optional: one Playwright smoke against the deployed UI (login → pause → resume).
+7. Approve once on an Argo CD app with self-heal: the approved values stay after an Argo CD sync (D-027).
+8. Onboarding (D-025): register a new cluster name via the admin API, bind it to datasource `local` with the label of an existing spoke, run the datasource test and readiness; the state stays `Registered` (no agent) and auto-patch on it gets `409 cluster_not_automation_ready`; with `overrideReadiness: true` it is accepted and audited. Clean up the cluster.
+9. Readiness of `ro-spoke-1` and `ro-spoke-2` is `AutomationReady` after a recheck.
+10. RBAC removed: remove the agent's `pods/resize` (or rollout patch) rule on one spoke, recheck → the state drops to `ReadyAudit`, a `ReadinessChanged` audit row appears, and auto-patch is refused. Restore the rule in cleanup (also on failure).
+11. KSM scaled to 0 → `metrics.freshness` blocking failure + banner condition. Behind `RO_E2E_DISRUPTIVE=1`, skipped by default (scaling kube-state-metrics needs the user's OK; see the tracker).
+12. Optional: one Playwright smoke against the deployed UI (login → pause → resume).
 
 ## Definition of done
 `make e2e && make e2e` passes with the new scenarios, in under 30 minutes.
