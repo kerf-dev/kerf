@@ -5,6 +5,9 @@ ENV CGO_ENABLED=0 GOTOOLCHAIN=local
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd/pricing/ cmd/pricing/
+COPY api/v1alpha1/ api/v1alpha1/
+COPY internal/hub/hubapi/ internal/hub/hubapi/
+COPY internal/hub/datasource/ internal/hub/datasource/
 COPY internal/pricing/ internal/pricing/
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     go build -trimpath -ldflags="-s -w" -o /out/pricing ./cmd/pricing
