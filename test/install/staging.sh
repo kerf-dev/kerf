@@ -235,10 +235,17 @@ readiness() {
 }
 
 wait_state() { # state minutes
-  local end=$(( $(date +%s) + $2 * 60 )) r=""
+  local end=$(( $(date +%s) + $2 * 60 )) r="" last=$(date +%s)
   while [ "$(date +%s)" -lt $end ]; do
     r=$(readiness); echo "  $(date +%H:%M:%S) $r"
     echo "$r" | jq -e --arg s "$1" '.state == $s' >/dev/null && return 0
+    # The recommender runs daily, and it needs some minutes of metrics before it sees a workload; a
+    # run requested right after the install finds nothing. As the guide's step 5.4 says, start a run:
+    # every 3 minutes while recommendations are missing.
+    if echo "$r" | jq -e '.failing[] | select(.id == "metrics.recommendations")' >/dev/null && [ $(( $(date +%s) - last )) -ge 180 ]; then
+      echo "  recompute: $(curl -sS -b "$WORK/cookies" -H "X-CSRF-Token: $CSRF" -X POST "https://$UI_HOST/v1/admin/recompute?cluster=$CLUSTER" | jq -c '{runId}')"
+      last=$(date +%s)
+    fi
     curl -sS -o /dev/null -b "$WORK/cookies" -H "X-CSRF-Token: $CSRF" -X POST https://$UI_HOST/v1/clusters/$CLUSTER/readiness/recheck || true
     sleep 30
   done
@@ -337,6 +344,7 @@ case "${1:-}" in
   up) clusters; prereqs ;;
   install) step3; step4; step5 ;;
   verify) verify ;;
+  recompute) signin >/dev/null; curl -sS -b "$WORK/cookies" -H "X-CSRF-Token: $CSRF" -X POST "https://$UI_HOST/v1/admin/recompute?cluster=$CLUSTER" | jq -c . ;;
   upgrade) upgrade "${2:?version}" ;;
   uninstall) uninstall ;;
   step3|step4|step5|signin|leader_check|readiness|prereqs|clusters|autopatch|failover) "$1" ;;

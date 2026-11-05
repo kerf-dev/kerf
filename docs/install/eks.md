@@ -595,7 +595,9 @@ now with:
 ```bash
 curl -sS -b $WORK/cookies -H "X-CSRF-Token: $CSRF" -X POST "https://$UI_HOST/v1/admin/recompute?cluster=$CLUSTER" | jq -c .
 ```
-The state then moves to **`AutomationReady`** once every write capability passes. Each failing check
+The recommender needs a few minutes of this cluster's metrics before it sees its workloads: if the
+run log says `"workloads":0` (or `metrics.recommendations` keeps failing), run the command again
+after five minutes. The state then moves to **`AutomationReady`** once every write capability passes. Each failing check
 names its fix (`remediation`). The catalog is `docs/contracts/readiness.md`. The readiness states:
 `Registered → AgentConnected → MetricsOK → ReadyAudit → AutomationReady`. A session expires after
 12 hours. If `curl` returns `401`, sign in again (4.5).
