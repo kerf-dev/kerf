@@ -1,0 +1,26 @@
+# Stand-in for RDS PostgreSQL 16 (guide step 3.2): CloudNativePG with TLS on (server certificate for
+# ro-hub-rw.rds.svc, CA in Secret ro-hub-ca). The master user `ro_admin` mirrors RDS's
+# `--master-username ro_admin`; its password Secret stands in for RDS's managed master secret.
+apiVersion: v1
+kind: Namespace
+metadata: {name: rds}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: {name: ro-hub, namespace: rds}
+spec:
+  instances: 1
+  imageName: PG_IMAGE
+  storage: {size: 2Gi}
+  resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 512Mi}}
+  bootstrap:
+    initdb: {database: postgres_init, owner: postgres_init}
+  managed:
+    roles:
+      - name: ro_admin
+        ensure: present
+        login: true
+        superuser: false
+        createdb: true
+        createrole: true
+        passwordSecret: {name: ro-admin-master}

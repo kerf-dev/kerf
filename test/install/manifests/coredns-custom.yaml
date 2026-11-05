@@ -1,0 +1,12 @@
+# Stand-in for Route 53 (guide step 4.4): HUB_HOST and UI_HOST resolve to the hub cluster's traefik
+# (servicelb on the hub server node, address HUB_NODE_IP on the k3d network ro-dev).
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: coredns-custom, namespace: kube-system}
+data:
+  ro-staging.server: |
+    ro-staging.test:53 {
+      hosts {
+        HUB_NODE_IP HUB_HOST UI_HOST
+      }
+    }

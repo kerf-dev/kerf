@@ -1,0 +1,25 @@
+# WO-18e: one over-provisioned workload for the guide's step 6 (auto-patch). stress-ng uses ~2% of
+# a core against a 500m request, so the recommendation is a CPU decrease.
+apiVersion: v1
+kind: Namespace
+metadata: {name: staging-demo}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: web, namespace: staging-demo, labels: {app: web}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: web}}
+  template:
+    metadata: {labels: {app: web}}
+    spec:
+      containers:
+        - name: app
+          image: docker.io/colinianking/stress-ng:77b17fb95ec2f00e1c2ac2a8a20fe799150d8bd5
+          args: [--cpu, "1", --cpu-load, "2", --timeout, "0"]
+          resources:
+            requests: {cpu: 500m, memory: 64Mi}
+            limits: {memory: 128Mi}
+          resizePolicy:
+            - {resourceName: cpu, restartPolicy: NotRequired}
+            - {resourceName: memory, restartPolicy: RestartContainer}
