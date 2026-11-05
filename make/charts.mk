@@ -36,6 +36,8 @@ UMBRELLA_WANT_all   := hub pricing resource-optimizer-agent resource-optimizer-w
 UMBRELLA_CRDS_hub   := 0
 UMBRELLA_CRDS_spoke := 2
 UMBRELLA_CRDS_all   := 2
+# The cluster wizard's Argo CD snippets, written by internal/hub/install's tests for kubeconform.
+INSTALL_SNIPPETS    := $(KUBECONFORM_CACHE)/install-snippets
 # The umbrella's dev render for charts-diff-dev (mode all).
 UMBRELLA_DEV        := --set global.mode=all --set dev=true --set-string global.clusterName=ro-hub \
   --set-string hub.database.url=postgres://dev@db/dev
@@ -117,6 +119,12 @@ charts-lint-umbrella: kubeconform yq ## helm lint + kubeconform of the umbrella 
 	  -schema-location default -schema-location '$(CRDS_CATALOG)' \
 	  $(UMBRELLA_EXAMPLES)/applicationset.yaml $(UMBRELLA_EXAMPLES)/argocd-ecr-repo.yaml $(UMBRELLA_EXAMPLES)/external-secrets/*.yaml; \
 	for f in $(UMBRELLA_EXAMPLES)/iam/*.json; do jq -e '.Version and .Statement' $$f >/dev/null || { echo "$$f: not an IAM policy"; exit 1; }; done; \
+	echo "== the cluster wizard's install snippets (internal/hub/install, WO-18f) with this chart"; \
+	mkdir -p $(INSTALL_SNIPPETS); rm -f $(INSTALL_SNIPPETS)/*.yaml; \
+	INSTALL_TEST_REQUIRE_HELM=1 INSTALL_SNIPPET_DIR=$(abspath $(INSTALL_SNIPPETS)) $(GO) test -count=1 \
+	  -run 'TestSnippetsRenderWithChart|TestValuesMatchSpokeExample|TestInstallConfigFromCharts' ./internal/hub/install ./internal/hub; \
+	$(KUBECONFORM) -strict -summary -kubernetes-version $(CHARTS_K8S_VERSION) -cache $(KUBECONFORM_CACHE) \
+	  -schema-location default -schema-location '$(CRDS_CATALOG)' $(INSTALL_SNIPPETS)/*.yaml; \
 	echo "umbrella chart OK"
 
 # The Kubernetes JSON schemas have no CustomResourceDefinition schema, so kubeconform skips that

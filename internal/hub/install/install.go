@@ -1,16 +1,21 @@
-// Package install renders the agent (and optional webhook) install instructions of a cluster for
-// the onboarding wizard: a Helm command, a values file, or an Argo CD Application, plus the Argo
-// CD ignoreDifferences snippet (D-006). The token never appears: the snippets reference the Secret
-// resource-optimizer-agent-token (key token), whose value is shown once at cluster creation or
+// Package install renders the install instructions of a workload cluster for the onboarding
+// wizard: a Helm script, a values file, or an Argo CD Application, plus the Argo CD
+// ignoreDifferences snippet for argocd-cm (D-006). All three install the umbrella chart
+// resource-optimizer with global.mode spoke (D-028, docs/install/eks.md step 5.3): the agent, the
+// admission webhook and the CRDs in one release.
+//
+// The token never appears: the snippets reference the Secret resource-optimizer-agent-token (key
+// token), either an existing one (the Helm script creates it from $RO_AGENT_TOKEN) or one the
+// chart's ExternalSecret builds from a secret store. Its value is shown once at cluster creation or
 // token creation. docs/contracts/readiness.md §4.
 package install
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 
@@ -26,10 +31,19 @@ const (
 	DefaultArgoCDProject   = "default"
 	DefaultCertManagerRef  = "oci://quay.io/jetstack/charts/cert-manager"
 	DefaultCertManagerVer  = "v1.19.1"
+	// DefaultTokenKey is the secret store key of a cluster's agent token ({cluster} = its name),
+	// as in docs/install/eks.md step 5.2.
+	DefaultTokenKey      = "resource-optimizer/clusters/{cluster}/agent-token"
+	DefaultTokenProperty = "token"
+	// ChartName and ReleaseName of the umbrella chart (deploy/charts/resource-optimizer).
+	ChartName   = "resource-optimizer"
+	ReleaseName = "resource-optimizer"
 	// FieldManager is the agent's server-side apply field manager (D-006).
 	FieldManager = "resource-optimizer"
 	// TokenEnv is the shell variable the Helm snippet reads the agent token from.
 	TokenEnv = "RO_AGENT_TOKEN"
+	// AgentReplicas: two agents with leader election (the umbrella chart's production default).
+	AgentReplicas = 2
 )
 
 // Options describe what to render.
@@ -37,23 +51,30 @@ type Options struct {
 	Cluster string
 	// HubURL is the hub base URL as reachable from the cluster.
 	HubURL string
-	// AgentChart and WebhookChart are chart references: oci://registry/path/<chart> or
-	// <helm repo URL>|<chart>, e.g. https://charts.example.com|agent.
-	AgentChart, WebhookChart string
-	// ChartVersion is the chart version (empty = latest).
+	// Chart is the umbrella chart reference: oci://registry/path/resource-optimizer,
+	// <helm repo URL>|resource-optimizer, or a local chart path.
+	Chart string
+	// ChartVersion is the chart version (empty = latest). The images default to it.
 	ChartVersion string
-	Namespace    string
+	// ImageRegistry is global.imageRegistry, the registry host of the images (the chart requires
+	// it). Empty: the host of an oci:// Chart.
+	ImageRegistry string
+	Namespace     string
 	// ImageRepository and ImageTag override the chart's agent image when set.
 	ImageRepository, ImageTag string
 	// ReadOnly installs the agent without write RBAC (every mode capped at audit).
 	ReadOnly bool
-	// Webhook adds the admission webhook; CertManager adds cert-manager (the webhook needs it).
+	// Webhook keeps the admission webhook (part of mode spoke; false sets webhook.enabled false).
+	// CertManager adds cert-manager to the Helm script (the webhook needs it).
 	Webhook, CertManager bool
 	// CertManagerChart / CertManagerVersion default to DefaultCertManagerRef / Ver.
 	CertManagerChart, CertManagerVersion string
 	// Health is the cluster's metrics binding for the agent's throttling health watch (D-025);
-	// nil = the chart defaults (hub VictoriaMetrics, label cluster).
+	// nil = the chart defaults (no throttling rollback).
 	Health *HealthMetrics
+	// TokenExternalSecret makes the chart build the token Secret with the External Secrets
+	// Operator; nil = an existing Secret (the Helm script creates it).
+	TokenExternalSecret *TokenExternalSecret
 	// ArgoCDNamespace and ArgoCDProject of the Application (defaults argocd, default);
 	// DestinationServer defaults to the in-cluster API server.
 	ArgoCDNamespace, ArgoCDProject, DestinationServer string
@@ -68,7 +89,18 @@ type HealthMetrics struct {
 	ExtraMatchers     []string `yaml:"extraMatchers,omitempty"`
 }
 
-var dnsLabel = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
+// TokenExternalSecret: where the agent token is in the secret store.
+type TokenExternalSecret struct {
+	// SecretStoreKind (default ClusterSecretStore) and SecretStoreName: global.externalSecrets.secretStoreRef.
+	SecretStoreKind, SecretStoreName string
+	// Key (default DefaultTokenKey; {cluster} is replaced) and Property (default token).
+	Key, Property string
+}
+
+var (
+	dnsLabel = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
+	safeArg  = regexp.MustCompile(`^[A-Za-z0-9_./:=@%+,{}|-]*$`)
+)
 
 func (o *Options) defaults() error {
 	var errs []error
@@ -78,11 +110,14 @@ func (o *Options) defaults() error {
 	if u, err := url.Parse(o.HubURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		errs = append(errs, errors.New("hub URL must be an absolute http(s) URL"))
 	}
-	if o.AgentChart == "" {
-		errs = append(errs, errors.New("agent chart reference is not configured"))
+	if o.Chart == "" {
+		errs = append(errs, errors.New("chart reference is not configured"))
 	}
-	if o.Webhook && o.WebhookChart == "" {
-		errs = append(errs, errors.New("webhook chart reference is not configured"))
+	if o.ImageRegistry == "" {
+		o.ImageRegistry = RegistryOf(o.Chart)
+	}
+	if o.ImageRegistry == "" && o.Chart != "" {
+		errs = append(errs, errors.New("image registry is not configured (needed unless the chart is an oci:// reference)"))
 	}
 	if o.Namespace == "" {
 		o.Namespace = DefaultNamespace
@@ -105,12 +140,60 @@ func (o *Options) defaults() error {
 	if o.CertManagerVersion == "" {
 		o.CertManagerVersion = DefaultCertManagerVer
 	}
-	for _, c := range []string{o.AgentChart, o.WebhookChart, o.ChartVersion, o.ImageRepository, o.ImageTag, o.CertManagerChart, o.CertManagerVersion} {
-		if strings.ContainsAny(c, "\n\r'\"`$\\ ") {
+	args := []string{o.Chart, o.ChartVersion, o.ImageRegistry, o.ImageRepository, o.ImageTag, o.CertManagerChart, o.CertManagerVersion}
+	if t := o.TokenExternalSecret; t != nil {
+		t2 := *t
+		if t2.SecretStoreKind == "" {
+			t2.SecretStoreKind = "ClusterSecretStore"
+		}
+		if t2.Key == "" {
+			t2.Key = DefaultTokenKey
+		}
+		t2.Key = strings.ReplaceAll(t2.Key, "{cluster}", o.Cluster)
+		if t2.Property == "" {
+			t2.Property = DefaultTokenProperty
+		}
+		if t2.SecretStoreName == "" {
+			errs = append(errs, errors.New("token external secret: secret store name is not configured"))
+		}
+		o.TokenExternalSecret = &t2
+		args = append(args, t2.SecretStoreKind, t2.SecretStoreName, t2.Key, t2.Property)
+	}
+	for _, c := range args {
+		if !safeArg.MatchString(c) {
 			errs = append(errs, fmt.Errorf("invalid characters in %q", c))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// RegistryOf returns the registry host of an oci:// chart reference ("" otherwise).
+func RegistryOf(ref string) string {
+	rest, ok := strings.CutPrefix(ref, "oci://")
+	if !ok {
+		return ""
+	}
+	host, _, _ := strings.Cut(rest, "/")
+	return host
+}
+
+// UmbrellaFromComponent derives the umbrella chart reference from a component chart reference
+// (the pre-WO-18f onboarding.agentChart): make release publishes it next to the components, e.g.
+// oci://<registry>/charts/agent -> oci://<registry>/charts/resource-optimizer,
+// <repo>|agent -> <repo>|resource-optimizer, deploy/charts/agent -> deploy/charts/resource-optimizer.
+func UmbrellaFromComponent(ref string) string {
+	if ref == "" {
+		return ""
+	}
+	if repo, _, ok := strings.Cut(ref, "|"); ok {
+		return repo + "|" + ChartName
+	}
+	rest, oci := strings.CutPrefix(ref, "oci://")
+	out := path.Join(path.Dir(rest), ChartName)
+	if oci {
+		return "oci://" + out
+	}
+	return out
 }
 
 // ArgoCDIgnoreDifferences is the argocd-cm data entry that makes Argo CD ignore the fields the
@@ -128,9 +211,10 @@ func Render(format string, o Options) (hubapi.InstallSnippet, error) {
 	var err error
 	switch format {
 	case hubapi.InstallHelm:
-		s.Content, s.Filename = helmScript(o), "install.sh"
+		s.Filename = "install.sh"
+		s.Content, err = helmScript(o)
 	case hubapi.InstallValues:
-		s.Filename = "values-" + o.Cluster + ".yaml"
+		s.Filename = valuesName(o)
 		s.Content, err = valuesFile(o)
 	case hubapi.InstallArgoCD:
 		s.Filename = "resource-optimizer-" + o.Cluster + ".yaml"
@@ -145,33 +229,38 @@ func Render(format string, o Options) (hubapi.InstallSnippet, error) {
 	return s, nil
 }
 
+func valuesName(o Options) string { return "values-" + o.Cluster + ".yaml" }
+
 func notes(format string, o Options) []string {
-	n := []string{
-		fmt.Sprintf("The agent token is not in this snippet: create the Secret %s (key %s) in namespace %s with the token shown once when the cluster was created, or create a new agent token (POST /v1/admin/tokens).",
-			hubapi.AgentTokenSecretName, hubapi.AgentTokenSecretKey, o.Namespace),
-		"If Argo CD manages the workloads, add the argocdIgnoreDifferences entry to argocd-cm so it does not revert the agent's changes.",
+	var n []string
+	if t := o.TokenExternalSecret; t != nil {
+		n = append(n, fmt.Sprintf("The agent token is not in this snippet: store the token shown once when the cluster was created (or a new agent token, POST /v1/admin/tokens) in the secret store %s as %s, property %s. The chart's ExternalSecret builds the Secret %s from it.",
+			t.SecretStoreName, t.Key, t.Property, hubapi.AgentTokenSecretName))
+	} else if format == hubapi.InstallHelm {
+		n = append(n, fmt.Sprintf("The agent token is not in this snippet: set %s to the token shown once when the cluster was created (or a new agent token, POST /v1/admin/tokens); the script stores it in the Secret %s.",
+			TokenEnv, hubapi.AgentTokenSecretName))
+	} else {
+		n = append(n, fmt.Sprintf("The agent token is not in this snippet: create the Secret %s (key %s) in namespace %s with the token shown once when the cluster was created, or create a new agent token (POST /v1/admin/tokens).",
+			hubapi.AgentTokenSecretName, hubapi.AgentTokenSecretKey, o.Namespace))
 	}
+	n = append(n,
+		"This installs the umbrella chart resource-optimizer in mode spoke with the settings of this cluster. docs/install/eks.md step 5.3 (deploy/examples/eks/values-spoke.yaml) adds the production extras: NetworkPolicies, ServiceMonitors, the webhook port and a private hub CA.",
+		"If Argo CD manages the workloads, add the argocdIgnoreDifferences entry to argocd-cm so it does not revert the agent's changes.",
+	)
 	if o.ReadOnly {
 		n = append(n, "readOnly: the agent gets no write permissions; every workload stays in audit and the cluster cannot reach AutomationReady.")
 	}
-	if o.Webhook && !o.CertManager {
-		n = append(n, "The webhook needs cert-manager in the cluster (or set webhook issuerRef to an existing issuer).")
+	if o.Webhook && (!o.CertManager || format != hubapi.InstallHelm) {
+		n = append(n, "The webhook needs cert-manager in the cluster (or set webhook.certManager.issuerRef to an existing issuer).")
 	}
 	if format == hubapi.InstallValues {
-		n = append(n, fmt.Sprintf("helm upgrade --install agent %s -n %s --create-namespace -f %s", chartCLI(o.AgentChart, o.ChartVersion), o.Namespace, "values-"+o.Cluster+".yaml"))
+		n = append(n, fmt.Sprintf("helm upgrade --install %s %s -n %s --create-namespace -f %s --wait --timeout 10m",
+			ReleaseName, chartCLI(o.Chart, o.ChartVersion), o.Namespace, valuesName(o)))
 	}
 	return n
 }
 
-// shellQuote quotes s for POSIX shells.
-func shellQuote(s string) string {
-	if s != "" && regexp.MustCompile(`^[A-Za-z0-9_./:=@%+,-]+$`).MatchString(s) {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
-}
-
-// chartCLI renders a chart reference for helm: "oci://…/agent --version x" or "agent --repo url".
+// chartCLI renders a chart reference for helm: "oci://…/chart --version x" or "chart --repo url".
 func chartCLI(ref, version string) string {
 	out := ref
 	if repo, chart, ok := strings.Cut(ref, "|"); ok {
@@ -183,56 +272,68 @@ func chartCLI(ref, version string) string {
 	return out
 }
 
-func helmScript(o Options) string {
+// valuesDelimiter ends the values heredoc of the Helm script. The values are YAML mappings of
+// validated single-line strings, so no line equals it.
+const valuesDelimiter = "RO_VALUES"
+
+func helmScript(o Options) (string, error) {
+	vals, err := marshal(spokeVals(o))
+	if err != nil {
+		return "", err
+	}
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\nset -eu\n")
-	fmt.Fprintf(&b, "# resource-optimizer for cluster %s. Run with kubectl/helm pointed at the cluster.\n", o.Cluster)
-	fmt.Fprintf(&b, "# %s: the agent token shown once when the cluster was created (or POST /v1/admin/tokens).\n", TokenEnv)
-	fmt.Fprintf(&b, ": \"${%s:?set %s to the agent token}\"\n\n", TokenEnv, TokenEnv)
-	fmt.Fprintf(&b, "kubectl create namespace %s --dry-run=client -o yaml | kubectl apply -f -\n", o.Namespace)
-	fmt.Fprintf(&b, "kubectl -n %s create secret generic %s --from-literal=%s=\"$%s\" --dry-run=client -o yaml | kubectl apply -f -\n\n",
-		o.Namespace, hubapi.AgentTokenSecretName, hubapi.AgentTokenSecretKey, TokenEnv)
+	fmt.Fprintf(&b, "# resource-optimizer (chart %s, global.mode spoke) for cluster %s.\n# Run with kubectl and helm pointed at the cluster.\n", ChartName, o.Cluster)
+	if t := o.TokenExternalSecret; t != nil {
+		fmt.Fprintf(&b, "# The agent token comes from the secret store %s: store the token shown once when the\n# cluster was created (or POST /v1/admin/tokens) as %s, property %s, first.\n\n",
+			t.SecretStoreName, t.Key, t.Property)
+	} else {
+		fmt.Fprintf(&b, "# %s: the agent token shown once when the cluster was created (or POST /v1/admin/tokens).\n", TokenEnv)
+		fmt.Fprintf(&b, ": \"${%s:?set %s to the agent token}\"\n\n", TokenEnv, TokenEnv)
+		fmt.Fprintf(&b, "kubectl create namespace %s --dry-run=client -o yaml | kubectl apply -f -\n", o.Namespace)
+		fmt.Fprintf(&b, "kubectl -n %s create secret generic %s --from-literal=%s=\"$%s\" --dry-run=client -o yaml | kubectl apply -f -\n\n",
+			o.Namespace, hubapi.AgentTokenSecretName, hubapi.AgentTokenSecretKey, TokenEnv)
+	}
 	if o.Webhook && o.CertManager {
 		fmt.Fprintf(&b, "helm upgrade --install cert-manager %s -n cert-manager --create-namespace --set crds.enabled=true --wait\n\n",
 			chartCLI(o.CertManagerChart, o.CertManagerVersion))
 	}
-	fmt.Fprintf(&b, "helm upgrade --install agent %s -n %s --wait \\\n  --set-string clusterName=%s \\\n  --set-string hub.url=%s",
-		chartCLI(o.AgentChart, o.ChartVersion), o.Namespace, shellQuote(o.Cluster), shellQuote(o.HubURL))
-	fmt.Fprintf(&b, " \\\n  --set-string hub.tokenSecret.name=%s --set-string hub.tokenSecret.key=%s", hubapi.AgentTokenSecretName, hubapi.AgentTokenSecretKey)
-	if o.ImageRepository != "" {
-		fmt.Fprintf(&b, " \\\n  --set-string image.repository=%s", o.ImageRepository)
-	}
-	if o.ImageTag != "" {
-		fmt.Fprintf(&b, " \\\n  --set-string image.tag=%s", o.ImageTag)
-	}
-	if o.ReadOnly {
-		b.WriteString(" \\\n  --set readOnly=true")
-	}
-	if h := o.Health; h != nil {
-		if h.MetricsURL != "" {
-			fmt.Fprintf(&b, " \\\n  --set-string health.metricsURL=%s", shellQuote(h.MetricsURL))
-		}
-		fmt.Fprintf(&b, " \\\n  --set-string health.clusterLabel=%s", shellQuote(h.ClusterLabel))
-		if h.ClusterLabelValue != "" {
-			fmt.Fprintf(&b, " \\\n  --set-string health.clusterLabelValue=%s", shellQuote(h.ClusterLabelValue))
-		}
-		if len(h.ExtraMatchers) > 0 {
-			j, _ := json.Marshal(h.ExtraMatchers)
-			fmt.Fprintf(&b, " \\\n  --set-json health.extraMatchers=%s", shellQuote(string(j)))
-		}
-	}
-	b.WriteString("\n")
-	if o.Webhook {
-		fmt.Fprintf(&b, "\nhelm upgrade --install webhook %s -n %s --wait \\\n  --set-string clusterName=%s\n",
-			chartCLI(o.WebhookChart, o.ChartVersion), o.Namespace, shellQuote(o.Cluster))
-	}
-	return b.String()
+	fmt.Fprintf(&b, "helm upgrade --install %s %s \\\n  -n %s --create-namespace --wait --timeout 10m -f - <<'%s'\n%s%s\n",
+		ReleaseName, chartCLI(o.Chart, o.ChartVersion), o.Namespace, valuesDelimiter, vals, valuesDelimiter)
+	return b.String(), nil
+}
+
+// ---- values (deploy/examples/eks/values-spoke.yaml, docs/install/eks.md step 5.3) ----
+
+type secretStoreRef struct {
+	Kind string `yaml:"kind"`
+	Name string `yaml:"name"`
+}
+
+type globalValues struct {
+	Mode            string `yaml:"mode"`
+	ClusterName     string `yaml:"clusterName"`
+	ImageRegistry   string `yaml:"imageRegistry"`
+	ExternalSecrets *struct {
+		SecretStoreRef secretStoreRef `yaml:"secretStoreRef"`
+	} `yaml:"externalSecrets,omitempty"`
+}
+
+type remoteRef struct {
+	Key      string `yaml:"key"`
+	Property string `yaml:"property"`
+}
+
+type externalSecret struct {
+	Enabled   bool      `yaml:"enabled"`
+	RemoteRef remoteRef `yaml:"remoteRef"`
 }
 
 type tokenSecret struct {
-	Name   string `yaml:"name"`
-	Key    string `yaml:"key"`
-	Create bool   `yaml:"create"`
+	Name           string          `yaml:"name"`
+	Key            string          `yaml:"key"`
+	Create         bool            `yaml:"create"`
+	ExternalSecret *externalSecret `yaml:"externalSecret,omitempty"`
 }
 
 type hubValues struct {
@@ -246,22 +347,45 @@ type imageValues struct {
 }
 
 type agentValues struct {
-	ClusterName string         `yaml:"clusterName"`
-	Hub         hubValues      `yaml:"hub"`
-	Image       *imageValues   `yaml:"image,omitempty"`
-	ReadOnly    bool           `yaml:"readOnly"`
-	Health      *HealthMetrics `yaml:"health,omitempty"`
+	Hub            hubValues      `yaml:"hub"`
+	ReplicaCount   int            `yaml:"replicaCount"`
+	LeaderElection bool           `yaml:"leaderElection"`
+	Image          *imageValues   `yaml:"image,omitempty"`
+	ReadOnly       bool           `yaml:"readOnly"`
+	Health         *HealthMetrics `yaml:"health,omitempty"`
 }
 
-func agentVals(o Options) agentValues {
-	v := agentValues{
-		ClusterName: o.Cluster,
-		Hub:         hubValues{URL: o.HubURL, TokenSecret: tokenSecret{Name: hubapi.AgentTokenSecretName, Key: hubapi.AgentTokenSecretKey}},
-		ReadOnly:    o.ReadOnly,
-		Health:      o.Health,
+type webhookValues struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+type spokeValues struct {
+	Global  globalValues   `yaml:"global"`
+	Agent   agentValues    `yaml:"agent"`
+	Webhook *webhookValues `yaml:"webhook,omitempty"`
+}
+
+func spokeVals(o Options) spokeValues {
+	v := spokeValues{
+		Global: globalValues{Mode: "spoke", ClusterName: o.Cluster, ImageRegistry: o.ImageRegistry},
+		Agent: agentValues{
+			Hub:          hubValues{URL: o.HubURL, TokenSecret: tokenSecret{Name: hubapi.AgentTokenSecretName, Key: hubapi.AgentTokenSecretKey}},
+			ReplicaCount: AgentReplicas, LeaderElection: true,
+			ReadOnly: o.ReadOnly,
+			Health:   o.Health,
+		},
+	}
+	if t := o.TokenExternalSecret; t != nil {
+		v.Global.ExternalSecrets = &struct {
+			SecretStoreRef secretStoreRef `yaml:"secretStoreRef"`
+		}{secretStoreRef{Kind: t.SecretStoreKind, Name: t.SecretStoreName}}
+		v.Agent.Hub.TokenSecret.ExternalSecret = &externalSecret{Enabled: true, RemoteRef: remoteRef{Key: t.Key, Property: t.Property}}
 	}
 	if o.ImageRepository != "" || o.ImageTag != "" {
-		v.Image = &imageValues{Repository: o.ImageRepository, Tag: o.ImageTag}
+		v.Agent.Image = &imageValues{Repository: o.ImageRepository, Tag: o.ImageTag}
+	}
+	if !o.Webhook {
+		v.Webhook = &webhookValues{Enabled: false}
 	}
 	return v
 }
@@ -281,14 +405,23 @@ func marshal(docs ...any) (string, error) {
 	return b.String(), nil
 }
 
+func tokenComment(o Options) string {
+	if t := o.TokenExternalSecret; t != nil {
+		return fmt.Sprintf("# The token is read from the Secret %s, built by the chart's ExternalSecret from\n# %s (property %s) in the secret store %s. It is not in this file.\n",
+			hubapi.AgentTokenSecretName, t.Key, t.Property, t.SecretStoreName)
+	}
+	return fmt.Sprintf("# The token is read from the Secret %s (key %s); it is not in this file.\n", hubapi.AgentTokenSecretName, hubapi.AgentTokenSecretKey)
+}
+
 func valuesFile(o Options) (string, error) {
-	body, err := marshal(agentVals(o))
+	body, err := marshal(spokeVals(o))
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("# resource-optimizer agent values for cluster %s.\n# The token is read from the Secret %s (key %s); it is not in this file.\n",
-		o.Cluster, hubapi.AgentTokenSecretName, hubapi.AgentTokenSecretKey) + body, nil
+	return fmt.Sprintf("# resource-optimizer (chart %s, global.mode spoke) values for cluster %s.\n", ChartName, o.Cluster) + tokenComment(o) + body, nil
 }
+
+// ---- Argo CD (docs/install/eks.md steps 6 and 7) ----
 
 type appSource struct {
 	RepoURL        string `yaml:"repoURL"`
@@ -300,12 +433,20 @@ type appSource struct {
 	} `yaml:"helm"`
 }
 
+type ignoreDifference struct {
+	Group                 string   `yaml:"group"`
+	Kind                  string   `yaml:"kind"`
+	ManagedFieldsManagers []string `yaml:"managedFieldsManagers,omitempty"`
+	JQPathExpressions     []string `yaml:"jqPathExpressions,omitempty"`
+}
+
 type application struct {
 	APIVersion string `yaml:"apiVersion"`
 	Kind       string `yaml:"kind"`
 	Metadata   struct {
-		Name      string `yaml:"name"`
-		Namespace string `yaml:"namespace"`
+		Name      string            `yaml:"name"`
+		Namespace string            `yaml:"namespace"`
+		Labels    map[string]string `yaml:"labels"`
 	} `yaml:"metadata"`
 	Spec struct {
 		Project     string    `yaml:"project"`
@@ -314,7 +455,8 @@ type application struct {
 			Server    string `yaml:"server"`
 			Namespace string `yaml:"namespace"`
 		} `yaml:"destination"`
-		SyncPolicy struct {
+		IgnoreDifferences []ignoreDifference `yaml:"ignoreDifferences"`
+		SyncPolicy        struct {
 			Automated   map[string]bool `yaml:"automated"`
 			SyncOptions []string        `yaml:"syncOptions"`
 		} `yaml:"syncPolicy"`
@@ -339,28 +481,32 @@ func argoSource(ref, version string) appSource {
 	return s
 }
 
-func newApp(o Options, name, ref, release string, values any) application {
+// argoCD renders the Application of the umbrella chart, as one Application of
+// deploy/examples/eks/applicationset.yaml: the agent's fields and the webhook's caBundle (written
+// by cert-manager's CA injector) are ignored (D-006), and deleting the Application keeps the
+// objects (no resources finalizer: the CRDs hold every policy).
+func argoCD(o Options) (string, error) {
 	var a application
 	a.APIVersion, a.Kind = "argoproj.io/v1alpha1", "Application"
-	a.Metadata.Name, a.Metadata.Namespace = name, o.ArgoCDNamespace
+	a.Metadata.Name, a.Metadata.Namespace = "resource-optimizer-"+o.Cluster, o.ArgoCDNamespace
+	a.Metadata.Labels = map[string]string{"app.kubernetes.io/part-of": "resource-optimizer"}
 	a.Spec.Project = o.ArgoCDProject
-	a.Spec.Source = argoSource(ref, o.ChartVersion)
-	a.Spec.Source.Helm.ReleaseName, a.Spec.Source.Helm.ValuesObject = release, values
+	a.Spec.Source = argoSource(o.Chart, o.ChartVersion)
+	a.Spec.Source.Helm.ReleaseName, a.Spec.Source.Helm.ValuesObject = ReleaseName, spokeVals(o)
 	a.Spec.Destination.Server, a.Spec.Destination.Namespace = o.DestinationServer, o.Namespace
-	a.Spec.SyncPolicy.Automated = map[string]bool{"prune": true, "selfHeal": true}
-	a.Spec.SyncPolicy.SyncOptions = []string{"CreateNamespace=true", "ServerSideApply=true"}
-	return a
-}
-
-func argoCD(o Options) (string, error) {
-	docs := []any{newApp(o, "resource-optimizer-agent", o.AgentChart, "agent", agentVals(o))}
+	a.Spec.IgnoreDifferences = []ignoreDifference{{Group: "*", Kind: "*", ManagedFieldsManagers: []string{FieldManager}}}
 	if o.Webhook {
-		docs = append(docs, newApp(o, "resource-optimizer-webhook", o.WebhookChart, "webhook", map[string]string{"clusterName": o.Cluster}))
+		a.Spec.IgnoreDifferences = append(a.Spec.IgnoreDifferences, ignoreDifference{
+			Group: "admissionregistration.k8s.io", Kind: "MutatingWebhookConfiguration",
+			JQPathExpressions: []string{".webhooks[]?.clientConfig.caBundle"},
+		})
 	}
-	body, err := marshal(docs...)
+	a.Spec.SyncPolicy.Automated = map[string]bool{"prune": true, "selfHeal": true}
+	a.Spec.SyncPolicy.SyncOptions = []string{"CreateNamespace=true", "ServerSideApply=true", "RespectIgnoreDifferences=true"}
+	body, err := marshal(a)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("# Argo CD Applications for cluster %s. Create the Secret %s (key %s) in namespace %s first;\n# the token is not in this manifest.\n",
-		o.Cluster, hubapi.AgentTokenSecretName, hubapi.AgentTokenSecretKey, o.Namespace) + body, nil
+	return fmt.Sprintf("# Argo CD Application for cluster %s (chart %s, global.mode spoke).\n", o.Cluster, ChartName) + tokenComment(o) +
+		"# Create that Secret (or the secret store entry) before the first sync.\n" + body, nil
 }

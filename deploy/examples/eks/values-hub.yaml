@@ -64,11 +64,15 @@ hub:
     # The built-in datasource `local`: where the workload clusters' metrics are (label `cluster`).
     prometheusURL: http://vmsingle.monitoring.svc:8428
     onboarding:
-      # Install snippets of the cluster wizard: the hub URL as agents reach it. The snippets use the
-      # component charts; this guide installs the umbrella chart instead (step 5).
+      # Install snippets of the cluster wizard (step 5.2): the hub URL as agents reach it and this
+      # chart, installed with global.mode spoke. The chart version defaults to the hub's, the image
+      # registry to the chart's host.
       hubURL: https://hub.ro.example.com
-      agentChart: oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts/agent
-      webhookChart: oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts/webhook
+      chart: oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts/resource-optimizer
+      # The agent token from Secrets Manager, as step 5.2 stores it.
+      agentTokenExternalSecret:
+        secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}
+        remoteRef: {key: "resource-optimizer/clusters/{cluster}/agent-token", property: token}
 
   # Hub API for the agents of every workload cluster: internal ALB (AWS Load Balancer Controller).
   ingress:

@@ -1619,7 +1619,7 @@ export const adminHandlers = [
     if (installUnconfigured())
       return conflict(
         'install_not_configured',
-        'Install snippets are not configured on the hub: hub URL must be an absolute http(s) URL; agent chart reference is not configured',
+        'Install snippets are not configured on the hub: hub URL must be an absolute http(s) URL\nchart reference is not configured',
       )
     return json(
       installSnippet(

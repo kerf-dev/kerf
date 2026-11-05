@@ -5,7 +5,7 @@
 STAGING_VERSION ?= 0.1.0-rc.2
 STAGING := VERSION=$(STAGING_VERSION) ./test/install/staging.sh
 
-.PHONY: install-staging install-staging-verify install-staging-upgrade install-staging-uninstall install-staging-down
+.PHONY: install-staging install-staging-verify install-staging-wizard install-staging-upgrade install-staging-uninstall install-staging-down
 
 install-staging: ## Staging: clusters, prerequisites, release STAGING_VERSION, then the guide's steps 3-5.
 	@if ! helm show chart oci://localhost:5005/resource-optimizer/charts/resource-optimizer --version $(STAGING_VERSION) --plain-http >/dev/null 2>&1; then \
@@ -15,6 +15,9 @@ install-staging: ## Staging: clusters, prerequisites, release STAGING_VERSION, t
 
 install-staging-verify: ## Staging: leader, HTTPS, AutomationReady, one auto-patch, hub failover.
 	$(STAGING) verify
+
+install-staging-wizard: ## Staging (WO-18f): a third cluster ro-stg-spoke-2, registered via the API and installed with the wizard's Helm snippet.
+	$(STAGING) wizard
 
 install-staging-upgrade: ## Staging: upgrade to STAGING_UPGRADE_VERSION (released first) with a no-5xx probe.
 	@test -n "$(STAGING_UPGRADE_VERSION)" || { echo "STAGING_UPGRADE_VERSION is required"; exit 1; }

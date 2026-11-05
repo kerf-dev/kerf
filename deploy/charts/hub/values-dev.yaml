@@ -50,5 +50,5 @@ config:
   onboarding:
     checkInterval: 10m
     hubURL: http://hub-api.hub.svc:8080
-    agentChart: deploy/charts/agent
-    webhookChart: deploy/charts/webhook
+    chart: deploy/charts/resource-optimizer
+    imageRegistry: k3d-ro-registry:5005

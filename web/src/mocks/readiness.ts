@@ -738,28 +738,53 @@ export const ARGOCD_IGNORE = `resource.customizations.ignoreDifferences.all: |
   - resource-optimizer
 `
 
+const MOCK_CHART = 'oci://ghcr.io/oz/resource-optimizer/charts/resource-optimizer'
+
+/** The values of the umbrella chart in mode spoke, as the hub renders them (WO-18f). */
+function spokeValues(cluster: string, webhook: boolean, indent = ''): string[] {
+  return [
+    'global:',
+    '  mode: spoke',
+    `  clusterName: ${cluster}`,
+    '  imageRegistry: ghcr.io',
+    'agent:',
+    '  hub:',
+    `    url: ${HUB_URL}`,
+    '    tokenSecret:',
+    `      name: ${AGENT_SECRET}`,
+    '      key: token',
+    '      create: false',
+    '  replicaCount: 2',
+    '  leaderElection: true',
+    '  readOnly: false',
+    ...(webhook ? [] : ['webhook:', '  enabled: false']),
+  ].map((l) => indent + l)
+}
+
 function helmSnippet(cluster: string, webhook: boolean, certManager: boolean) {
   const lines = [
-    '# 1. Store the agent token (shown once when the token was created) in a Secret:',
-    'kubectl create namespace resource-optimizer --dry-run=client -o yaml | kubectl apply -f -',
-    `kubectl -n resource-optimizer create secret generic ${AGENT_SECRET} \\`,
-    '  --from-literal=token="$RO_AGENT_TOKEN"',
+    '#!/bin/sh',
+    'set -eu',
+    `# resource-optimizer (chart resource-optimizer, global.mode spoke) for cluster ${cluster}.`,
+    '# RO_AGENT_TOKEN: the agent token shown once when the cluster was created (or POST /v1/admin/tokens).',
+    ': "${RO_AGENT_TOKEN:?set RO_AGENT_TOKEN to the agent token}"',
     '',
-    '# 2. Install the agent:',
-    'helm upgrade --install resource-optimizer-agent oci://ghcr.io/oz/resource-optimizer/charts/agent \\',
-    '  --version 0.4.2 -n resource-optimizer \\',
-    `  --set clusterName=${cluster} \\`,
-    `  --set hub.url=${HUB_URL} \\`,
-    `  --set hub.tokenSecret.name=${AGENT_SECRET}`,
+    'kubectl create namespace resource-optimizer --dry-run=client -o yaml | kubectl apply -f -',
+    `kubectl -n resource-optimizer create secret generic ${AGENT_SECRET} --from-literal=token="$RO_AGENT_TOKEN" --dry-run=client -o yaml | kubectl apply -f -`,
+    '',
   ]
-  if (webhook) {
+  if (webhook && certManager)
     lines.push(
+      'helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager --version v1.19.1 -n cert-manager --create-namespace --set crds.enabled=true --wait',
       '',
-      '# 3. Optional: the mutating webhook (keeps requests on new pods):',
-      'helm upgrade --install resource-optimizer-webhook oci://ghcr.io/oz/resource-optimizer/charts/webhook \\',
-      `  --version 0.4.2 -n resource-optimizer --set certManager.enabled=${certManager ? 'true' : 'false'}`,
     )
-  }
+  lines.push(
+    `helm upgrade --install resource-optimizer ${MOCK_CHART} --version 0.4.2 \\`,
+    "  -n resource-optimizer --create-namespace --wait --timeout 10m -f - <<'RO_VALUES'",
+    ...spokeValues(cluster, webhook),
+    'RO_VALUES',
+    '',
+  )
   return lines.join('\n')
 }
 
@@ -770,8 +795,9 @@ export function installSnippet(
   certManager: boolean,
 ): InstallSnippet {
   const notes = [
-    `The token is not part of the snippet: create the Secret ${AGENT_SECRET} (key token) with the value shown once when the agent token was created.`,
-    'Add the Argo CD snippet to argocd-cm if Argo CD manages the workloads (D-006).',
+    `The agent token is not in this snippet: create the Secret ${AGENT_SECRET} (key token) in namespace resource-optimizer with the token shown once when the cluster was created.`,
+    'This installs the umbrella chart resource-optimizer in mode spoke with the settings of this cluster. docs/install/eks.md step 5.3 adds the production extras.',
+    "If Argo CD manages the workloads, add the argocdIgnoreDifferences entry to argocd-cm so it does not revert the agent's changes.",
   ]
   if (format === 'helm')
     return {
@@ -784,52 +810,61 @@ export function installSnippet(
   if (format === 'values')
     return {
       format,
-      filename: 'values.yaml',
+      filename: `values-${cluster}.yaml`,
       argocdIgnoreDifferences: ARGOCD_IGNORE,
-      notes,
+      notes: [
+        ...notes,
+        `helm upgrade --install resource-optimizer ${MOCK_CHART} --version 0.4.2 -n resource-optimizer --create-namespace -f values-${cluster}.yaml --wait --timeout 10m`,
+      ],
       content: [
-        `clusterName: ${cluster}`,
-        'hub:',
-        `  url: ${HUB_URL}`,
-        '  tokenSecret:',
-        `    name: ${AGENT_SECRET}`,
-        '    key: token',
-        'readOnly: false',
-        'pullInterval: 30s',
-        ...(webhook ? ['webhook:', '  enabled: true', `  certManager: ${certManager}`] : []),
+        `# resource-optimizer (chart resource-optimizer, global.mode spoke) values for cluster ${cluster}.`,
+        `# The token is read from the Secret ${AGENT_SECRET} (key token); it is not in this file.`,
+        ...spokeValues(cluster, webhook),
         '',
       ].join('\n'),
     }
   return {
     format,
-    filename: `${cluster}-resource-optimizer.yaml`,
+    filename: `resource-optimizer-${cluster}.yaml`,
     argocdIgnoreDifferences: ARGOCD_IGNORE,
     notes,
     content: [
+      `# Argo CD Application for cluster ${cluster} (chart resource-optimizer, global.mode spoke).`,
+      `# The token is read from the Secret ${AGENT_SECRET} (key token); it is not in this file.`,
       'apiVersion: argoproj.io/v1alpha1',
       'kind: Application',
       'metadata:',
-      `  name: resource-optimizer-agent-${cluster}`,
+      `  name: resource-optimizer-${cluster}`,
       '  namespace: argocd',
+      '  labels:',
+      '    app.kubernetes.io/part-of: resource-optimizer',
       'spec:',
-      '  project: platform',
-      '  destination:',
-      `    name: ${cluster}`,
-      '    namespace: resource-optimizer',
+      '  project: default',
       '  source:',
       '    repoURL: ghcr.io/oz/resource-optimizer/charts',
-      '    chart: agent',
+      '    chart: resource-optimizer',
       '    targetRevision: 0.4.2',
       '    helm:',
+      '      releaseName: resource-optimizer',
       '      valuesObject:',
-      `        clusterName: ${cluster}`,
-      '        hub:',
-      `          url: ${HUB_URL}`,
-      '          tokenSecret:',
-      `            name: ${AGENT_SECRET}`,
+      ...spokeValues(cluster, webhook, '        '),
+      '  destination:',
+      '    server: https://kubernetes.default.svc',
+      '    namespace: resource-optimizer',
+      '  ignoreDifferences:',
+      "    - group: '*'",
+      "      kind: '*'",
+      '      managedFieldsManagers: [resource-optimizer]',
+      ...(webhook
+        ? [
+            '    - group: admissionregistration.k8s.io',
+            '      kind: MutatingWebhookConfiguration',
+            "      jqPathExpressions: ['.webhooks[]?.clientConfig.caBundle']",
+          ]
+        : []),
       '  syncPolicy:',
       '    automated: { prune: true, selfHeal: true }',
-      '    syncOptions: [CreateNamespace=true, ServerSideApply=true]',
+      '    syncOptions: [CreateNamespace=true, ServerSideApply=true, RespectIgnoreDifferences=true]',
       '',
     ].join('\n'),
   }

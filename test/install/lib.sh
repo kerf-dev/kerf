@@ -28,11 +28,15 @@ export SPOKE_CTX=k3d-ro-stg-spoke
 export SPOKE_METRICS_URL=http://prometheus-operated.monitoring.svc:9090
 export SPOKE_VPC_CIDR=10.42.0.0/16            # stand-in: k3s's API server reaches the webhook from cni0
 export HELM_OCI_FLAGS=--plain-http            # stand-in: the local registry speaks HTTP
+export WIZ_CLUSTER=ro-stg-spoke-2             # WO-18f: the workload cluster installed with the wizard's snippet
+export WIZ_CTX=k3d-ro-stg-spoke-2
+export AGENT_SECRET=resource-optimizer-agent-token
 INGRESS_PORT=19443                            # host port of the hub cluster's traefik ("the ALB")
 
 log() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 kh() { kubectl --context "$HUB_CTX" "$@"; }
 ks() { kubectl --context "$SPOKE_CTX" "$@"; }
+kw() { kubectl --context "$WIZ_CTX" "$@"; }
 
 # The ALB/Route 53 stand-in for the shell: https://$HUB_HOST and https://$UI_HOST go to traefik on the
 # hub cluster, verified against the staging CA (ACM's public chain stand-in).
@@ -50,7 +54,7 @@ sm_apply() {
   store=$(jq '{apiVersion: "external-secrets.io/v1", kind: "ClusterSecretStore",
     metadata: {name: "aws-secrets-manager"},
     spec: {provider: {fake: {data: [to_entries[] | {key: .key, value: .value}]}}}}' "$SM")
-  for ctx in "$HUB_CTX" "$SPOKE_CTX"; do
+  for ctx in "$HUB_CTX" "$SPOKE_CTX" "$WIZ_CTX"; do
     kubectl --context "$ctx" get crd clustersecretstores.external-secrets.io >/dev/null 2>&1 || continue
     echo "$store" | kubectl --context "$ctx" apply -f - >/dev/null
   done
