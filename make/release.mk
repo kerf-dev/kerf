@@ -99,8 +99,9 @@ release-chart-package:
 	  if [ -d $$dir/charts ]; then \
 	    : "The umbrella (WO-18d): charts/ links the component charts. Package a copy with the links"; \
 	    : "resolved and every subchart at version/appVersion VERSION (its image tags default to it)."; \
-	    stage=$(RELEASE_DIR)/stage/$$c; rm -rf $(RELEASE_DIR)/stage/$$c; mkdir -p $(RELEASE_DIR)/stage; \
-	    cp -RL $$dir $$stage || exit 1; \
+	    : "_stage: go ./... skips _-prefixed dirs, so the copied *_test.go never joins make ci."; \
+	    stage=$(RELEASE_DIR)/_stage/$$c; rm -rf $(RELEASE_DIR)/_stage/$$c; mkdir -p $(RELEASE_DIR)/_stage; \
+	    cp -RL $$dir $$stage || exit 1; find $$stage -name "*_test.go" -delete; \
 	    for sub in $$stage/charts/*/Chart.yaml; do \
 	      sed -e 's/^version:.*/version: $(VERSION)/' -e 's/^appVersion:.*/appVersion: "$(VERSION)"/' $$sub > $$sub.new && mv $$sub.new $$sub; \
 	    done; \
