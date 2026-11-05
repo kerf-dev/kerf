@@ -1,0 +1,77 @@
+# resource-optimizer on a workload cluster (EKS): agent + admission webhook + CRDs.
+# docs/install/eks.md, step 5. One release per cluster, namespace resource-optimizer.
+#
+# Placeholders: docs/install/eks.md replaces them with sed. Each one appears only as written here:
+#   123456789012                                       AWS account ($ACCOUNT)
+#   eu-west-1                                          region ($AWS_REGION)
+#   prod-eu1                                           this cluster's name, as registered in the hub ($CLUSTER)
+#   hub.ro.example.com                                 the hub API's DNS name ($HUB_HOST)
+#   10.1.0.0/16                                        this cluster's VPC CIDR ($SPOKE_VPC_CIDR)
+#   http://prometheus-operated.monitoring.svc:9090     this cluster's Prometheus ($SPOKE_METRICS_URL)
+
+global:
+  mode: spoke
+  # As registered in the hub's cluster wizard (a DNS label). Also the agent token's path below.
+  clusterName: prod-eu1
+  imageRegistry: 123456789012.dkr.ecr.eu-west-1.amazonaws.com
+  externalSecrets:
+    secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}
+
+agent:
+  hub:
+    # The hub's internal ALB (an ACM certificate: publicly trusted, no caBundle needed).
+    url: https://hub.ro.example.com
+    # The token the cluster wizard showed once, stored in Secrets Manager as {"token": "..."}.
+    # Becomes Secret resource-optimizer-agent-token (key token); re-read on every request.
+    tokenSecret:
+      externalSecret:
+        enabled: true
+        remoteRef: {key: resource-optimizer/clusters/prod-eu1/agent-token, property: token}
+    # A hub certificate from a private CA instead of ACM: the CA as a ConfigMap.
+    # caBundle:
+    #   existingConfigMap: corp-root-ca
+    #   key: ca.crt
+  # Two replicas with leader election (the chart default here), PDB minAvailable 1, node/zone spread.
+  replicaCount: 2
+  leaderElection: true
+  # This cluster's CPU throttling series (container_cpu_cfs_*) for the rollback health watch.
+  health:
+    metricsURL: http://prometheus-operated.monitoring.svc:9090
+    # The series carry no cluster label in a per-cluster Prometheus.
+    clusterLabel: ""
+  # Argo CD on this cluster: the agent reads argocd-cm to check the ignoreDifferences entry.
+  # Rendered by Argo CD (no Helm lookup): set force: true when the argocd namespace exists here.
+  selfCheck:
+    argocd:
+      enabled: true
+      force: false
+  networkPolicy:
+    enabled: true
+    ingress:
+      metricsFrom:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: monitoring}
+    egress:
+      # The API server (443, 6443), the hub's ALB (443) and health.metricsURL (9090).
+      ports: [443, 6443, 9090]
+  serviceMonitor:
+    enabled: true
+    kind: ServiceMonitor
+    labels: {release: kube-prometheus-stack}
+
+webhook:
+  # The webhook listens on 9443: the EKS control plane must reach the nodes on it (security group).
+  containerPort: 9443
+  networkPolicy:
+    enabled: true
+    ingress:
+      # The API server's ENIs sit in this VPC.
+      apiServerFrom:
+        - ipBlock: {cidr: 10.1.0.0/16}
+      metricsFrom:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: monitoring}
+  serviceMonitor:
+    enabled: true
+    kind: ServiceMonitor
+    labels: {release: kube-prometheus-stack}

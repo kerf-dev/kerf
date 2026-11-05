@@ -1,0 +1,171 @@
+# resource-optimizer on the hub cluster (EKS): hub + web UI + pricing. docs/install/eks.md, step 4.
+#
+# Placeholders: docs/install/eks.md replaces them with sed. Each one appears only as written here:
+#   123456789012                                    AWS account ($ACCOUNT)
+#   eu-west-1                                       region ($AWS_REGION)
+#   ops-eu1                                         EKS name of the hub cluster ($HUB_CLUSTER)
+#   ro-hub.c0ffee0c0ffe.eu-west-1.rds.amazonaws.com RDS endpoint ($RDS_HOST)
+#   hub.ro.example.com / ui.ro.example.com          DNS names ($HUB_HOST / $UI_HOST)
+#   arn:aws:acm:...:certificate/00000000-...        ACM certificate for both names ($CERT_ARN)
+#   10.0.0.0/16                                     the hub cluster's VPC CIDR ($HUB_VPC_CIDR)
+#   http://vmsingle.monitoring.svc:8428             fleet metrics query URL ($METRICS_URL)
+#   0.1.0                                           not here: the image tags default to the chart version
+
+global:
+  mode: hub
+  # The hub's own cluster name: the `cluster` label of pricing's own series.
+  clusterName: ops-eu1
+  # Images: $REGISTRY/<component>:<chart version> with REGISTRY=<this>/resource-optimizer.
+  imageRegistry: 123456789012.dkr.ecr.eu-west-1.amazonaws.com
+  externalSecrets:
+    # deploy/examples/eks/external-secrets/cluster-secret-store.yaml
+    secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}
+
+hub:
+  # RDS PostgreSQL with verify-full (D-028). The ExternalSecret builds Secret hub-db (DATABASE_URL)
+  # from the JSON secret {"username": ..., "password": ...} and the CA bundle ConfigMap below.
+  database:
+    host: ro-hub.c0ffee0c0ffe.eu-west-1.rds.amazonaws.com
+    port: 5432
+    name: resource_optimizer
+    sslmode: verify-full
+    params: {connect_timeout: "10"}
+    # kubectl -n resource-optimizer create configmap rds-ca-bundle --from-file=global-bundle.pem
+    caBundle:
+      existingConfigMap: rds-ca-bundle
+      key: global-bundle.pem
+    externalSecret:
+      enabled: true
+      source: rds
+      remoteRef: {key: resource-optimizer/hub/db}
+
+  auth:
+    cookieSecure: true
+    bootstrapAdmin:
+      username: admin
+      externalSecret:
+        enabled: true
+        remoteRef: {key: resource-optimizer/hub/bootstrap-admin, property: password}
+
+  # Datasource secrets key from Secrets Manager (kept on uninstall). Required with Argo CD.
+  onboarding:
+    secretsKey:
+      externalSecret:
+        enabled: true
+        remoteRef: {key: resource-optimizer/hub/datasource-key, property: key}
+
+  config:
+    # The built-in datasource `local`: where the workload clusters' metrics are (label `cluster`).
+    prometheusURL: http://vmsingle.monitoring.svc:8428
+    onboarding:
+      # Install snippets of the cluster wizard: the hub URL as agents reach it. The snippets use the
+      # component charts; this guide installs the umbrella chart instead (step 5).
+      hubURL: https://hub.ro.example.com
+      agentChart: oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts/agent
+      webhookChart: oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts/webhook
+
+  # Hub API for the agents of every workload cluster: internal ALB (AWS Load Balancer Controller).
+  ingress:
+    enabled: true
+    className: alb
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internal
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
+      alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      alb.ingress.kubernetes.io/healthcheck-path: /readyz
+      alb.ingress.kubernetes.io/success-codes: "200"
+      # Only private networks reach the listener (the workload clusters' VPCs, peered or via TGW).
+      alb.ingress.kubernetes.io/inbound-cidrs: 10.0.0.0/8
+    hosts:
+      - host: hub.ro.example.com
+        paths: [{path: /, pathType: Prefix}]
+    tls:
+      - hosts: [hub.ro.example.com]
+
+  # Needs a NetworkPolicy-enforcing CNI (VPC CNI with enableNetworkPolicy=true).
+  networkPolicy:
+    enabled: true
+    ingress:
+      # The ALB (target-type ip) reaches the pods from the VPC; web and pricing are built in.
+      from:
+        - ipBlock: {cidr: 10.0.0.0/16}
+      metricsFrom:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: monitoring}
+
+  # Prometheus Operator (kube-prometheus-stack). VictoriaMetrics operator: kind VMServiceScrape / VMRule.
+  # The labels select them in kube-prometheus-stack (its default selector is release=<its release>).
+  serviceMonitor:
+    enabled: true
+    kind: ServiceMonitor
+    labels: {release: kube-prometheus-stack}
+  prometheusRule:
+    enabled: true
+    kind: PrometheusRule
+    labels: {release: kube-prometheus-stack}
+  dashboards:
+    enabled: true
+    namespace: monitoring
+
+web:
+  # The `ui` token (read-only visitors without a session), created after the first sign-in.
+  token:
+    externalSecret:
+      enabled: true
+      remoteRef: {key: resource-optimizer/hub/ui-token, property: token}
+  ingress:
+    enabled: true
+    className: alb
+    annotations:
+      # internal or internet-facing: your choice (D-028).
+      alb.ingress.kubernetes.io/scheme: internal
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
+      alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      alb.ingress.kubernetes.io/healthcheck-path: /healthz
+    hosts:
+      - host: ui.ro.example.com
+        paths: [{path: /, pathType: Prefix}]
+    tls:
+      - hosts: [ui.ro.example.com]
+  networkPolicy:
+    enabled: true
+    ingress:
+      from:
+        - ipBlock: {cidr: 10.0.0.0/16}
+
+pricing:
+  # AWS Pricing API and spot prices through EKS Pod Identity (ServiceAccount `pricing`).
+  provider: aws
+  aws:
+    pricingRegion: us-east-1
+    region: eu-west-1
+  vmURL: http://vmsingle.monitoring.svc:8428
+  hub:
+    # The token of role pricing, created after the first sign-in.
+    tokenSecret:
+      externalSecret:
+        enabled: true
+        remoteRef: {key: resource-optimizer/hub/pricing-token, property: token}
+  networkPolicy:
+    enabled: true
+    ingress:
+      metricsFrom:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: monitoring}
+        # The API server's service proxy (the guide's checks) comes from the VPC.
+        - ipBlock: {cidr: 10.0.0.0/16}
+    egress:
+      # The hub (8080), vmURL (8428; add your port if it differs), AWS APIs (443).
+      ports: [443, 8080, 8428]
+      to:
+        # EKS Pod Identity Agent on the node: AWS credentials.
+        - to: [{ipBlock: {cidr: 169.254.170.23/32}}]
+          ports: [{protocol: TCP, port: 80}]
+  serviceMonitor:
+    enabled: true
+    kind: ServiceMonitor
+    labels: {release: kube-prometheus-stack}

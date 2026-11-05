@@ -1,3 +1,4 @@
+{{- if include "hub.c.enabled" . -}}
 {{- /* Alerts on the series of docs/contracts/metrics.md and the component prefixes it allows
 (ro_recommender_*, ro_pricing_*, ro_webhook_*, ro_hub_*). */}}
 {{- $pr := .Values.prometheusRule }}
@@ -104,3 +105,4 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
 {{- end }}
+{{ end -}}

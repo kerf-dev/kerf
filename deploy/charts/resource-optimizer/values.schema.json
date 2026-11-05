@@ -1,0 +1,420 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "resource-optimizer umbrella chart values (WO-18d)",
+  "description": "Component sections are the component charts' values; this schema checks what the umbrella needs per global.mode and rejects inline secrets unless dev: true.",
+  "type": "object",
+  "required": [
+    "global"
+  ],
+  "properties": {
+    "mode": {
+      "description": "Not used: the mode is global.mode (Helm passes only global.* to the components).",
+      "const": "(not used: set global.mode instead of mode)"
+    },
+    "dev": {
+      "description": "Development: allows inline secrets, cookieSecure false and an empty global.imageRegistry.",
+      "type": "boolean"
+    },
+    "global": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "description": "hub = hub, web, pricing; spoke = agent, webhook, CRDs; all = everything.",
+          "type": "string",
+          "enum": [
+            "hub",
+            "spoke",
+            "all"
+          ]
+        },
+        "clusterName": {
+          "description": "This cluster's name as registered in the hub (required in mode spoke and all).",
+          "type": "string",
+          "pattern": "^([a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)?$"
+        },
+        "imageRegistry": {
+          "description": "Registry host prefixed to every image repository (required unless dev: true).",
+          "type": "string"
+        },
+        "imagePullSecrets": {
+          "type": "array"
+        },
+        "externalSecrets": {
+          "type": "object"
+        }
+      }
+    },
+    "hub": {
+      "$ref": "#/definitions/component"
+    },
+    "web": {
+      "$ref": "#/definitions/component"
+    },
+    "pricing": {
+      "$ref": "#/definitions/component"
+    },
+    "agent": {
+      "$ref": "#/definitions/component"
+    },
+    "webhook": {
+      "$ref": "#/definitions/component"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "mode spoke and all: global.clusterName is required.",
+      "if": {
+        "properties": {
+          "global": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "spoke",
+                  "all"
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "global": {
+            "required": [
+              "clusterName"
+            ],
+            "properties": {
+              "clusterName": {
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "mode spoke: agent.hub.url is required (unless agent.enabled is false).",
+      "if": {
+        "properties": {
+          "global": {
+            "properties": {
+              "mode": {
+                "const": "spoke"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "agent": {
+            "not": {
+              "properties": {
+                "enabled": {
+                  "const": false
+                }
+              },
+              "required": [
+                "enabled"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "agent"
+        ],
+        "properties": {
+          "agent": {
+            "required": [
+              "hub"
+            ],
+            "properties": {
+              "hub": {
+                "required": [
+                  "url"
+                ],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https?://"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "mode hub and all: the hub needs a database Secret (hub.database.existingSecret or hub.database.externalSecret.enabled; hub.database.url only with dev: true).",
+      "if": {
+        "properties": {
+          "global": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "hub",
+                  "all"
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "hub": {
+            "not": {
+              "properties": {
+                "enabled": {
+                  "const": false
+                }
+              },
+              "required": [
+                "enabled"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "hub"
+        ],
+        "properties": {
+          "hub": {
+            "required": [
+              "database"
+            ],
+            "properties": {
+              "database": {
+                "$ref": "#/definitions/databaseConfigured"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Production (dev is not true): no inline secrets, secure cookies, a registry.",
+      "if": {
+        "properties": {
+          "dev": {
+            "const": true
+          }
+        },
+        "required": [
+          "dev"
+        ]
+      },
+      "else": {
+        "$ref": "#/definitions/production"
+      }
+    }
+  ],
+  "definitions": {
+    "component": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Overrides global.mode for this component."
+        },
+        "fullnameOverride": {
+          "type": "string"
+        }
+      }
+    },
+    "empty": {
+      "description": "Must be empty unless dev: true (inline secret).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 0
+    },
+    "notTrue": {
+      "description": "Must be false unless dev: true.",
+      "enum": [
+        false,
+        null
+      ]
+    },
+    "databaseConfigured": {
+      "type": "object",
+      "anyOf": [
+        {
+          "required": [
+            "existingSecret"
+          ],
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "required": [
+            "externalSecret"
+          ],
+          "properties": {
+            "externalSecret": {
+              "type": "object",
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "const": true
+                }
+              }
+            }
+          }
+        },
+        {
+          "required": [
+            "url"
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "production": {
+      "properties": {
+        "global": {
+          "required": [
+            "imageRegistry"
+          ],
+          "properties": {
+            "imageRegistry": {
+              "description": "Required unless dev: true.",
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "hub": {
+          "properties": {
+            "database": {
+              "properties": {
+                "url": {
+                  "$ref": "#/definitions/empty"
+                }
+              }
+            },
+            "auth": {
+              "properties": {
+                "cookieSecure": {
+                  "description": "false only with dev: true.",
+                  "const": true
+                },
+                "bootstrapAdmin": {
+                  "properties": {
+                    "password": {
+                      "$ref": "#/definitions/empty"
+                    }
+                  }
+                },
+                "users": {
+                  "type": "array",
+                  "items": {
+                    "not": {
+                      "required": [
+                        "password"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "devSeed": {
+              "properties": {
+                "enabled": {
+                  "$ref": "#/definitions/notTrue"
+                },
+                "tokens": {
+                  "description": "Development tokens: dev: true only.",
+                  "type": "object",
+                  "maxProperties": 0
+                },
+                "users": {
+                  "type": "array",
+                  "items": {
+                    "not": {
+                      "required": [
+                        "password"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "web": {
+          "properties": {
+            "token": {
+              "properties": {
+                "value": {
+                  "$ref": "#/definitions/empty"
+                }
+              }
+            }
+          }
+        },
+        "pricing": {
+          "properties": {
+            "hub": {
+              "properties": {
+                "tokenSecret": {
+                  "properties": {
+                    "create": {
+                      "$ref": "#/definitions/notTrue"
+                    },
+                    "token": {
+                      "$ref": "#/definitions/empty"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "agent": {
+          "properties": {
+            "hub": {
+              "properties": {
+                "tokenSecret": {
+                  "properties": {
+                    "create": {
+                      "$ref": "#/definitions/notTrue"
+                    },
+                    "token": {
+                      "$ref": "#/definitions/empty"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,3 +1,4 @@
+{{- if include "pricing.c.enabled" . -}}
 {{- if .Values.prices }}
 apiVersion: v1
 kind: ConfigMap
@@ -8,3 +9,4 @@ data:
   prices.yaml: |
     {{- .Values.prices | nindent 4 }}
 {{- end }}
+{{ end -}}

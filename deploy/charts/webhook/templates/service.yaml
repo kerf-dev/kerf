@@ -1,3 +1,4 @@
+{{- if include "webhook.c.enabled" . -}}
 # API server -> webhook (HTTPS). Not annotated for scraping: the vmagent endpoints role makes one
 # target per Service port, so scrape annotations live on the metrics-only Service below.
 apiVersion: v1
@@ -31,3 +32,4 @@ spec:
     - name: metrics
       port: 8080
       targetPort: metrics
+{{ end -}}

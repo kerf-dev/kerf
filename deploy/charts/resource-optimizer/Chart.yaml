@@ -1,0 +1,39 @@
+apiVersion: v2
+name: resource-optimizer
+description: >-
+  resource-optimizer in one chart (WO-18d, D-028): global.mode hub installs the hub, web UI and
+  pricing service; spoke installs the agent, admission webhook and CRDs on a workload cluster;
+  all installs everything in one cluster.
+type: application
+# make release VERSION=x.y.z writes version and appVersion here and in every subchart.
+version: 0.1.0
+appVersion: "0.1.0"
+keywords: [kubernetes, rightsizing, eks]
+home: https://github.com/tomer1983/resource-optimizer
+sources: [https://github.com/tomer1983/resource-optimizer]
+# The component charts, linked into charts/ (symlinks to deploy/charts/<name>, so an in-tree render
+# always uses the current charts; `helm package` stores real copies). Do not run `helm dependency
+# update` here: it would replace the links with archives. There are no `condition:`s: Helm cannot
+# derive them from global.mode, so each component gates its own templates ("<name>.c.enabled" in
+# its templates/_common.tpl).
+dependencies:
+  - name: hub
+    alias: hub
+    version: ">=0.0.0-0"
+    repository: file://../hub
+  - name: web
+    alias: web
+    version: ">=0.0.0-0"
+    repository: file://../web
+  - name: pricing
+    alias: pricing
+    version: ">=0.0.0-0"
+    repository: file://../pricing
+  - name: agent
+    alias: agent
+    version: ">=0.0.0-0"
+    repository: file://../agent
+  - name: webhook
+    alias: webhook
+    version: ">=0.0.0-0"
+    repository: file://../webhook

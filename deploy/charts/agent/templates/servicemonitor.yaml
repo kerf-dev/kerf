@@ -1,1 +1,3 @@
+{{- if include "agent.c.enabled" . -}}
 {{- include "agent.c.serviceMonitor" (dict "ctx" . "port" "metrics" "selector" (dict "app.kubernetes.io/name" "resource-optimizer-agent" "app.kubernetes.io/instance" .Release.Name)) }}
+{{ end -}}

@@ -1,3 +1,4 @@
+{{- if include "hub.c.enabled" . -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -24,3 +25,4 @@ data:
     {{- end }}
     {{- $_ := set $cfg "onboarding" $onb }}
     {{- toYaml $cfg | nindent 4 }}
+{{ end -}}

@@ -1,0 +1,58 @@
+{{- $ns := .Release.Namespace -}}
+{{- $mode := .Values.global.mode -}}
+{{- $hubOn := include "ro.enabled" (dict "ctx" . "component" "hub") -}}
+{{- $webOn := include "ro.enabled" (dict "ctx" . "component" "web") -}}
+{{- $pricingOn := include "ro.enabled" (dict "ctx" . "component" "pricing") -}}
+{{- $agentOn := include "ro.enabled" (dict "ctx" . "component" "agent") -}}
+{{- $webhookOn := include "ro.enabled" (dict "ctx" . "component" "webhook") -}}
+{{- $hub := include "ro.name" (dict "ctx" . "component" "hub") -}}
+{{- $web := include "ro.name" (dict "ctx" . "component" "web") -}}
+{{- $agent := include "ro.name" (dict "ctx" . "component" "agent") -}}
+{{- $cluster := .Values.global.clusterName -}}
+resource-optimizer {{ .Chart.AppVersion }}, mode {{ $mode }}, release {{ .Release.Name }} in namespace {{ $ns }}.
+Installed: {{ if $hubOn }}hub {{ end }}{{ if $webOn }}web {{ end }}{{ if $pricingOn }}pricing {{ end }}{{ if $agentOn }}agent {{ end }}{{ if $webhookOn }}webhook {{ end }}
+Install guide: docs/install/eks.md
+
+1. Pods:
+   kubectl -n {{ $ns }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+{{- if $hubOn }}
+
+2. Hub ({{ $hub }}): ready, and exactly one replica leads (sum of ro_hub_leader = 1):
+   kubectl -n {{ $ns }} rollout status deploy/{{ $hub }}
+   for p in $(kubectl -n {{ $ns }} get pods -l app.kubernetes.io/name=hub,app.kubernetes.io/instance={{ .Release.Name }} -o name); do
+     kubectl get --raw "/api/v1/namespaces/{{ $ns }}/pods/${p#pod/}:8080/proxy/metrics" | grep '^ro_hub_leader '; done
+{{- with .Values.hub.ingress }}{{ if .enabled }}{{ with .hosts }}
+   Hub API for agents: https://{{ (index . 0).host }}  (check: curl -s https://{{ (index . 0).host }}/readyz)
+{{- end }}{{ end }}{{ end }}
+{{- end }}
+{{- if $webOn }}
+
+3. The UI ({{ $web }}):
+{{- $wi := .Values.web.ingress | default dict }}
+{{- if and $wi.enabled $wi.hosts }}
+   https://{{ (index $wi.hosts 0).host }}
+{{- else }}
+   kubectl -n {{ $ns }} port-forward svc/{{ $web }} 8080:{{ .Values.web.service.port }}   then http://localhost:8080
+{{- end }}
+   Sign in as {{ .Values.hub.auth.bootstrapAdmin.username }} (the bootstrap admin password: Secrets Manager
+   resource-optimizer/hub/bootstrap-admin, or your auth.bootstrapAdmin Secret), then change it.
+{{- end }}
+{{- if $hubOn }}
+
+4. Register each workload cluster: UI -> Clusters -> Add cluster (/clusters/new). The wizard shows
+   the cluster's agent token once: store it in Secrets Manager under
+   resource-optimizer/clusters/<cluster>/agent-token, then install this chart there with global.mode=spoke.
+{{- end }}
+{{- if $agentOn }}
+
+{{ if $hubOn }}5{{ else }}2{{ end }}. Agent ({{ $agent }}) of cluster {{ $cluster }} -> {{ .Values.agent.hub.url | default (printf "http://%s.%s.svc.cluster.local:8080" $hub $ns) }}:
+   kubectl -n {{ $ns }} logs deploy/{{ $agent }} --tail=20
+   kubectl -n {{ $ns }} get secret {{ .Values.agent.hub.tokenSecret.name }}   (key {{ .Values.agent.hub.tokenSecret.key }}; created by the ExternalSecret)
+   Readiness: UI -> Clusters -> {{ $cluster }}. It moves Registered -> Agent connected -> Metrics OK ->
+   Ready (audit) -> Automation ready; every failing check names its fix (docs/contracts/readiness.md).
+   Auto-patch can be set only on Automation ready clusters.
+{{- end }}
+{{- if $webhookOn }}
+   Webhook: kubectl -n {{ $ns }} get certificate,deploy,endpoints -l app.kubernetes.io/name=resource-optimizer-webhook
+   The control plane must reach the nodes on TCP {{ .Values.webhook.containerPort }} (security group).
+{{- end }}

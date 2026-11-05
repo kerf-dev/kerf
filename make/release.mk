@@ -17,8 +17,9 @@ VERSION   ?= $(shell git describe --tags --match 'v[0-9]*' --always --dirty 2>/d
 VERSION   := $(VERSION)
 
 RELEASE_IMAGES    ?= hub pricing agent webhook web
-# Until WO-18d lands the five component charts are released; afterwards RELEASE_CHARTS=resource-optimizer.
-RELEASE_CHARTS    ?= hub pricing agent webhook web
+# The umbrella chart (WO-18d, what docs/install/eks.md installs) and the component charts (the hub's
+# cluster wizard renders install snippets for the agent and webhook charts).
+RELEASE_CHARTS    ?= resource-optimizer hub pricing agent webhook web
 RELEASE_CHART_DIR ?= deploy/charts
 RELEASE_DIR       ?= $(LOCALBIN)/release
 # buildx builder (docker-container driver: multi-platform output, SBOM and provenance attestations).
@@ -95,6 +96,16 @@ release-chart-package:
 	@for c in $(RELEASE_CHARTS); do \
 	  dir=$(RELEASE_CHART_DIR)/$$c; test -f $$dir/Chart.yaml || { echo "no chart at $$dir"; exit 1; }; \
 	  deps=""; grep -q '^dependencies:' $$dir/Chart.yaml && deps=--dependency-update; \
+	  if [ -d $$dir/charts ]; then \
+	    : "The umbrella (WO-18d): charts/ links the component charts. Package a copy with the links"; \
+	    : "resolved and every subchart at version/appVersion VERSION (its image tags default to it)."; \
+	    stage=$(RELEASE_DIR)/stage/$$c; rm -rf $(RELEASE_DIR)/stage/$$c; mkdir -p $(RELEASE_DIR)/stage; \
+	    cp -RL $$dir $$stage || exit 1; \
+	    for sub in $$stage/charts/*/Chart.yaml; do \
+	      sed -e 's/^version:.*/version: $(VERSION)/' -e 's/^appVersion:.*/appVersion: "$(VERSION)"/' $$sub > $$sub.new && mv $$sub.new $$sub; \
+	    done; \
+	    dir=$$stage; deps=""; \
+	  fi; \
 	  helm package $$dir $$deps --version $(VERSION) --app-version $(VERSION) -d $(RELEASE_DIR)/charts; \
 	done
 
