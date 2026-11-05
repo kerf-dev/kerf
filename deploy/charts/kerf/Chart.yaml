@@ -1,16 +1,102 @@
 apiVersion: v2
 name: kerf
+# One chart for every cluster (WO-18d, D-028): global.mode hub installs the hub, web UI and pricing
+# service; spoke installs the agent, admission webhook and CRDs on a workload cluster; all installs
+# everything in one cluster.
 description: >-
-  Kerf in one chart (WO-18d, D-028): global.mode hub installs the hub, web UI and
-  pricing service; spoke installs the agent, admission webhook and CRDs on a workload cluster;
-  all installs everything in one cluster.
+  Kerf: self-hosted Kubernetes rightsizing. Recommends CPU and memory requests and limits from
+  Prometheus or VictoriaMetrics history, prices the savings per node type, and applies changes with
+  in-place resize or rollout, guardrails, maintenance windows and automatic rollback. One chart:
+  global.mode hub (central cluster), spoke (each workload cluster) or all (one cluster).
 type: application
 # make release VERSION=x.y.z writes version and appVersion here and in every subchart.
 version: 0.1.0
 appVersion: "0.1.0"
-keywords: [kubernetes, rightsizing, eks]
+keywords:
+  - kubernetes
+  - rightsizing
+  - finops
+  - cost-optimization
+  - resource-requests
+  - resource-limits
+  - vertical-pod-autoscaler
+  - in-place-pod-resize
+  - autoscaling
+  - prometheus
+  - victoriametrics
+  - eks
+icon: https://raw.githubusercontent.com/kerf-dev/kerf/main/docs/branding/kerf-mark-on-light.svg
 home: https://github.com/kerf-dev/kerf
 sources: [https://github.com/kerf-dev/kerf]
+# Artifact Hub (https://artifacthub.io/docs/topics/annotations/helm/). The image tags must match the release
+# version: update artifacthub.io/images and artifacthub.io/changes with every release (docs/release.md).
+annotations:
+  artifacthub.io/category: monitoring-logging
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/kerf-dev/kerf
+    - name: Install on Amazon EKS
+      url: https://github.com/kerf-dev/kerf/blob/main/docs/install/eks.md
+    - name: Documentation
+      url: https://github.com/kerf-dev/kerf/blob/main/docs/README.md
+    - name: Changelog
+      url: https://github.com/kerf-dev/kerf/blob/main/CHANGELOG.md
+    - name: Security policy
+      url: https://github.com/kerf-dev/kerf/blob/main/SECURITY.md
+  artifacthub.io/images: |
+    - name: hub
+      image: ghcr.io/kerf-dev/kerf/hub:0.1.0
+    - name: web
+      image: ghcr.io/kerf-dev/kerf/web:0.1.0
+    - name: pricing
+      image: ghcr.io/kerf-dev/kerf/pricing:0.1.0
+    - name: agent
+      image: ghcr.io/kerf-dev/kerf/agent:0.1.0
+    - name: webhook
+      image: ghcr.io/kerf-dev/kerf/webhook:0.1.0
+  artifacthub.io/crds: |
+    - kind: RightsizingPolicy
+      version: v1alpha1
+      name: rightsizingpolicies.kerf.getkerf.dev
+      displayName: Rightsizing policy
+      description: >-
+        Which workloads Kerf may change and how: CPU and memory modes (off, audit, auto-patch), the apply
+        strategy, maintenance and freeze windows, guardrails and rollback thresholds. Cluster-scoped.
+    - kind: RightsizingRecommendation
+      version: v1alpha1
+      name: rightsizingrecommendations.kerf.getkerf.dev
+      displayName: Rightsizing recommendation
+      description: >-
+        The change Kerf wants for one workload, in its namespace, written by the agent, with the phase of the
+        change (Pending, Applying, Applied, Blocked, RolledBack, Released, Deferred).
+  artifacthub.io/crdsExamples: |
+    - apiVersion: kerf.getkerf.dev/v1alpha1
+      kind: RightsizingPolicy
+      metadata:
+        name: shop-cpu-auto
+      spec:
+        selector:
+          namespaces: [shop]
+        profile: production
+        cpu:
+          mode: auto-patch
+        memory:
+          mode: audit
+        apply:
+          strategy: in-place
+  artifacthub.io/changes: |
+    - kind: added
+      description: First public version.
+    - kind: added
+      description: Recommendations and savings from Prometheus or VictoriaMetrics, priced per node type.
+    - kind: added
+      description: Automation per policy with in-place resize or rollout, guardrails, maintenance windows and automatic rollback.
+    - kind: added
+      description: HPA coordination, JVM heap-aware memory, zero-downtime single-replica changes.
+    - kind: added
+      description: Web UI with admin area, add-cluster wizard and readiness checks.
 # The component charts, linked into charts/ (symlinks to deploy/charts/<name>, so an in-tree render
 # always uses the current charts; `helm package` stores real copies). Do not run `helm dependency
 # update` here: it would replace the links with archives. There are no `condition:`s: Helm cannot

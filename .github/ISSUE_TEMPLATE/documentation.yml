@@ -1,0 +1,21 @@
+name: Documentation
+description: Something in the docs is missing, wrong or hard to follow.
+labels: [documentation]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Which page?
+      placeholder: e.g. docs/install/eks.md, section 5.3
+    validations: {required: true}
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's wrong or missing?
+      description: Quote the sentence, or describe what you were trying to do when the docs didn't help.
+    validations: {required: true}
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested wording
+      description: Optional. Small fixes are also welcome as a pull request.

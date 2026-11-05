@@ -1,20 +1,39 @@
 name: Bug report
-description: Something does not work as documented.
-labels: [bug]
+description: Kerf does something other than what the docs say.
+labels: [bug, triage]
 body:
   - type: markdown
     attributes:
-      value: Security problems go through **Security → Report a vulnerability**, not an issue. Remove tokens, hostnames and other private data from logs before posting.
+      value: |
+        Thanks for taking the time to report this. A short, exact report gets fixed fastest.
+
+        **Security problems** go through [Report a vulnerability](https://github.com/kerf-dev/kerf/security/advisories/new), not an issue.
+        Before you paste logs or values, remove tokens, passwords, hostnames and anything else private.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Where is the problem?
+      multiple: true
+      options:
+        - Recommendations or savings (hub, pricing)
+        - Automation (agent, webhook, rollback)
+        - Web UI
+        - Helm chart or install
+        - Cluster onboarding and readiness checks
+        - Documentation
+        - Not sure
+    validations: {required: true}
   - type: textarea
     id: what
     attributes:
       label: What happened, and what did you expect?
+      placeholder: The agent rolled back checkout-api after a CPU change, but the activity log shows no OOM kills, restarts or throttling.
     validations: {required: true}
   - type: textarea
     id: reproduce
     attributes:
       label: How to reproduce
-      description: Steps, the relevant chart values (without secrets) and resources.
+      description: Steps, the relevant chart values and `RightsizingPolicy` (without secrets), and the workload's kind.
   - type: input
     id: version
     attributes:
@@ -24,11 +43,20 @@ body:
   - type: input
     id: platform
     attributes:
-      label: Kubernetes
-      placeholder: e.g. EKS 1.35, metrics from Prometheus 3.x
+      label: Kubernetes and metrics
+      placeholder: e.g. EKS 1.35, VictoriaMetrics 1.110, Argo CD 3.1
   - type: textarea
     id: logs
     attributes:
       label: Logs and readiness
-      description: Hub, agent or webhook logs; the cluster's readiness checks from the UI.
+      description: Hub, agent or webhook logs around the time it happened, and the cluster's readiness checks from the UI.
       render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the existing issues and didn't find this one.
+          required: true
+        - label: I removed secrets and private data from everything above.
+          required: true

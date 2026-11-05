@@ -1,23 +1,41 @@
-# Kerf (umbrella chart)
+<img src="https://raw.githubusercontent.com/kerf-dev/kerf/main/docs/branding/kerf-logo-on-light.svg" alt="Kerf" height="48">
 
-One chart for every cluster (WO-18d, D-028). `global.mode` picks what a release installs:
+# Kerf Helm chart
+
+**Kerf is self-hosted Kubernetes rightsizing.** It recommends CPU and memory requests and limits from your
+Prometheus or VictoriaMetrics history, prices the savings per node type, and, where you allow it, applies the
+change with an in-place pod resize or a rollout, with guardrails, maintenance windows and automatic rollback.
+Every workload starts in `audit`: nothing changes until you turn on `auto-patch`.
+
+This one chart installs Kerf on every cluster. `global.mode` picks what a release installs:
 
 | `global.mode` | Components | Where |
 |---|---|---|
-| `hub` | hub, web, pricing | the hub cluster |
+| `hub` | hub, web, pricing | the central (hub) cluster |
 | `spoke` | agent, webhook, the CRDs | each workload cluster |
 | `all` | everything | one cluster (evaluation, small setups) |
 
 `<component>.enabled: true|false` overrides one component either way.
 
-**Install guide:** [docs/install/eks.md](../../../docs/install/eks.md). **Examples:** [deploy/examples/eks](../../../deploy/examples/eks).
+## Install
 
 ```bash
-helm upgrade --install kerf oci://$REGISTRY/charts/kerf --version $VERSION \
-  -n kerf --create-namespace -f values-hub.yaml
+helm install kerf oci://ghcr.io/kerf-dev/kerf/charts/kerf --version <version> \
+  -n kerf --create-namespace -f values-hub.yaml     # global.mode: hub, then spoke on each workload cluster
 ```
 
+Released charts use the signed images of the same release from `ghcr.io/kerf-dev/kerf`. Requirements: Kubernetes
+1.35 (tested), a Prometheus-compatible metrics store with cAdvisor and kube-state-metrics, PostgreSQL 12 or later
+for the hub, and cert-manager on workload clusters.
+
+- **Step-by-step guide:** [Install on Amazon EKS](https://github.com/kerf-dev/kerf/blob/main/docs/install/eks.md), with example values in
+  [deploy/examples/eks](https://github.com/kerf-dev/kerf/tree/main/deploy/examples/eks).
+- **Project:** [github.com/kerf-dev/kerf](https://github.com/kerf-dev/kerf) ·
+  [documentation](https://github.com/kerf-dev/kerf/blob/main/docs/README.md) · [changelog](https://github.com/kerf-dev/kerf/blob/main/CHANGELOG.md) · [security](https://github.com/kerf-dev/kerf/blob/main/SECURITY.md)
+
 ## How it works
+
+For chart developers (WO-18d, D-028).
 
 - **Components** are the five component charts (`deploy/charts/{hub,web,pricing,agent,webhook}`),
   linked into `charts/` as symlinks. `helm package` (`make release`) stores real copies and sets their
@@ -51,7 +69,7 @@ helm upgrade --install kerf oci://$REGISTRY/charts/kerf --version $VERSION \
 ## Values
 
 The umbrella's own values. Everything under `hub`, `web`, `pricing`, `agent` and `webhook` is that component chart's
-values: see `deploy/charts/<component>/values.yaml` and the table in `docs/handover/WO-18b-handover.md`.
+values: see `deploy/charts/<component>/values.yaml` in the [repository](https://github.com/kerf-dev/kerf/tree/main/deploy/charts) and the [component values table](https://github.com/kerf-dev/kerf/blob/main/docs/handover/WO-18b-handover.md).
 
 | Value | Default | Description |
 |---|---|---|
