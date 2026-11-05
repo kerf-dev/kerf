@@ -75,9 +75,25 @@ Follow `docs/install/eks.md` literally where possible; replace the AWS pieces li
 
 `global.mode=all` on a single k3d cluster exercises everything at once; a hub cluster plus one spoke matches the guide.
 
-## Verification (2026-11-05)
+## Verification (2026-11-05, Helm v4.3.1)
 
-See the "Verification" section of the final report in the session; summarised here after the run.
+| Command | Result |
+|---|---|
+| `make ci` | rc=0: golangci-lint `0 issues.`, 30 test packages ok (incl. `deploy/charts/resource-optimizer`), redocly valid |
+| `make charts-lint` | rc=0: the 5 component charts × {defaults, dev, prod} as before, then `charts-lint-umbrella`: mode {hub, spoke, all} × {defaults+required, EKS examples} lint `--strict` + kubeconform 1.35.0, 0 invalid; Deployments per mode hub = `hub pricing web`, spoke = `resource-optimizer-agent resource-optimizer-webhook` + 2 CRDs, all = all five + 2 CRDs; wiring `web HUB_UPSTREAM=hub.resource-optimizer.svc.cluster.local:8080`, `pricing/agent --hub-url=http://hub.resource-optimizer.svc.cluster.local:8080`; example manifests (ApplicationSet, ECR ExternalSecret + generator, ClusterSecretStore) valid; IAM JSON valid. `umbrella chart OK` |
+| `make charts-diff-dev` | `== hub/web/pricing/agent/webhook: no difference`, `== resource-optimizer: not in main (new chart)` |
+| `helm template ro deploy/charts/resource-optimizer --set mode=hub` | fails: `at '/global': missing property 'mode'`, `at '/mode': value must be '(not used: set global.mode instead of mode)'`, `at '/global/imageRegistry': minLength: got 0, want 1` |
+| `helm template ro deploy/charts/resource-optimizer --set global.mode=hub` | fails: `at '/hub/database': 'anyOf' failed` (existingSecret / externalSecret.enabled / url) and `at '/global/imageRegistry': minLength: got 0, want 1` |
+| `… -f deploy/examples/eks/values-hub.yaml --set hub.database.url=postgres://x` | fails: `at '/hub/database/url': maxLength: got 12, want 0` |
+| `… values-hub.yaml --set hub.auth.cookieSecure=false` | fails: `at '/hub/auth/cookieSecure': value must be true`; with `dev=true` (+ url, ES off) it renders |
+| other rejections | `web.token.value` → `maxLength`, `agent.hub.tokenSecret.create=true` / `hub.devSeed.enabled=true` → `value must be one of false, <nil>`, spoke without `global.clusterName` / `agent.hub.url` → named errors |
+| `RELEASE_CHARTS=resource-optimizer make release-chart REGISTRY=localhost:5005/ro-release VERSION=0.1.0-rc.1` | rc=0, `Pushed: localhost:5005/ro-release/charts/resource-optimizer:0.1.0-rc.1`, digest `sha256:e3cdb1f558c4a265f2d13a9be32b8f03109da738518e0484ddff39dced4d03bd` |
+| `helm template ro oci://localhost:5005/ro-release/charts/resource-optimizer --version 0.1.0-rc.1 --plain-http -f deploy/examples/eks/values-spoke.yaml \| kubeconform -strict -kubernetes-version 1.35.0 -ignore-missing-schemas` | `30 resources … Valid: 23, Invalid: 0, Errors: 0, Skipped: 7` (CRDs, ExternalSecret, Certificate, Issuer, ServiceMonitors); images `…/resource-optimizer/agent:0.1.0-rc.1`, `…/webhook:0.1.0-rc.1`, labels `agent-0.1.0-rc.1` |
+| `helm install --dry-run=client` per mode | NOTES render the right steps per mode |
+| Read-only checks on the shared fleet (no deploys) | the guide's API-server proxy checks behave as documented: `services/hub:8080/proxy/readyz` → `ok`; `services/https:webhook:443/proxy/healthz` → `Error from server (NotFound)` (webhook reachable); `services/pricing:9090/proxy/metrics` → `ro_pricing_nodes{…status="priced"}` |
+| Independent subagent read of the guide and examples | 3 blockers + 11 minor found, all fixed: migration overwrote the old datasource key (now copied into Secrets Manager first); pricing NetworkPolicy blocked the Pod Identity Agent (`169.254.170.23:80` egress added); ECR repositories never created (inlined in step 2); plus missing `--context`s, per-cluster variable notes, VPN/internal-ALB reachability, `monitoring` namespace and egress-port assumptions, ACM record wait loop, Docker Hub pull for psql, Argo CD login/repo credentials, the step 7 check text, pricing metrics check vs NetworkPolicy (VPC `ipBlock` added). |
+
+Not done here (per the work-order): any live install. WO-18e does that.
 
 ## Follow-ups (not owned here)
 
