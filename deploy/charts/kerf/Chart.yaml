@@ -28,8 +28,8 @@ keywords:
 icon: https://raw.githubusercontent.com/kerf-dev/kerf/main/docs/branding/kerf-mark-on-light.svg
 home: https://github.com/kerf-dev/kerf
 sources: [https://github.com/kerf-dev/kerf]
-# Artifact Hub (https://artifacthub.io/docs/topics/annotations/helm/). The image tags must match the release
-# version: update artifacthub.io/images and artifacthub.io/changes with every release (docs/release.md).
+# Artifact Hub (https://artifacthub.io/docs/topics/annotations/helm/). make release (release-chart-package) sets
+# the artifacthub.io/images tags to the release version and artifacthub.io/prerelease from it.
 annotations:
   artifacthub.io/category: monitoring-logging
   artifacthub.io/license: Apache-2.0

@@ -15,6 +15,9 @@ Helm charts as OCI artifacts. Both go to one registry prefix, for example
 
 Every image is an OCI index with one manifest per platform. Each index also holds an SBOM (SPDX) and
 a SLSA provenance attestation (`mode=max`). Charts are packaged with `version` and `appVersion` set to `$VERSION`.
+The umbrella chart's Artifact Hub annotations are set at packaging too: every image in `artifacthub.io/images`
+becomes `$REGISTRY/<component>:$VERSION`, and `artifacthub.io/prerelease` is `"true"` for a `-suffix` version
+(`-rc.N`), `"false"` otherwise. There is nothing to edit by hand.
 
 
 ## Releasing on GitHub

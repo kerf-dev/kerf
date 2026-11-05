@@ -92,8 +92,11 @@ release-images: release-check release-builder ## Build and push the images with 
 # default to the images of this release: the umbrella's global.imageRegistry becomes $(REGISTRY) without
 # its trailing /kerf, and each component chart's image.repository becomes $(REGISTRY)/<name>.
 # A user then installs the chart with no registry setting. Explicit values still win.
+# The umbrella's Artifact Hub annotations follow the release too: every `image:` of artifacthub.io/images
+# becomes $(REGISTRY)/<component>:$(VERSION), and artifacthub.io/prerelease is "true" for a -suffix version.
 RELEASE_CHART_DEFAULT_REGISTRY ?=
 RELEASE_IMAGE_HOST = $(patsubst %/kerf,%,$(REGISTRY))
+RELEASE_PRERELEASE = $(if $(findstring -,$(VERSION)),true,false)
 
 .PHONY: release-chart-package
 release-chart-package:
@@ -113,6 +116,10 @@ release-chart-package:
 	    for sub in $$stage/charts/*/Chart.yaml; do \
 	      sed -e 's/^version:.*/version: $(VERSION)/' -e 's/^appVersion:.*/appVersion: "$(VERSION)"/' $$sub > $$sub.new && mv $$sub.new $$sub; \
 	    done; deps=""; \
+	    : "Artifact Hub metadata of the umbrella: the images of this release, pre-release for a -suffix version."; \
+	    sed -E -e 's|^( +image: ).*/([a-z-]+):[^ ]+$$|\1$(REGISTRY)/\2:$(VERSION)|' \
+	      -e 's|^  artifacthub.io/prerelease: .*|  artifacthub.io/prerelease: "$(RELEASE_PRERELEASE)"|' \
+	      $$stage/Chart.yaml > $$stage/Chart.yaml.new && mv $$stage/Chart.yaml.new $$stage/Chart.yaml; \
 	    if [ "$(RELEASE_CHART_DEFAULT_REGISTRY)" = 1 ]; then \
 	      sed -e 's|^  imageRegistry: ""|  imageRegistry: "$(RELEASE_IMAGE_HOST)"|' $$stage/values.yaml > $$stage/values.yaml.new && \
 	        mv $$stage/values.yaml.new $$stage/values.yaml; \
