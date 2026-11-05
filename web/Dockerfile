@@ -11,7 +11,7 @@
 #     buffers; see nginx/nginx.conf);
 #   - liveness/readiness: GET /healthz on 8080.
 
-FROM --platform=$BUILDPLATFORM node:22-alpine AS build
+FROM --platform=$BUILDPLATFORM node:26-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
