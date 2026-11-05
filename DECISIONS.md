@@ -162,3 +162,4 @@ revoked. Without this, Argo CD with self-heal would silently revert every approv
 - **GitOps:** an Argo CD ApplicationSet with a cluster generator.
 
 Plan and audit: `docs/work-orders/WO-18-eks-packaging.md`.
+- **Amendment (2026-11-05, WO-18d):** the switch is `global.mode`, not a top-level `mode`. Helm passes only `global.*` to subcharts, and the components gate themselves on it. The schema rejects a top-level `mode` and names `global.mode`. In release `resource-optimizer` the objects keep the dev names (`hub`, `web`, `pricing`, `webhook`, `resource-optimizer-agent`).

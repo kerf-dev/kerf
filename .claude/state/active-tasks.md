@@ -44,8 +44,8 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-18a | Hub HA (leader lock, migrate lock, recompute in DB) | 5 | done | local_2deafb65 | wo-18a-hub-ha | – | migration 0012 |
 | WO-18b | Production-grade component charts | 5 | done | local_5dc2f372 | wo-18b-chart-hardening | – | |
 | WO-18c | Multi-arch images and release | 5 | done | local_04939a0e | wo-18c-release | – | |
-| WO-18d | Umbrella chart + EKS guide | 5 | in-progress | local_5651ac77 | wo-18d-umbrella | – | |
-| WO-18e | Staging install verification (ro-staging) | 5 | todo | – | wo-18e-staging | WO-18a/c/d | |
+| WO-18d | Umbrella chart + EKS guide | 5 | done | local_5651ac77 | wo-18d-umbrella | – | |
+| WO-18e | Staging install verification (ro-staging) | 5 | in-progress | orchestrator | wo-18e-staging | WO-18a/c/d | |
 
 ## Open questions for the user
 - Token with GitHub `workflow` scope needed to activate `ci/github-workflows/` (user, morning).
@@ -78,3 +78,4 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-04 User approved the WO-18 plan (D-028): audit in docs/work-orders/WO-18-eks-packaging.md. Migration 0012 assigned to WO-18a (recompute requests). Web nginx port 80→8080: WO-18c changes the image, WO-18b adds the chart value; orchestrator sets it at merge. Started 18a, 18b, 18c.
 - 2026-11-04 WO-18a (308415b), WO-18b (0713ebe, 59c5293) and WO-18c (cfd2d2d, bcf397b) merged; no file overlap. Integration fix-ups e2ccb9c: hub chart 2 replicas + RollingUpdate + POD_NAME + grace 30s; web chart 8080 non-root read-only by default; agent-sync-crds → charts-sync; selfcheck CRD text. `make ci`, `make charts-lint` green; `charts-diff-dev` shows only those intended changes. Deployed hub/web/pricing/agent/webhook at main-e2ccb9c: migration 0012 applied once (one pod), one leader. Live failover: leader force-deleted, follower acquired in <1 s; recompute via API ran once on the new leader (succeeded, 14.7 s). Full `make e2e` on main: PASS 16m (usual skips). Both spokes AutomationReady. Started WO-18d.
 - 2026-11-05 WO-18d session local_5651ac77 started by the user (worktree .claude/worktrees/wo-18d-umbrella). Next: verify + merge, then write and start WO-18e (staging install on k3d ro-staging).
+- 2026-11-05 WO-18d merged (7df084b). Verified on the branch: charts-lint rc=0 (umbrella × 3 modes × defaults/EKS), charts-diff-dev: components unchanged, make ci rc=0 after fix 7af48de (release staged a copy of the umbrella's _test.go into bin/release/stage, breaking go test ./...). D-028 amended: global.mode. Follow-ups from the handover (hub configmap secretsKeyFile with externalSecret only; wizard snippets for the umbrella; selfcheck webhook label; release.md wording) → next fix-up WO. WO-18e run by the orchestrator.
