@@ -18,7 +18,7 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-FROM nginx:1.29-alpine
+FROM nginx:1.31-alpine
 # Pick up resolvers from /etc/resolv.conf for the runtime `resolver` directive. Templates render into
 # /tmp/conf.d (writable), which nginx.conf includes; the stock /etc/nginx/conf.d is not read.
 ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1 \
