@@ -217,13 +217,15 @@ func TestHubUnreachable(t *testing.T) {
 	pa.Selector.MatchLabels = map[string]string{"e2e-role": "applied"}
 	pa.Priority = 1001
 	// The apply and, below, the outage must not overlap the other spoke-2 scenarios (lockSpoke2).
+	// Both recommendations before the first lock: while other spoke-2 scenarios hold the lock they
+	// may also hold spoke-2 recomputes (TestAdminPause).
 	waitHubRecommendation(t, cl, ns, deployment, "applied", cpuBelow(overCPU))
+	// "held" must have a representative recommendation cached by the agent before the outage.
+	waitHubRecommendation(t, cl, ns, deployment, "held", cpuBelow(overCPU))
 	unlock := lockSpoke2(t)
 	armed(t, cl, ns+"-applied", ns, "applied", overCPU, pa)
 	waitPhase(t, cl, ns, deployment, "applied", v1alpha1.PhaseApplied)
 	unlock()
-	// "held" must have a representative recommendation cached by the agent before the outage.
-	waitHubRecommendation(t, cl, ns, deployment, "held", cpuBelow(overCPU))
 	waitReason(t, cl, ns, deployment, "held", v1alpha1.ReasonModeAudit, 3*time.Minute)
 	sleep(t, 2*pull, "at least one agent pull after that recommendation")
 	appliedPods := snapshot(t, cl, ns, "applied")

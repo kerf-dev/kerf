@@ -54,6 +54,9 @@ func (h *hubAPI) holdRecompute(t *testing.T, cluster string) (release func()) {
 	return release
 }
 
+// holdWait bounds how long recomputeNow waits for other scenarios' holds.
+const holdWait = 4 * time.Minute
+
 // defaultRecomputeEvery: a run of one dev spoke takes a few seconds, and with the dev hub's
 // recommender.endAlignment (30s) every run sees the last half minute of usage.
 const defaultRecomputeEvery = 30 * time.Second
@@ -75,10 +78,24 @@ func (h *hubAPI) maybeRecompute(ctx context.Context, cluster string, logf func(s
 	h.recompute(ctx, cluster, logf)
 }
 
-// recomputeNow asks for a recommender run of the cluster now, outside the rate limit and other
-// scenarios' holds (theirs are robust to a run: approvals are re-approved, the D-027 check ends
-// early). It reports false when the hub has no recompute trigger.
+// recomputeNow asks for a recommender run of the cluster now, outside the rate limit. It first
+// waits (up to holdWait) until no other scenario holds the cluster's recomputes: theirs would
+// survive a run (approvals are re-approved, the D-027 self-heal check ends early), but they would
+// check less. It reports false when the hub has no recompute trigger.
 func (h *hubAPI) recomputeNow(ctx context.Context, cluster string, logf func(string, ...any)) bool {
+	start := time.Now()
+	for {
+		h.mu.Lock()
+		held := h.holds[cluster] > 0
+		h.mu.Unlock()
+		if !held || time.Since(start) > holdWait {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if d := time.Since(start); d > time.Second {
+		logf("recompute of %s waited %s for other scenarios' holds", cluster, d.Round(time.Second))
+	}
 	h.mu.Lock()
 	if h.noRecompute || h.AdminToken == "" {
 		h.mu.Unlock()

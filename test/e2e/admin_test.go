@@ -221,6 +221,9 @@ func TestAdminPause(t *testing.T) {
 	armed(t, cl, ns+"-rb", ns, "rb", overCPU, pa)
 	waitPhase(t, cl, ns, deployment, "rb", v1alpha1.PhaseApplied)
 
+	// From the pause until the blocked events are counted, no suite recompute for spoke-2: a new
+	// recommendation with other values is a new proposal and gets its own blocked event (D-017).
+	releaseRecompute := env.Hub.holdRecompute(t, cl.Name)
 	before := clusterAgent(t, cl.Name).ConfigVersion
 	if r := setPause(t, operator, cl.Name, true, nil); r.Status != http.StatusOK {
 		t.Fatalf("operator pause of %s: %s", cl.Name, r)
@@ -269,6 +272,7 @@ func TestAdminPause(t *testing.T) {
 	if n := len(slices.DeleteFunc(evs, func(e auditEvent) bool { return e.Reason != v1alpha1.ReasonPaused })); n != 1 {
 		t.Errorf("%d blocked/Paused events for web, want exactly 1 (D-017)", n)
 	}
+	releaseRecompute()
 	q := url.Values{"targetType": {hubapi.TargetAutomation}, "cluster": {cl.Name}}
 	opActor := hubapi.Actor{Type: hubapi.ActorUser, Name: operator, Role: operator}
 	since := func(c hubapi.ConfigChange) bool { return !c.Time.Before(pausedAt.Add(-time.Minute)) }
