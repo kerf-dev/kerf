@@ -1,1 +1,3 @@
+{{- if include "pricing.c.enabled" . -}}
 {{- include "pricing.c.serviceMonitor" (dict "ctx" . "port" "http-metrics") }}
+{{ end -}}

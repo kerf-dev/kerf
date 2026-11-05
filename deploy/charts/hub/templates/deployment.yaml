@@ -1,3 +1,4 @@
+{{- if include "hub.c.enabled" . -}}
 {{- $dsKey := include "hub.datasourceKeyEnabled" . }}
 {{- $dbCA := include "hub.dbCAEnabled" . }}
 apiVersion: apps/v1
@@ -153,3 +154,4 @@ spec:
       {{- with .Values.affinity }}
       affinity: {{- toYaml . | nindent 8 }}
       {{- end }}
+{{ end -}}

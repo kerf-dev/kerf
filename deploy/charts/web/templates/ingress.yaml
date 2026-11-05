@@ -1,3 +1,4 @@
+{{- if include "web.c.enabled" . -}}
 {{- if .Values.ingress.enabled }}
 {{- $svc := include "web.fullname" . }}
 {{- $port := .Values.service.port }}
@@ -34,3 +35,4 @@ spec:
           {{- end }}
     {{- end }}
 {{- end }}
+{{ end -}}

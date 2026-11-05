@@ -267,3 +267,64 @@ spec:
 {{- end -}}
 {{- $s | int -}}
 {{- end -}}
+
+{{- /* ---- Umbrella chart (WO-18d): enable gate, names and wiring --------------------------------
+
+Every template file of every component chart is wrapped in
+  {{- if include "hub.c.enabled" . -}} ... {{ end -}}
+Helm evaluates a dependency's `condition:` before any template and cannot derive it from another
+value, so the umbrella chart deploy/charts/resource-optimizer selects its components here instead:
+
+- `enabled` set (true/false, umbrella `<component>.enabled`) wins;
+- else global.mode (umbrella `mode`): hub = hub, web, pricing; spoke = agent, webhook; all = every one;
+- global.mode empty (a component chart installed on its own, as in development): enabled, and
+  nothing below runs, so standalone renders are unchanged (`make charts-diff-dev`).
+
+With global.mode set, the gate also fills in what the umbrella derives (only values left empty):
+clusterName from global.clusterName; web hub.upstream, pricing hub.url (and its token Secret name)
+and, in mode all, agent hub.url from the hub Service of the release. It runs at the top of every
+template file, before anything reads those values. */ -}}
+{{- define "hub.c.enabled" -}}
+{{- $mode := dig "mode" "" (.Values.global | default dict) | toString -}}
+{{- $on := true -}}
+{{- if and (hasKey .Values "enabled") (not (kindIs "invalid" .Values.enabled)) -}}
+{{- $on = .Values.enabled -}}
+{{- else if $mode -}}
+{{- $modes := dict "hub" (list "hub" "all") "web" (list "hub" "all") "pricing" (list "hub" "all") "agent" (list "spoke" "all") "webhook" (list "spoke" "all") -}}
+{{- $on = has $mode (get $modes .Chart.Name | default list) -}}
+{{- end -}}
+{{- if $on -}}
+{{- if $mode }}{{ include "hub.c.umbrellaWiring" . }}{{ end -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{- /* Name of a component's objects in the umbrella chart: `<release>-<component>`, or plain
+`<component>` when the release is named resource-optimizer. The agent always keeps the release
+prefix (`resource-optimizer-agent`): it owns cluster-scoped RBAC, where a bare `agent` could clash.
+`<component>.fullnameOverride` wins. dict: ctx, component. */ -}}
+{{- define "hub.c.umbrellaName" -}}
+{{- $rel := .ctx.Release.Name -}}
+{{- if and (eq $rel "resource-optimizer") (ne .component "agent") -}}{{ .component }}
+{{- else -}}{{ printf "%s-%s" $rel .component | trunc 63 | trimSuffix "-" }}
+{{- end -}}
+{{- end -}}
+
+{{- /* Values the umbrella derives (see "hub.c.enabled"); prints nothing. */ -}}
+{{- define "hub.c.umbrellaWiring" -}}
+{{- $g := .Values.global | default dict -}}
+{{- $hub := printf "%s.%s.svc.cluster.local" (include "hub.c.umbrellaName" (dict "ctx" . "component" "hub")) .Release.Namespace -}}
+{{- if and $g.clusterName (not .Values.clusterName) }}{{ $_ := set .Values "clusterName" $g.clusterName }}{{ end -}}
+{{- if eq .Chart.Name "web" -}}
+{{- if not .Values.hub.upstream }}{{ $_ := set .Values.hub "upstream" (printf "%s:8080" $hub) }}{{ end -}}
+{{- else if eq .Chart.Name "pricing" -}}
+{{- if not .Values.hub.url }}{{ $_ := set .Values.hub "url" (printf "http://%s:8080" $hub) }}{{ end -}}
+{{- if not .Values.hub.tokenSecret.name }}{{ $_ := set .Values.hub.tokenSecret "name" (printf "%s-hub-token" (include "hub.c.umbrellaName" (dict "ctx" . "component" "pricing"))) }}{{ end -}}
+{{- else if eq .Chart.Name "agent" -}}
+{{- if and (not .Values.hub.url) (not .Values.stubHub.enabled) -}}
+{{- if eq $g.mode "all" }}{{ $_ := set .Values.hub "url" (printf "http://%s:8080" $hub) }}
+{{- else }}{{ fail "agent.hub.url is required in mode spoke: the hub URL as this cluster reaches it, e.g. https://hub.example.internal" }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

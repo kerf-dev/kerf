@@ -1,3 +1,4 @@
+{{- if include "webhook.c.enabled" . -}}
 {{- if not .Values.certManager.issuerRef.name }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
@@ -34,3 +35,4 @@ spec:
     kind: Issuer
     name: {{ include "webhook.fullname" . }}-selfsigned
     {{- end }}
+{{ end -}}

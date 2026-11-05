@@ -1,1 +1,3 @@
+{{- if include "web.c.enabled" . -}}
 {{- include "web.c.pdb" . }}
+{{ end -}}

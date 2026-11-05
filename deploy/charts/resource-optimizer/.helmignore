@@ -1,0 +1,4 @@
+# Not part of the chart.
+*_test.go
+README.md.gotmpl
+.DS_Store

@@ -1,0 +1,103 @@
+# Argo CD: one resource-optimizer Application per labelled cluster (docs/install/eks.md, "Argo CD").
+#
+# Cluster Secrets (argocd namespace) select what is installed:
+#   label      resource-optimizer.oz.io/mode: hub | spoke
+#   annotation resource-optimizer.oz.io/cluster-name: <name in the hub>        (default: the Argo CD cluster name)
+#   annotation resource-optimizer.oz.io/agent-token-key: <Secrets Manager key> (default: resource-optimizer/clusters/<name>/agent-token)
+#   annotation resource-optimizer.oz.io/vpc-cidr: <the cluster's VPC CIDR>      (spoke: the API server's ENIs, webhook NetworkPolicy)
+# e.g. argocd cluster add <kube context> --name prod-eu1 \
+#        --label resource-optimizer.oz.io/mode=spoke --annotation resource-optimizer.oz.io/vpc-cidr=10.1.0.0/16
+#
+# Placeholders (the guide replaces them with sed):
+#   123456789012 / eu-west-1                                    account / region
+#   https://git.example.com/platform/resource-optimizer-config.git  your Git repo with the values files
+#                                                                  (resource-optimizer/values-hub.yaml, values-spoke.yaml)
+#   0.1.0                                                       the chart version (make release VERSION=)
+#
+# Argo CD itself, on every Argo CD instance that syncs workloads the agent patches (D-006), needs in
+# argocd-cm:
+#   resource.customizations.ignoreDifferences.all: |
+#     managedFieldsManagers:
+#     - resource-optimizer
+# and those Applications need syncOptions RespectIgnoreDifferences=true (ServerSideApply=true recommended).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: resource-optimizer
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  # Deleting the ApplicationSet (or a cluster's label) keeps the installed objects: the CRDs hold
+  # every RightsizingPolicy and RightsizingRecommendation (Argo CD ignores helm.sh/resource-policy: keep).
+  syncPolicy:
+    preserveResourcesOnDeletion: true
+  generators:
+    - clusters:
+        selector:
+          matchExpressions:
+            - {key: resource-optimizer.oz.io/mode, operator: In, values: [hub, spoke]}
+  template:
+    metadata:
+      name: 'resource-optimizer-{{ .name }}'
+      labels:
+        app.kubernetes.io/part-of: resource-optimizer
+      # No resources-finalizer: deleting the Application leaves the objects (see above).
+    spec:
+      project: default
+      destination:
+        server: '{{ .server }}'
+        namespace: resource-optimizer
+      sources:
+        # The chart from ECR (helm OCI repository, enableOCI; argocd-ecr-repo.yaml keeps its credentials fresh).
+        - repoURL: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts
+          chart: resource-optimizer
+          targetRevision: 0.1.0
+          helm:
+            releaseName: resource-optimizer
+            valueFiles:
+              - '$values/resource-optimizer/values-{{ index .metadata.labels "resource-optimizer.oz.io/mode" }}.yaml'
+            # Per cluster, from the cluster Secret (unused keys are ignored in mode hub).
+            valuesObject:
+              global:
+                clusterName: '{{ index .metadata.annotations "resource-optimizer.oz.io/cluster-name" | default .name }}'
+              agent:
+                hub:
+                  tokenSecret:
+                    externalSecret:
+                      remoteRef:
+                        key: '{{ index .metadata.annotations "resource-optimizer.oz.io/agent-token-key" | default (printf "resource-optimizer/clusters/%s/agent-token" (index .metadata.annotations "resource-optimizer.oz.io/cluster-name" | default .name)) }}'
+              webhook:
+                networkPolicy:
+                  ingress:
+                    apiServerFrom:
+                      - ipBlock:
+                          cidr: '{{ index .metadata.annotations "resource-optimizer.oz.io/vpc-cidr" | default "10.0.0.0/8" }}'
+        # Your values files (values-hub.yaml / values-spoke.yaml after the guide's sed).
+        - repoURL: https://git.example.com/platform/resource-optimizer-config.git
+          targetRevision: main
+          ref: values
+      # D-006: fields other controllers own on these objects.
+      ignoreDifferences:
+        # The agent rightsizes workloads with server-side apply (field manager resource-optimizer),
+        # these components included when a policy covers this namespace.
+        - group: '*'
+          kind: '*'
+          managedFieldsManagers: [resource-optimizer]
+        # cert-manager's CA injector writes the webhook's caBundle.
+        - group: admissionregistration.k8s.io
+          kind: MutatingWebhookConfiguration
+          jqPathExpressions: ['.webhooks[]?.clientConfig.caBundle']
+        # Only when the chart generates the datasource key (no ExternalSecret; Argo CD runs no Helm
+        # lookup, so every render has a new key). values-hub.yaml uses the ExternalSecret.
+        - kind: Secret
+          name: hub-datasource-key
+          jsonPointers: [/data]
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true

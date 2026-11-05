@@ -1,0 +1,41 @@
+# Argo CD's credentials for the chart repository in ECR (optional, Argo CD only). ECR tokens expire
+# after 12 hours, so the External Secrets Operator regenerates the repository Secret every 6 hours
+# with its ECRAuthorizationToken generator. Apply it in the cluster running Argo CD; the role of ESO's
+# ServiceAccount there needs iam/argocd-ecr-pull-policy.json as well as iam/eso-policy.json.
+# Placeholders: 123456789012 / eu-west-1.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: ECRAuthorizationToken
+metadata:
+  name: ecr-resource-optimizer
+  namespace: argocd
+spec:
+  region: eu-west-1
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: repo-resource-optimizer-charts
+  namespace: argocd
+spec:
+  refreshInterval: 6h
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: ECRAuthorizationToken
+          name: ecr-resource-optimizer
+  target:
+    name: repo-resource-optimizer-charts
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      metadata:
+        labels:
+          argocd.argoproj.io/secret-type: repository
+      data:
+        name: resource-optimizer-charts
+        type: helm
+        enableOCI: "true"
+        url: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts
+        username: "{{ .username }}"
+        password: "{{ .password }}"

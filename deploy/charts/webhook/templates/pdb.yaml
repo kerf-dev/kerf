@@ -1,1 +1,3 @@
+{{- if include "webhook.c.enabled" . -}}
 {{- include "webhook.c.pdb" . }}
+{{ end -}}

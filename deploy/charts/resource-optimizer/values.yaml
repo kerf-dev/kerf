@@ -1,0 +1,183 @@
+# resource-optimizer: one chart for the hub cluster and every workload cluster (WO-18d, D-028).
+# Install guide: docs/install/eks.md. Examples: deploy/examples/eks/values-{hub,spoke}.yaml.
+#
+# Each component's settings live under its name (hub, web, pricing, agent, webhook) and are the
+# component chart's values (deploy/charts/<name>/values.yaml, docs/handover/WO-18b-handover.md).
+# Only what this chart changes from the component defaults is listed here.
+# values.schema.json rejects inline secrets unless dev: true.
+
+global:
+  # Required. What this release installs:
+  #   hub   = hub + web + pricing                  (the central cluster)
+  #   spoke = agent + webhook + the CRDs          (each workload cluster)
+  #   all   = everything in one cluster           (small setups, evaluation)
+  # <component>.enabled: true|false overrides one component either way.
+  # It sits under global because Helm passes only global.* to the components.
+  # mode: hub
+
+  # Required in mode spoke and all: this cluster's name as registered in the hub (a DNS label).
+  # Feeds agent.clusterName, webhook.clusterName and pricing.clusterName (each wins when set).
+  clusterName: ""
+
+  # Required unless dev: true. Registry host prefixed to every image.repository, e.g. the ECR
+  # host of `make release REGISTRY=<host>/resource-optimizer` (docs/release.md):
+  #   123456789012.dkr.ecr.eu-west-1.amazonaws.com
+  imageRegistry: ""
+  # Pull secrets for every pod (names or {name: ...}); EKS nodes pull from ECR with their role.
+  imagePullSecrets: []
+  # Default SecretStore of every ExternalSecret (External Secrets Operator), e.g.
+  #   secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}
+  externalSecrets:
+    secretStoreRef: {}
+
+# Development only: allows inline secrets (hub.database.url, web.token.value, *.tokenSecret.create,
+# hub.auth.bootstrapAdmin.password, hub.devSeed), hub.auth.cookieSecure: false and an empty
+# global.imageRegistry.
+dev: false
+
+# ---------------------------------------------------------------------------------------------------
+# hub: API, recommender, readiness (mode hub, all)
+# Object names: see templates/_names.tpl (release resource-optimizer -> hub, web, pricing, webhook,
+# resource-optimizer-agent; another release R -> R-hub, R-web, ...).
+hub:
+  # enabled: true            # override global.mode for this component
+  image:
+    repository: resource-optimizer/hub
+    tag: ""                  # default: the chart appVersion (= the release VERSION)
+    digest: ""               # optional sha256:... from bin/release/images.txt
+  # 2 replicas, RollingUpdate, PDB minAvailable 1 and node/zone spread are the chart defaults
+  # (leader election on Postgres, WO-18a).
+
+  # The database. Production: RDS through the External Secrets Operator (D-028, verify-full):
+  #   database:
+  #     host: ro-hub.xxxxxxxx.eu-west-1.rds.amazonaws.com
+  #     caBundle: {existingConfigMap: rds-ca-bundle, key: global-bundle.pem}
+  #     externalSecret:
+  #       enabled: true
+  #       source: rds          # the RDS-managed secret (JSON username/password)
+  #       remoteRef: {key: "resource-optimizer/hub/db"}
+  # or your own Secret: database.existingSecret (key DATABASE_URL). A direct connection or a
+  # session-mode pooler only: the leader lock needs a session (no RDS Proxy, no transaction pooling).
+  database:
+    url: ""                  # inline URL: dev: true only
+
+  # Initial admin, created on an empty database. Production: from Secrets Manager
+  #   auth.bootstrapAdmin.externalSecret: {enabled: true, remoteRef: {key: resource-optimizer/hub/bootstrap-admin, property: password}}
+  auth:
+    cookieSecure: true       # false: dev: true only (plain-HTTP development)
+
+  # Datasource secrets key (D-025). The chart generates it once (Helm lookup) unless it comes from
+  # Secrets Manager. With Argo CD (no lookup) use the ExternalSecret, or every sync makes a new key:
+  #   onboarding.secretsKey.externalSecret: {enabled: true, remoteRef: {key: resource-optimizer/hub/datasource-key}}
+
+  # Ingress for the hub API (agents of other clusters, pricing over HTTPS). AWS Load Balancer
+  # Controller, internal ALB (D-028):
+  #   ingress:
+  #     enabled: true
+  #     className: alb
+  #     annotations:
+  #       alb.ingress.kubernetes.io/scheme: internal
+  #       alb.ingress.kubernetes.io/target-type: ip
+  #       alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+  #       alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account>:certificate/<id>
+  #       alb.ingress.kubernetes.io/healthcheck-path: /readyz
+  #     hosts: [{host: hub.ro.example.internal, paths: [{path: /, pathType: Prefix}]}]
+  #     tls: [{hosts: [hub.ro.example.internal]}]
+  # Opt-in production features, each needs its add-on (examples: deploy/examples/eks/values-hub.yaml):
+  #   networkPolicy:  {enabled: true, ingress: {from: [{ipBlock: {cidr: <VPC CIDR>}}]}}
+  #   serviceMonitor: {enabled: true, kind: ServiceMonitor}       # or VMServiceScrape
+  #   prometheusRule: {enabled: true, kind: PrometheusRule}       # or VMRule
+  #   dashboards:     {enabled: true, namespace: monitoring}      # Grafana sidecar ConfigMaps
+
+# ---------------------------------------------------------------------------------------------------
+# web: the UI (nginx, non-root on 8080) (mode hub, all)
+web:
+  image:
+    repository: resource-optimizer/web
+    tag: ""
+    digest: ""
+  hub:
+    # Empty: this release's hub Service (<hub name>.<namespace>.svc.cluster.local:8080).
+    upstream: ""
+  # Read-only `ui` token for visitors without a session (auth.anonymousRead). Production:
+  #   token.externalSecret: {enabled: true, remoteRef: {key: resource-optimizer/hub/ui-token, property: token}}
+  token:
+    value: ""                # inline token: dev: true only
+  # Ingress for browsers (ALB, scheme of your choice):
+  #   ingress:
+  #     enabled: true
+  #     className: alb
+  #     annotations:
+  #       alb.ingress.kubernetes.io/scheme: internal          # or internet-facing
+  #       alb.ingress.kubernetes.io/target-type: ip
+  #       alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+  #       alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account>:certificate/<id>
+  #       alb.ingress.kubernetes.io/healthcheck-path: /healthz
+  #     hosts: [{host: ro.example.com, paths: [{path: /, pathType: Prefix}]}]
+  #     tls: [{hosts: [ro.example.com]}]
+  #   networkPolicy: {enabled: true}
+
+# ---------------------------------------------------------------------------------------------------
+# pricing: node prices and cost series (mode hub, all)
+pricing:
+  image:
+    repository: resource-optimizer/pricing
+    tag: ""
+    digest: ""
+  clusterName: ""            # empty: global.clusterName
+  # static (the price file in the image) or aws (Pricing API + spot prices; IAM through EKS Pod
+  # Identity for ServiceAccount <pricing name>: docs/install/eks.md).
+  provider: static
+  hub:
+    # Empty: this release's hub Service. The token (role pricing) is read from Secret
+    # tokenSecret.name, default <pricing name>-hub-token. Production:
+    #   tokenSecret.externalSecret: {enabled: true, remoteRef: {key: resource-optimizer/hub/pricing-token, property: token}}
+    url: ""
+    tokenSecret:
+      name: ""
+      create: false          # true + token: dev: true only
+      token: ""
+  #   networkPolicy:  {enabled: true}
+  #   serviceMonitor: {enabled: true}
+
+# ---------------------------------------------------------------------------------------------------
+# agent: one per workload cluster (mode spoke, all)
+agent:
+  image:
+    repository: resource-optimizer/agent
+    tag: ""
+    digest: ""
+  clusterName: ""            # empty: global.clusterName
+  hub:
+    # Required in mode spoke: the hub API as this cluster reaches it, e.g.
+    # https://hub.ro.example.internal (the hub's internal ALB). Empty in mode all: this release's
+    # hub Service.
+    url: ""
+    # The cluster's agent token (role agent), shown once by the hub's cluster wizard. Secret
+    # resource-optimizer-agent-token, key token. Production:
+    #   tokenSecret.externalSecret: {enabled: true, remoteRef: {key: resource-optimizer/clusters/<cluster>/agent-token, property: token}}
+    tokenSecret:
+      create: false          # true + token: dev: true only
+      token: ""
+    # caBundle: {existingConfigMap: corp-root-ca, key: ca.crt}   # hub certificate from a private CA
+  # Production default here: two replicas with leader election (one works, one waits).
+  replicaCount: 2
+  leaderElection: true
+  health:
+    # Prometheus-compatible endpoint with this cluster's container_cpu_cfs_* series, for the
+    # throttling rollback (WO-08). Empty: no throttling-based rollback.
+    metricsURL: ""
+  #   networkPolicy:  {enabled: true}
+  #   serviceMonitor: {enabled: true}
+
+# ---------------------------------------------------------------------------------------------------
+# webhook: mutating admission webhook (mode spoke, all). Needs cert-manager. The control plane must
+# reach the nodes on containerPort (9443): docs/install/eks.md, security groups.
+webhook:
+  image:
+    repository: resource-optimizer/webhook
+    tag: ""
+    digest: ""
+  clusterName: ""            # empty: global.clusterName
+  #   networkPolicy:  {enabled: true, ingress: {apiServerFrom: [{ipBlock: {cidr: <VPC CIDR>}}]}}
+  #   serviceMonitor: {enabled: true}
