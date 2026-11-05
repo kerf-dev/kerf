@@ -1,5 +1,5 @@
 # Weekly dependency updates. Go modules, the web UI's npm packages, the Dockerfiles' base images and the
-# GitHub Actions (pinned by commit SHA in ci/github-workflows/ and .github/workflows/).
+# GitHub Actions (pinned by commit SHA in .github/workflows/).
 version: 2
 updates:
   - package-ecosystem: gomod

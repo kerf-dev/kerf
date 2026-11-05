@@ -19,7 +19,7 @@ a SLSA provenance attestation (`mode=max`). Charts are packaged with `version` a
 
 ## Releasing on GitHub
 
-The release workflow (`.github/workflows/release.yaml`; until it is activated, `ci/github-workflows/`) runs when
+The release workflow (`.github/workflows/release.yaml`) runs when
 a tag `vX.Y.Z` or `vX.Y.Z-rc.N` is pushed (WO-26).
 
 | Step | What happens |

@@ -133,7 +133,7 @@ Prerequisites: the agents have their hub token Secret (WO-06 hand-over) and are 
 
 ## CI
 
-`ci/github-workflows/e2e.yaml` (to be moved to `.github/workflows/`): creates the clusters
+`.github/workflows/e2e.yaml`: creates the clusters
 (`make dev-up`), deploys hub, pricing and agents, creates the agent tokens, runs `make e2e`, and on
 failure uploads `bin/e2e.log`, `kubectl cluster-info dump` of all clusters and the rightsizing
 objects.
