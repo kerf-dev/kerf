@@ -7,7 +7,7 @@ global:
     secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}
 
 image:
-  repository: resource-optimizer/hub
+  repository: kerf/hub
   tag: 0.2.0
   digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
@@ -20,7 +20,7 @@ autoscaling:
   minReplicas: 2
   maxReplicas: 4
   targetCPUUtilizationPercentage: 75
-priorityClassName: resource-optimizer-critical
+priorityClassName: kerf-critical
 nodeSelector:
   kubernetes.io/os: linux
 tolerations:
@@ -28,7 +28,7 @@ tolerations:
 
 serviceAccount:
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/resource-optimizer-hub
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/kerf-hub
 
 podLabels: {team: platform}
 podAnnotations: {example.com/owner: platform}
@@ -44,7 +44,7 @@ ingress:
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
     alb.ingress.kubernetes.io/healthcheck-path: /readyz
-    alb.ingress.kubernetes.io/group.name: resource-optimizer
+    alb.ingress.kubernetes.io/group.name: kerf
   hosts:
     - host: hub.ro.example.internal
       paths: [{path: /, pathType: Prefix}]
@@ -66,13 +66,13 @@ auth:
   bootstrapAdmin:
     externalSecret:
       enabled: true
-      remoteRef: {key: resource-optimizer/hub/bootstrap-admin, property: password}
+      remoteRef: {key: kerf/hub/bootstrap-admin, property: password}
 
 onboarding:
   secretsKey:
     externalSecret:
       enabled: true
-      remoteRef: {key: resource-optimizer/hub/datasource-key}
+      remoteRef: {key: kerf/hub/datasource-key}
 
 config:
   prometheusURL: http://vmsingle-fleet.monitoring.svc:8428

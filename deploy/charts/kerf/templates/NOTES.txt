@@ -9,7 +9,7 @@
 {{- $web := include "ro.name" (dict "ctx" . "component" "web") -}}
 {{- $agent := include "ro.name" (dict "ctx" . "component" "agent") -}}
 {{- $cluster := .Values.global.clusterName -}}
-resource-optimizer {{ .Chart.AppVersion }}, mode {{ $mode }}, release {{ .Release.Name }} in namespace {{ $ns }}.
+Kerf {{ .Chart.AppVersion }}, mode {{ $mode }}, release {{ .Release.Name }} in namespace {{ $ns }}.
 Installed: {{ if $hubOn }}hub {{ end }}{{ if $webOn }}web {{ end }}{{ if $pricingOn }}pricing {{ end }}{{ if $agentOn }}agent {{ end }}{{ if $webhookOn }}webhook {{ end }}
 Install guide: docs/install/eks.md
 
@@ -17,10 +17,10 @@ Install guide: docs/install/eks.md
    kubectl -n {{ $ns }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
 {{- if $hubOn }}
 
-2. Hub ({{ $hub }}): ready, and exactly one replica leads (sum of ro_hub_leader = 1):
+2. Hub ({{ $hub }}): ready, and exactly one replica leads (sum of kerf_hub_leader = 1):
    kubectl -n {{ $ns }} rollout status deploy/{{ $hub }}
    for p in $(kubectl -n {{ $ns }} get pods -l app.kubernetes.io/name=hub,app.kubernetes.io/instance={{ .Release.Name }} -o name); do
-     kubectl get --raw "/api/v1/namespaces/{{ $ns }}/pods/${p#pod/}:8080/proxy/metrics" | grep '^ro_hub_leader '; done
+     kubectl get --raw "/api/v1/namespaces/{{ $ns }}/pods/${p#pod/}:8080/proxy/metrics" | grep '^kerf_hub_leader '; done
 {{- with .Values.hub.ingress }}{{ if .enabled }}{{ with .hosts }}
    Hub API for agents: https://{{ (index . 0).host }}  (check: curl -s https://{{ (index . 0).host }}/readyz)
 {{- end }}{{ end }}{{ end }}
@@ -35,13 +35,13 @@ Install guide: docs/install/eks.md
    kubectl -n {{ $ns }} port-forward svc/{{ $web }} 8080:{{ .Values.web.service.port }}   then http://localhost:8080
 {{- end }}
    Sign in as {{ .Values.hub.auth.bootstrapAdmin.username }} (the bootstrap admin password: Secrets Manager
-   resource-optimizer/hub/bootstrap-admin, or your auth.bootstrapAdmin Secret), then change it.
+   kerf/hub/bootstrap-admin, or your auth.bootstrapAdmin Secret), then change it.
 {{- end }}
 {{- if $hubOn }}
 
 4. Register each workload cluster: UI -> Clusters -> Add cluster (/clusters/new). The wizard shows
    the cluster's agent token once: store it in Secrets Manager under
-   resource-optimizer/clusters/<cluster>/agent-token, then install this chart there with global.mode=spoke.
+   kerf/clusters/<cluster>/agent-token, then install this chart there with global.mode=spoke.
 {{- end }}
 {{- if $agentOn }}
 
@@ -53,6 +53,6 @@ Install guide: docs/install/eks.md
    Auto-patch can be set only on Automation ready clusters.
 {{- end }}
 {{- if $webhookOn }}
-   Webhook: kubectl -n {{ $ns }} get certificate,deploy,endpoints -l app.kubernetes.io/name=resource-optimizer-webhook
+   Webhook: kubectl -n {{ $ns }} get certificate,deploy,endpoints -l app.kubernetes.io/name=kerf-webhook
    The control plane must reach the nodes on TCP {{ .Values.webhook.containerPort }} (security group).
 {{- end }}

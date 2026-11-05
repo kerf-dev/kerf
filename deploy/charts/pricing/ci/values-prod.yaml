@@ -7,7 +7,7 @@ global:
 
 clusterName: ro-hub
 image:
-  repository: resource-optimizer/pricing
+  repository: kerf/pricing
   tag: 0.2.0
   digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
@@ -22,7 +22,7 @@ hub:
     name: pricing-hub-token
     externalSecret:
       enabled: true
-      remoteRef: {key: resource-optimizer/pricing/hub-token, property: token}
+      remoteRef: {key: kerf/pricing/hub-token, property: token}
   caBundle:
     pem: |
       -----BEGIN CERTIFICATE-----
@@ -32,9 +32,9 @@ hub:
 serviceAccount:
   # IRSA fallback; with EKS Pod Identity leave annotations empty and create the association.
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/resource-optimizer-pricing
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/kerf-pricing
 
-priorityClassName: resource-optimizer
+priorityClassName: kerf
 podLabels: {team: platform}
 nodeSelector: {kubernetes.io/os: linux}
 

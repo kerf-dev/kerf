@@ -2,7 +2,7 @@
 # Uses the shared k3d environment through its host ports (docs/handover/WO-01-handover.md).
 # The in-cluster deployment uses deploy/charts/hub/values-dev.yaml instead.
 listen: ":8080"
-databaseURL: postgres://ro:ro@localhost:15432/resource_optimizer?sslmode=disable
+databaseURL: postgres://kerf:kerf@localhost:15432/kerf?sslmode=disable
 prometheusURL: http://localhost:18428
 migrationsDir: db/migrations
 corsOrigins: ["http://localhost:5173"]

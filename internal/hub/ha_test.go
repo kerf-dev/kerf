@@ -15,9 +15,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
 // Hub HA tests (WO-18a): several hub replicas, each with its own pool, elector and HTTP server,
@@ -222,7 +222,7 @@ func TestLeaderTwoHubs(t *testing.T) {
 	}
 	// Leadership metrics.
 	if g := testutil.ToFloat64(leader.srv.Metrics.leader) + testutil.ToFloat64(follower.srv.Metrics.leader); g != 1 {
-		t.Errorf("sum of ro_hub_leader = %v", g)
+		t.Errorf("sum of kerf_hub_leader = %v", g)
 	}
 	if n := testutil.ToFloat64(leader.srv.Metrics.transitions); n != 1 {
 		t.Errorf("leader transitions %v, want 1", n)
@@ -244,14 +244,14 @@ func TestLeaderTwoHubs(t *testing.T) {
 	}
 	lm := string(leader.get(t, "/metrics", "").body)
 	fm := string(follower.get(t, "/metrics", "").body)
-	for _, name := range []string{"ro_recommendation_cpu_cores{", "ro_recommender_last_success_timestamp_seconds{"} {
+	for _, name := range []string{"kerf_recommendation_cpu_cores{", "kerf_recommender_last_success_timestamp_seconds{"} {
 		if !strings.Contains(lm, name) || strings.Contains(fm, name) {
 			t.Errorf("%s: on leader %v, on follower %v; want leader only", name, strings.Contains(lm, name), strings.Contains(fm, name))
 		}
 	}
 	for _, m := range []string{lm, fm} {
-		if !strings.Contains(m, "ro_hub_leader ") || !strings.Contains(m, "ro_hub_leader_transitions_total ") {
-			t.Error("ro_hub_leader / ro_hub_leader_transitions_total missing")
+		if !strings.Contains(m, "kerf_hub_leader ") || !strings.Contains(m, "kerf_hub_leader_transitions_total ") {
+			t.Error("kerf_hub_leader / kerf_hub_leader_transitions_total missing")
 		}
 	}
 }
@@ -293,7 +293,7 @@ func TestLeaderFailover(t *testing.T) {
 		t.Errorf("the old leader kept running the recommender after losing the lock")
 	}
 	if got := testutil.ToFloat64(old.srv.Metrics.leader); got != 0 {
-		t.Errorf("old leader ro_hub_leader = %v", got)
+		t.Errorf("old leader kerf_hub_leader = %v", got)
 	}
 	if got := testutil.ToFloat64(old.srv.Metrics.transitions); got != 2 {
 		t.Errorf("old leader transitions %v, want 2 (acquired, lost)", got)

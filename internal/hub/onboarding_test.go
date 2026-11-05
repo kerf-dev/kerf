@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/readiness"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/readiness"
 )
 
 // fakeProm is a Prometheus HTTP API answering instant queries by substring rules (value 0
@@ -326,10 +326,10 @@ func TestReadinessAndGating(t *testing.T) {
 	}
 	e.problem(e.do(http.MethodGet, "/v1/clusters/c1/readiness/history?limit=0", tokUI, nil), 400, "invalid_limit")
 	m := e.metrics()
-	if v, ok := m.find("ro_cluster_readiness", map[string]string{"cluster": "c1", "check": rd.CheckRBACResize}); !ok || v != "0" {
-		t.Errorf("ro_cluster_readiness resize = %v %v", v, ok)
+	if v, ok := m.find("kerf_cluster_readiness", map[string]string{"cluster": "c1", "check": rd.CheckRBACResize}); !ok || v != "0" {
+		t.Errorf("kerf_cluster_readiness resize = %v %v", v, ok)
 	}
-	if v, ok := m.find("ro_cluster_readiness_state", map[string]string{"cluster": "c1", "state": "ReadyAudit"}); !ok || v != "1" {
+	if v, ok := m.find("kerf_cluster_readiness_state", map[string]string{"cluster": "c1", "state": "ReadyAudit"}); !ok || v != "1" {
 		t.Errorf("state gauge = %v %v", v, ok)
 	}
 
@@ -374,19 +374,19 @@ func TestInstallSnippetAPI(t *testing.T) {
 			t.Errorf("values lack %q:\n%s", want, s.Content)
 		}
 	}
-	if s.Format != "values" || !strings.Contains(s.ArgoCDIgnoreDifferences, "resource-optimizer") ||
-		!strings.Contains(strings.Join(s.Notes, "\n"), "helm upgrade --install resource-optimizer oci://ghcr.io/x/charts/resource-optimizer --version 0.2.0 ") {
+	if s.Format != "values" || !strings.Contains(s.ArgoCDIgnoreDifferences, "kerf") ||
+		!strings.Contains(strings.Join(s.Notes, "\n"), "helm upgrade --install kerf oci://ghcr.io/x/charts/kerf --version 0.2.0 ") {
 		t.Errorf("snippet %+v", s)
 	}
 	// onboarding.chart wins; the token from the secret store
-	e.srv.Cfg.Onboarding.Chart, e.srv.Cfg.Onboarding.ImageRegistry = "deploy/charts/resource-optimizer", "k3d-ro-registry:5005"
+	e.srv.Cfg.Onboarding.Chart, e.srv.Cfg.Onboarding.ImageRegistry = "deploy/charts/kerf", "k3d-ro-registry:5005"
 	e.srv.Cfg.Onboarding.HubVersion, e.srv.Cfg.Onboarding.ChartVersion = "dev", ""
 	es := &TokenExternalSecretConfig{}
 	es.SecretStoreRef.Name = "aws-secrets-manager"
 	e.srv.Cfg.Onboarding.AgentTokenExternalSecret = es
 	e.getJSON("/v1/admin/clusters/c1/install?format=helm&webhook=true", tokAdmin, &s)
-	for _, want := range []string{"helm upgrade --install resource-optimizer deploy/charts/resource-optimizer \\\n", "imageRegistry: k3d-ro-registry:5005",
-		"key: resource-optimizer/clusters/c1/agent-token", "name: aws-secrets-manager"} {
+	for _, want := range []string{"helm upgrade --install kerf deploy/charts/kerf \\\n", "imageRegistry: k3d-ro-registry:5005",
+		"key: kerf/clusters/c1/agent-token", "name: aws-secrets-manager"} {
 		if !strings.Contains(s.Content, want) {
 			t.Errorf("helm lacks %q:\n%s", want, s.Content)
 		}

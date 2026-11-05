@@ -1,7 +1,7 @@
 // Package readiness runs the hub-side cluster readiness checks (metrics checks against the
 // cluster's datasource), merges them with the agent's self-checks, computes the readiness state
 // (api/v1alpha1/readiness.ComputeState), stores results and history, and exports
-// ro_cluster_readiness. D-025, docs/contracts/readiness.md.
+// kerf_cluster_readiness. D-025, docs/contracts/readiness.md.
 package readiness
 
 import (
@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
 // Thresholds of the metrics checks.
@@ -623,7 +623,7 @@ func (r *run) pricingCoverage() {
 		r.add(rd.CheckPricingCoverage, rd.StatusUnknown, "not checked: no node labels or no pricing store", "", "", nil)
 		return
 	}
-	priced, _, err := r.value(r.c.Local, fmt.Sprintf("count(max by (node) (last_over_time(ro_node_hourly_cost_usd%s[1h])))", datasource.DefaultMatcher(r.c.M.Cluster).Sel()))
+	priced, _, err := r.value(r.c.Local, fmt.Sprintf("count(max by (node) (last_over_time(kerf_node_hourly_cost_usd%s[1h])))", datasource.DefaultMatcher(r.c.M.Cluster).Sel()))
 	if err != nil {
 		r.queryFailed(rd.CheckPricingCoverage, err)
 		return
@@ -631,7 +631,7 @@ func (r *run) pricingCoverage() {
 	d := map[string]string{"priced": strconv.Itoa(int(priced)), "nodes": strconv.Itoa(total)}
 	if int(priced) < total {
 		r.add(rd.CheckPricingCoverage, rd.StatusWarn, fmt.Sprintf("%d of %d nodes priced: the others use the default rates", int(priced), total),
-			"See ro_pricing_nodes{status=\"skipped\"} and the pricing service log for the skip reason (usually missing node labels, see metrics.node-labels).", hubapi.RemediationText, d)
+			"See kerf_pricing_nodes{status=\"skipped\"} and the pricing service log for the skip reason (usually missing node labels, see metrics.node-labels).", hubapi.RemediationText, d)
 		return
 	}
 	r.add(rd.CheckPricingCoverage, rd.StatusPass, fmt.Sprintf("all %d nodes priced", total), "", "", d)

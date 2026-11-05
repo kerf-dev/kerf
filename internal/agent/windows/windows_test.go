@@ -8,7 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 var now = time.Date(2026, 11, 4, 10, 30, 0, 0, time.UTC) // Wednesday

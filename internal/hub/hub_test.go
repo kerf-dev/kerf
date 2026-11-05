@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
 func TestAPIAuth(t *testing.T) {
@@ -84,8 +84,8 @@ func TestAPIAuth(t *testing.T) {
 	}
 	// Request metrics are labelled by route pattern, not by raw path.
 	ms := e.metrics()
-	if v, ok := ms.find("ro_hub_http_requests_total", map[string]string{"route": "GET /v1/clusters/{cluster}/recommendations", "code": "403"}); !ok || v == "0" {
-		t.Errorf("ro_hub_http_requests_total for the recommendations route not found")
+	if v, ok := ms.find("kerf_hub_http_requests_total", map[string]string{"route": "GET /v1/clusters/{cluster}/recommendations", "code": "403"}); !ok || v == "0" {
+		t.Errorf("kerf_hub_http_requests_total for the recommendations route not found")
 	}
 	if r := e.do("GET", "/readyz", "", nil); r.code != 200 {
 		t.Errorf("readyz: %d", r.code)
@@ -390,7 +390,7 @@ func TestAgentEventsAndAudit(t *testing.T) {
 	e.problem(e.do("POST", "/v1/clusters/c1/events", tokC1, tooMany), 413, "batch_too_large")
 	e.problem(e.do("POST", "/v1/clusters/c1/events", tokC1, "nope"), 400, "invalid_json")
 
-	// ro_actions_total counts stored events once per resource, with the workload labels.
+	// kerf_actions_total counts stored events once per resource, with the workload labels.
 	ms := e.metrics()
 	wl := func(k hubapi.WorkloadKey, l map[string]string) map[string]string {
 		l["cluster"], l["namespace"], l["workload_kind"], l["workload"] = k.Cluster, k.Namespace, k.Kind, k.Name
@@ -408,8 +408,8 @@ func TestAgentEventsAndAudit(t *testing.T) {
 		{wl(key("c1", "ghost", hubapi.KindDaemonSet, "nothing"), map[string]string{"type": "skipped"}), "1"},
 		{wl(kAPI, map[string]string{"type": "applied", "resource": "cpu"}), "1"},
 	} {
-		if v, ok := ms.find("ro_actions_total", want.labels); !ok || v != want.value {
-			t.Errorf("ro_actions_total%v = %q (found %v), want %s", want.labels, v, ok, want.value)
+		if v, ok := ms.find("kerf_actions_total", want.labels); !ok || v != want.value {
+			t.Errorf("kerf_actions_total%v = %q (found %v), want %s", want.labels, v, ok, want.value)
 		}
 	}
 
@@ -1242,7 +1242,7 @@ func TestInventoryDeletion(t *testing.T) {
 	if sum.Fleet.Workloads != 5 {
 		t.Errorf("summary workloads %d", sum.Fleet.Workloads)
 	}
-	if v, ok := e.metrics().find("ro_workload_phase", map[string]string{"workload": "legacy"}); ok {
+	if v, ok := e.metrics().find("kerf_workload_phase", map[string]string{"workload": "legacy"}); ok {
 		t.Errorf("deleted workload still exported: %v", v)
 	}
 	// The workload comes back when it reappears.
@@ -1275,21 +1275,21 @@ func TestMetricsEndpoint(t *testing.T) {
 		labels map[string]string
 		want   float64
 	}{
-		{"ro_recommendation_cpu_cores", with("container", "app", "type", "request", "source", "recommended"), mustParseCPU(t, rec.Recommended.Requests.CPU)},
-		{"ro_recommendation_cpu_cores", with("container", "app", "type", "request", "source", "current"), 1},
-		{"ro_recommendation_cpu_cores", with("container", "app", "type", "limit", "source", "current"), 2},
-		{"ro_recommendation_memory_bytes", with("container", "app", "type", "request", "source", "current"), 1 * gi},
-		{"ro_recommendation_confidence", wl, d.Recommendation.Confidence},
-		{"ro_recommendation_average_replicas", wl, 3},
-		{"ro_recommendation_generated_timestamp_seconds", wl, float64(e.now.Truncate(fakeStep).Unix())},
-		{"ro_recommendation_monthly_savings_usd", with("container", "app", "resource", "cpu"), rec.MonthlySavingsUSD.CPU},
-		{"ro_workload_mode", with("resource", "cpu", "mode", "audit", "source", "global-default"), 1},
-		{"ro_workload_phase", with("phase", "Pending"), 1},
-		{"ro_workload_mode", map[string]string{"cluster": "c1", "namespace": "batch", "workload_kind": "CronJob", "workload": "report", "resource": "memory", "mode": "audit", "source": "global-default"}, 1},
-		{"ro_recommendation_risk_flag", map[string]string{"workload": "ledger", "flag": "oom-killed"}, 1},
-		{"ro_recommender_recommendations", map[string]string{"cluster": "c1"}, 4},
-		{"ro_recommender_pricing_fallback", map[string]string{"cluster": "c1"}, 0},
-		{"ro_recommender_runs_total", map[string]string{"status": "succeeded"}, 3},
+		{"kerf_recommendation_cpu_cores", with("container", "app", "type", "request", "source", "recommended"), mustParseCPU(t, rec.Recommended.Requests.CPU)},
+		{"kerf_recommendation_cpu_cores", with("container", "app", "type", "request", "source", "current"), 1},
+		{"kerf_recommendation_cpu_cores", with("container", "app", "type", "limit", "source", "current"), 2},
+		{"kerf_recommendation_memory_bytes", with("container", "app", "type", "request", "source", "current"), 1 * gi},
+		{"kerf_recommendation_confidence", wl, d.Recommendation.Confidence},
+		{"kerf_recommendation_average_replicas", wl, 3},
+		{"kerf_recommendation_generated_timestamp_seconds", wl, float64(e.now.Truncate(fakeStep).Unix())},
+		{"kerf_recommendation_monthly_savings_usd", with("container", "app", "resource", "cpu"), rec.MonthlySavingsUSD.CPU},
+		{"kerf_workload_mode", with("resource", "cpu", "mode", "audit", "source", "global-default"), 1},
+		{"kerf_workload_phase", with("phase", "Pending"), 1},
+		{"kerf_workload_mode", map[string]string{"cluster": "c1", "namespace": "batch", "workload_kind": "CronJob", "workload": "report", "resource": "memory", "mode": "audit", "source": "global-default"}, 1},
+		{"kerf_recommendation_risk_flag", map[string]string{"workload": "ledger", "flag": "oom-killed"}, 1},
+		{"kerf_recommender_recommendations", map[string]string{"cluster": "c1"}, 4},
+		{"kerf_recommender_pricing_fallback", map[string]string{"cluster": "c1"}, 0},
+		{"kerf_recommender_runs_total", map[string]string{"status": "succeeded"}, 3},
 	} {
 		v, ok := ms.find(tc.name, tc.labels)
 		if !ok {
@@ -1302,10 +1302,10 @@ func TestMetricsEndpoint(t *testing.T) {
 			t.Errorf("%s%v = %v, want %v", tc.name, tc.labels, got, tc.want)
 		}
 	}
-	if _, ok := ms.find("ro_recommendation_confidence", map[string]string{"workload": "report"}); ok {
+	if _, ok := ms.find("kerf_recommendation_confidence", map[string]string{"workload": "report"}); ok {
 		t.Error("report has no recommendation but exports confidence")
 	}
-	if _, ok := ms.find("ro_recommender_last_success_timestamp_seconds", map[string]string{"cluster": "c2"}); !ok {
+	if _, ok := ms.find("kerf_recommender_last_success_timestamp_seconds", map[string]string{"cluster": "c2"}); !ok {
 		t.Error("last success timestamp missing")
 	}
 	// Status reports are reflected after the next refresh.
@@ -1315,10 +1315,10 @@ func TestMetricsEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	ms = e.metrics()
-	if _, ok := ms.find("ro_workload_mode", with("resource", "cpu", "mode", "auto-patch", "source", "policy")); !ok {
+	if _, ok := ms.find("kerf_workload_mode", with("resource", "cpu", "mode", "auto-patch", "source", "policy")); !ok {
 		t.Error("reported mode not exported")
 	}
-	if _, ok := ms.find("ro_workload_mode", with("resource", "cpu", "mode", "audit")); ok {
+	if _, ok := ms.find("kerf_workload_mode", with("resource", "cpu", "mode", "audit")); ok {
 		t.Error("stale default mode still exported")
 	}
 	// Series names and label sets are unique (the collector must not emit duplicates).

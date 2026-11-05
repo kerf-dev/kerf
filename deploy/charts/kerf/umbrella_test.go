@@ -1,4 +1,4 @@
-// Package umbrella checks the resource-optimizer umbrella chart's wiring to its component charts
+// Package umbrella checks the Kerf umbrella chart's wiring to its component charts
 // (WO-18d). Rendering checks are in `make charts-lint` (charts-lint-umbrella).
 package umbrella
 

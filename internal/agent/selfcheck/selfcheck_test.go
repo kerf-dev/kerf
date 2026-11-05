@@ -28,9 +28,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	sigsyaml "sigs.k8s.io/yaml"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
 var now = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
@@ -163,12 +163,12 @@ func healthyEnv(t *testing.T) *env {
 		objs: []client.Object{
 			crd(t, "rightsizingpolicies", v1alpha1.RightsizingPolicySpec{}, ""),
 			crd(t, "rightsizingrecommendations", v1alpha1.RightsizingRecommendationSpec{}, ""),
-			&admissionv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "resource-optimizer-webhook", Annotations: map[string]string{"cert-manager.io/inject-ca-from": "resource-optimizer/webhook"}},
-				Webhooks: []admissionv1.MutatingWebhook{{Name: "pods.webhook.resource-optimizer.oz.io", ClientConfig: admissionv1.WebhookClientConfig{CABundle: []byte("ca"),
-					Service: &admissionv1.ServiceReference{Namespace: "resource-optimizer", Name: "webhook"}}}}},
-			&discoveryv1.EndpointSlice{ObjectMeta: metav1.ObjectMeta{Namespace: "resource-optimizer", Name: "webhook-x", Labels: map[string]string{discoveryv1.LabelServiceName: "webhook"}},
+			&admissionv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "kerf-webhook", Annotations: map[string]string{"cert-manager.io/inject-ca-from": "kerf/webhook"}},
+				Webhooks: []admissionv1.MutatingWebhook{{Name: "pods.webhook.kerf.getkerf.dev", ClientConfig: admissionv1.WebhookClientConfig{CABundle: []byte("ca"),
+					Service: &admissionv1.ServiceReference{Namespace: "kerf", Name: "webhook"}}}}},
+			&discoveryv1.EndpointSlice{ObjectMeta: metav1.ObjectMeta{Namespace: "kerf", Name: "webhook-x", Labels: map[string]string{discoveryv1.LabelServiceName: "webhook"}},
 				AddressType: discoveryv1.AddressTypeIPv4, Endpoints: []discoveryv1.Endpoint{{Addresses: []string{"10.0.0.1"}, Conditions: discoveryv1.EndpointConditions{Ready: &ready}}}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "argocd", Name: "argocd-cm"}, Data: map[string]string{IgnoreDifferencesKey: "managedFieldsManagers:\n- kube-controller-manager\n- resource-optimizer\n"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "argocd", Name: "argocd-cm"}, Data: map[string]string{IgnoreDifferencesKey: "managedFieldsManagers:\n- kube-controller-manager\n- kerf\n"}},
 			&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1"}},
 			&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n2"}},
 			&v1alpha1.RightsizingRecommendation{ObjectMeta: metav1.ObjectMeta{Namespace: "shop", Name: "api"},
@@ -403,14 +403,14 @@ func TestArgoCDAndNodes(t *testing.T) {
 
 	// per-kind keys also count
 	if !ignoresManager(map[string]string{
-		"resource.customizations.ignoreDifferences.apps_Deployment":  "managedFieldsManagers: [resource-optimizer]",
-		"resource.customizations.ignoreDifferences.apps_StatefulSet": "managedFieldsManagers: [resource-optimizer]",
-		"resource.customizations.ignoreDifferences.apps_DaemonSet":   "managedFieldsManagers: [resource-optimizer]",
-		"resource.customizations.ignoreDifferences.batch_CronJob":    "managedFieldsManagers: [resource-optimizer]",
+		"resource.customizations.ignoreDifferences.apps_Deployment":  "managedFieldsManagers: [kerf]",
+		"resource.customizations.ignoreDifferences.apps_StatefulSet": "managedFieldsManagers: [kerf]",
+		"resource.customizations.ignoreDifferences.apps_DaemonSet":   "managedFieldsManagers: [kerf]",
+		"resource.customizations.ignoreDifferences.batch_CronJob":    "managedFieldsManagers: [kerf]",
 	}) {
 		t.Error("per-kind ignoreDifferences not accepted")
 	}
-	if ignoresManager(map[string]string{"resource.customizations.ignoreDifferences.apps_Deployment": "managedFieldsManagers: [resource-optimizer]"}) {
+	if ignoresManager(map[string]string{"resource.customizations.ignoreDifferences.apps_Deployment": "managedFieldsManagers: [kerf]"}) {
 		t.Error("partial per-kind accepted")
 	}
 

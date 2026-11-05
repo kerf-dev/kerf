@@ -12,22 +12,22 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
-// testDB returns a fresh migrated database when RO_TEST_DATABASE_URL is set (skipped otherwise).
+// testDB returns a fresh migrated database when KERF_TEST_DATABASE_URL is set (skipped otherwise).
 func testDB(t *testing.T) *store.Store {
 	t.Helper()
-	base := os.Getenv("RO_TEST_DATABASE_URL")
+	base := os.Getenv("KERF_TEST_DATABASE_URL")
 	if base == "" {
-		t.Skip("RO_TEST_DATABASE_URL not set; skipping Postgres integration test")
+		t.Skip("KERF_TEST_DATABASE_URL not set; skipping Postgres integration test")
 	}
 	ctx := context.Background()
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
-	name := "ro_ds_test_" + hex.EncodeToString(b)
+	name := "kerf_ds_test_" + hex.EncodeToString(b)
 	adminConn, err := pgx.Connect(ctx, base)
 	if err != nil {
 		t.Fatal(err)

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubstub"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/internal/agent/hubstub"
 )
 
 func TestClientAgainstStub(t *testing.T) {

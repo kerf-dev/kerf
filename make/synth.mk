@@ -7,7 +7,7 @@ SYNTH_FLAGS    ?=
 SYNTH_BIN      := $(LOCALBIN)/synth
 # Live mode keeps its binary, scenario copy, pid and log here (outside the checkout, so it keeps
 # running when a worktree is removed).
-SYNTH_LIVE_DIR ?= $(HOME)/.cache/resource-optimizer/synth-live
+SYNTH_LIVE_DIR ?= $(HOME)/.cache/kerf/synth-live
 
 synth_live_running = [ -f $(SYNTH_LIVE_DIR)/pid ] && kill -0 $$(cat $(SYNTH_LIVE_DIR)/pid) 2>/dev/null
 

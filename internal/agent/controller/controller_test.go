@@ -19,9 +19,9 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/apply"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent/apply"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
 const argoManager = "argocd-controller"
@@ -198,7 +198,7 @@ func TestRolloutFieldManagerAndRelease(t *testing.T) {
 		t.Fatalf("template not patched: cpu %s mem %s", cpuReq(d), memReq(d))
 	}
 	if ok, op := managerOwns(d, v1alpha1.FieldManager); !ok || op != string(metav1.ManagedFieldsOperationApply) {
-		t.Fatalf("resource-optimizer does not own resources via Apply (op %q)", op)
+		t.Fatalf("kerf does not own resources via Apply (op %q)", op)
 	}
 	owned := apply.OwnedResources(d)
 	if !owned[corev1.ResourceCPU] || !owned[corev1.ResourceMemory] {
@@ -237,7 +237,7 @@ func TestRolloutFieldManagerAndRelease(t *testing.T) {
 	eventually(t, 20*time.Second, "released", wantPhase(name, v1alpha1.PhaseReleased))
 	d = getDeploy(t, name)
 	if ok, _ := managerOwns(d, v1alpha1.FieldManager); ok {
-		t.Fatal("resource-optimizer still owns resource fields after release")
+		t.Fatal("kerf still owns resource fields after release")
 	}
 	for _, mf := range d.ManagedFields {
 		if mf.Manager == v1alpha1.FieldManager {

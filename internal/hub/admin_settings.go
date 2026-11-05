@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/config"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/hub/config"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
 // ---- settings (hub-only, versioned; docs/contracts/admin.md "Settings") ----

@@ -12,7 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
 // Elector elects the hub leader on Postgres (WO-18a, D-028) and delivers the replicas'

@@ -15,7 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // Images already on the k3d nodes (sample workloads, WO-01), so scenarios don't pull.

@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // UserRow is a local user with its credentials and login bookkeeping (D-023).

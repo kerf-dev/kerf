@@ -6,7 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // Skip reasons for a recommendation that must not be injected.

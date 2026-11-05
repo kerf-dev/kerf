@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // TestPruneAbsent (WO-04e): on a cluster with an agent, a workload missing from the agent's full

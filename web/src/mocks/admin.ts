@@ -875,7 +875,7 @@ export const adminHandlers = [
     writeSession(s)
     return HttpResponse.json(meOut(u, s), {
       headers: {
-        'Set-Cookie': `ro_session=mock-${s.csrfToken.slice(0, 8)}; HttpOnly; SameSite=Strict; Path=/`,
+        'Set-Cookie': `kerf_session=mock-${s.csrfToken.slice(0, 8)}; HttpOnly; SameSite=Strict; Path=/`,
       },
     })
   }),

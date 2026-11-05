@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // The hub outage is simulated on spoke 2 only, by replacing the agent's hub token with an invalid
@@ -25,8 +25,8 @@ import (
 const invalidToken = "e2e-hub-unreachable-invalid-token"
 
 var (
-	agentNamespace   = getenv("E2E_AGENT_NAMESPACE", "resource-optimizer")
-	agentTokenSecret = getenv("E2E_AGENT_TOKEN_SECRET", "resource-optimizer-agent-token")
+	agentNamespace   = getenv("E2E_AGENT_NAMESPACE", "kerf")
+	agentTokenSecret = getenv("E2E_AGENT_TOKEN_SECRET", "kerf-agent-token")
 )
 
 // blockHub cuts the agent off from the hub and returns the function that restores it.

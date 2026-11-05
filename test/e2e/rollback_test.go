@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 const pythonImage = "docker.io/library/python:3.13.18-alpine3.23" // already on the nodes (WO-01)

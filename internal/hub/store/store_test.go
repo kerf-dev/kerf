@@ -14,22 +14,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
-// newTestStore creates a fresh migrated database ro_hub_test_<random> (dropped at the end) when
-// RO_TEST_DATABASE_URL is set to a superuser URL; otherwise the test is skipped.
+// newTestStore creates a fresh migrated database kerf_hub_test_<random> (dropped at the end) when
+// KERF_TEST_DATABASE_URL is set to a superuser URL; otherwise the test is skipped.
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	base := os.Getenv("RO_TEST_DATABASE_URL")
+	base := os.Getenv("KERF_TEST_DATABASE_URL")
 	if base == "" {
-		t.Skip("RO_TEST_DATABASE_URL not set; skipping Postgres integration test")
+		t.Skip("KERF_TEST_DATABASE_URL not set; skipping Postgres integration test")
 	}
 	ctx := context.Background()
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
-	name := "ro_hub_test_" + hex.EncodeToString(b)
+	name := "kerf_hub_test_" + hex.EncodeToString(b)
 	admin, err := pgx.Connect(ctx, base)
 	if err != nil {
 		t.Fatal(err)

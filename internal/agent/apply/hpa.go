@@ -7,7 +7,7 @@ package apply
 // Changing the requests alone therefore changes when it scales. The agent changes the requests
 // and the target together, target' = target x sum(requests before) / sum(requests after), so
 // sum(requests) x target and with it the scaling behaviour stay the same. The target is written
-// with server-side apply under field manager resource-optimizer (Argo CD ignores the fields that
+// with server-side apply under field manager kerf (Argo CD ignores the fields that
 // manager owns, D-006) and restored by a rollback; releasing the workload releases the HPA too.
 
 import (
@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // HPA problems: why an HPA that scales on a utilization cannot be coordinated.
@@ -189,7 +189,7 @@ func toMap(m autoscalingv2.MetricSpec) (map[string]any, error) {
 	return runtime.DefaultUnstructuredConverter.ToUnstructured(&m)
 }
 
-// HPAOwned reports whether resource-optimizer owns fields of the HPA.
+// HPAOwned reports whether Kerf owns fields of the HPA.
 func HPAOwned(h *autoscalingv2.HorizontalPodAutoscaler) bool {
 	for _, mf := range h.GetManagedFields() {
 		if mf.Manager == FieldManager {

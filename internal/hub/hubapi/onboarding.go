@@ -34,7 +34,7 @@ const (
 	InstallValues = "values"
 	InstallArgoCD = "argocd"
 
-	AgentTokenSecretName = "resource-optimizer-agent-token"
+	AgentTokenSecretName = "kerf-agent-token"
 	AgentTokenSecretKey  = "token"
 )
 

@@ -20,7 +20,7 @@ metadata:
   labels: {{- include "agent.labels" . | nindent 4 }}
 rules:
   # Workloads: watched for policy resolution; patched (server-side apply under field manager
-  # resource-optimizer, and the managedFields release) by the rollout strategy.
+  # kerf, and the managedFields release) by the rollout strategy.
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets", "daemonsets"]
     verbs: ["get", "list", "watch"{{ if not .Values.readOnly }}, "patch"{{ end }}]
@@ -70,13 +70,13 @@ rules:
     verbs: ["get", "list", "watch"{{ if not .Values.readOnly }}, "patch"{{ end }}]
   # Our CRDs. RightsizingPolicies are written only when they are materialised from the hub
   # config (labelled managed-by=hub, D-022); others are never touched.
-  - apiGroups: ["resource-optimizer.oz.io"]
+  - apiGroups: ["kerf.getkerf.dev"]
     resources: ["rightsizingpolicies"]
     verbs: ["get", "list", "watch"{{ if and .Values.configSync.enabled (not .Values.readOnly) }}, "create", "update", "patch", "delete"{{ end }}]
-  - apiGroups: ["resource-optimizer.oz.io"]
+  - apiGroups: ["kerf.getkerf.dev"]
     resources: ["rightsizingrecommendations"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["resource-optimizer.oz.io"]
+  - apiGroups: ["kerf.getkerf.dev"]
     resources: ["rightsizingrecommendations/status"]
     verbs: ["get", "update", "patch"]
   # Self-checks (D-025, D-026): CRD schema currency, the webhook configuration.

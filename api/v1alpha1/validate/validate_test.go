@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/yaml"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 func ptr[T any](v T) *T { return &v }

@@ -1,4 +1,4 @@
-// Package workload gives uniform access to the four workload kinds resource-optimizer manages
+// Package workload gives uniform access to the four workload kinds Kerf manages
 // (Deployment, StatefulSet, DaemonSet, CronJob) and to their running pods.
 package workload
 
@@ -18,7 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // Kinds lists the supported kinds with their API versions.

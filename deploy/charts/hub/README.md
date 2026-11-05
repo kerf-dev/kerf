@@ -1,7 +1,7 @@
 # hub chart (WO-04)
 
-The resource-optimizer hub: the HTTP API (`api/openapi/hub.yaml`), the recommender scheduler and the
-`ro_recommendation_*` / `ro_workload_*` metrics. It applies the goose migrations in `db/migrations`
+The Kerf hub: the HTTP API (`api/openapi/hub.yaml`), the recommender scheduler and the
+`kerf_recommendation_*` / `kerf_workload_*` metrics. It applies the goose migrations in `db/migrations`
 (baked into the image at `/migrations`) on every start.
 
 ## Deploy to the shared dev environment
@@ -9,8 +9,8 @@ The resource-optimizer hub: the HTTP API (`api/openapi/hub.yaml`), the recommend
 ```bash
 make deploy-hub                   # build, push to localhost:5005, helm upgrade --install into ro-hub
 # equivalent:
-docker build -f cmd/hub/Dockerfile -t localhost:5005/resource-optimizer/hub:dev-1 . && docker push localhost:5005/resource-optimizer/hub:dev-1
-helm --kube-context k3d-ro-hub upgrade --install hub deploy/charts/hub -n resource-optimizer --create-namespace \
+docker build -f cmd/hub/Dockerfile -t localhost:5005/kerf/hub:dev-1 . && docker push localhost:5005/kerf/hub:dev-1
+helm --kube-context k3d-ro-hub upgrade --install hub deploy/charts/hub -n kerf --create-namespace \
   -f deploy/charts/hub/values-dev.yaml --set image.tag=dev-1 --wait
 ```
 
@@ -18,17 +18,17 @@ helm --kube-context k3d-ro-hub upgrade --install hub deploy/charts/hub -n resour
 |---|---|
 | API from the host | `http://localhost:18080` (NodePort 30080 on ro-hub) |
 | API from a spoke | `http://hub-api.hub.svc:8080` (selector-less Service → hub NodePort 30080, WO-01) |
-| API inside ro-hub | `http://hub.resource-optimizer.svc:8080` |
+| API inside ro-hub | `http://hub.kerf.svc:8080` |
 | Metrics | `/metrics` on the same port; the Service carries `prometheus.io/scrape: "true"` so the hub vmagent scrapes it (`honor_labels`, the hub sets `cluster` itself) |
 | Health | `/healthz` (liveness), `/readyz` (migrations done and Postgres reachable) |
-| Postgres | `postgres.postgres.svc:5432`, database `resource_optimizer` (Secret `hub-db`) |
+| Postgres | `postgres.postgres.svc:5432`, database `kerf` (Secret `hub-db`) |
 | VictoriaMetrics | `http://victoria-metrics.monitoring.svc:8428` |
 | CORS | `http://localhost:5173` (UI dev server, WO-14) |
 
 On the host (no image): `make run-hub` (= `go run ./cmd/hub --config dev/hub.yaml`, port 8080, same
 database and tokens). Do not run it while the in-cluster hub is up: both would run the recommender.
 
-## Dev tokens (Secret `hub-dev-tokens`, namespace `resource-optimizer`, ro-hub)
+## Dev tokens (Secret `hub-dev-tokens`, namespace `kerf`, ro-hub)
 
 `devSeed.enabled: true` (values-dev.yaml only) registers the clusters `ro-spoke-1`, `ro-spoke-2`,
 `synth-a`, `synth-b` and stores the SHA-256 of these tokens. **Development only** — they are in Git.
@@ -43,7 +43,7 @@ database and tokens). Do not run it while the in-cluster hub is up: both would r
 | `admin` | admin | everything | `ro-dev-admin-1b71e51dc42ec5deb56e7f06` |
 
 ```bash
-kubectl --context k3d-ro-hub -n resource-optimizer get secret hub-dev-tokens -o jsonpath='{.data.ui}' | base64 -d
+kubectl --context k3d-ro-hub -n kerf get secret hub-dev-tokens -o jsonpath='{.data.ui}' | base64 -d
 curl -s -H "Authorization: Bearer ro-dev-ui-97446cd3a095035d6290abc5" localhost:18080/v1/summary | jq .fleet
 curl -s -H "Authorization: Bearer ro-dev-rospoke1-2b8dbdc041b28d5865e7caf7" localhost:18080/v1/clusters/ro-spoke-1/recommendations | jq '.items | length'
 ```
@@ -55,7 +55,7 @@ the table above.
 
 | Value | Default | Meaning |
 |---|---|---|
-| `image.repository` / `image.tag` | `localhost:5005/resource-optimizer/hub` / `dev` | image (dev: `k3d-ro-registry:5005/...`) |
+| `image.repository` / `image.tag` | `localhost:5005/kerf/hub` / `dev` | image (dev: `k3d-ro-registry:5005/...`) |
 | `service.type` / `service.nodePort` | `ClusterIP` / – | dev: `NodePort` 30080 |
 | `database.url` or `database.existingSecret` | – | Postgres URL, passed as `HUB_DATABASE_URL` |
 | `devSeed.enabled`, `.clusters`, `.tokens` | `false` | dev seed and Secret `hub-dev-tokens` |
@@ -63,7 +63,7 @@ the table above.
 | `auth.cookieSecure`, `.sessionTTL`, `.maxFailedLogins`, `.lockoutDuration` | `true`, `12h`, `5`, `15m` | browser sessions (D-023); dev: `cookieSecure: false` (plain HTTP) |
 | `auth.bootstrapAdmin.username`, `.password` or `.existingSecret`/`.existingSecretKey` | `admin`, – | initial admin, created only on a database without users |
 | `config` | see values.yaml | the hub config file (`internal/hub/config.go`): `prometheusURL`, `corsOrigins`, `agentStaleAfter`, `recommender.*`, `history.*` |
-| `database.externalSecret` (`source: rds\|url`), `.host`, `.port`, `.name`, `.sslmode`, `.params`, `.caBundle` | off, –, 5432, `resource_optimizer`, `verify-full` | External Secrets Operator builds Secret `<release>-db` from an RDS-managed secret (JSON username/password) plus host/port/name, `sslmode` and `sslrootcert` = the mounted CA bundle (`/etc/hub/db-ca/ca.pem`) |
+| `database.externalSecret` (`source: rds\|url`), `.host`, `.port`, `.name`, `.sslmode`, `.params`, `.caBundle` | off, –, 5432, `kerf`, `verify-full` | External Secrets Operator builds Secret `<release>-db` from an RDS-managed secret (JSON username/password) plus host/port/name, `sslmode` and `sslrootcert` = the mounted CA bundle (`/etc/hub/db-ca/ca.pem`) |
 | `auth.bootstrapAdmin.externalSecret`, `onboarding.secretsKey.externalSecret` | off | the same for the first admin's password and the datasource encryption key (kept on uninstall) |
 | `replicaCount`, `updateStrategy`, `podDisruptionBudget`, `autoscaling`, `topologySpread` | 1, Recreate, on (>1 pod), off, on (>1 pod) | more than one replica needs leader election (WO-18a) and `updateStrategy: RollingUpdate` |
 | `serviceAccount.{create,name,annotations,automountServiceAccountToken}` | true, release name, –, false | IRSA / Pod Identity annotations |
@@ -79,7 +79,7 @@ first regular run, computed from the stored metrics and filled in between regula
 refused as incomplete metrics), `step`, `rateWindow`, `riskWindow`, `inventoryLookback`, `throttleThreshold`,
 `restartThreshold`, `throttleIncrease`, `oomIncrease`, `minCPU`, `minMemory`, `lowConfidence`,
 `defaultProfile`, `defaultCPUCoreHourUSD`, `defaultMemoryGiBHourUSD` (fallback when the cluster has no
-`ro_*_hourly_cost_usd` series) and `profiles.<dev|production|high-availability>.{window, cpuPercentile,
+`kerf_*_hourly_cost_usd` series) and `profiles.<dev|production|high-availability>.{window, cpuPercentile,
 memoryPercentile, memoryPeakWindow, cpuHeadroom, memoryBuffer}`.
 History: `history.fullResolution` keeps every run, older recommendations are thinned to one per
 workload and day, `history.retention` deletes the rest (the latest per workload is always kept).
@@ -104,6 +104,6 @@ with its `runId`; completion shows as `lastRecommenderRunAt` in `GET /v1/cluster
 up to the last full 5-minute step.
 
 ```bash
-curl -s -X POST -H "Authorization: Bearer $(kubectl --context k3d-ro-hub -n resource-optimizer get secret hub-dev-tokens -o jsonpath='{.data.admin}' | base64 -d)" \
+curl -s -X POST -H "Authorization: Bearer $(kubectl --context k3d-ro-hub -n kerf get secret hub-dev-tokens -o jsonpath='{.data.admin}' | base64 -d)" \
   'http://localhost:18080/v1/admin/recompute?cluster=ro-spoke-1'
 ```

@@ -7,7 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
 const mib = 1 << 20

@@ -5,7 +5,7 @@ global:
 
 clusterName: prod-eu-1
 image:
-  repository: resource-optimizer/webhook
+  repository: kerf/webhook
   tag: 0.2.0
   digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 

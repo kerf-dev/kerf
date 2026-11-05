@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 var updateGolden = flag.Bool("update", false, "rewrite golden files")
@@ -43,7 +43,7 @@ func allQueries(q Queries) string {
 	add("HPAMetrics", q.HPAMetrics(day))
 	add("HPAReplicaBounds/min", q.HPAReplicaBounds("min", day))
 	add("HPAPeakReplicas", q.HPAPeakReplicas(7*day))
-	avg, count := q.Pricing("ro_cpu_core_hourly_cost_usd", time.Hour)
+	avg, count := q.Pricing("kerf_cpu_core_hourly_cost_usd", time.Hour)
 	add("Pricing/avg", avg)
 	add("Pricing/count", count)
 	return b.String()
@@ -117,7 +117,7 @@ func TestQueriesBindingEquivalent(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := allQueries(Queries{Cluster: "ro-spoke-1", RateWindow: 5 * time.Minute, Binding: &m})
-			if !strings.Contains(got, `ro_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}`) {
+			if !strings.Contains(got, `kerf_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}`) {
 				t.Error("pricing queries must keep cluster=\"ro-spoke-1\"")
 			}
 			back := unrelabel(t, got, "ro-spoke-1")

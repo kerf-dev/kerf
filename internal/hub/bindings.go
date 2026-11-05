@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
 // Bindings resolves where a cluster's metrics are (D-025): its datasource (querier, API) and the

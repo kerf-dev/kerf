@@ -101,7 +101,7 @@ func TokenEqual(a, b string) bool {
 // ---- session cookie ----
 
 // CookieName is the session cookie (hubapi.SessionCookie).
-const CookieName = "ro_session"
+const CookieName = "kerf_session"
 
 // SessionCookie returns the session cookie: HttpOnly, SameSite=Strict, Path=/, Secure unless the
 // hub serves plain HTTP in development.

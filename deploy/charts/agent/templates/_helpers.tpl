@@ -1,17 +1,17 @@
 {{- define "agent.fullname" -}}
-{{- if contains "resource-optimizer" .Release.Name -}}{{ .Release.Name | trunc 63 | trimSuffix "-" }}{{- else -}}resource-optimizer-{{ .Release.Name | trunc 44 | trimSuffix "-" }}{{- end -}}
+{{- if contains "kerf" .Release.Name -}}{{ .Release.Name | trunc 63 | trimSuffix "-" }}{{- else -}}kerf-{{ .Release.Name | trunc 44 | trimSuffix "-" }}{{- end -}}
 {{- end -}}
 
 {{- define "agent.labels" -}}
-app.kubernetes.io/name: resource-optimizer-agent
+app.kubernetes.io/name: kerf-agent
 app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/part-of: resource-optimizer
+app.kubernetes.io/part-of: kerf
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 {{- end -}}
 
 {{- define "agent.selectorLabels" -}}
-app.kubernetes.io/name: resource-optimizer-agent
+app.kubernetes.io/name: kerf-agent
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
 var now = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
@@ -110,7 +110,7 @@ func byID(rep Report) map[string]hubapi.ReadinessCheck {
 
 func TestMetricsCheckerHealthy(t *testing.T) {
 	q := healthy()
-	local := (&fakeQ{}).on(2, "ro_node_hourly_cost_usd")
+	local := (&fakeQ{}).on(2, "kerf_node_hourly_cost_usd")
 	m, _ := datasource.NewMatcher("ro-spoke-2", &hubapi.MetricsBinding{ClusterLabel: "k8s_cluster", ClusterLabelValue: "prod", ExtraMatchers: []string{`env="prod"`}})
 	c := &MetricsChecker{Q: q, M: m, Local: local, HistoryWindow: 7 * 24 * time.Hour, DocsBase: "https://docs/", Now: func() time.Time { return now }}
 	rep := c.Run(context.Background())
@@ -141,7 +141,7 @@ func TestMetricsCheckerHealthy(t *testing.T) {
 			t.Errorf("query without the binding: %s", qs)
 		}
 	}
-	if !strings.Contains(local.queries[0], `ro_node_hourly_cost_usd{cluster="ro-spoke-2"}`) {
+	if !strings.Contains(local.queries[0], `kerf_node_hourly_cost_usd{cluster="ro-spoke-2"}`) {
 		t.Errorf("pricing query %s", local.queries[0])
 	}
 }
@@ -204,7 +204,7 @@ func TestMetricsCheckerPartial(t *testing.T) {
 		{has: []string{" and on (namespace, pod) "}, res: []recommender.VectorSample{{Sample: recommender.Sample{V: 100}}}},
 		{has: []string{"kube_node_labels"}, res: []recommender.VectorSample{nodeSample("n1", true), nodeSample("n2", false)}},
 	}, q.rules...)
-	local := (&fakeQ{}).on(1, "ro_node_hourly_cost_usd")
+	local := (&fakeQ{}).on(1, "kerf_node_hourly_cost_usd")
 	rep := (&MetricsChecker{Q: q, M: datasource.DefaultMatcher("c"), Local: local, Now: func() time.Time { return now }}).Run(context.Background())
 	got := byID(rep)
 	if c := got[rd.CheckKSMOwners]; c.Status != "fail" || !strings.Contains(c.Message, "kube_job_owner") {

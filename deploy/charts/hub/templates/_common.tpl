@@ -1,5 +1,5 @@
 {{- /*
-Shared helpers of the resource-optimizer component charts (WO-18b).
+Shared helpers of the Kerf component charts (WO-18b).
 
 The master copy lives in deploy/charts/hub/templates/_common.tpl; `make charts-sync` copies it
 into web, pricing, agent and webhook with the "hub." prefix replaced by the chart's own, and
@@ -273,7 +273,7 @@ spec:
 Every template file of every component chart is wrapped in
   {{- if include "hub.c.enabled" . -}} ... {{ end -}}
 Helm evaluates a dependency's `condition:` before any template and cannot derive it from another
-value, so the umbrella chart deploy/charts/resource-optimizer selects its components here instead:
+value, so the umbrella chart deploy/charts/kerf selects its components here instead:
 
 - `enabled` set (true/false, umbrella `<component>.enabled`) wins;
 - else global.mode (umbrella `mode`): hub = hub, web, pricing; spoke = agent, webhook; all = every one;
@@ -300,12 +300,12 @@ true
 {{- end -}}
 
 {{- /* Name of a component's objects in the umbrella chart: `<release>-<component>`, or plain
-`<component>` when the release is named resource-optimizer. The agent always keeps the release
-prefix (`resource-optimizer-agent`): it owns cluster-scoped RBAC, where a bare `agent` could clash.
+`<component>` when the release is named kerf. The agent always keeps the release
+prefix (`kerf-agent`): it owns cluster-scoped RBAC, where a bare `agent` could clash.
 `<component>.fullnameOverride` wins. dict: ctx, component. */ -}}
 {{- define "hub.c.umbrellaName" -}}
 {{- $rel := .ctx.Release.Name -}}
-{{- if and (eq $rel "resource-optimizer") (ne .component "agent") -}}{{ .component }}
+{{- if and (eq $rel "kerf") (ne .component "agent") -}}{{ .component }}
 {{- else -}}{{ printf "%s-%s" $rel .component | trunc 63 | trimSuffix "-" }}
 {{- end -}}
 {{- end -}}

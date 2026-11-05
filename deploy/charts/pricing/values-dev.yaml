@@ -1,6 +1,6 @@
 # Local k3d (ro-hub). Tilt / make deploy-pricing set image.repository, image.tag and clusterName.
 image:
-  repository: k3d-ro-registry:5005/resource-optimizer/pricing
+  repository: k3d-ro-registry:5005/kerf/pricing
   tag: latest
 interval: 1m
 # synth-a/synth-b node series are a backfill (WO-02) that ends when the backfill runs; keep pricing
@@ -9,7 +9,7 @@ nodeLookback: 24h
 defaultRegion: eu-west-1
 logLevel: debug
 hub:
-  url: http://hub.resource-optimizer.svc:8080
+  url: http://hub.kerf.svc:8080
   tokenSecret:
     name: pricing-hub-token
     create: true

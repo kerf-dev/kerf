@@ -306,8 +306,8 @@ function ClusterCard({
             <div>
               <div className="font-medium">Waiting for the agent</div>
               <p className="text-muted-foreground">
-                Install the resource-optimizer chart in this cluster with its hub token. Workloads,
-                recommendations and savings appear after the first report.
+                Install the Kerf chart in this cluster with its hub token. Workloads, recommendations and
+                savings appear after the first report.
               </p>
             </div>
           </div>

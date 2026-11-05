@@ -4,7 +4,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // Preview item limits.

@@ -242,9 +242,9 @@ const SOURCE_TO_MODE: Record<LayerSource, ModeSource> = {
 }
 
 const ANNOTATION = {
-  cpu: 'resource-optimizer.oz.io/cpu-mode',
-  memory: 'resource-optimizer.oz.io/memory-mode',
-  profile: 'resource-optimizer.oz.io/profile',
+  cpu: 'kerf.getkerf.dev/cpu-mode',
+  memory: 'kerf.getkerf.dev/memory-mode',
+  profile: 'kerf.getkerf.dev/profile',
 }
 
 export function evaluate(
@@ -477,7 +477,7 @@ export function seedAdmin(db: MockDb): AdminState {
     id: 'local',
     name: 'local',
     type: 'victoriametrics',
-    url: 'http://victoria-metrics.resource-optimizer.svc:8428',
+    url: 'http://victoria-metrics.kerf.svc:8428',
     builtIn: true,
     auth: { type: 'none', secretConfigured: false },
     headers: {},

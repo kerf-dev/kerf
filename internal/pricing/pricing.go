@@ -1,7 +1,7 @@
 // Package pricing prices Kubernetes nodes and splits each node's hourly price into per-vCPU-hour and
 // per-GiB-hour rates (WO-03, D-008). Nodes are discovered from spoke metrics in the hub's
 // VictoriaMetrics, priced by a Provider (AWS or a static file) and exported as the
-// ro_*_hourly_cost_usd series defined in docs/contracts/metrics.md.
+// kerf_*_hourly_cost_usd series defined in docs/contracts/metrics.md.
 package pricing
 
 import (

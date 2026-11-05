@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/hub/auth"
-	"github.com/tomer1983/resource-optimizer/internal/hub/config"
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/hub/auth"
+	"github.com/kerf-dev/kerf/internal/hub/config"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
 // ---- agent configuration (GET /v1/clusters/{cluster}/config) ----

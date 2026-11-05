@@ -15,7 +15,7 @@ cat <<'URLS'
   VictoriaMetrics  http://localhost:18428        (in-cluster: victoria-metrics.monitoring.svc:8428 on ro-hub,
                                                   victoria-metrics.hub.svc:8428 on the spokes)
   Grafana          http://localhost:13000        (anonymous admin; admin/admin)
-  Postgres         postgres://ro:ro@localhost:15432/resource_optimizer
+  Postgres         postgres://kerf:kerf@localhost:15432/kerf
   Argo CD          http://localhost:18090        (ro-spoke-1; admin/admin123)
   Git server       git://localhost:19418/workloads.git (ro-spoke-1, seeded from dev/workloads/)
   Registry         push localhost:5005/<image>, pull k3d-ro-registry:5005/<image>

@@ -324,7 +324,7 @@ export interface paths {
      * @description What the agent materialises on its cluster (`docs/contracts/admin.md`):
      *     - `policies`: every hub-managed policy for this cluster, as `RightsizingPolicy` specs. The
      *       agent creates, updates and deletes `RightsizingPolicy` CRs labelled
-     *       `resource-optimizer.oz.io/managed-by=hub` so that exactly these exist (name = `name`,
+     *       `kerf.getkerf.dev/managed-by=hub` so that exactly these exist (name = `name`,
      *       annotations `hub-policy-id`, `hub-version`, `hub-policy-type`). CRs without the label are
      *       never touched. With `policySource: git` the list is empty.
      *     - `flags`: pause. While `paused`, the agent applies nothing new (event `blocked`, reason
@@ -356,7 +356,7 @@ export interface paths {
     /**
      * Log in with a local user (D-023)
      * @description Checks the username and password and starts a session. The response sets the session
-     *     cookie `ro_session` (`HttpOnly; SameSite=Strict; Path=/`, plus `Secure` behind TLS) and
+     *     cookie `kerf_session` (`HttpOnly; SameSite=Strict; Path=/`, plus `Secure` behind TLS) and
      *     returns the CSRF token the client sends as `X-CSRF-Token` on every write made with the
      *     session. Failed logins are rate limited per client address and per user; after repeated
      *     failures the user is locked for a while (`429` with `Retry-After`, code `account_locked`).
@@ -1258,7 +1258,7 @@ export interface paths {
     /**
      * Agent install instructions for a cluster
      * @description Rendered for this cluster and hub URL. The token value is never included: the snippet
-     *     references the Secret `resource-optimizer-agent-token` (key `token`); the value is shown
+     *     references the Secret `kerf-agent-token` (key `token`); the value is shown
      *     once when the token is created. Also returns the Argo CD `ignoreDifferences` snippet for
      *     `argocd-cm` (D-006).
      */
@@ -1447,7 +1447,7 @@ export interface components {
     }
     /**
      * @description Rates used for `monthlySavingsUSD` (D-016). `source` is `metrics` when they come from the
-     *     pricing series (`ro_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when
+     *     pricing series (`kerf_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when
      *     the cluster had no pricing series and the hub's configured fallback rate was used.
      *     Absent on recommendations computed before the field existed.
      */
@@ -2533,13 +2533,13 @@ export interface components {
     ConfigPolicy: {
       /**
        * Format: uuid
-       * @description Annotation `resource-optimizer.oz.io/hub-policy-id`.
+       * @description Annotation `kerf.getkerf.dev/hub-policy-id`.
        */
       id: string
       /** @description Name of the CR. */
       name: string
       type: components['schemas']['HubPolicyType']
-      /** @description Annotation `resource-optimizer.oz.io/hub-version`. */
+      /** @description Annotation `kerf.getkerf.dev/hub-version`. */
       version: number
       /** @description Equal to `spec.priority`. */
       priority: number
@@ -3071,7 +3071,7 @@ export interface components {
        * @example application.yaml
        */
       filename: string
-      /** @description Snippet for `argocd-cm` so Argo CD ignores fields owned by `resource-optimizer` (D-006). */
+      /** @description Snippet for `argocd-cm` so Argo CD ignores fields owned by `kerf` (D-006). */
       argocdIgnoreDifferences: string
       notes?: string[]
     }
@@ -3746,7 +3746,7 @@ export interface operations {
       /** @description Logged in. */
       200: {
         headers: {
-          /** @description `ro_session=<opaque>; HttpOnly; SameSite=Strict; Path=/` */
+          /** @description `kerf_session=<opaque>; HttpOnly; SameSite=Strict; Path=/` */
           'Set-Cookie'?: string
           [name: string]: unknown
         }

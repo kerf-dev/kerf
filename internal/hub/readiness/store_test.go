@@ -13,22 +13,22 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/readiness"
+	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
 func testDB(t *testing.T) *store.Store {
 	t.Helper()
-	base := os.Getenv("RO_TEST_DATABASE_URL")
+	base := os.Getenv("KERF_TEST_DATABASE_URL")
 	if base == "" {
-		t.Skip("RO_TEST_DATABASE_URL not set; skipping Postgres integration test")
+		t.Skip("KERF_TEST_DATABASE_URL not set; skipping Postgres integration test")
 	}
 	ctx := context.Background()
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
-	name := "ro_rd_test_" + hex.EncodeToString(b)
+	name := "kerf_rd_test_" + hex.EncodeToString(b)
 	adminConn, err := pgx.Connect(ctx, base)
 	if err != nil {
 		t.Fatal(err)

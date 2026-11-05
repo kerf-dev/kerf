@@ -146,7 +146,7 @@ function PricingWhy({ pricing, replicas }: { pricing?: RecommendationPricing; re
         Savings estimate
         {pricing ? (
           pricing.source === 'metrics' ? (
-            <Tooltip content="Average of the cluster's ro_*_hourly_cost_usd pricing series (WO-03).">
+            <Tooltip content="Average of the cluster's kerf_*_hourly_cost_usd pricing series (WO-03).">
               <span className="ml-auto rounded-md bg-success/12 px-1.5 py-0.5 text-[11px] font-medium text-success">
                 pricing metrics
               </span>

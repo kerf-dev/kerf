@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/tools/synth/synth"
+	"github.com/kerf-dev/kerf/tools/synth/synth"
 )
 
 // liveState is what `live` needs to continue a backfill: the backfill's timeline start, its

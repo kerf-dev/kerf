@@ -5,12 +5,12 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// Gauges exports ro_cluster_readiness{cluster,check,severity} (1 = pass, 0 otherwise, one series
-// per catalog check) and ro_cluster_readiness_state{cluster,state} (1 for the current state).
+// Gauges exports kerf_cluster_readiness{cluster,check,severity} (1 = pass, 0 otherwise, one series
+// per catalog check) and kerf_cluster_readiness_state{cluster,state} (1 for the current state).
 // docs/contracts/metrics.md.
 type Gauges struct {
 	checks *prometheus.GaugeVec
@@ -23,11 +23,11 @@ type Gauges struct {
 func NewGauges() *Gauges {
 	return &Gauges{
 		checks: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "ro_cluster_readiness",
+			Name: "kerf_cluster_readiness",
 			Help: "1 when the latest result of a cluster readiness check is pass, 0 when it is warn, fail or unknown (or has no result).",
 		}, []string{"cluster", "check", "severity"}),
 		state: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "ro_cluster_readiness_state",
+			Name: "kerf_cluster_readiness_state",
 			Help: "1 for the cluster's current readiness state, 0 for the others.",
 		}, []string{"cluster", "state"}),
 	}

@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
 // StateKey is the ConfigMap key holding the persisted state (JSON).
@@ -27,15 +27,15 @@ const maxStateBytes = 768 << 10
 
 var (
 	configPulls = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "ro_agent_config_pulls_total",
+		Name: "kerf_agent_config_pulls_total",
 		Help: "Hub config pulls by result (ok, not_modified, unsupported, error).",
 	}, []string{"result"})
 	configPaused = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "ro_agent_paused",
+		Name: "kerf_agent_paused",
 		Help: "1 while automation of the cluster is paused in the hub config.",
 	})
 	hubPolicies = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ro_agent_policies",
+		Name: "kerf_agent_policies",
 		Help: "RightsizingPolicies by source (hub, git) and validity.",
 	}, []string{"source", "valid"})
 )
@@ -173,7 +173,7 @@ func (s *Syncer) persist(ctx context.Context) error {
 		return err
 	}
 	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: s.Namespace, Name: s.ConfigMap,
-		Labels: map[string]string{"app.kubernetes.io/name": "resource-optimizer-agent", "app.kubernetes.io/component": "config-state"}},
+		Labels: map[string]string{"app.kubernetes.io/name": "kerf-agent", "app.kubernetes.io/component": "config-state"}},
 		Data: map[string]string{StateKey: string(b)}}
 	err = s.Client.Update(ctx, cm)
 	if apierrors.IsNotFound(err) {

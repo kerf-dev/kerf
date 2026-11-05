@@ -3,8 +3,8 @@ name: release
 # Push a tag vX.Y.Z (or vX.Y.Z-rc.N) on main to publish that version (docs/release.md, "Releasing on GitHub"):
 #   1. the ci workflow runs on the tagged commit;
 #   2. `make release` builds the five multi-arch images (SBOM + provenance) and the Helm charts and pushes
-#      them to GitHub Container Registry: ghcr.io/<owner>/resource-optimizer/<image>:X.Y.Z and
-#      oci://ghcr.io/<owner>/resource-optimizer/charts/<chart>, the charts defaulting to these images;
+#      them to GitHub Container Registry: ghcr.io/<owner>/kerf/<image>:X.Y.Z and
+#      oci://ghcr.io/<owner>/kerf/charts/<chart>, the charts defaulting to these images;
 #   3. cosign signs every image and chart by digest (keyless, this workflow's GitHub OIDC identity);
 #   4. a GitHub Release vX.Y.Z is created: CHANGELOG.md's section, install steps, the digests, the merged
 #      pull requests; the chart packages and digest lists are attached. A -suffix makes it a pre-release.
@@ -58,7 +58,7 @@ jobs:
         run: |
           owner=${GITHUB_REPOSITORY_OWNER,,}
           echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-          echo "REGISTRY=ghcr.io/$owner/resource-optimizer" >> "$GITHUB_ENV"
+          echo "REGISTRY=ghcr.io/$owner/kerf" >> "$GITHUB_ENV"
 
       - name: Tagged commit is on main
         run: |
@@ -100,6 +100,6 @@ jobs:
           case "$VERSION" in *-*) pre="--prerelease --latest=false" ;; esac
           # shellcheck disable=SC2086
           gh release create "$GITHUB_REF_NAME" --verify-tag $pre \
-            --title "resource-optimizer $VERSION" \
+            --title "kerf $VERSION" \
             --notes-file bin/release/notes.md --generate-notes \
             bin/release/charts/*.tgz bin/release/images.txt bin/release/charts.txt bin/release/SHA256SUMS

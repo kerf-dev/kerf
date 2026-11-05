@@ -9,8 +9,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/tomer1983/resource-optimizer/internal/agent/controller"
-	"github.com/tomer1983/resource-optimizer/internal/health"
+	"github.com/kerf-dev/kerf/internal/agent/controller"
+	"github.com/kerf-dev/kerf/internal/health"
 )
 
 // HealthConfig configures the health watch (WO-08).

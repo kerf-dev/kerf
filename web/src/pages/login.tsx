@@ -57,7 +57,7 @@ export default function LoginPage() {
   const id = useId()
 
   useEffect(() => {
-    document.title = 'Sign in · Resource Optimizer'
+    document.title = 'Sign in · Kerf'
   }, [])
 
   if (auth.signedIn && !login.isPending) return <Navigate to={next} replace />
@@ -86,7 +86,7 @@ export default function LoginPage() {
       <div className="relative w-full max-w-[400px]">
         <div className="mb-7 flex flex-col items-center text-center">
           <Logo size="lg" />
-          <h1 className="mt-5 text-xl font-semibold tracking-tight">Sign in to Resource Optimizer</h1>
+          <h1 className="mt-5 text-xl font-semibold tracking-tight">Sign in to Kerf</h1>
           <p className="mt-1 text-[13px] text-muted-foreground">Kubernetes rightsizing for your fleet</p>
         </div>
         <form

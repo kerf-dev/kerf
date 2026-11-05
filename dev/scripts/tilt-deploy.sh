@@ -11,13 +11,13 @@
 #               <component>/Dockerfile, built with <component>/ as context.
 #               Without one the chart's default image is used.
 #   overrides   image.repository, image.tag, and clusterName=<cluster> are set on every install
-#   namespace   $RO_NAMESPACE (default resource-optimizer)
+#   namespace   $KERF_NAMESPACE (default kerf)
 . "$(dirname "$0")/lib.sh"
 
 name="$1"; shift
 export LOG_PREFIX="tilt:$name"
 chart="$ROOT/deploy/charts/$name"
-ns="${RO_NAMESPACE:-resource-optimizer}"
+ns="${KERF_NAMESPACE:-kerf}"
 [[ -d "$chart" ]] || { log "deploy/charts/$name does not exist yet, skipping"; exit 0; }
 
 dockerfile="" build_args="" context="$ROOT"
@@ -34,7 +34,7 @@ fi
 set_args=()
 if [[ -n "$dockerfile" ]]; then
   tag="dev-$(date +%Y%m%d-%H%M%S)"
-  image="resource-optimizer/$name"
+  image="kerf/$name"
   log "building $image:$tag from ${dockerfile#"$ROOT/"}"
   # shellcheck disable=SC2086
   docker build -f "$dockerfile" $build_args -t "localhost:$REGISTRY_PORT/$image:$tag" "$context"

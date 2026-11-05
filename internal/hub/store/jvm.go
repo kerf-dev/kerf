@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // The JVM containers an agent reports (WO-12) are stored in workload_status.settings under the key

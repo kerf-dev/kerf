@@ -17,7 +17,7 @@ CLUSTERS=("$HUB" "${SPOKES[@]}")
 NETWORK=ro-dev
 REGISTRY=ro-registry          # container k3d-ro-registry, push to localhost:5005
 REGISTRY_PORT=5005
-CHART_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/resource-optimizer/charts"
+CHART_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/kerf/charts"
 
 log()  { printf '\033[1;34m[%s]\033[0m %s\n' "${LOG_PREFIX:-dev}" "$*" >&2; }
 warn() { printf '\033[1;33m[%s] WARN:\033[0m %s\n' "${LOG_PREFIX:-dev}" "$*" >&2; }

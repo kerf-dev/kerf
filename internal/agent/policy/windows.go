@@ -3,8 +3,8 @@ package policy
 import (
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/windows"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent/windows"
 )
 
 // InWindow reports whether now lies inside one of the windows (see windows.Open).

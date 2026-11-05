@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: resource-optimizer hub API
+  title: Kerf hub API
   version: 0.1.0
   summary: Contract between the hub, the per-cluster agents and the web UI (WO-00).
   description: |
@@ -17,7 +17,7 @@ info:
     A token without an accepted role gets `403`. The hub stores only a SHA-256 hash of each token.
 
     **Sessions** (D-023, admin area `docs/contracts/admin.md`): a local user logs in with
-    `POST /v1/auth/login` and gets the HttpOnly cookie `ro_session` (`sessionAuth`). Users have one
+    `POST /v1/auth/login` and gets the HttpOnly cookie `kerf_session` (`sessionAuth`). Users have one
     role, `viewer` < `operator` < `admin`; each includes the ones before it. An operation lists the
     lowest user role it accepts as `sessionAuth: [role]`, next to the token roles it accepts. For
     authorization a `ui` token counts as `viewer` and an `admin` token as `admin`. Every write
@@ -695,7 +695,7 @@ paths:
         What the agent materialises on its cluster (`docs/contracts/admin.md`):
         - `policies`: every hub-managed policy for this cluster, as `RightsizingPolicy` specs. The
           agent creates, updates and deletes `RightsizingPolicy` CRs labelled
-          `resource-optimizer.oz.io/managed-by=hub` so that exactly these exist (name = `name`,
+          `kerf.getkerf.dev/managed-by=hub` so that exactly these exist (name = `name`,
           annotations `hub-policy-id`, `hub-version`, `hub-policy-type`). CRs without the label are
           never touched. With `policySource: git` the list is empty.
         - `flags`: pause. While `paused`, the agent applies nothing new (event `blocked`, reason
@@ -739,7 +739,7 @@ paths:
       summary: Log in with a local user (D-023)
       description: |
         Checks the username and password and starts a session. The response sets the session
-        cookie `ro_session` (`HttpOnly; SameSite=Strict; Path=/`, plus `Secure` behind TLS) and
+        cookie `kerf_session` (`HttpOnly; SameSite=Strict; Path=/`, plus `Secure` behind TLS) and
         returns the CSRF token the client sends as `X-CSRF-Token` on every write made with the
         session. Failed logins are rate limited per client address and per user; after repeated
         failures the user is locked for a while (`429` with `Retry-After`, code `account_locked`).
@@ -756,7 +756,7 @@ paths:
           description: Logged in.
           headers:
             Set-Cookie:
-              description: '`ro_session=<opaque>; HttpOnly; SameSite=Strict; Path=/`'
+              description: '`kerf_session=<opaque>; HttpOnly; SameSite=Strict; Path=/`'
               schema:
                 type: string
           content:
@@ -2623,7 +2623,7 @@ paths:
       summary: Agent install instructions for a cluster
       description: |
         Rendered for this cluster and hub URL. The token value is never included: the snippet
-        references the Secret `resource-optimizer-agent-token` (key `token`); the value is shown
+        references the Secret `kerf-agent-token` (key `token`); the value is shown
         once when the token is created. Also returns the Argo CD `ignoreDifferences` snippet for
         `argocd-cm` (D-006).
       parameters:
@@ -2668,7 +2668,7 @@ components:
     sessionAuth:
       type: apiKey
       in: cookie
-      name: ro_session
+      name: kerf_session
       description: |
         Session of a local user (D-023), set by `POST /v1/auth/login`. The requirement lists the
         lowest user role accepted (`viewer` < `operator` < `admin`). Writes also need `X-CSRF-Token`.
@@ -3131,7 +3131,7 @@ components:
       type: object
       description: |
         Rates used for `monthlySavingsUSD` (D-016). `source` is `metrics` when they come from the
-        pricing series (`ro_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when
+        pricing series (`kerf_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when
         the cluster had no pricing series and the hub's configured fallback rate was used.
         Absent on recommendations computed before the field existed.
       required: [source, cpuCoreHourUSD, memoryGiBHourUSD]
@@ -5120,7 +5120,7 @@ components:
         id:
           type: string
           format: uuid
-          description: Annotation `resource-optimizer.oz.io/hub-policy-id`.
+          description: Annotation `kerf.getkerf.dev/hub-policy-id`.
         name:
           type: string
           description: Name of the CR.
@@ -5129,7 +5129,7 @@ components:
         version:
           type: integer
           minimum: 1
-          description: Annotation `resource-optimizer.oz.io/hub-version`.
+          description: Annotation `kerf.getkerf.dev/hub-version`.
         priority:
           type: integer
           description: Equal to `spec.priority`.
@@ -5921,7 +5921,7 @@ components:
           examples: [install.sh, values.yaml, application.yaml]
         argocdIgnoreDifferences:
           type: string
-          description: Snippet for `argocd-cm` so Argo CD ignores fields owned by `resource-optimizer` (D-006).
+          description: Snippet for `argocd-cm` so Argo CD ignores fields owned by `kerf` (D-006).
         notes:
           type: array
           items:

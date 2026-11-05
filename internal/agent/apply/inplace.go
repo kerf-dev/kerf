@@ -11,8 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/workload"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent/workload"
 )
 
 // ResizeState is the state of an in-place resize of one pod.

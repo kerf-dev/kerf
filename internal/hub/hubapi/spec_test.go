@@ -13,8 +13,8 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1/readiness"
 )
 
 // schemaTypes maps components/schemas names to the Go types that mirror them.

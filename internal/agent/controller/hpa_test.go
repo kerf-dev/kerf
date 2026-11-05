@@ -13,9 +13,9 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/apply"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent/apply"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
 // hpaApply is the HPA as Argo CD applies it from Git: cpu utilization target.
@@ -114,7 +114,7 @@ func TestHPACoordination(t *testing.T) {
 	eventually(t, 5*time.Second, "HPA target 75", wantHPATarget(t, name, 75))
 	h = getHPA(t, name)
 	if !apply.HPAOwned(h) {
-		t.Fatalf("resource-optimizer does not own the HPA target: %+v", h.ManagedFields)
+		t.Fatalf("kerf does not own the HPA target: %+v", h.ManagedFields)
 	}
 	for _, mf := range h.ManagedFields {
 		if mf.Manager == argoManager && strings.Contains(mf.FieldsV1.GetRawString(), "f:metrics") {

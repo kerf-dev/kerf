@@ -13,13 +13,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // Path is the HTTP path the webhook is served on.
 const Path = "/mutate-v1-pod"
 
-// Results (the "result" label of ro_webhook_admissions_total).
+// Results (the "result" label of kerf_webhook_admissions_total).
 const (
 	ResultMutated = "mutated"
 	ResultSkipped = "skipped"

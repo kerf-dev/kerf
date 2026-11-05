@@ -18,8 +18,8 @@ export METRICS_URL=http://vmsingle.monitoring.svc:8428
 export ACCOUNT=000000000000
 export ECR=localhost:5005                     # stand-in: the k3d registry, as pushed to from this machine
 export ECR_IN_CLUSTER=k3d-ro-registry:5005    # the same registry as the clusters pull from it
-export REGISTRY=$ECR/resource-optimizer
-export NS=resource-optimizer
+export REGISTRY=$ECR/kerf
+export NS=kerf
 export WORK=${WORK:-$ROOT/bin/staging} && mkdir -p "$WORK"
 export HUB_CTX=k3d-ro-stg-hub
 export HUB_VPC_CIDR=10.42.0.0/16              # stand-in: the k3s pod CIDR (traefik's pods reach hub/web)
@@ -30,7 +30,7 @@ export SPOKE_VPC_CIDR=10.42.0.0/16            # stand-in: k3s's API server reach
 export HELM_OCI_FLAGS=--plain-http            # stand-in: the local registry speaks HTTP
 export WIZ_CLUSTER=ro-stg-spoke-2             # WO-18f: the workload cluster installed with the wizard's snippet
 export WIZ_CTX=k3d-ro-stg-spoke-2
-export AGENT_SECRET=resource-optimizer-agent-token
+export AGENT_SECRET=kerf-agent-token
 INGRESS_PORT=19443                            # host port of the hub cluster's traefik ("the ALB")
 
 log() { printf '\n\033[1m== %s\033[0m\n' "$*"; }

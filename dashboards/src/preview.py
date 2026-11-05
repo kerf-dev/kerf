@@ -3,8 +3,8 @@
 
 Grafana provisions dashboards/ from the main checkout; to try a branch before it is merged, this
 script imports every dashboard with "-preview" appended to its UID, " (preview)" to its title, tag
-"resource-optimizer-preview" and links rewritten to the preview UIDs, into folder
-"resource-optimizer (preview)". Provisioned dashboards are never touched.
+"kerf-preview" and links rewritten to the preview UIDs, into folder
+"kerf (preview)". Provisioned dashboards are never touched.
 
   preview.py            import / update the previews
   preview.py --delete   delete the previews and their folder
@@ -26,8 +26,8 @@ import build  # noqa: E402
 GRAFANA = os.environ.get("GRAFANA_URL", "http://localhost:13000").rstrip("/")
 AUTH = "Basic " + base64.b64encode((os.environ.get("GRAFANA_USER", "admin") + ":"
                                     + os.environ.get("GRAFANA_PASSWORD", "admin")).encode()).decode()
-FOLDER_UID = "resource-optimizer-preview"
-FOLDER_TITLE = "resource-optimizer (preview)"
+FOLDER_UID = "kerf-preview"
+FOLDER_TITLE = "kerf (preview)"
 SUFFIX = "-preview"
 TAG = build.TAG + "-preview"
 

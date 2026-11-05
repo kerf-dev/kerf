@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 const deployment = "Deployment"
@@ -215,7 +215,7 @@ const reasonSingleReplicaUnsafe = "SingleReplicaUnsafe"
 
 // WO-13: a single-replica workload is not changed in a way that takes its only pod down. An
 // in-place memory resize with resizePolicy RestartContainer restarts the container, so it is
-// blocked (unless the workload opts in with resource-optimizer.oz.io/allow-disruption).
+// blocked (unless the workload opts in with kerf.getkerf.dev/allow-disruption).
 func TestSingleReplicaRestartIsBlocked(t *testing.T) {
 	t.Parallel()
 	cl := env.Spoke1
@@ -306,7 +306,7 @@ func TestInPlaceFallback(t *testing.T) {
 	}
 }
 
-// Scenario 5: rollout. New ReplicaSet with the new values; field manager resource-optimizer
+// Scenario 5: rollout. New ReplicaSet with the new values; field manager kerf
 // owns the resource fields of the template.
 func TestRollout(t *testing.T) {
 	t.Parallel()

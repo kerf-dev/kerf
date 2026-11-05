@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the resource-optimizer Grafana dashboards (WO-05).
+"""Generate the Kerf Grafana dashboards (WO-05).
 
 The JSON files in dashboards/ are build output: edit this file, then run `make dashboards`.
 `make dashboards-verify` fails when the JSON is out of date.
@@ -20,7 +20,7 @@ import sys
 
 OUT_DIR = pathlib.Path(__file__).resolve().parent.parent
 DS = {"type": "prometheus", "uid": "${datasource}"}
-TAG = "resource-optimizer"
+TAG = "kerf"
 SCHEMA_VERSION = 41
 
 UID = {
@@ -81,7 +81,7 @@ def zero_filled(values, label, expr_for):
 
 
 def encoded(metric, label, choices, sel, by=WL):
-    """Numeric encoding of a one-hot gauge (ro_workload_mode / ro_workload_phase): value = index."""
+    """Numeric encoding of a one-hot gauge (kerf_workload_mode / kerf_workload_phase): value = index."""
     parts = []
     for name, idx, _ in sorted(choices, key=lambda c: -c[1]):
         parts.append("(" + dedup(metric, by, *sel, label + '="' + name + '"') + " == 1) * " + str(idx))
@@ -95,8 +95,8 @@ def per_container(expr, base):
 
 def rec_containers(sel):
     """One series (value 1) per container that has a recommendation."""
-    return ("group by (" + WLC + ") (" + v("ro_recommendation_cpu_cores", *sel, 'source="recommended"')
-            + " or " + v("ro_recommendation_memory_bytes", *sel, 'source="recommended"') + ")")
+    return ("group by (" + WLC + ") (" + v("kerf_recommendation_cpu_cores", *sel, 'source="recommended"')
+            + " or " + v("kerf_recommendation_memory_bytes", *sel, 'source="recommended"') + ")")
 
 
 def risk_flags(wl_sel, base, keys):
@@ -110,9 +110,9 @@ def risk_flags(wl_sel, base, keys):
     for flag in FLAGS:
         lab = "f_" + flag.replace("-", "_")
         labels.append(lab)
-        present = ('label_replace(' + dedup("ro_recommendation_risk_flag", WL, *wl_sel, 'flag="' + flag + '"')
+        present = ('label_replace(' + dedup("kerf_recommendation_risk_flag", WL, *wl_sel, 'flag="' + flag + '"')
                    + ', "' + lab + '", "' + flag + '", "", "")')
-        absent = "0 * " + dedup("ro_recommendation_confidence", WL, *wl_sel) + " + 1"
+        absent = "0 * " + dedup("kerf_recommendation_confidence", WL, *wl_sel) + " + 1"
         expr = ("(" + expr + ")\n* on (" + WL + ") group_left (" + lab + ")\n(" + present
                 + " or on (" + WL + ") (" + absent + "))")
     expr = 'label_replace(' + expr + ', "rf", "$1", "' + labels[0] + '", "(.*)")'
@@ -429,7 +429,7 @@ def dashboard(key, title, description, grid, variables, time_from="now-24h", ref
         "time": {"from": time_from, "to": "now"},
         "timepicker": {},
         "links": [{
-            "title": "resource-optimizer", "type": "dashboards", "tags": [TAG], "asDropdown": False,
+            "title": "kerf", "type": "dashboards", "tags": [TAG], "asDropdown": False,
             "includeVars": True, "keepTime": True, "targetBlank": False, "icon": "external link",
             "tooltip": "", "url": "",
         }],
@@ -460,13 +460,13 @@ D_W = 'workload="$workload"'
 D_WL = [D_C, D_N, D_K, D_W]
 D_WLC = D_WL + [F_CT]
 
-VAR_CLUSTER_Q = "label_values(ro_workload_mode, cluster)"
-VAR_NAMESPACE_Q = 'label_values(ro_workload_mode{cluster=~"$cluster"}, namespace)'
+VAR_CLUSTER_Q = "label_values(kerf_workload_mode, cluster)"
+VAR_NAMESPACE_Q = 'label_values(kerf_workload_mode{cluster=~"$cluster"}, namespace)'
 
 
 def savings(sel):
     """Monthly savings per container and resource, de-duplicated across hub pods."""
-    return dedup("ro_recommendation_monthly_savings_usd", WLC + ", resource", *sel)
+    return dedup("kerf_recommendation_monthly_savings_usd", WLC + ", resource", *sel)
 
 
 def rec_value(metric, sel, typ, source):
@@ -476,7 +476,7 @@ def rec_value(metric, sel, typ, source):
 def fleet_total(metric, sel, source):
     """Sum over workloads of (per-container request x average replicas)."""
     return ("sum (\n  " + rec_value(metric, sel, "request", source) + "\n  * on (" + WL + ") group_left ()\n  "
-            + dedup("ro_recommendation_average_replicas", WL, *sel) + "\n)")
+            + dedup("kerf_recommendation_average_replicas", WL, *sel) + "\n)")
 
 
 def running_requests(resource, sel):
@@ -501,7 +501,7 @@ def overview():
     g.add(5, 5, stat(
         "Net savings / month",
         "Estimated USD per month if every recommendation were applied: savings from decreases minus the cost "
-        "of increases (ro_recommendation_monthly_savings_usd, summed over containers and resources). "
+        "of increases (kerf_recommendation_monthly_savings_usd, summed over containers and resources). "
         "Estimated, not realized.",
         targets(("sum(" + sav + ")", "Net")), unit=USD, decimals=0, th=TH_SAVINGS, graph="area", links=[opp]))
     g.add(5, 5, stat(
@@ -517,15 +517,15 @@ def overview():
         th=thresholds(("orange", None)), graph="area", links=[opp]))
     g.add(5, 5, stat(
         "Node cost / month",
-        "Current price of all priced nodes in the selected clusters × 730 h (ro_node_hourly_cost_usd from the "
+        "Current price of all priced nodes in the selected clusters × 730 h (kerf_node_hourly_cost_usd from the "
         "pricing service). Not filtered by namespace.",
-        targets(("sum(" + dedup("ro_node_hourly_cost_usd", "cluster, node", F_C) + ") * 730", "Nodes")),
+        targets(("sum(" + dedup("kerf_node_hourly_cost_usd", "cluster, node", F_C) + ") * 730", "Nodes")),
         unit=USD, decimals=0, graph="area"))
     g.add(4, 5, stat(
         "Share of node cost",
         "Net monthly savings as a share of the monthly node cost of the selected clusters. Indicative: the "
         "namespace filter narrows the savings but not the node cost.",
-        targets(("sum(" + sav + ") / (sum(" + dedup("ro_node_hourly_cost_usd", "cluster, node", F_C) + ") * 730)",
+        targets(("sum(" + sav + ") / (sum(" + dedup("kerf_node_hourly_cost_usd", "cluster, node", F_C) + ") * 730)",
                  "Share")),
         unit="percentunit", decimals=1, th=thresholds(("text", None), ("green", 0.05))))
 
@@ -554,12 +554,12 @@ def overview():
     g.row("Capacity: requested vs used vs recommended")
     cpu_req = running_requests("cpu", sel)
     cpu_used = ("sum(rate(" + v("container_cpu_usage_seconds_total", *sel, *REAL_CONTAINER) + "[$__rate_interval]))")
-    cpu_rec = fleet_total("ro_recommendation_cpu_cores", sel, "recommended")
-    cpu_cur = fleet_total("ro_recommendation_cpu_cores", sel, "current")
+    cpu_rec = fleet_total("kerf_recommendation_cpu_cores", sel, "recommended")
+    cpu_cur = fleet_total("kerf_recommendation_cpu_cores", sel, "current")
     mem_req = running_requests("memory", sel)
     mem_used = "sum(" + dedup("container_memory_working_set_bytes", PODC, *sel, *REAL_CONTAINER) + ")"
-    mem_rec = fleet_total("ro_recommendation_memory_bytes", sel, "recommended")
-    mem_cur = fleet_total("ro_recommendation_memory_bytes", sel, "current")
+    mem_rec = fleet_total("kerf_recommendation_memory_bytes", sel, "recommended")
+    mem_cur = fleet_total("kerf_recommendation_memory_bytes", sel, "current")
     cap_overrides = [
         override_name("Requested", [("color", fixed("orange")), ("custom.lineWidth", 2)]),
         override_name("Used", [("color", fixed("blue")), ("custom.fillOpacity", 25)]),
@@ -605,7 +605,7 @@ def overview():
         th=thresholds(("green", None), ("text", 0)), graph="area"))
 
     g.row("Workloads: modes, risk flags, phases")
-    tracked = "count(" + dedup("ro_workload_mode", WL, *sel, 'resource="cpu"') + " == 1)"
+    tracked = "count(" + dedup("kerf_workload_mode", WL, *sel, 'resource="cpu"') + " == 1)"
     g.add(4, 4, stat(
         "Workloads",
         "Workloads known to the hub (every workload reported by an agent or seen in metrics).",
@@ -613,33 +613,33 @@ def overview():
     g.add(4, 4, stat(
         "Recommended",
         "Workloads that have a current recommendation (needs usage data).",
-        targets(("count(" + dedup("ro_recommendation_confidence", WL, *sel) + ")", "Recommended")),
+        targets(("count(" + dedup("kerf_recommendation_confidence", WL, *sel) + ")", "Recommended")),
         decimals=0, no_value="0"))
     g.add(4, 4, stat(
         "Confidence (avg)",
         "Mean recommendation confidence (0–1). Below 0.5 the hub flags low-confidence; the agent's default "
         "guardrail needs 0.7 to apply.",
-        targets(("avg(" + dedup("ro_recommendation_confidence", WL, *sel) + ")", "Confidence")),
+        targets(("avg(" + dedup("kerf_recommendation_confidence", WL, *sel) + ")", "Confidence")),
         unit="percentunit", decimals=0, th=TH_CONFIDENCE, min_=0, max_=1))
     g.add(4, 4, stat(
         "Coverage (avg)",
         "Mean fraction of the recommendation window that has usage samples.",
-        targets(("avg(" + dedup("ro_recommendation_data_coverage_ratio", WL, *sel) + ")", "Coverage")),
+        targets(("avg(" + dedup("kerf_recommendation_data_coverage_ratio", WL, *sel) + ")", "Coverage")),
         unit="percentunit", decimals=0, th=TH_COVERAGE, min_=0, max_=1))
     g.add(4, 4, stat(
         "Flagged",
         "Workloads with at least one risk flag (throttled, oom-killed, restarting, hpa-coupled, sidecar, "
         "short-lived, low-confidence).",
-        targets(("count(count by (" + WL + ") (" + dedup("ro_recommendation_risk_flag", WL + ", flag", *sel) + "))",
+        targets(("count(count by (" + WL + ") (" + dedup("kerf_recommendation_risk_flag", WL + ", flag", *sel) + "))",
                  "Flagged")), decimals=0, no_value="0", th=thresholds(("text", None), ("orange", 1))))
     g.add(4, 4, stat(
         "In auto-patch",
         "Workloads with auto-patch as the effective mode for CPU or memory.",
-        targets(("count(" + dedup("ro_workload_mode", WL, *sel, 'mode="auto-patch"') + " == 1)", "auto-patch")),
+        targets(("count(" + dedup("kerf_workload_mode", WL, *sel, 'mode="auto-patch"') + " == 1)", "auto-patch")),
         decimals=0, no_value="0", th=thresholds(("text", None), ("green", 1))))
 
     mode_expr = lambda res: zero_filled([m for m, _, _ in MODES], "mode", lambda m: (
-        "count(" + dedup("ro_workload_mode", WL, *sel, 'resource="' + res + '"', 'mode="' + m + '"') + " == 1)"))
+        "count(" + dedup("kerf_workload_mode", WL, *sel, 'resource="' + res + '"', 'mode="' + m + '"') + " == 1)"))
     mode_panel = base_panel(
         "barchart", "Workloads per mode",
         "Effective mode per resource (D-005: global default audit < cluster default < policy < annotation).",
@@ -662,14 +662,14 @@ def overview():
         "How many workloads carry each risk flag. throttled / oom-killed: never decreased; hpa-coupled: audit "
         "only (D-011); low-confidence: confidence < 0.5.",
         targets({"expr": zero_filled(FLAGS, "flag", lambda f: (
-            "count(" + dedup("ro_recommendation_risk_flag", WL, *sel, 'flag="' + f + '"') + ")")),
+            "count(" + dedup("kerf_recommendation_risk_flag", WL, *sel, 'flag="' + f + '"') + ")")),
             "legend": "{{flag}}", "instant": True}),
         decimals=0, th=thresholds(("text", None), ("orange", 1)), links=[opp]))
     g.add(8, 8, bargauge(
         "Workloads per phase",
         "Current RightsizingRecommendation phase reported by the agents. Pending = nothing applied yet.",
         targets({"expr": zero_filled([p for p, _, _ in PHASES], "phase", lambda ph: (
-            "count(" + dedup("ro_workload_phase", WL, *sel, 'phase="' + ph + '"') + " == 1)")),
+            "count(" + dedup("kerf_workload_phase", WL, *sel, 'phase="' + ph + '"') + " == 1)")),
             "legend": "{{phase}}", "instant": True}),
         decimals=0, color={"mode": "fixed", "fixedColor": "blue"}))
 
@@ -678,15 +678,15 @@ def overview():
         "Last recommender run",
         "Time since the recommender last succeeded for each cluster. Production runs every 24 h (orange after "
         "26 h, red after 48 h); the dev environment runs every 5 min.",
-        targets({"expr": "time() - max by (cluster) (" + v("ro_recommender_last_success_timestamp_seconds", F_C) + ")",
+        targets({"expr": "time() - max by (cluster) (" + v("kerf_recommender_last_success_timestamp_seconds", F_C) + ")",
                  "legend": "{{cluster}}", "instant": True}),
         unit="s", decimals=0, th=thresholds(("green", None), ("orange", 26 * 3600), ("red", 48 * 3600)),
         text_mode="value_and_name"))
     g.add(12, 4, stat(
         "Pricing source",
         "Whether savings for each cluster use live node prices from the pricing service or the hub's default "
-        "rates (ro_recommender_pricing_fallback = 1).",
-        targets({"expr": "max by (cluster) (" + v("ro_recommender_pricing_fallback", F_C) + ")", "legend": "{{cluster}}",
+        "rates (kerf_recommender_pricing_fallback = 1).",
+        targets({"expr": "max by (cluster) (" + v("kerf_recommender_pricing_fallback", F_C) + ")", "legend": "{{cluster}}",
                  "instant": True}),
         mappings=[{"type": "value", "options": {"0": {"text": "Live prices", "color": "green", "index": 0},
                                                 "1": {"text": "Default rates", "color": "orange", "index": 1}}}],
@@ -716,14 +716,14 @@ def opportunity_columns(sel_c, sel_wl, filt):
         q.append(target("(" + expr + ")" + keep, "", ref, instant=True, fmt="table"))
 
     add(total, "A")
-    add(rec_value("ro_recommendation_cpu_cores", sel_c, "request", "current"), "D")
-    add(rec_value("ro_recommendation_cpu_cores", sel_c, "request", "recommended"), "E")
-    add(rec_value("ro_recommendation_memory_bytes", sel_c, "request", "current"), "F")
-    add(rec_value("ro_recommendation_memory_bytes", sel_c, "request", "recommended"), "G")
-    add(per_container(dedup("ro_recommendation_confidence", WL, *sel_wl), base), "H")
-    add(per_container(encoded("ro_workload_mode", "mode", MODES, sel_wl + ['resource="cpu"']), base), "I")
-    add(per_container(encoded("ro_workload_mode", "mode", MODES, sel_wl + ['resource="memory"']), base), "J")
-    add(per_container(encoded("ro_workload_phase", "phase", PHASES, sel_wl), base), "K")
+    add(rec_value("kerf_recommendation_cpu_cores", sel_c, "request", "current"), "D")
+    add(rec_value("kerf_recommendation_cpu_cores", sel_c, "request", "recommended"), "E")
+    add(rec_value("kerf_recommendation_memory_bytes", sel_c, "request", "current"), "F")
+    add(rec_value("kerf_recommendation_memory_bytes", sel_c, "request", "recommended"), "G")
+    add(per_container(dedup("kerf_recommendation_confidence", WL, *sel_wl), base), "H")
+    add(per_container(encoded("kerf_workload_mode", "mode", MODES, sel_wl + ['resource="cpu"']), base), "I")
+    add(per_container(encoded("kerf_workload_mode", "mode", MODES, sel_wl + ['resource="memory"']), base), "J")
+    add(per_container(encoded("kerf_workload_phase", "phase", PHASES, sel_wl), base), "K")
     add(risk_flags(sel_wl, base, WLC), "L")
     return q
 
@@ -819,9 +819,9 @@ def opportunities():
             query_var("cluster", "Cluster", VAR_CLUSTER_Q),
             query_var("namespace", "Namespace", VAR_NAMESPACE_Q),
             query_var("workload", "Workload",
-                      'label_values(ro_workload_mode{cluster=~"$cluster", namespace=~"$namespace"}, workload)'),
+                      'label_values(kerf_workload_mode{cluster=~"$cluster", namespace=~"$namespace"}, workload)'),
             query_var("container", "Container",
-                      'label_values(ro_recommendation_memory_bytes{cluster=~"$cluster", namespace=~"$namespace", '
+                      'label_values(kerf_recommendation_memory_bytes{cluster=~"$cluster", namespace=~"$namespace", '
                       'workload=~"$workload"}, container)'),
             custom_var("direction", "Show", [("All", "> -Inf"), ("Savings", "> 0"), ("Increases", "< 0")], "> -Inf",
                        "Filter rows by the sign of the estimated savings."),
@@ -923,14 +923,14 @@ def usage_panel(title, desc, unit, usage, usage_avg, usage_5m, req, lim, metric)
 
 def drill_container_table():
     mapping = [
-        ("A", "ro_recommendation_cpu_cores", "request", "current"),
-        ("B", "ro_recommendation_cpu_cores", "request", "recommended"),
-        ("C", "ro_recommendation_cpu_cores", "limit", "current"),
-        ("D", "ro_recommendation_cpu_cores", "limit", "recommended"),
-        ("E", "ro_recommendation_memory_bytes", "request", "current"),
-        ("F", "ro_recommendation_memory_bytes", "request", "recommended"),
-        ("G", "ro_recommendation_memory_bytes", "limit", "current"),
-        ("H", "ro_recommendation_memory_bytes", "limit", "recommended"),
+        ("A", "kerf_recommendation_cpu_cores", "request", "current"),
+        ("B", "kerf_recommendation_cpu_cores", "request", "recommended"),
+        ("C", "kerf_recommendation_cpu_cores", "limit", "current"),
+        ("D", "kerf_recommendation_cpu_cores", "limit", "recommended"),
+        ("E", "kerf_recommendation_memory_bytes", "request", "current"),
+        ("F", "kerf_recommendation_memory_bytes", "request", "recommended"),
+        ("G", "kerf_recommendation_memory_bytes", "limit", "current"),
+        ("H", "kerf_recommendation_memory_bytes", "limit", "recommended"),
     ]
     tg = [target(rec_value(m, D_WLC, t, s), "", ref, instant=True, fmt="table") for ref, m, t, s in mapping]
     tg.append(target("sum by (" + WLC + ") (" + savings(D_WLC) + ")", "", "I", instant=True, fmt="table"))
@@ -966,42 +966,42 @@ def workload():
         "Confidence",
         "Recommendation confidence 0–1 = 0.6 × coverage + 0.2 × samples + 0.2 × stability. < 0.5 is flagged "
         "low-confidence; the agent applies at ≥ 0.7 by default.",
-        targets(("max(" + v("ro_recommendation_confidence", *wl) + ")", "Confidence")),
+        targets(("max(" + v("kerf_recommendation_confidence", *wl) + ")", "Confidence")),
         unit="percentunit", decimals=0, th=TH_CONFIDENCE, min_=0, max_=1, no_value="–"))
     g.add(6, 4, stat(
         "Data coverage",
         "Fraction of the recommendation window that has usage samples.",
-        targets(("max(" + v("ro_recommendation_data_coverage_ratio", *wl) + ")", "Coverage")),
+        targets(("max(" + v("kerf_recommendation_data_coverage_ratio", *wl) + ")", "Coverage")),
         unit="percentunit", decimals=0, th=TH_COVERAGE, min_=0, max_=1, no_value="–"))
     g.add(4, 4, stat(
         "Replicas",
         "Average number of running pods the hub used to compute savings.",
-        targets(("max(" + v("ro_recommendation_average_replicas", *wl) + ")", "Replicas")), decimals=1,
+        targets(("max(" + v("kerf_recommendation_average_replicas", *wl) + ")", "Replicas")), decimals=1,
         no_value="–"))
     g.add(6, 4, stat(
         "Recommendation age",
         "Time since the current recommendation was generated.",
-        targets(("time() - max(" + v("ro_recommendation_generated_timestamp_seconds", *wl) + ")", "Age")),
+        targets(("time() - max(" + v("kerf_recommendation_generated_timestamp_seconds", *wl) + ")", "Age")),
         unit="s", decimals=0, th=thresholds(("green", None), ("orange", 26 * 3600), ("red", 48 * 3600)),
         no_value="–"))
     for res, title in [("cpu", "CPU mode"), ("memory", "Memory mode")]:
         g.add(4, 4, stat(
             title,
             "Effective " + res + " mode (off / audit / auto-patch) as reported by the agent.",
-            targets((encoded("ro_workload_mode", "mode", MODES, wl + ['resource="' + res + '"']), "Mode")),
+            targets((encoded("kerf_workload_mode", "mode", MODES, wl + ['resource="' + res + '"']), "Mode")),
             mappings=value_map(MODES), no_value="unknown", color={"mode": "fixed", "fixedColor": "text"}))
     g.add(4, 4, stat(
         "Phase",
         "Phase of the workload's RightsizingRecommendation: Pending → Applying → Applied, or Blocked / "
         "RolledBack / Released.",
-        targets((encoded("ro_workload_phase", "phase", PHASES, wl), "Phase")),
+        targets((encoded("kerf_workload_phase", "phase", PHASES, wl), "Phase")),
         mappings=value_map(PHASES), no_value="unknown", color={"mode": "fixed", "fixedColor": "text"}))
 
     g.add(8, 4, stat(
         "Risk flags",
         "Risk flags on the current recommendation. throttled / oom-killed: never decreased; restarting; "
         "hpa-coupled: audit only; sidecar; short-lived; low-confidence.",
-        targets(("max by (rf) (" + risk_flags(wl, dedup("ro_recommendation_confidence", WL, *wl), WL) + ")",
+        targets(("max by (rf) (" + risk_flags(wl, dedup("kerf_recommendation_confidence", WL, *wl), WL) + ")",
                  "{{rf}}")),
         text_mode="name", color_mode="value", no_value="–",
         color={"mode": "fixed", "fixedColor": "orange"}))
@@ -1019,7 +1019,7 @@ def workload():
         of_workload(cpu_pod("5m"), window="5m"),
         ksm_value("kube_pod_container_resource_requests", "cpu"),
         ksm_value("kube_pod_container_resource_limits", "cpu"),
-        "ro_recommendation_cpu_cores"))
+        "kerf_recommendation_cpu_cores"))
 
     g.row("Memory")
     g.add(24, 12, usage_panel(
@@ -1032,7 +1032,7 @@ def workload():
         of_workload(mem_pod("5m"), window="5m"),
         ksm_value("kube_pod_container_resource_requests", "memory"),
         ksm_value("kube_pod_container_resource_limits", "memory"),
-        "ro_recommendation_memory_bytes"))
+        "kerf_recommendation_memory_bytes"))
 
     g.row("Pressure and events")
     throttle = of_workload(
@@ -1060,9 +1060,9 @@ def workload():
                    override_name(".*restarts", [("color", fixed("orange"))], True)]))
     g.add(24, 7, table(
         "Automation events for this workload",
-        "Events the agent sent for this workload in the selected time range (ro_actions_total, counted by the "
+        "Events the agent sent for this workload in the selected time range (kerf_actions_total, counted by the "
         "hub). Shown as annotations on the graphs above.",
-        [target("sum by (type, reason, resource, strategy) (increase(" + v("ro_actions_total", *wl)
+        [target("sum by (type, reason, resource, strategy) (increase(" + v("kerf_actions_total", *wl)
                 + "[$__range])) > 0", "", "A", instant=True, fmt="table")],
         columns=[("type", "Type", [("mappings", [{"type": "value", "options": {
                     t: {"color": c, "index": i} for i, (t, c) in enumerate(EVENT_TYPES)}}]), cell("color-text")]),
@@ -1072,7 +1072,7 @@ def workload():
 
     annotation = {
         "name": "Automation events", "enable": True, "hide": False, "iconColor": "#FF9830",
-        "datasource": DS, "expr": ("sum by (type, reason) (increase(" + v("ro_actions_total", *wl) + "[2m])) > 0"),
+        "datasource": DS, "expr": ("sum by (type, reason) (increase(" + v("kerf_actions_total", *wl) + "[2m])) > 0"),
         "step": "1m", "titleFormat": "{{type}}", "textFormat": "{{reason}}", "tagKeys": "type,reason",
         "useValueForTime": False, "refId": "Anno",
     }
@@ -1082,17 +1082,17 @@ def workload():
         "requests/limits, throttling, OOM kills and automation events.",
         g, [
             query_var("cluster", "Cluster", VAR_CLUSTER_Q, multi=False, include_all=False),
-            query_var("namespace", "Namespace", 'label_values(ro_workload_mode{cluster="$cluster"}, namespace)',
+            query_var("namespace", "Namespace", 'label_values(kerf_workload_mode{cluster="$cluster"}, namespace)',
                       multi=False, include_all=False),
             query_var("workload", "Workload",
-                      'label_values(ro_workload_mode{cluster="$cluster", namespace="$namespace"}, workload)',
+                      'label_values(kerf_workload_mode{cluster="$cluster", namespace="$namespace"}, workload)',
                       multi=False, include_all=False),
             query_var("kind", "Kind",
-                      'label_values(ro_workload_mode{cluster="$cluster", namespace="$namespace", '
+                      'label_values(kerf_workload_mode{cluster="$cluster", namespace="$namespace", '
                       'workload="$workload"}, workload_kind)',
                       multi=False, include_all=False, description="Workload kind (normally a single value)."),
             query_var("container", "Container",
-                      'label_values(ro_recommendation_memory_bytes{cluster="$cluster", namespace="$namespace", '
+                      'label_values(kerf_recommendation_memory_bytes{cluster="$cluster", namespace="$namespace", '
                       'workload_kind="$kind", workload="$workload"}, container)'),
             custom_var("window", "Percentile window", [("7d", "7d"), ("14d", "14d"), ("28d", "28d")], "14d",
                        "Window of the P50/P95/P99/max lines. Profiles: dev 7d, production 14d, high-availability 28d."),
@@ -1106,13 +1106,13 @@ def workload():
 def automation():
     sel = [F_C, F_N, F_W]
     g = Grid()
-    acts = lambda *m: v("ro_actions_total", *sel, *m)
+    acts = lambda *m: v("kerf_actions_total", *sel, *m)
 
     g.row("Actions")
     type_overrides = [override_name(t, [("color", fixed(c))]) for t, c in EVENT_TYPES]
     g.add(24, 4, stat(
         "Events in range",
-        "Events stored by the hub in the selected time range, by type (ro_actions_total; resets on hub restart, "
+        "Events stored by the hub in the selected time range, by type (kerf_actions_total; resets on hub restart, "
         "so always read through increase()). One increment per resource listed in an event.",
         targets({"expr": zero_filled([t for t, _ in EVENT_TYPES], "type", lambda t: (
             "sum(increase(" + acts('type="' + t + '"') + "[$__range]))")), "legend": "{{type}}", "instant": True}),
@@ -1173,13 +1173,13 @@ def automation():
     g.add(14, 8, timeseries(
         "Workloads by phase",
         "Number of workloads per RightsizingRecommendation phase over time.",
-        targets(("count by (phase) (" + dedup("ro_workload_phase", WL + ", phase", *sel) + " == 1)", "{{phase}}")),
+        targets(("count by (phase) (" + dedup("kerf_workload_phase", WL + ", phase", *sel) + " == 1)", "{{phase}}")),
         stack=True, fill=40, decimals=0, min_=0, overrides=phase_overrides))
     g.add(10, 8, table(
         "Modes and where they come from",
         "Workloads per effective mode and the level that set it (global-default < cluster-default < policy < "
         "annotation, D-005).",
-        [target("count by (resource, mode, source) (" + dedup("ro_workload_mode", WL + ", resource, mode, source", *sel)
+        [target("count by (resource, mode, source) (" + dedup("kerf_workload_mode", WL + ", resource, mode, source", *sel)
                 + " == 1)", "", "A", instant=True, fmt="table")],
         columns=[("resource", "Resource"), ("mode", "Mode", [("mappings", [{"type": "value", "options": {
                      m: {"color": c, "index": i} for i, (m, _, c) in enumerate(MODES)}}]), cell("color-text")]),
@@ -1190,7 +1190,7 @@ def automation():
     g.add(8, 5, stat(
         "Last recommender run",
         "Time since the recommender last succeeded per cluster (production: every 24 h; dev: every 5 min).",
-        targets({"expr": "time() - max by (cluster) (" + v("ro_recommender_last_success_timestamp_seconds", F_C) + ")",
+        targets({"expr": "time() - max by (cluster) (" + v("kerf_recommender_last_success_timestamp_seconds", F_C) + ")",
                  "legend": "{{cluster}}", "instant": True}),
         unit="s", decimals=0, th=thresholds(("green", None), ("orange", 26 * 3600), ("red", 48 * 3600)),
         text_mode="value_and_name"))
@@ -1198,7 +1198,7 @@ def automation():
         "Last agent pull",
         "Time since each cluster's agent last pulled recommendations successfully. 'never' = the agent has "
         "not reached the hub yet (check its token and the hub URL).",
-        targets({"expr": "time() - max by (cluster) (" + v("ro_agent_last_successful_pull_timestamp_seconds", F_C) + ")",
+        targets({"expr": "time() - max by (cluster) (" + v("kerf_agent_last_successful_pull_timestamp_seconds", F_C) + ")",
                  "legend": "{{cluster}}", "instant": True}),
         unit="s", decimals=0, th=thresholds(("green", None), ("orange", 900), ("red", 3600)),
         mappings=[range_map(1e8, None, "never", "red")], text_mode="value_and_name", no_value="no agent"))
@@ -1206,7 +1206,7 @@ def automation():
         "Recommender runs in range",
         "Recommender runs by outcome in the selected range (hub-wide, not per cluster). 'partial' = some "
         "clusters failed.",
-        targets({"expr": "sum by (status) (increase(ro_recommender_runs_total[$__range]))", "legend": "{{status}}",
+        targets({"expr": "sum by (status) (increase(kerf_recommender_runs_total[$__range]))", "legend": "{{status}}",
                  "instant": True}),
         decimals=0, text_mode="value_and_name", color={"mode": "fixed", "fixedColor": "text"},
         overrides=[override_name("succeeded", [("color", fixed("green"))]),
@@ -1215,7 +1215,7 @@ def automation():
     g.add(8, 8, timeseries(
         "Agent → hub requests",
         "Requests from each agent to the hub by result (ok, not_modified, error).",
-        targets(("sum by (cluster, result) (rate(" + v("ro_agent_hub_requests_total", F_C) + "[$__rate_interval]))",
+        targets(("sum by (cluster, result) (rate(" + v("kerf_agent_hub_requests_total", F_C) + "[$__rate_interval]))",
                  "{{cluster}} · {{result}}")),
         unit="reqps", decimals=2, min_=0, no_value="No agent reporting",
         overrides=[override_name(".*error", [("color", fixed("red"))], True)]))
@@ -1223,16 +1223,16 @@ def automation():
         "Agent event buffer",
         "Events waiting in each agent's buffer for delivery to the hub, and events dropped because the buffer "
         "was full. Both should stay at 0.",
-        targets(("max by (cluster) (" + v("ro_agent_events_buffered", F_C) + ")", "{{cluster}} buffered"),
-                ("sum by (cluster) (increase(" + v("ro_agent_events_dropped_total", F_C) + "[$__interval]))",
+        targets(("max by (cluster) (" + v("kerf_agent_events_buffered", F_C) + ")", "{{cluster}} buffered"),
+                ("sum by (cluster) (increase(" + v("kerf_agent_events_dropped_total", F_C) + "[$__interval]))",
                  "{{cluster}} dropped")),
         decimals=0, min_=0, overrides=[override_name(".*dropped", [("color", fixed("red"))], True)],
         no_value="No agent reporting"))
     g.add(8, 8, timeseries(
         "Recommender run duration",
         "Average duration of recommender runs completed in each interval (hub-wide).",
-        targets(("sum(increase(ro_recommender_run_duration_seconds_sum[$__interval])) / "
-                 "sum(increase(ro_recommender_run_duration_seconds_count[$__interval]))", "avg run")),
+        targets(("sum(increase(kerf_recommender_run_duration_seconds_sum[$__interval])) / "
+                 "sum(increase(kerf_recommender_run_duration_seconds_count[$__interval]))", "avg run")),
         unit="s", decimals=1, min_=0, interval="15m", bars=True, no_value="No runs in range"))
 
     return dashboard(
@@ -1243,7 +1243,7 @@ def automation():
             query_var("cluster", "Cluster", VAR_CLUSTER_Q),
             query_var("namespace", "Namespace", VAR_NAMESPACE_Q),
             query_var("workload", "Workload",
-                      'label_values(ro_workload_mode{cluster=~"$cluster", namespace=~"$namespace"}, workload)'),
+                      'label_values(kerf_workload_mode{cluster=~"$cluster", namespace=~"$namespace"}, workload)'),
         ], time_from="now-7d")
 
 

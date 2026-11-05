@@ -1,5 +1,5 @@
 # -*- mode: Python -*-
-# Inner loop for resource-optimizer on the local k3d fleet (D-010). Run `make dev-up` first.
+# Inner loop for Kerf on the local k3d fleet (D-010). Run `make dev-up` first.
 #
 #   tilt up                  everything below that exists
 #   tilt up agent webhook    only those resources

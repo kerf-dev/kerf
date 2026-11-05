@@ -30,7 +30,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // cluster is one spoke as seen by the suite.
@@ -121,7 +121,7 @@ func setup() error {
 		var s corev1.Secret
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		if err := hubCluster.C.Get(ctx, client.ObjectKey{Namespace: "resource-optimizer", Name: "hub-dev-tokens"}, &s); err != nil {
+		if err := hubCluster.C.Get(ctx, client.ObjectKey{Namespace: "kerf", Name: "hub-dev-tokens"}, &s); err != nil {
 			if token == "" {
 				return fmt.Errorf("hub UI token: set E2E_HUB_UI_TOKEN or deploy the hub with devSeed: %w", err)
 			}
@@ -155,7 +155,7 @@ func randSuffix() string {
 }
 
 // suiteLabel marks every object the suite creates.
-const suiteLabel = "e2e.resource-optimizer.oz.io/suite"
+const suiteLabel = "e2e.kerf.getkerf.dev/suite"
 
 // newNamespace creates e2e-<scenario>-<rand> and deletes it (and the policy of the same name)
 // when the test ends.

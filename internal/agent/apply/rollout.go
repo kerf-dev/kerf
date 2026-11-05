@@ -1,8 +1,8 @@
 // Package apply writes recommended values to the cluster.
 //
 //   - rollout: server-side apply of container resources on the pod template under field manager
-//     resource-optimizer with force (Argo CD's controller owns the fields first, D-006);
-//   - release: drop resource-optimizer's managedFields entry without deleting any field, so the
+//     kerf with force (Argo CD's controller owns the fields first, D-006);
+//   - release: drop kerf's managedFields entry without deleting any field, so the
 //     values stay until Argo CD (or anyone) restores them;
 //   - in-place: resize running pods through the pods/resize subresource (D-007).
 package apply
@@ -19,8 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/workload"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent/workload"
 )
 
 // FieldManager is the SSA field manager of every write to workloads (D-006).
@@ -153,7 +153,7 @@ func mergeTargets(base, over []v1alpha1.ContainerRecommendation) []v1alpha1.Cont
 	return out
 }
 
-// OwnedResources returns the resources (cpu, memory) whose requests or limits resource-optimizer
+// OwnedResources returns the resources (cpu, memory) whose requests or limits kerf
 // owns on the pod template, read from managedFields.
 func OwnedResources(obj client.Object) map[corev1.ResourceName]bool {
 	out := map[corev1.ResourceName]bool{}
@@ -191,7 +191,7 @@ func walkResources(node map[string]any, inResources bool, out map[corev1.Resourc
 	}
 }
 
-// Release removes resource-optimizer's managedFields entries and our annotations from the
+// Release removes kerf's managedFields entries and our annotations from the
 // workload in one JSON patch, guarded by resourceVersion. No resource field is deleted: values
 // stay as they are, now owned by nobody, so Argo CD's next sync restores the Git values (D-006).
 // It returns false if there was nothing to release.

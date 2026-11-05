@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# WO-18e: install resource-optimizer on two fresh k3d clusters by following docs/install/eks.md.
+# WO-18e: install kerf on two fresh k3d clusters by following docs/install/eks.md.
 #   staging.sh up        clusters + the guide's prerequisites (step 1) + AWS stand-ins (step 3)
 #   staging.sh install   steps 4 and 5 of the guide (hub cluster, first sign-in, tokens, workload cluster)
 #   staging.sh verify    every Check of steps 4-6, failover, upgrade without 5xx
 #   staging.sh wizard    WO-18f: a second workload cluster installed with the hub wizard's Helm snippet
 #   staging.sh uninstall step 9
 #   staging.sh down      delete both clusters
-# Run `make release REGISTRY=localhost:5005/resource-optimizer VERSION=$VERSION` first (step 2).
+# Run `make release REGISTRY=localhost:5005/kerf VERSION=$VERSION` first (step 2).
 # shellcheck source=lib.sh
 . "$(dirname "$0")/lib.sh"
 cd "$ROOT"
@@ -68,13 +68,13 @@ prereqs() {
     kubectl --context "$ctx" -n kube-system rollout restart deploy/coredns >/dev/null
   done
 
-  # RDS stand-in: CloudNativePG, master user ro_admin.
+  # RDS stand-in: CloudNativePG, master user kerf_admin.
   helm --kube-context "$HUB_CTX" upgrade --install cnpg "$CNPG_CHART" --version "$CNPG_VERSION" \
     -n cnpg-system --create-namespace --wait >/dev/null
   kh create namespace rds --dry-run=client -o yaml | kh apply -f - >/dev/null
   if ! kh -n rds get secret ro-admin-master >/dev/null 2>&1; then
     kh -n rds create secret generic ro-admin-master --type=kubernetes.io/basic-auth \
-      --from-literal=username=ro_admin --from-literal=password="$(openssl rand -hex 24)" >/dev/null
+      --from-literal=username=kerf_admin --from-literal=password="$(openssl rand -hex 24)" >/dev/null
   fi
   sed "s|PG_IMAGE|$PG_IMAGE|" "$INSTALL/manifests/postgres.yaml" | kh apply -f - >/dev/null
   until kh -n rds get cluster ro-hub -o jsonpath='{.status.readyInstances}' 2>/dev/null | grep -q 1; do sleep 5; done
@@ -86,27 +86,27 @@ export RDS_HOST=ro-hub-rw.rds.svc
 step3() {
   log "step 3.2: database role and database (RDS stand-in)"
   kh create namespace "$NS" --dry-run=client -o yaml | kh apply -f - >/dev/null
-  if ! kh -n rds exec ro-hub-1 -c postgres -- psql -tAc "select 1 from pg_roles where rolname='ro'" | grep -q 1; then
+  if ! kh -n rds exec ro-hub-1 -c postgres -- psql -tAc "select 1 from pg_roles where rolname='kerf'" | grep -q 1; then
     export APP_PW=$(openssl rand -hex 24)
     MASTER_PW=$(kh -n rds get secret ro-admin-master -o jsonpath='{.data.password}' | base64 -d)
     # The guide's command, as written:
     { echo "$MASTER_PW"
-      echo "CREATE ROLE ro LOGIN PASSWORD '$APP_PW';"
-      echo "GRANT ro TO ro_admin;"
-      echo "CREATE DATABASE resource_optimizer OWNER ro;"
+      echo "CREATE ROLE kerf LOGIN PASSWORD '$APP_PW';"
+      echo "GRANT kerf TO kerf_admin;"
+      echo "CREATE DATABASE kerf OWNER kerf;"
     } | kh -n "$NS" run psql-setup --rm -i --restart=Never --image=postgres:16-alpine -- \
-      sh -c "read -r PGPASSWORD; export PGPASSWORD; exec psql 'host=$RDS_HOST user=ro_admin dbname=postgres sslmode=require' -v ON_ERROR_STOP=1"
+      sh -c "read -r PGPASSWORD; export PGPASSWORD; exec psql 'host=$RDS_HOST user=kerf_admin dbname=postgres sslmode=require' -v ON_ERROR_STOP=1"
     unset MASTER_PW
     log "step 3.3: Secrets Manager (Fake provider)"
-    aws secretsmanager create-secret --name resource-optimizer/hub/db \
-      --secret-string "$(jq -cn --arg p "$APP_PW" '{username: "ro", password: $p}')"
-    aws secretsmanager create-secret --name resource-optimizer/hub/bootstrap-admin \
+    aws secretsmanager create-secret --name kerf/hub/db \
+      --secret-string "$(jq -cn --arg p "$APP_PW" '{username: "kerf", password: $p}')"
+    aws secretsmanager create-secret --name kerf/hub/bootstrap-admin \
       --secret-string "$(jq -cn --arg p "$(openssl rand -base64 24)" '{password: $p}')"
-    aws secretsmanager create-secret --name resource-optimizer/hub/datasource-key \
+    aws secretsmanager create-secret --name kerf/hub/datasource-key \
       --secret-string "$(jq -cn --arg k "$(openssl rand -base64 32)" '{key: $k}')"
     unset APP_PW
   fi
-  echo "Check: $(aws secretsmanager list-secrets --filters Key=name,Values=resource-optimizer/ --query 'SecretList[].Name' --output text)"
+  echo "Check: $(aws secretsmanager list-secrets --filters Key=name,Values=kerf/ --query 'SecretList[].Name' --output text)"
   echo "Check: ClusterSecretStore Ready=$(kh get clustersecretstore aws-secrets-manager -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
   log "step 3.5: certificate (ACM stand-in)"
   sed -e "s|HUB_HOST|$HUB_HOST|; s|UI_HOST|$UI_HOST|" "$INSTALL/manifests/tls.yaml" | kh apply -f - >/dev/null
@@ -126,7 +126,7 @@ step4() {
   # Fix the registry host (ECR's is $ACCOUNT.dkr.ecr...; the stand-in is localhost:5005).
   sed -i '' -e "s|$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com|$ECR_IN_CLUSTER|g" "$WORK/values-hub.yaml"
   echo "Check (grep, expect nothing):"; grep -nE '123456789012|example\.com|c0ffee|ops-eu1|00000000-0000' "$WORK/values-hub.yaml" || true
-  helm template resource-optimizer "oci://$REGISTRY/charts/resource-optimizer" --version "$VERSION" $HELM_OCI_FLAGS -n "$NS" \
+  helm template kerf "oci://$REGISTRY/charts/kerf" --version "$VERSION" $HELM_OCI_FLAGS -n "$NS" \
     -f "$WORK/values-hub.yaml" -f "$INSTALL/values-staging-hub.yaml" | grep -E '^kind: (Deployment|Ingress|ExternalSecret)$' | sort | uniq -c
 
   log "step 4.2: CA bundle (RDS stand-in: the CloudNativePG CA)"
@@ -135,12 +135,12 @@ step4() {
   echo "Check: $(kh -n "$NS" get configmap rds-ca-bundle -o jsonpath='{.data.global-bundle\.pem}' | grep -c 'BEGIN CERTIFICATE') certificate(s)"
 
   log "step 4.3: install"
-  helm --kube-context "$HUB_CTX" upgrade --install resource-optimizer "oci://$REGISTRY/charts/resource-optimizer" $HELM_OCI_FLAGS \
+  helm --kube-context "$HUB_CTX" upgrade --install kerf "oci://$REGISTRY/charts/kerf" $HELM_OCI_FLAGS \
     --version "$VERSION" -n "$NS" -f "$WORK/values-hub.yaml" -f "$INSTALL/values-staging-hub.yaml"
   kh -n "$NS" rollout status deploy/hub --timeout=10m
   kh -n "$NS" rollout status deploy/web --timeout=5m
   kh -n "$NS" get externalsecrets
-  kh -n "$NS" get pods -l app.kubernetes.io/instance=resource-optimizer
+  kh -n "$NS" get pods -l app.kubernetes.io/instance=kerf
   leader_check
 
   log "step 4.4: DNS (stand-in: CoreDNS hosts + curl --connect-to)"
@@ -149,11 +149,11 @@ step4() {
   log "step 4.5: first sign-in, ui and pricing tokens"
   signin
   for role in ui pricing; do
-    if [ "$(aws secretsmanager get-secret-value --secret-id resource-optimizer/hub/$role-token)" = null ]; then
+    if [ "$(aws secretsmanager get-secret-value --secret-id kerf/hub/$role-token)" = null ]; then
       val=$(curl -sS -b "$WORK/cookies" -H "X-CSRF-Token: $CSRF" -H 'Content-Type: application/json' \
-        -d "$(jq -cn --arg r $role '{role: $r, description: ("resource-optimizer " + $r), reason: "install"}')" \
+        -d "$(jq -cn --arg r $role '{role: $r, description: ("kerf " + $r), reason: "install"}')" \
         https://$UI_HOST/v1/admin/tokens | jq -r .value)
-      aws secretsmanager create-secret --name resource-optimizer/hub/$role-token \
+      aws secretsmanager create-secret --name kerf/hub/$role-token \
         --secret-string "$(jq -cn --arg t "$val" '{token: $t}')" --query Name --output text
     fi
   done
@@ -167,7 +167,7 @@ step4() {
 }
 
 signin() {
-  export ADMIN_PW=$(aws secretsmanager get-secret-value --secret-id resource-optimizer/hub/bootstrap-admin --query SecretString --output text | jq -r .password)
+  export ADMIN_PW=$(aws secretsmanager get-secret-value --secret-id kerf/hub/bootstrap-admin --query SecretString --output text | jq -r .password)
   CSRF=$(curl -sS -c "$WORK/cookies" -H 'Content-Type: application/json' \
     -d "$(jq -cn --arg p "$ADMIN_PW" '{username: "admin", password: $p}')" https://$UI_HOST/v1/auth/login | jq -r .csrfToken)
   export CSRF
@@ -179,8 +179,8 @@ leader_check() {
   echo "Check: readyz=$(kh get --raw "/api/v1/namespaces/$NS/services/hub:8080/proxy/readyz")"
   local sum=0
   for p in $(kh -n "$NS" get pods -l app.kubernetes.io/name=hub --field-selector=status.phase=Running -o name); do
-    v=$(kh get --raw "/api/v1/namespaces/$NS/pods/${p#pod/}:8080/proxy/metrics" | awk '/^ro_hub_leader /{print $2}')
-    echo "  ${p#pod/} ro_hub_leader $v"; sum=$((sum + ${v:-0}))
+    v=$(kh get --raw "/api/v1/namespaces/$NS/pods/${p#pod/}:8080/proxy/metrics" | awk '/^kerf_hub_leader /{print $2}')
+    echo "  ${p#pod/} kerf_hub_leader $v"; sum=$((sum + ${v:-0}))
   done
   echo "  sum=$sum"; [ "$sum" = 1 ]
 }
@@ -193,7 +193,7 @@ step5() {
 
   log "step 5.2: register the cluster (the wizard's API calls)"
   signin
-  if [ "$(aws secretsmanager get-secret-value --secret-id resource-optimizer/clusters/$CLUSTER/agent-token)" = null ]; then
+  if [ "$(aws secretsmanager get-secret-value --secret-id kerf/clusters/$CLUSTER/agent-token)" = null ]; then
     register_cluster
   fi
 
@@ -205,12 +205,12 @@ step5() {
   sed -i '' -e "s|$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com|$ECR_IN_CLUSTER|g" "$WORK/values-spoke-$CLUSTER.yaml"
   grep -nE '123456789012|example\.com|prod-eu1' "$WORK/values-spoke-$CLUSTER.yaml" || true
   # caBundle: the staging CA is private (ACM's chain is public); the guide's troubleshooting says to set it.
-  helm --kube-context "$SPOKE_CTX" upgrade --install resource-optimizer "oci://$REGISTRY/charts/resource-optimizer" $HELM_OCI_FLAGS \
+  helm --kube-context "$SPOKE_CTX" upgrade --install kerf "oci://$REGISTRY/charts/kerf" $HELM_OCI_FLAGS \
     --version "$VERSION" -n "$NS" --create-namespace -f "$WORK/values-spoke-$CLUSTER.yaml" -f "$INSTALL/values-staging-spoke.yaml" \
     --set-file agent.hub.caBundle.pem="$WORK/ca.crt" --wait --timeout 10m
-  ks -n "$NS" get externalsecret resource-optimizer-agent-token
-  ks -n "$NS" get pods -l app.kubernetes.io/instance=resource-optimizer
-  ks -n "$NS" logs deploy/resource-optimizer-agent | grep -m1 'starting agent' || true
+  ks -n "$NS" get externalsecret kerf-agent-token
+  ks -n "$NS" get pods -l app.kubernetes.io/instance=kerf
+  ks -n "$NS" logs deploy/kerf-agent | grep -m1 'starting agent' || true
 
   log "step 5.4: readiness"
   ks get --raw "/api/v1/namespaces/$NS/services/https:webhook:443/proxy/healthz" 2>&1 | tail -1 || true
@@ -229,7 +229,7 @@ register_cluster() { # [cluster]
     https://$UI_HOST/v1/admin/clusters | tee "$WORK/register.json" | jq -r '.agentToken.value // empty')
   [ -n "$token" ] || { echo "register failed: $(jq -c 'del(.agentToken,.token)' "$WORK/register.json")"; return 1; }
   AGENT_TOKEN=$token
-  aws secretsmanager create-secret --name resource-optimizer/clusters/$c/agent-token \
+  aws secretsmanager create-secret --name kerf/clusters/$c/agent-token \
     --secret-string "$(jq -cn --arg t "$AGENT_TOKEN" '{token: $t}')" --query Name --output text
   unset AGENT_TOKEN
 }
@@ -251,7 +251,7 @@ wizard() {
 
   log "wizard: register $WIZ_CLUSTER (POST /v1/admin/clusters) and store its token (step 5.2)"
   signin
-  if [ "$(aws secretsmanager get-secret-value --secret-id resource-optimizer/clusters/$WIZ_CLUSTER/agent-token)" = null ]; then
+  if [ "$(aws secretsmanager get-secret-value --secret-id kerf/clusters/$WIZ_CLUSTER/agent-token)" = null ]; then
     register_cluster "$WIZ_CLUSTER"
   fi
 
@@ -280,8 +280,8 @@ WRAPPER
 
   log "wizard: checks (as step 5.3)"
   kw -n "$NS" get externalsecret "$AGENT_SECRET"
-  kw -n "$NS" get pods -l app.kubernetes.io/instance=resource-optimizer
-  kw -n "$NS" logs deploy/resource-optimizer-agent | grep -m1 'starting agent' || true
+  kw -n "$NS" get pods -l app.kubernetes.io/instance=kerf
+  kw -n "$NS" logs deploy/kerf-agent | grep -m1 'starting agent' || true
   CLUSTER=$WIZ_CLUSTER wait_state AgentConnected 5
 }
 
@@ -337,7 +337,7 @@ failover() {
   log "failover: delete the hub leader pod"
   local leader="" t0 t1
   for p in $(kh -n "$NS" get pods -l app.kubernetes.io/name=hub -o name); do
-    [ "$(kh get --raw "/api/v1/namespaces/$NS/pods/${p#pod/}:8080/proxy/metrics" | awk '/^ro_hub_leader /{print $2}')" = 1 ] && leader=${p#pod/}
+    [ "$(kh get --raw "/api/v1/namespaces/$NS/pods/${p#pod/}:8080/proxy/metrics" | awk '/^kerf_hub_leader /{print $2}')" = 1 ] && leader=${p#pod/}
   done
   echo "  leader: $leader"
   t0=$(date +%s)
@@ -358,32 +358,32 @@ upgrade() { # VERSION=<new> (released beforehand)
       done
       sleep 0.5; done ) &
   local probe=$!
-  helm --kube-context "$HUB_CTX" upgrade resource-optimizer "oci://$REGISTRY/charts/resource-optimizer" $HELM_OCI_FLAGS \
+  helm --kube-context "$HUB_CTX" upgrade kerf "oci://$REGISTRY/charts/kerf" $HELM_OCI_FLAGS \
     --version "$1" -n "$NS" -f "$WORK/values-hub.yaml" -f "$INSTALL/values-staging-hub.yaml" >/dev/null
   kh -n "$NS" rollout status deploy/hub --timeout=10m
   kh -n "$NS" rollout status deploy/web --timeout=5m
-  helm --kube-context "$SPOKE_CTX" upgrade resource-optimizer "oci://$REGISTRY/charts/resource-optimizer" $HELM_OCI_FLAGS \
+  helm --kube-context "$SPOKE_CTX" upgrade kerf "oci://$REGISTRY/charts/kerf" $HELM_OCI_FLAGS \
     --version "$1" -n "$NS" -f "$WORK/values-spoke-$CLUSTER.yaml" -f "$INSTALL/values-staging-spoke.yaml" \
     --set-file agent.hub.caBundle.pem="$WORK/ca.crt" --wait --timeout 10m >/dev/null
   wait $probe || true
   echo "Check: probe status codes: $(cut -d' ' -f1 "$WORK/probe.txt" | sort | uniq -c | tr '\n' ' ')"
   grep -vE '^200 ' "$WORK/probe.txt" || true
-  helm --kube-context "$HUB_CTX" -n "$NS" history resource-optimizer | tail -2
+  helm --kube-context "$HUB_CTX" -n "$NS" history kerf | tail -2
   leader_check
   ! grep -qE '^(5..|000) ' "$WORK/probe.txt"
 }
 
 uninstall() {
   log "step 9: uninstall"
-  helm --kube-context "$SPOKE_CTX" -n "$NS" uninstall resource-optimizer
-  helm --kube-context "$HUB_CTX" -n "$NS" uninstall resource-optimizer
-  echo "Check (kept on purpose): $(ks get crd -o name | grep resource-optimizer.oz.io | tr '\n' ' ')"
+  helm --kube-context "$SPOKE_CTX" -n "$NS" uninstall kerf
+  helm --kube-context "$HUB_CTX" -n "$NS" uninstall kerf
+  echo "Check (kept on purpose): $(ks get crd -o name | grep kerf.getkerf.dev | tr '\n' ' ')"
   echo "Check (kept on purpose): $(kh -n "$NS" get externalsecret,secret hub-datasource-key -o name 2>&1 | tr '\n' ' ')"
-  ks delete crd rightsizingpolicies.resource-optimizer.oz.io rightsizingrecommendations.resource-optimizer.oz.io
+  ks delete crd rightsizingpolicies.kerf.getkerf.dev rightsizingrecommendations.kerf.getkerf.dev
   ks delete namespace "$NS"
   kh -n "$NS" delete externalsecret hub-datasource-key
   kh delete namespace "$NS"
-  echo "Check: crds=[$(ks get crd | grep resource-optimizer.oz.io || true)] releases=[$(helm --kube-context "$HUB_CTX" -n "$NS" list -q)]"
+  echo "Check: crds=[$(ks get crd | grep kerf.getkerf.dev || true)] releases=[$(helm --kube-context "$HUB_CTX" -n "$NS" list -q)]"
 }
 
 verify() {

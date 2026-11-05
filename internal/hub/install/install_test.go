@@ -14,13 +14,13 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 const (
-	testChart    = "oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts/resource-optimizer"
+	testChart    = "oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf/charts/kerf"
 	testRegistry = "123456789012.dkr.ecr.eu-west-1.amazonaws.com"
-	umbrellaDir  = "../../../deploy/charts/resource-optimizer"
+	umbrellaDir  = "../../../deploy/charts/kerf"
 	spokeExample = "../../../deploy/examples/eks/values-spoke.yaml"
 )
 
@@ -127,10 +127,10 @@ func TestRenderHelm(t *testing.T) {
 		"existing secret": {
 			mut: func(*Options) {},
 			contains: []string{
-				`: "${RO_AGENT_TOKEN:?`,
-				"kubectl create namespace resource-optimizer --dry-run=client",
-				`create secret generic resource-optimizer-agent-token --from-literal=token="$RO_AGENT_TOKEN"`,
-				"helm upgrade --install resource-optimizer " + testChart + " --version 0.1.0 \\\n  -n resource-optimizer --create-namespace --wait --timeout 10m -f - <<'RO_VALUES'\n",
+				`: "${KERF_AGENT_TOKEN:?`,
+				"kubectl create namespace kerf --dry-run=client",
+				`create secret generic kerf-agent-token --from-literal=token="$KERF_AGENT_TOKEN"`,
+				"helm upgrade --install kerf " + testChart + " --version 0.1.0 \\\n  -n kerf --create-namespace --wait --timeout 10m -f - <<'KERF_VALUES'\n",
 			},
 			absent: []string{"cert-manager", "helm upgrade --install agent", "helm upgrade --install webhook"},
 			values: wantValues,
@@ -140,12 +140,12 @@ func TestRenderHelm(t *testing.T) {
 				*o = esOpts()
 				o.ReadOnly, o.ImageTag, o.Webhook = true, "main-ece1564", false
 			},
-			contains: []string{"store the token shown once", "as resource-optimizer/clusters/ro-spoke-2/agent-token, property token"},
-			absent:   []string{"RO_AGENT_TOKEN", "kubectl create", "kubectl -n", "cert-manager"},
+			contains: []string{"store the token shown once", "as kerf/clusters/ro-spoke-2/agent-token, property token"},
+			absent:   []string{"KERF_AGENT_TOKEN", "kubectl create", "kubectl -n", "cert-manager"},
 			values: merge(wantValues, map[string]any{
 				"global.externalSecrets.secretStoreRef": map[string]any{"kind": "ClusterSecretStore", "name": "aws-secrets-manager"},
 				"global.externalSecrets":                map[string]any{"secretStoreRef": map[string]any{"kind": "ClusterSecretStore", "name": "aws-secrets-manager"}},
-				"agent.hub.tokenSecret.externalSecret":  map[string]any{"enabled": true, "remoteRef": map[string]any{"key": "resource-optimizer/clusters/ro-spoke-2/agent-token", "property": "token"}},
+				"agent.hub.tokenSecret.externalSecret":  map[string]any{"enabled": true, "remoteRef": map[string]any{"key": "kerf/clusters/ro-spoke-2/agent-token", "property": "token"}},
 				"agent.readOnly":                        true,
 				"agent.image":                           map[string]any{"tag": "main-ece1564"},
 				"webhook":                               map[string]any{"enabled": false},
@@ -154,12 +154,12 @@ func TestRenderHelm(t *testing.T) {
 		"cert-manager, health, repo chart, explicit registry": {
 			mut: func(o *Options) {
 				o.CertManager = true
-				o.Chart, o.ImageRegistry = "https://charts.example.com|resource-optimizer", "registry.example.com"
+				o.Chart, o.ImageRegistry = "https://charts.example.com|kerf", "registry.example.com"
 				o.Health = &HealthMetrics{MetricsURL: "http://prom:9090", ClusterLabel: "k8s_cluster", ClusterLabelValue: "prod", ExtraMatchers: []string{`env="prod"`}}
 			},
 			contains: []string{
 				"helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager --version v1.19.1 -n cert-manager",
-				"helm upgrade --install resource-optimizer resource-optimizer --repo https://charts.example.com --version 0.1.0",
+				"helm upgrade --install kerf kerf --repo https://charts.example.com --version 0.1.0",
 			},
 			values: merge(wantValues, map[string]any{
 				"global.imageRegistry": "registry.example.com",
@@ -181,11 +181,11 @@ func TestRenderHelm(t *testing.T) {
 					t.Errorf("contains %q:\n%s", w, s.Content)
 				}
 			}
-			if n := strings.Count(s.Content, "helm upgrade --install resource-optimizer "); n != 1 {
+			if n := strings.Count(s.Content, "helm upgrade --install kerf "); n != 1 {
 				t.Errorf("%d umbrella installs", n)
 			}
 			checkValues(t, "heredoc", heredocValues(t, s.Content), tc.values)
-			if s.Filename != "install.sh" || s.ArgoCDIgnoreDifferences != "resource.customizations.ignoreDifferences.all: |\n  managedFieldsManagers:\n  - resource-optimizer\n" {
+			if s.Filename != "install.sh" || s.ArgoCDIgnoreDifferences != "resource.customizations.ignoreDifferences.all: |\n  managedFieldsManagers:\n  - kerf\n" {
 				t.Errorf("snippet %+v", s)
 			}
 			if sh, err := exec.LookPath("sh"); err == nil {
@@ -207,8 +207,8 @@ func TestRenderValues(t *testing.T) {
 	}
 	notes := strings.Join(s.Notes, "\n")
 	for _, w := range []string{
-		"helm upgrade --install resource-optimizer " + testChart + " --version 0.1.0 -n resource-optimizer --create-namespace -f values-ro-spoke-2.yaml",
-		"create the Secret resource-optimizer-agent-token", "values-spoke.yaml",
+		"helm upgrade --install kerf " + testChart + " --version 0.1.0 -n kerf --create-namespace -f values-ro-spoke-2.yaml",
+		"create the Secret kerf-agent-token", "values-spoke.yaml",
 	} {
 		if !strings.Contains(notes, w) {
 			t.Errorf("notes lack %q:\n%s", w, notes)
@@ -216,7 +216,7 @@ func TestRenderValues(t *testing.T) {
 	}
 	// the external secret variant says where the token goes
 	s = render(t, hubapi.InstallValues, esOpts())
-	if !strings.Contains(s.Content, "resource-optimizer/clusters/ro-spoke-2/agent-token") || !strings.Contains(strings.Join(s.Notes, " "), "in the secret store aws-secrets-manager") {
+	if !strings.Contains(s.Content, "kerf/clusters/ro-spoke-2/agent-token") || !strings.Contains(strings.Join(s.Notes, " "), "in the secret store aws-secrets-manager") {
 		t.Errorf("external secret values:\n%s\n%v", s.Content, s.Notes)
 	}
 }
@@ -233,7 +233,7 @@ func TestValuesMatchSpokeExample(t *testing.T) {
 	defaults := umbrellaDefaults(t)
 	o := Options{
 		Cluster: "prod-eu1", HubURL: "https://hub.ro.example.com", Webhook: true,
-		Chart:               "oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts/resource-optimizer",
+		Chart:               "oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf/charts/kerf",
 		TokenExternalSecret: &TokenExternalSecret{SecretStoreName: "aws-secrets-manager"},
 		Health:              &HealthMetrics{MetricsURL: "http://prometheus-operated.monitoring.svc:9090", ClusterLabel: ""},
 	}
@@ -310,10 +310,10 @@ func TestRenderArgoCD(t *testing.T) {
 		ignored      int
 		webhookValue any
 	}{
-		"oci, webhook": {mut: func(*Options) {}, repo: "123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts", chart: "resource-optimizer", ignored: 2},
+		"oci, webhook": {mut: func(*Options) {}, repo: "123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf/charts", chart: "kerf", ignored: 2},
 		"repo, no webhook": {mut: func(o *Options) {
-			o.Chart, o.ImageRegistry, o.Webhook = "https://charts.example.com|resource-optimizer", "r.example.com", false
-		}, repo: "https://charts.example.com", chart: "resource-optimizer", ignored: 1, webhookValue: map[string]any{"enabled": false}},
+			o.Chart, o.ImageRegistry, o.Webhook = "https://charts.example.com|kerf", "r.example.com", false
+		}, repo: "https://charts.example.com", chart: "kerf", ignored: 1, webhookValue: map[string]any{"enabled": false}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			o := opts()
@@ -334,15 +334,15 @@ func TestRenderArgoCD(t *testing.T) {
 			app := docs[0]
 			checkValues(t, "application", app, map[string]any{
 				"kind":                                  "Application",
-				"metadata.name":                         "resource-optimizer-ro-spoke-2",
+				"metadata.name":                         "kerf-ro-spoke-2",
 				"metadata.namespace":                    "argocd",
-				"metadata.labels":                       map[string]any{"app.kubernetes.io/part-of": "resource-optimizer"},
+				"metadata.labels":                       map[string]any{"app.kubernetes.io/part-of": "kerf"},
 				"metadata.finalizers":                   nil, // deleting the Application keeps the CRDs
 				"spec.source.repoURL":                   tc.repo,
 				"spec.source.chart":                     tc.chart,
 				"spec.source.targetRevision":            "0.1.0",
-				"spec.source.helm.releaseName":          "resource-optimizer",
-				"spec.destination.namespace":            "resource-optimizer",
+				"spec.source.helm.releaseName":          "kerf",
+				"spec.destination.namespace":            "kerf",
 				"spec.destination.server":               "https://kubernetes.default.svc",
 				"spec.syncPolicy.automated":             map[string]any{"prune": true, "selfHeal": true},
 				"spec.syncPolicy.syncOptions":           []any{"CreateNamespace=true", "ServerSideApply=true", "RespectIgnoreDifferences=true"},
@@ -360,13 +360,13 @@ func TestRenderArgoCD(t *testing.T) {
 			if len(ign) != tc.ignored {
 				t.Fatalf("ignoreDifferences %v", ign)
 			}
-			if !reflect.DeepEqual(ign[0], map[string]any{"group": "*", "kind": "*", "managedFieldsManagers": []any{"resource-optimizer"}}) {
+			if !reflect.DeepEqual(ign[0], map[string]any{"group": "*", "kind": "*", "managedFieldsManagers": []any{"kerf"}}) {
 				t.Errorf("ignoreDifferences[0] %v", ign[0])
 			}
 			if tc.ignored == 2 && !reflect.DeepEqual(ign[1], map[string]any{"group": "admissionregistration.k8s.io", "kind": "MutatingWebhookConfiguration", "jqPathExpressions": []any{".webhooks[]?.clientConfig.caBundle"}}) {
 				t.Errorf("ignoreDifferences[1] %v", ign[1])
 			}
-			if s.Filename != "resource-optimizer-ro-spoke-2.yaml" {
+			if s.Filename != "kerf-ro-spoke-2.yaml" {
 				t.Errorf("filename %s", s.Filename)
 			}
 		})
@@ -445,7 +445,7 @@ func TestSnippetsRenderWithChart(t *testing.T) {
 					}
 				}
 				slices.Sort(deploys)
-				if !reflect.DeepEqual(deploys, []string{"resource-optimizer-agent", "webhook"}) || replicas["resource-optimizer-agent"] != 2 {
+				if !reflect.DeepEqual(deploys, []string{"kerf-agent", "webhook"}) || replicas["kerf-agent"] != 2 {
 					t.Errorf("deployments %v replicas %v", deploys, replicas)
 				}
 				wantES := []string(nil)
@@ -480,7 +480,7 @@ func TestRenderErrors(t *testing.T) {
 		"cluster":         func(o *Options) { o.Cluster = "Bad" },
 		"hub":             func(o *Options) { o.HubURL = "hub:8080" },
 		"chart":           func(o *Options) { o.Chart = "" },
-		"registry":        func(o *Options) { o.Chart = "deploy/charts/resource-optimizer" },
+		"registry":        func(o *Options) { o.Chart = "deploy/charts/kerf" },
 		"injection":       func(o *Options) { o.ChartVersion = "1; rm -rf /" },
 		"quote":           func(o *Options) { o.ImageRegistry = "r'example" },
 		"namespace":       func(o *Options) { o.Namespace = "a_b" },
@@ -498,7 +498,7 @@ func TestRenderErrors(t *testing.T) {
 	}
 	// a local chart path renders with an explicit registry
 	o := opts()
-	o.Chart, o.ImageRegistry = "deploy/charts/resource-optimizer", "k3d-ro-registry:5005"
+	o.Chart, o.ImageRegistry = "deploy/charts/kerf", "k3d-ro-registry:5005"
 	if _, err := Render(hubapi.InstallHelm, o); err != nil {
 		t.Errorf("local chart: %v", err)
 	}
@@ -506,10 +506,10 @@ func TestRenderErrors(t *testing.T) {
 
 func TestChartRefs(t *testing.T) {
 	for _, tc := range []struct{ component, umbrella, registry string }{
-		{"oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts/agent", testChart, testRegistry},
-		{"oci://localhost:5005/resource-optimizer/charts/agent", "oci://localhost:5005/resource-optimizer/charts/resource-optimizer", "localhost:5005"},
-		{"https://charts.example.com|agent", "https://charts.example.com|resource-optimizer", ""},
-		{"deploy/charts/agent", "deploy/charts/resource-optimizer", ""},
+		{"oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf/charts/agent", testChart, testRegistry},
+		{"oci://localhost:5005/kerf/charts/agent", "oci://localhost:5005/kerf/charts/kerf", "localhost:5005"},
+		{"https://charts.example.com|agent", "https://charts.example.com|kerf", ""},
+		{"deploy/charts/agent", "deploy/charts/kerf", ""},
 		{"", "", ""},
 	} {
 		u := UmbrellaFromComponent(tc.component)

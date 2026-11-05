@@ -13,9 +13,9 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/auth"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/hub/auth"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
 // access is who may call a route: bearer tokens of the listed roles (an admin token always) and,
@@ -95,7 +95,7 @@ func (s *Server) authenticate(a access, next http.HandlerFunc) http.Handler {
 		} else {
 			raw, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 			if !ok || strings.TrimSpace(raw) == "" || len(a.tokens) == 0 {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="resource-optimizer"`)
+				w.Header().Set("WWW-Authenticate", `Bearer realm="kerf"`)
 				msg := "Missing bearer token."
 				if len(a.tokens) == 0 {
 					msg = "Log in first: this endpoint needs a session."
@@ -105,7 +105,7 @@ func (s *Server) authenticate(a access, next http.HandlerFunc) http.Handler {
 			}
 			tok, err := s.lookupToken(r.Context(), strings.TrimSpace(raw))
 			if errors.Is(err, store.ErrNotFound) {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="resource-optimizer", error="invalid_token"`)
+				w.Header().Set("WWW-Authenticate", `Bearer realm="kerf", error="invalid_token"`)
 				writeProblem(w, r, http.StatusUnauthorized, "invalid_token", "Unknown, expired or revoked token.")
 				return
 			}

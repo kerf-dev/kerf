@@ -69,7 +69,7 @@ spec:
         {{- include "agent.selectorLabels" . | nindent 8 }}
         {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
         # The agent must never be mutated by the webhook (WO-07).
-        resource-optimizer.oz.io/skip-webhook: "true"
+        kerf.getkerf.dev/skip-webhook: "true"
       annotations:
         checksum/config: {{ printf "%s%s" (toYaml .Values.clusterDefaults) (toYaml .Values.freeze) | sha256sum }}
         {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{ end }}
@@ -87,9 +87,9 @@ spec:
           args:
             - --cluster-name={{ .Values.clusterName }}
             - --hub-url={{ include "agent.hubURL" . }}
-            - --hub-token-file=/var/run/secrets/resource-optimizer/hub/{{ .Values.hub.tokenSecret.key }}
-            - --cluster-defaults=/etc/resource-optimizer/cluster-defaults.yaml
-            - --freeze-file=/etc/resource-optimizer/freeze.yaml
+            - --hub-token-file=/var/run/secrets/kerf/hub/{{ .Values.hub.tokenSecret.key }}
+            - --cluster-defaults=/etc/kerf/cluster-defaults.yaml
+            - --freeze-file=/etc/kerf/freeze.yaml
             - --pull-interval={{ .Values.pullInterval }}
             - --hub-stale-after={{ .Values.hubStaleAfter }}
             - --report-interval={{ .Values.reportInterval }}
@@ -137,7 +137,7 @@ spec:
             {{- if $ca }}
             # Go reads the system roots plus every file of these directories (hub.caBundle).
             - name: SSL_CERT_DIR
-              value: /etc/ssl/certs:/etc/resource-optimizer/hub-ca
+              value: /etc/ssl/certs:/etc/kerf/hub-ca
             {{- end }}
             {{- with .Values.extraEnv }}{{ toYaml . | nindent 12 }}{{ end }}
           {{- with .Values.extraEnvFrom }}
@@ -157,14 +157,14 @@ spec:
           securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
             - name: config
-              mountPath: /etc/resource-optimizer
+              mountPath: /etc/kerf
               readOnly: true
             - name: hub-token
-              mountPath: /var/run/secrets/resource-optimizer/hub
+              mountPath: /var/run/secrets/kerf/hub
               readOnly: true
             {{- if $ca }}
             - name: hub-ca
-              mountPath: /etc/resource-optimizer/hub-ca
+              mountPath: /etc/kerf/hub-ca
               readOnly: true
             {{- end }}
             {{- with .Values.extraVolumeMounts }}{{ toYaml . | nindent 12 }}{{ end }}

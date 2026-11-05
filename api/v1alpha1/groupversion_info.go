@@ -1,10 +1,10 @@
-// Package v1alpha1 contains the API types of the resource-optimizer.oz.io group.
+// Package v1alpha1 contains the API types of the kerf.getkerf.dev group.
 //
 // This package is a contract (WO-00). Changing it requires a decision in DECISIONS.md.
 // It depends only on k8s.io/api and k8s.io/apimachinery so that every component can import it.
 //
 // +kubebuilder:object:generate=true
-// +groupName=resource-optimizer.oz.io
+// +groupName=kerf.getkerf.dev
 package v1alpha1
 
 import (
@@ -15,7 +15,7 @@ import (
 
 var (
 	// GroupVersion is the group version used to register these objects.
-	GroupVersion = schema.GroupVersion{Group: "resource-optimizer.oz.io", Version: "v1alpha1"}
+	GroupVersion = schema.GroupVersion{Group: "kerf.getkerf.dev", Version: "v1alpha1"}
 
 	// SchemeBuilder registers the types of this group-version.
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)

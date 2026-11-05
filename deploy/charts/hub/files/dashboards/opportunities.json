@@ -3,7 +3,7 @@
   "title": "Rightsizing / Opportunities",
   "description": "Every container recommendation ranked by estimated monthly savings, with current vs recommended requests, confidence, risk flags and modes.",
   "tags": [
-    "resource-optimizer"
+    "kerf"
   ],
   "editable": true,
   "graphTooltip": 1,
@@ -21,10 +21,10 @@
   "timepicker": {},
   "links": [
     {
-      "title": "resource-optimizer",
+      "title": "kerf",
       "type": "dashboards",
       "tags": [
-        "resource-optimizer"
+        "kerf"
       ],
       "asDropdown": false,
       "includeVars": true,
@@ -79,10 +79,10 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(ro_workload_mode, cluster)",
+        "definition": "label_values(kerf_workload_mode, cluster)",
         "query": {
           "qryType": 1,
-          "query": "label_values(ro_workload_mode, cluster)",
+          "query": "label_values(kerf_workload_mode, cluster)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -112,10 +112,10 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(ro_workload_mode{cluster=~\"$cluster\"}, namespace)",
+        "definition": "label_values(kerf_workload_mode{cluster=~\"$cluster\"}, namespace)",
         "query": {
           "qryType": 1,
-          "query": "label_values(ro_workload_mode{cluster=~\"$cluster\"}, namespace)",
+          "query": "label_values(kerf_workload_mode{cluster=~\"$cluster\"}, namespace)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -145,10 +145,10 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\"}, workload)",
+        "definition": "label_values(kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\"}, workload)",
         "query": {
           "qryType": 1,
-          "query": "label_values(ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\"}, workload)",
+          "query": "label_values(kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\"}, workload)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -178,10 +178,10 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(ro_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}, container)",
+        "definition": "label_values(kerf_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}, container)",
         "query": {
           "qryType": 1,
-          "query": "label_values(ro_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}, container)",
+          "query": "label_values(kerf_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}, container)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -253,7 +253,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "sum(sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "Net",
           "range": true,
           "instant": false,
@@ -325,7 +325,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "count(sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "Rows",
           "range": true,
           "instant": false,
@@ -393,7 +393,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) > 0)",
+          "expr": "count(sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) > 0)",
           "legendFormat": "Decreases",
           "range": true,
           "instant": false,
@@ -461,7 +461,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count(sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) < 0)",
+          "expr": "count(sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) < 0)",
           "legendFormat": "Increases",
           "range": true,
           "instant": false,
@@ -529,7 +529,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "(sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -542,7 +542,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", type=\"request\", source=\"current\"}))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "(max by (cluster, namespace, workload_kind, workload, container) (kerf_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", type=\"request\", source=\"current\"}))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -555,7 +555,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", type=\"request\", source=\"recommended\"}))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "(max by (cluster, namespace, workload_kind, workload, container) (kerf_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", type=\"request\", source=\"recommended\"}))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -568,7 +568,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", type=\"request\", source=\"current\"}))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "(max by (cluster, namespace, workload_kind, workload, container) (kerf_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", type=\"request\", source=\"current\"}))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -581,7 +581,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(max by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", type=\"request\", source=\"recommended\"}))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "(max by (cluster, namespace, workload_kind, workload, container) (kerf_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", type=\"request\", source=\"recommended\"}))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -594,7 +594,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "((max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}))\n+ on (cluster, namespace, workload_kind, workload) group_right ()\n(0 * group by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"} or ro_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"})))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "((max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}))\n+ on (cluster, namespace, workload_kind, workload) group_right ()\n(0 * group by (cluster, namespace, workload_kind, workload, container) (kerf_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"} or kerf_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"})))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -607,7 +607,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(((\n  (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"cpu\", mode=\"auto-patch\"}) == 1) * 2\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"cpu\", mode=\"audit\"}) == 1) * 1\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"cpu\", mode=\"off\"}) == 1) * 0\n))\n+ on (cluster, namespace, workload_kind, workload) group_right ()\n(0 * group by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"} or ro_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"})))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "(((\n  (max by (cluster, namespace, workload_kind, workload) (kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"cpu\", mode=\"auto-patch\"}) == 1) * 2\n  or (max by (cluster, namespace, workload_kind, workload) (kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"cpu\", mode=\"audit\"}) == 1) * 1\n  or (max by (cluster, namespace, workload_kind, workload) (kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"cpu\", mode=\"off\"}) == 1) * 0\n))\n+ on (cluster, namespace, workload_kind, workload) group_right ()\n(0 * group by (cluster, namespace, workload_kind, workload, container) (kerf_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"} or kerf_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"})))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -620,7 +620,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(((\n  (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"memory\", mode=\"auto-patch\"}) == 1) * 2\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"memory\", mode=\"audit\"}) == 1) * 1\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"memory\", mode=\"off\"}) == 1) * 0\n))\n+ on (cluster, namespace, workload_kind, workload) group_right ()\n(0 * group by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"} or ro_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"})))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "(((\n  (max by (cluster, namespace, workload_kind, workload) (kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"memory\", mode=\"auto-patch\"}) == 1) * 2\n  or (max by (cluster, namespace, workload_kind, workload) (kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"memory\", mode=\"audit\"}) == 1) * 1\n  or (max by (cluster, namespace, workload_kind, workload) (kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", resource=\"memory\", mode=\"off\"}) == 1) * 0\n))\n+ on (cluster, namespace, workload_kind, workload) group_right ()\n(0 * group by (cluster, namespace, workload_kind, workload, container) (kerf_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"} or kerf_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"})))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -633,7 +633,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(((\n  (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"Released\"}) == 1) * 5\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"RolledBack\"}) == 1) * 4\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"Blocked\"}) == 1) * 3\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"Applied\"}) == 1) * 2\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"Applying\"}) == 1) * 1\n  or (max by (cluster, namespace, workload_kind, workload) (ro_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"Pending\"}) == 1) * 0\n))\n+ on (cluster, namespace, workload_kind, workload) group_right ()\n(0 * group by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"} or ro_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"})))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "(((\n  (max by (cluster, namespace, workload_kind, workload) (kerf_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"Released\"}) == 1) * 5\n  or (max by (cluster, namespace, workload_kind, workload) (kerf_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"RolledBack\"}) == 1) * 4\n  or (max by (cluster, namespace, workload_kind, workload) (kerf_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"Blocked\"}) == 1) * 3\n  or (max by (cluster, namespace, workload_kind, workload) (kerf_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"Applied\"}) == 1) * 2\n  or (max by (cluster, namespace, workload_kind, workload) (kerf_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"Applying\"}) == 1) * 1\n  or (max by (cluster, namespace, workload_kind, workload) (kerf_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", phase=\"Pending\"}) == 1) * 0\n))\n+ on (cluster, namespace, workload_kind, workload) group_right ()\n(0 * group by (cluster, namespace, workload_kind, workload, container) (kerf_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"} or kerf_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"})))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -646,7 +646,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(max by (cluster, namespace, workload_kind, workload, container, rf) (\nlabel_replace(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace((((((((group by (cluster, namespace, workload_kind, workload, container) (ro_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"} or ro_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"}))\n* on (cluster, namespace, workload_kind, workload) group_left (f_throttled)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"throttled\"}), \"f_throttled\", \"throttled\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_oom_killed)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"oom-killed\"}), \"f_oom_killed\", \"oom-killed\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_restarting)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"restarting\"}), \"f_restarting\", \"restarting\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_hpa_coupled)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"hpa-coupled\"}), \"f_hpa_coupled\", \"hpa-coupled\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_sidecar)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"sidecar\"}), \"f_sidecar\", \"sidecar\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_short_lived)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"short-lived\"}), \"f_short_lived\", \"short-lived\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_low_confidence)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (ro_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"low-confidence\"}), \"f_low_confidence\", \"low-confidence\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (ro_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)), \"rf\", \"$1\", \"f_throttled\", \"(.*)\"), \"rf\", \"|\", \"rf\", \"f_oom_killed\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_restarting\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_hpa_coupled\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_sidecar\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_short_lived\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_low_confidence\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"none\", \"rf\", \"\")\n))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
+          "expr": "(max by (cluster, namespace, workload_kind, workload, container, rf) (\nlabel_replace(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace(label_replace(label_join(label_replace((((((((group by (cluster, namespace, workload_kind, workload, container) (kerf_recommendation_cpu_cores{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"} or kerf_recommendation_memory_bytes{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\", source=\"recommended\"}))\n* on (cluster, namespace, workload_kind, workload) group_left (f_throttled)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"throttled\"}), \"f_throttled\", \"throttled\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_oom_killed)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"oom-killed\"}), \"f_oom_killed\", \"oom-killed\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_restarting)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"restarting\"}), \"f_restarting\", \"restarting\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_hpa_coupled)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"hpa-coupled\"}), \"f_hpa_coupled\", \"hpa-coupled\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_sidecar)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"sidecar\"}), \"f_sidecar\", \"sidecar\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_short_lived)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"short-lived\"}), \"f_short_lived\", \"short-lived\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)))\n* on (cluster, namespace, workload_kind, workload) group_left (f_low_confidence)\n(label_replace(max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_risk_flag{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", flag=\"low-confidence\"}), \"f_low_confidence\", \"low-confidence\", \"\", \"\") or on (cluster, namespace, workload_kind, workload) (0 * max by (cluster, namespace, workload_kind, workload) (kerf_recommendation_confidence{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) + 1)), \"rf\", \"$1\", \"f_throttled\", \"(.*)\"), \"rf\", \"|\", \"rf\", \"f_oom_killed\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_restarting\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_hpa_coupled\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_sidecar\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_short_lived\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"|\", \"rf\", \"f_low_confidence\"), \"rf\", \"$1, $2\", \"rf\", \"(.+)[|](.+)\"), \"rf\", \"$1\", \"rf\", \"[|]?(.*?)[|]?\"), \"rf\", \"none\", \"rf\", \"\")\n))\nand on (cluster, namespace, workload_kind, workload, container) (sum by (cluster, namespace, workload_kind, workload, container) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) $direction)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -1235,7 +1235,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sort_desc(topk(10, sum by (cluster, namespace, workload_kind, workload) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"}))))",
+          "expr": "sort_desc(topk(10, sum by (cluster, namespace, workload_kind, workload) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"}))))",
           "legendFormat": "{{workload}} · {{namespace}} · {{cluster}}",
           "range": false,
           "instant": true,
@@ -1308,7 +1308,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sort(bottomk(10, sum by (cluster, namespace, workload_kind, workload) (max by (cluster, namespace, workload_kind, workload, container, resource) (ro_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) < 0))",
+          "expr": "sort(bottomk(10, sum by (cluster, namespace, workload_kind, workload) (max by (cluster, namespace, workload_kind, workload, container, resource) (kerf_recommendation_monthly_savings_usd{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", container=~\"$container\"})) < 0))",
           "legendFormat": "{{workload}} · {{namespace}} · {{cluster}}",
           "range": false,
           "instant": true,

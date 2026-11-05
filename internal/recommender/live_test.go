@@ -8,12 +8,12 @@ import (
 	"time"
 )
 
-// TestLive runs the engine against a real Prometheus/VictoriaMetrics when RO_TEST_PROM_URL and
-// RO_TEST_CLUSTER are set, e.g. RO_TEST_PROM_URL=http://localhost:18428 RO_TEST_CLUSTER=ro-spoke-1.
+// TestLive runs the engine against a real Prometheus/VictoriaMetrics when KERF_TEST_PROM_URL and
+// KERF_TEST_CLUSTER are set, e.g. KERF_TEST_PROM_URL=http://localhost:18428 KERF_TEST_CLUSTER=ro-spoke-1.
 func TestLive(t *testing.T) {
-	url, cluster := os.Getenv("RO_TEST_PROM_URL"), os.Getenv("RO_TEST_CLUSTER")
+	url, cluster := os.Getenv("KERF_TEST_PROM_URL"), os.Getenv("KERF_TEST_CLUSTER")
 	if url == "" || cluster == "" {
-		t.Skip("RO_TEST_PROM_URL / RO_TEST_CLUSTER not set")
+		t.Skip("KERF_TEST_PROM_URL / KERF_TEST_CLUSTER not set")
 	}
 	cfg := DefaultConfig()
 	e := &Engine{Loader: &Source{Q: NewPromClient(url, 2*time.Minute), Cfg: cfg}, Cfg: cfg, Strategy: PercentileStrategy{}}
@@ -23,7 +23,7 @@ func TestLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("cluster %s: %d workloads, %d recommendations, pricing %+v in %s", cluster, len(res.Inventory), len(res.Results), res.Pricing, time.Since(start))
-	if os.Getenv("RO_TEST_VERBOSE") != "" {
+	if os.Getenv("KERF_TEST_VERBOSE") != "" {
 		for _, r := range res.Results {
 			b, _ := json.MarshalIndent(r.Recommendation, "", "  ")
 			t.Logf("%s", b)

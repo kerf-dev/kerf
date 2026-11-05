@@ -1,4 +1,4 @@
-# resource-optimizer: one chart for the hub cluster and every workload cluster (WO-18d, D-028).
+# Kerf: one chart for the hub cluster and every workload cluster (WO-18d, D-028).
 # Install guide: docs/install/eks.md. Examples: deploy/examples/eks/values-{hub,spoke}.yaml.
 #
 # Each component's settings live under its name (hub, web, pricing, agent, webhook) and are the
@@ -20,7 +20,7 @@ global:
   clusterName: ""
 
   # Required unless dev: true. Registry host prefixed to every image.repository, e.g. the ECR
-  # host of `make release REGISTRY=<host>/resource-optimizer` (docs/release.md):
+  # host of `make release REGISTRY=<host>/kerf` (docs/release.md):
   #   123456789012.dkr.ecr.eu-west-1.amazonaws.com
   imageRegistry: ""
   # Pull secrets for every pod (names or {name: ...}); EKS nodes pull from ECR with their role.
@@ -37,12 +37,12 @@ dev: false
 
 # ---------------------------------------------------------------------------------------------------
 # hub: API, recommender, readiness (mode hub, all)
-# Object names: see templates/_names.tpl (release resource-optimizer -> hub, web, pricing, webhook,
-# resource-optimizer-agent; another release R -> R-hub, R-web, ...).
+# Object names: see templates/_names.tpl (release kerf -> hub, web, pricing, webhook,
+# kerf-agent; another release R -> R-hub, R-web, ...).
 hub:
   # enabled: true            # override global.mode for this component
   image:
-    repository: resource-optimizer/hub
+    repository: kerf/hub
     tag: ""                  # default: the chart appVersion (= the release VERSION)
     digest: ""               # optional sha256:... from bin/release/images.txt
   # 2 replicas, RollingUpdate, PDB minAvailable 1 and node/zone spread are the chart defaults
@@ -55,20 +55,20 @@ hub:
   #     externalSecret:
   #       enabled: true
   #       source: rds          # the RDS-managed secret (JSON username/password)
-  #       remoteRef: {key: "resource-optimizer/hub/db"}
+  #       remoteRef: {key: "kerf/hub/db"}
   # or your own Secret: database.existingSecret (key DATABASE_URL). A direct connection or a
   # session-mode pooler only: the leader lock needs a session (no RDS Proxy, no transaction pooling).
   database:
     url: ""                  # inline URL: dev: true only
 
   # Initial admin, created on an empty database. Production: from Secrets Manager
-  #   auth.bootstrapAdmin.externalSecret: {enabled: true, remoteRef: {key: resource-optimizer/hub/bootstrap-admin, property: password}}
+  #   auth.bootstrapAdmin.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/bootstrap-admin, property: password}}
   auth:
     cookieSecure: true       # false: dev: true only (plain-HTTP development)
 
   # Datasource secrets key (D-025). The chart generates it once (Helm lookup) unless it comes from
   # Secrets Manager. With Argo CD (no lookup) use the ExternalSecret, or every sync makes a new key:
-  #   onboarding.secretsKey.externalSecret: {enabled: true, remoteRef: {key: resource-optimizer/hub/datasource-key}}
+  #   onboarding.secretsKey.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/datasource-key}}
 
   # Ingress for the hub API (agents of other clusters, pricing over HTTPS). AWS Load Balancer
   # Controller, internal ALB (D-028):
@@ -93,14 +93,14 @@ hub:
 # web: the UI (nginx, non-root on 8080) (mode hub, all)
 web:
   image:
-    repository: resource-optimizer/web
+    repository: kerf/web
     tag: ""
     digest: ""
   hub:
     # Empty: this release's hub Service (<hub name>.<namespace>.svc.cluster.local:8080).
     upstream: ""
   # Read-only `ui` token for visitors without a session (auth.anonymousRead). Production:
-  #   token.externalSecret: {enabled: true, remoteRef: {key: resource-optimizer/hub/ui-token, property: token}}
+  #   token.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/ui-token, property: token}}
   token:
     value: ""                # inline token: dev: true only
   # Ingress for browsers (ALB, scheme of your choice):
@@ -121,7 +121,7 @@ web:
 # pricing: node prices and cost series (mode hub, all)
 pricing:
   image:
-    repository: resource-optimizer/pricing
+    repository: kerf/pricing
     tag: ""
     digest: ""
   clusterName: ""            # empty: global.clusterName
@@ -131,7 +131,7 @@ pricing:
   hub:
     # Empty: this release's hub Service. The token (role pricing) is read from Secret
     # tokenSecret.name, default <pricing name>-hub-token. Production:
-    #   tokenSecret.externalSecret: {enabled: true, remoteRef: {key: resource-optimizer/hub/pricing-token, property: token}}
+    #   tokenSecret.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/pricing-token, property: token}}
     url: ""
     tokenSecret:
       name: ""
@@ -144,7 +144,7 @@ pricing:
 # agent: one per workload cluster (mode spoke, all)
 agent:
   image:
-    repository: resource-optimizer/agent
+    repository: kerf/agent
     tag: ""
     digest: ""
   clusterName: ""            # empty: global.clusterName
@@ -154,8 +154,8 @@ agent:
     # hub Service.
     url: ""
     # The cluster's agent token (role agent), shown once by the hub's cluster wizard. Secret
-    # resource-optimizer-agent-token, key token. Production:
-    #   tokenSecret.externalSecret: {enabled: true, remoteRef: {key: resource-optimizer/clusters/<cluster>/agent-token, property: token}}
+    # kerf-agent-token, key token. Production:
+    #   tokenSecret.externalSecret: {enabled: true, remoteRef: {key: kerf/clusters/<cluster>/agent-token, property: token}}
     tokenSecret:
       create: false          # true + token: dev: true only
       token: ""
@@ -175,7 +175,7 @@ agent:
 # reach the nodes on containerPort (9443): docs/install/eks.md, security groups.
 webhook:
   image:
-    repository: resource-optimizer/webhook
+    repository: kerf/webhook
     tag: ""
     digest: ""
   clusterName: ""            # empty: global.clusterName

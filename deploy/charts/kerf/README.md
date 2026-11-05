@@ -1,4 +1,4 @@
-# resource-optimizer (umbrella chart)
+# Kerf (umbrella chart)
 
 One chart for every cluster (WO-18d, D-028). `global.mode` picks what a release installs:
 
@@ -13,8 +13,8 @@ One chart for every cluster (WO-18d, D-028). `global.mode` picks what a release 
 **Install guide:** [docs/install/eks.md](../../../docs/install/eks.md). **Examples:** [deploy/examples/eks](../../../deploy/examples/eks).
 
 ```bash
-helm upgrade --install resource-optimizer oci://$REGISTRY/charts/resource-optimizer --version $VERSION \
-  -n resource-optimizer --create-namespace -f values-hub.yaml
+helm upgrade --install kerf oci://$REGISTRY/charts/kerf --version $VERSION \
+  -n kerf --create-namespace -f values-hub.yaml
 ```
 
 ## How it works
@@ -34,12 +34,12 @@ helm upgrade --install resource-optimizer oci://$REGISTRY/charts/resource-optimi
   - In mode `all`, `agent.hub.url` points at the hub Service too. In mode `spoke` it is required.
   - `clusterName` of agent, webhook and pricing comes from `global.clusterName`.
 - **Names** (`templates/_names.tpl`):
-  - Release `resource-optimizer` gives `hub`, `web`, `pricing`, `webhook` and `resource-optimizer-agent`.
+  - Release `kerf` gives `hub`, `web`, `pricing`, `webhook` and `kerf-agent`.
     These are the dev release names, so moving from the component charts keeps every object name.
   - Any other release `R` gives `R-hub`, `R-web`, `R-pricing`, `R-webhook` and `R-agent`.
   - `<component>.fullnameOverride` wins.
 - **Images.**
-  - The reference is `global.imageRegistry` / `resource-optimizer/<component>` : the chart version, plus `@<digest>` when `<component>.image.digest` is set.
+  - The reference is `global.imageRegistry` / `kerf/<component>` : the chart version, plus `@<digest>` when `<component>.image.digest` is set.
   - `global.imageRegistry` is required unless `dev: true`.
 - **Schema** (`values.schema.json`):
   - It requires `global.mode`, plus `global.clusterName` in `spoke` and `all`, and `agent.hub.url` in `spoke`.
@@ -63,7 +63,7 @@ values: see `deploy/charts/<component>/values.yaml` and the table in `docs/hando
 | `dev` | `false` | development: allows inline secrets, `cookieSecure: false`, an empty `imageRegistry` |
 | `<component>.enabled` | unset | `true`/`false` overrides `global.mode` for that component |
 | `<component>.fullnameOverride` | unset | name of that component's objects |
-| `<component>.image.repository` | `resource-optimizer/<component>` | image repository under `global.imageRegistry` |
+| `<component>.image.repository` | `kerf/<component>` | image repository under `global.imageRegistry` |
 | `<component>.image.tag` | `""` | default: the chart's `appVersion` (the release version) |
 | `<component>.image.digest` | `""` | optional `sha256:…` (from `bin/release/images.txt`) |
 | `hub.database.url` | `""` | inline database URL; `dev` only (production: `database.externalSecret` or `existingSecret`) |
@@ -90,6 +90,6 @@ or VictoriaMetrics operator), `*.externalSecret(s)` (External Secrets Operator),
 
 ```bash
 make charts-lint            # includes charts-lint-umbrella: every mode x {defaults, EKS examples} through kubeconform
-helm template ro deploy/charts/resource-optimizer --set global.mode=all --set dev=true \
+helm template ro deploy/charts/kerf --set global.mode=all --set dev=true \
   --set global.clusterName=dev --set hub.database.url=postgres://u:p@db/ro
 ```

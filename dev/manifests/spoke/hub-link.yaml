@@ -27,7 +27,7 @@ metadata:
   namespace: hub
   labels:
     kubernetes.io/service-name: victoria-metrics
-    endpointslice.kubernetes.io/managed-by: dev.resource-optimizer
+    endpointslice.kubernetes.io/managed-by: dev.kerf
 addressType: IPv4
 ports:
   - name: http
@@ -54,7 +54,7 @@ metadata:
   namespace: hub
   labels:
     kubernetes.io/service-name: hub-api
-    endpointslice.kubernetes.io/managed-by: dev.resource-optimizer
+    endpointslice.kubernetes.io/managed-by: dev.kerf
 addressType: IPv4
 ports:
   - name: http

@@ -4,12 +4,12 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.23.0
-  name: rightsizingpolicies.resource-optimizer.oz.io
+  name: rightsizingpolicies.kerf.getkerf.dev
 spec:
-  group: resource-optimizer.oz.io
+  group: kerf.getkerf.dev
   names:
     categories:
-    - resource-optimizer
+    - kerf
     kind: RightsizingPolicy
     listKind: RightsizingPolicyList
     plural: rightsizingpolicies
@@ -345,8 +345,7 @@ spec:
                     description: Kinds restricts the workload kinds. Empty means all
                       supported kinds.
                     items:
-                      description: WorkloadKind is a workload kind resource-optimizer
-                        manages.
+                      description: WorkloadKind is a workload kind Kerf manages.
                       enum:
                       - Deployment
                       - StatefulSet

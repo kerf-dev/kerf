@@ -269,7 +269,7 @@ export const CATALOG: CatalogEntry[] = [
     category: 'integration',
     severity: 'warning',
     source: 'agent',
-    title: 'Argo CD ignores resource-optimizer fields',
+    title: 'Argo CD ignores Kerf fields',
   },
   {
     id: 'policy.namespace-coverage',
@@ -281,9 +281,9 @@ export const CATALOG: CatalogEntry[] = [
 ]
 export const catalogEntry = (id: string) => CATALOG.find((c) => c.id === id)
 
-const DOCS = 'https://docs.resource-optimizer.dev/readiness'
+const DOCS = 'https://docs.kerf.dev/readiness'
 export const HUB_URL = 'https://ro-hub.platform.internal'
-export const AGENT_SECRET = 'resource-optimizer-agent-token'
+export const AGENT_SECRET = 'kerf-agent-token'
 
 const RBAC_RULES: Record<AgentCapability['name'], string[]> = {
   read: [
@@ -298,7 +298,7 @@ const RBAC_RULES: Record<AgentCapability['name'], string[]> = {
   hpa: ['{"apiGroups":["autoscaling"],"resources":["horizontalpodautoscalers"],"verbs":["patch"]}'],
   evict: ['{"apiGroups":[""],"resources":["pods/eviction"],"verbs":["create"]}'],
   policies: [
-    '{"apiGroups":["resource-optimizer.oz.io"],"resources":["rightsizingpolicies"],"verbs":["create","update","delete"]}',
+    '{"apiGroups":["kerf.getkerf.dev"],"resources":["rightsizingpolicies"],"verbs":["create","update","delete"]}',
   ],
   events: ['{"apiGroups":["","events.k8s.io"],"resources":["events"],"verbs":["create"]}'],
 }
@@ -308,9 +308,9 @@ function rbacRemediation(cap: AgentCapability['name']) {
     (r) => JSON.parse(r) as { apiGroups: string[]; resources: string[]; verbs: string[] },
   )
   return (
-    "kubectl patch clusterrole resource-optimizer-agent --type=json -p '[" +
+    "kubectl patch clusterrole kerf-agent --type=json -p '[" +
     rules.map((r) => `{"op":"add","path":"/rules/-","value":${JSON.stringify(r)}}`).join(',') +
-    "]'\n# or upgrade the agent chart without readOnly: helm upgrade resource-optimizer-agent … --set readOnly=false"
+    "]'\n# or upgrade the agent chart without readOnly: helm upgrade kerf-agent … --set readOnly=false"
   )
 }
 
@@ -326,13 +326,13 @@ function remediationFor(
       return { remediation: helmSnippet(cluster, false, false), remediationType: 'command' }
     case 'agent.version':
       return {
-        remediation: `helm upgrade resource-optimizer-agent oci://ghcr.io/tomer1983/resource-optimizer/charts/agent --version 0.4.2 -n resource-optimizer --reuse-values`,
+        remediation: `helm upgrade kerf-agent oci://ghcr.io/kerf-dev/kerf/charts/agent --version 0.4.2 -n kerf --reuse-values`,
         remediationType: 'command',
       }
     case 'agent.crds':
       return {
         remediation:
-          'kubectl apply --server-side -f https://github.com/tomer1983/resource-optimizer/releases/download/v0.4.2/crds.yaml',
+          'kubectl apply --server-side -f https://github.com/kerf-dev/kerf/releases/download/v0.4.2/crds.yaml',
         remediationType: 'command',
       }
     case 'agent.clock-skew':
@@ -381,7 +381,7 @@ function remediationFor(
     case 'webhook.healthy':
       return {
         remediation:
-          'helm upgrade --install resource-optimizer-webhook oci://ghcr.io/tomer1983/resource-optimizer/charts/webhook -n resource-optimizer --set certManager.enabled=true',
+          'helm upgrade --install kerf-webhook oci://ghcr.io/kerf-dev/kerf/charts/webhook -n kerf --set certManager.enabled=true',
         remediationType: 'command',
       }
     case 'integration.argocd':
@@ -427,7 +427,7 @@ function healthy(id: string, workloads: number): CheckResult {
     case 'agent.version':
       return PASS('Agent v0.4.2, hub v0.4.2 (minimum agent v0.4.0).')
     case 'agent.crds':
-      return PASS('rightsizingpolicies.resource-optimizer.oz.io v1alpha1 installed (stored version current).')
+      return PASS('rightsizingpolicies.kerf.getkerf.dev v1alpha1 installed (stored version current).')
     case 'agent.clock-skew':
       return PASS('Skew 0.4 s.')
     case 'datasource.reachable':
@@ -473,7 +473,7 @@ function healthy(id: string, workloads: number): CheckResult {
     case 'nodes.in-place-memory':
       return PASS('No node uses swap or a static CPU/memory manager.', { nodes: '0' })
     case 'integration.argocd':
-      return PASS('argocd-cm ignores fields managed by resource-optimizer.')
+      return PASS('argocd-cm ignores fields managed by kerf.')
     case 'policy.namespace-coverage':
       return PASS('kube-system and kube-node-lease excluded by the global defaults.', {
         excluded: 'kube-system,kube-node-lease',
@@ -521,8 +521,7 @@ export function buildReadiness(
   if (profile === 'ready') {
     results['integration.argocd'] = {
       status: 'warn',
-      message:
-        'Argo CD is installed and argocd-cm has no managedFieldsManagers entry for resource-optimizer.',
+      message: 'Argo CD is installed and argocd-cm has no managedFieldsManagers entry for kerf.',
     }
     ck(
       now - 3 * 86400_000,
@@ -540,8 +539,7 @@ export function buildReadiness(
     }
     results['rbac.policies'] = {
       status: 'fail',
-      message:
-        'SelfSubjectAccessReview denied create, update, delete rightsizingpolicies.resource-optimizer.oz.io.',
+      message: 'SelfSubjectAccessReview denied create, update, delete rightsizingpolicies.kerf.getkerf.dev.',
     }
     results['metrics.node-labels'] = {
       status: 'warn',
@@ -556,7 +554,7 @@ export function buildReadiness(
     }
     results['webhook.healthy'] = {
       status: 'fail',
-      message: 'MutatingWebhookConfiguration resource-optimizer has no caBundle; new pods are not mutated.',
+      message: 'MutatingWebhookConfiguration kerf has no caBundle; new pods are not mutated.',
     }
     results['webhook.cert-manager'] = {
       status: 'warn',
@@ -735,10 +733,10 @@ export function readinessSummary(m: ReadinessModel): S['ReadinessSummary'] {
 
 export const ARGOCD_IGNORE = `resource.customizations.ignoreDifferences.all: |
   managedFieldsManagers:
-  - resource-optimizer
+  - kerf
 `
 
-const MOCK_CHART = 'oci://ghcr.io/tomer1983/resource-optimizer/charts/resource-optimizer'
+const MOCK_CHART = 'oci://ghcr.io/kerf-dev/kerf/charts/kerf'
 
 /** The values of the umbrella chart in mode spoke, as the hub renders them (WO-18f). */
 function spokeValues(cluster: string, webhook: boolean, indent = ''): string[] {
@@ -765,12 +763,12 @@ function helmSnippet(cluster: string, webhook: boolean, certManager: boolean) {
   const lines = [
     '#!/bin/sh',
     'set -eu',
-    `# resource-optimizer (chart resource-optimizer, global.mode spoke) for cluster ${cluster}.`,
-    '# RO_AGENT_TOKEN: the agent token shown once when the cluster was created (or POST /v1/admin/tokens).',
-    ': "${RO_AGENT_TOKEN:?set RO_AGENT_TOKEN to the agent token}"',
+    `# Kerf (chart kerf, global.mode spoke) for cluster ${cluster}.`,
+    '# KERF_AGENT_TOKEN: the agent token shown once when the cluster was created (or POST /v1/admin/tokens).',
+    ': "${KERF_AGENT_TOKEN:?set KERF_AGENT_TOKEN to the agent token}"',
     '',
-    'kubectl create namespace resource-optimizer --dry-run=client -o yaml | kubectl apply -f -',
-    `kubectl -n resource-optimizer create secret generic ${AGENT_SECRET} --from-literal=token="$RO_AGENT_TOKEN" --dry-run=client -o yaml | kubectl apply -f -`,
+    'kubectl create namespace kerf --dry-run=client -o yaml | kubectl apply -f -',
+    `kubectl -n kerf create secret generic ${AGENT_SECRET} --from-literal=token="$KERF_AGENT_TOKEN" --dry-run=client -o yaml | kubectl apply -f -`,
     '',
   ]
   if (webhook && certManager)
@@ -779,10 +777,10 @@ function helmSnippet(cluster: string, webhook: boolean, certManager: boolean) {
       '',
     )
   lines.push(
-    `helm upgrade --install resource-optimizer ${MOCK_CHART} --version 0.4.2 \\`,
-    "  -n resource-optimizer --create-namespace --wait --timeout 10m -f - <<'RO_VALUES'",
+    `helm upgrade --install kerf ${MOCK_CHART} --version 0.4.2 \\`,
+    "  -n kerf --create-namespace --wait --timeout 10m -f - <<'KERF_VALUES'",
     ...spokeValues(cluster, webhook),
-    'RO_VALUES',
+    'KERF_VALUES',
     '',
   )
   return lines.join('\n')
@@ -795,8 +793,8 @@ export function installSnippet(
   certManager: boolean,
 ): InstallSnippet {
   const notes = [
-    `The agent token is not in this snippet: create the Secret ${AGENT_SECRET} (key token) in namespace resource-optimizer with the token shown once when the cluster was created.`,
-    'This installs the umbrella chart resource-optimizer in mode spoke with the settings of this cluster. docs/install/eks.md step 5.3 adds the production extras.',
+    `The agent token is not in this snippet: create the Secret ${AGENT_SECRET} (key token) in namespace kerf with the token shown once when the cluster was created.`,
+    'This installs the umbrella chart kerf in mode spoke with the settings of this cluster. docs/install/eks.md step 5.3 adds the production extras.',
     "If Argo CD manages the workloads, add the argocdIgnoreDifferences entry to argocd-cm so it does not revert the agent's changes.",
   ]
   if (format === 'helm')
@@ -814,10 +812,10 @@ export function installSnippet(
       argocdIgnoreDifferences: ARGOCD_IGNORE,
       notes: [
         ...notes,
-        `helm upgrade --install resource-optimizer ${MOCK_CHART} --version 0.4.2 -n resource-optimizer --create-namespace -f values-${cluster}.yaml --wait --timeout 10m`,
+        `helm upgrade --install kerf ${MOCK_CHART} --version 0.4.2 -n kerf --create-namespace -f values-${cluster}.yaml --wait --timeout 10m`,
       ],
       content: [
-        `# resource-optimizer (chart resource-optimizer, global.mode spoke) values for cluster ${cluster}.`,
+        `# Kerf (chart kerf, global.mode spoke) values for cluster ${cluster}.`,
         `# The token is read from the Secret ${AGENT_SECRET} (key token); it is not in this file.`,
         ...spokeValues(cluster, webhook),
         '',
@@ -825,36 +823,36 @@ export function installSnippet(
     }
   return {
     format,
-    filename: `resource-optimizer-${cluster}.yaml`,
+    filename: `kerf-${cluster}.yaml`,
     argocdIgnoreDifferences: ARGOCD_IGNORE,
     notes,
     content: [
-      `# Argo CD Application for cluster ${cluster} (chart resource-optimizer, global.mode spoke).`,
+      `# Argo CD Application for cluster ${cluster} (chart kerf, global.mode spoke).`,
       `# The token is read from the Secret ${AGENT_SECRET} (key token); it is not in this file.`,
       'apiVersion: argoproj.io/v1alpha1',
       'kind: Application',
       'metadata:',
-      `  name: resource-optimizer-${cluster}`,
+      `  name: kerf-${cluster}`,
       '  namespace: argocd',
       '  labels:',
-      '    app.kubernetes.io/part-of: resource-optimizer',
+      '    app.kubernetes.io/part-of: kerf',
       'spec:',
       '  project: default',
       '  source:',
-      '    repoURL: ghcr.io/tomer1983/resource-optimizer/charts',
-      '    chart: resource-optimizer',
+      '    repoURL: ghcr.io/kerf-dev/kerf/charts',
+      '    chart: kerf',
       '    targetRevision: 0.4.2',
       '    helm:',
-      '      releaseName: resource-optimizer',
+      '      releaseName: kerf',
       '      valuesObject:',
       ...spokeValues(cluster, webhook, '        '),
       '  destination:',
       '    server: https://kubernetes.default.svc',
-      '    namespace: resource-optimizer',
+      '    namespace: kerf',
       '  ignoreDifferences:',
       "    - group: '*'",
       "      kind: '*'",
-      '      managedFieldsManagers: [resource-optimizer]',
+      '      managedFieldsManagers: [kerf]',
       ...(webhook
         ? [
             '    - group: admissionregistration.k8s.io',

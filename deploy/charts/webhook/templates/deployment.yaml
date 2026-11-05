@@ -20,9 +20,9 @@ spec:
     metadata:
       labels:
         {{- include "webhook.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/part-of: resource-optimizer
+        app.kubernetes.io/part-of: kerf
         # Never mutate our own pods.
-        resource-optimizer.oz.io/skip-webhook: "true"
+        kerf.getkerf.dev/skip-webhook: "true"
         {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{ end }}
       {{- with .Values.podAnnotations }}
       annotations: {{- toYaml . | nindent 8 }}
@@ -40,7 +40,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --port={{ .Values.containerPort }}
-            - --cert-dir=/etc/resource-optimizer/webhook/certs
+            - --cert-dir=/etc/kerf/webhook/certs
             - --metrics-bind-address=:8080
             - --health-probe-bind-address=:8081
             - --log-level={{ .Values.logLevel }}
@@ -72,7 +72,7 @@ spec:
           securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
             - name: certs
-              mountPath: /etc/resource-optimizer/webhook/certs
+              mountPath: /etc/kerf/webhook/certs
               readOnly: true
             {{- with .Values.extraVolumeMounts }}{{ toYaml . | nindent 12 }}{{ end }}
       volumes:

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
 )
 
 // Node is a node discovered from kube-state-metrics series in VictoriaMetrics.

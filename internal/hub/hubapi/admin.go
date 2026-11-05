@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // Admin area (WO-19, D-022/D-023/D-024): types of the admin, auth and config endpoints.
@@ -48,7 +48,7 @@ func TokenUserRole(tokenRole string) string {
 
 // Session and CSRF (D-023).
 const (
-	SessionCookie = "ro_session"
+	SessionCookie = "kerf_session"
 	CSRFHeader    = "X-CSRF-Token"
 )
 

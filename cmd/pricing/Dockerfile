@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/pricing /pricing
 # Default price file for the static provider; the chart can mount another one over it.
-COPY dev/prices.yaml /etc/resource-optimizer/prices.yaml
+COPY dev/prices.yaml /etc/kerf/prices.yaml
 USER 65532:65532
 EXPOSE 9090
 ENTRYPOINT ["/pricing"]

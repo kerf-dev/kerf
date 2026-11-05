@@ -1,4 +1,4 @@
-# Releasing resource-optimizer
+# Releasing kerf
 
 Official releases are built by GitHub Actions and published to GitHub Container Registry
 ([Releasing on GitHub](#releasing-on-github)). The rest of this page is the same build run by hand with
@@ -6,12 +6,12 @@ Official releases are built by GitHub Actions and published to GitHub Container 
 
 A release publishes five multi-arch container images (`linux/amd64` and `linux/arm64`, D-028) and the
 Helm charts as OCI artifacts. Both go to one registry prefix, for example
-`123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer`. The targets are in `make/release.mk` (WO-18c).
+`123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf`. The targets are in `make/release.mk` (WO-18c).
 
 | Artifact | Reference |
 |---|---|
 | Images | `$REGISTRY/{hub,pricing,agent,webhook,web}:$VERSION` |
-| Charts | `oci://$REGISTRY/charts/resource-optimizer` (the one chart to install, `docs/install/eks.md`) and the component charts `oci://$REGISTRY/charts/{hub,pricing,agent,webhook,web}`, version `$VERSION` |
+| Charts | `oci://$REGISTRY/charts/kerf` (the one chart to install, `docs/install/eks.md`) and the component charts `oci://$REGISTRY/charts/{hub,pricing,agent,webhook,web}`, version `$VERSION` |
 
 Every image is an OCI index with one manifest per platform. Each index also holds an SBOM (SPDX) and
 a SLSA provenance attestation (`mode=max`). Charts are packaged with `version` and `appVersion` set to `$VERSION`.
@@ -25,10 +25,10 @@ a tag `vX.Y.Z` or `vX.Y.Z-rc.N` is pushed (WO-26).
 | Step | What happens |
 |---|---|
 | Checks | `CHANGELOG.md` has a `## [X.Y.Z]` section (final versions only); the whole `ci` workflow passes on the tagged commit; the commit is on `main` |
-| Build and push | `make release REGISTRY=ghcr.io/<owner>/resource-optimizer VERSION=X.Y.Z RELEASE_CHART_DEFAULT_REGISTRY=1`: the five images for both platforms with SBOM and provenance, and the six charts |
+| Build and push | `make release REGISTRY=ghcr.io/<owner>/kerf VERSION=X.Y.Z RELEASE_CHART_DEFAULT_REGISTRY=1`: the five images for both platforms with SBOM and provenance, and the six charts |
 | Chart defaults | `RELEASE_CHART_DEFAULT_REGISTRY=1` makes each packaged chart default to this release's GHCR images, so `helm install` needs no registry setting. Explicit values still win (the EKS guide's ECR values) |
 | Sign | `cosign sign` (keyless, the workflow's GitHub OIDC identity) for every image and chart digest |
-| GitHub Release | Title `resource-optimizer X.Y.Z`. Notes (`tools/release/notes.sh`): the CHANGELOG section, install steps, every artifact with its digest, the `cosign verify` command, then GitHub's list of merged pull requests by label (`.github/release.yml`). Attached: the chart packages, `images.txt`, `charts.txt`, `SHA256SUMS`. A `-rc.N` version is a pre-release and never "latest" |
+| GitHub Release | Title `kerf X.Y.Z`. Notes (`tools/release/notes.sh`): the CHANGELOG section, install steps, every artifact with its digest, the `cosign verify` command, then GitHub's list of merged pull requests by label (`.github/release.yml`). Attached: the chart packages, `images.txt`, `charts.txt`, `SHA256SUMS`. A `-rc.N` version is a pre-release and never "latest" |
 
 To release:
 
@@ -36,7 +36,7 @@ To release:
 # 1. In CHANGELOG.md, rename "## [Unreleased]" to "## [0.2.0] - 2026-11-20" and add a new empty Unreleased section.
 git commit -am "Release 0.2.0" && git push origin main
 # 2. Tag the commit on main and push the tag.
-git tag -a v0.2.0 -m "resource-optimizer 0.2.0" && git push origin v0.2.0
+git tag -a v0.2.0 -m "kerf 0.2.0" && git push origin v0.2.0
 ```
 
 For a release candidate, skip step 1 (its notes use the `[0.2.0]` or `[Unreleased]` section) and tag `v0.2.0-rc.1`.
@@ -44,8 +44,8 @@ Preview the notes locally with `tools/release/notes.sh 0.2.0` (after a `make rel
 
 GHCR facts to know:
 
-- Images: `ghcr.io/<owner>/resource-optimizer/{hub,pricing,agent,webhook,web}:X.Y.Z`. Charts:
-  `oci://ghcr.io/<owner>/resource-optimizer/charts/{resource-optimizer,hub,pricing,agent,webhook,web}`.
+- Images: `ghcr.io/<owner>/kerf/{hub,pricing,agent,webhook,web}:X.Y.Z`. Charts:
+  `oci://ghcr.io/<owner>/kerf/charts/{kerf,hub,pricing,agent,webhook,web}`.
 - A new package is created private. Once the repository is public, set each of the 11 packages to public
   once (package settings, "Change visibility"); later releases keep it.
 - GHCR tags can be overwritten, unlike the ECR setup below. The workflow never re-releases a tag; to fix a
@@ -66,12 +66,12 @@ GHCR facts to know:
 export AWS_REGION=eu-west-1
 export ACCOUNT=123456789012
 export ECR=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
-export REGISTRY=$ECR/resource-optimizer
+export REGISTRY=$ECR/kerf
 
 for repo in hub pricing agent webhook web \
-            charts/hub charts/pricing charts/agent charts/webhook charts/web charts/resource-optimizer; do
+            charts/hub charts/pricing charts/agent charts/webhook charts/web charts/kerf; do
   aws ecr create-repository --region "$AWS_REGION" \
-    --repository-name "resource-optimizer/$repo" \
+    --repository-name "kerf/$repo" \
     --image-tag-mutability IMMUTABLE \
     --image-scanning-configuration scanOnPush=true \
     --encryption-configuration encryptionType=KMS
@@ -79,7 +79,7 @@ done
 ```
 
 ECR does not create repositories on push, so every image and chart needs its own repository:
-`resource-optimizer/<image>` and `resource-optimizer/charts/<chart>`. The `charts/resource-optimizer`
+`kerf/<image>` and `kerf/charts/<chart>`. The `charts/kerf`
 repository holds the one chart you install (`docs/install/eks.md`).
 
 ### Immutable tags
@@ -117,7 +117,7 @@ cat > /tmp/ro-lifecycle.json <<'EOF'
 EOF
 for repo in hub pricing agent webhook web; do
   aws ecr start-lifecycle-policy-preview --region "$AWS_REGION" \
-    --repository-name "resource-optimizer/$repo" --lifecycle-policy-text file:///tmp/ro-lifecycle.json
+    --repository-name "kerf/$repo" --lifecycle-policy-text file:///tmp/ro-lifecycle.json
 done
 ```
 
@@ -156,7 +156,7 @@ make release REGISTRY=$REGISTRY VERSION=0.1.0   # images + charts
 | `VERSION` | `git describe` of the nearest `v*` tag without the `v`, else `0.0.0-g<sha>` | semver; `+build` metadata is not allowed (not a valid image tag) |
 | `PLATFORMS` | `linux/amd64,linux/arm64` | buildx platform list |
 | `RELEASE_IMAGES` | `hub pricing agent webhook web` | images to build |
-| `RELEASE_CHARTS` | `resource-optimizer hub pricing agent webhook web` | charts under `deploy/charts/` |
+| `RELEASE_CHARTS` | `kerf hub pricing agent webhook web` | charts under `deploy/charts/` |
 | `RELEASE_BUILDER` | `ro-release` | buildx builder, created if missing |
 | `RELEASE_INSECURE_REGISTRIES` | `localhost:5005 127.0.0.1:5005` | registries the builder reaches over plain HTTP |
 
@@ -172,7 +172,7 @@ The targets:
 Example `bin/release/images.txt`:
 
 ```
-123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/hub 0.1.0 sha256:…
+123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf/hub 0.1.0 sha256:…
 ```
 
 ### The buildx builder
@@ -200,7 +200,7 @@ docker buildx imagetools inspect $REGISTRY/hub:$V --format '{{ json .Provenance.
 helm show chart oci://$REGISTRY/charts/agent --version $V
 docker run --rm --platform linux/amd64 $REGISTRY/hub:$V --help      # each platform runs
 docker run --rm --platform linux/arm64 $REGISTRY/hub:$V --help      # (emulated on the other arch)
-aws ecr describe-image-scan-findings --repository-name resource-optimizer/hub --image-id imageTag=$V
+aws ecr describe-image-scan-findings --repository-name kerf/hub --image-id imageTag=$V
 ```
 
 The digest in `imagetools inspect` (`Digest:`) must match the one in `bin/release/images.txt`.

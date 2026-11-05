@@ -4,12 +4,12 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.23.0
-  name: rightsizingrecommendations.resource-optimizer.oz.io
+  name: rightsizingrecommendations.kerf.getkerf.dev
 spec:
-  group: resource-optimizer.oz.io
+  group: kerf.getkerf.dev
   names:
     categories:
-    - resource-optimizer
+    - kerf
     kind: RightsizingRecommendation
     listKind: RightsizingRecommendationList
     plural: rightsizingrecommendations

@@ -59,8 +59,8 @@ spec:
               cp -L /seed/* /tmp/work/
               cd /tmp/work
               git init -q -b main
-              git -c user.name=dev -c user.email=dev@resource-optimizer.local add -A
-              git -c user.name=dev -c user.email=dev@resource-optimizer.local commit -q -m "seed from dev/workloads"
+              git -c user.name=dev -c user.email=dev@kerf.local add -A
+              git -c user.name=dev -c user.email=dev@kerf.local commit -q -m "seed from dev/workloads"
               git clone -q --bare /tmp/work /srv/git/workloads.git
               git -C /srv/git/workloads.git log --oneline
           resources:

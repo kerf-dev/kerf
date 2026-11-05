@@ -1,5 +1,5 @@
 # Postgres for hub state and audit log (D-009), ro-hub namespace `postgres`.
-# In-cluster: postgres.postgres.svc:5432   From the host: localhost:15432   (dev credentials: ro / ro)
+# In-cluster: postgres.postgres.svc:5432   From the host: localhost:15432   (dev credentials: kerf / kerf)
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -12,11 +12,11 @@ metadata:
   namespace: postgres
 type: Opaque
 stringData:
-  POSTGRES_USER: ro
-  POSTGRES_PASSWORD: ro # dev only
-  POSTGRES_DB: resource_optimizer
+  POSTGRES_USER: kerf
+  POSTGRES_PASSWORD: kerf # dev only
+  POSTGRES_DB: kerf
   # convenience for components: DATABASE_URL
-  DATABASE_URL: postgres://ro:ro@postgres.postgres.svc:5432/resource_optimizer?sslmode=disable
+  DATABASE_URL: postgres://kerf:kerf@postgres.postgres.svc:5432/kerf?sslmode=disable
 ---
 apiVersion: v1
 kind: Service
@@ -61,7 +61,7 @@ spec:
               containerPort: 5432
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "ro", "-d", "resource_optimizer"]
+              command: ["pg_isready", "-U", "kerf", "-d", "kerf"]
             periodSeconds: 5
           resources:
             requests:

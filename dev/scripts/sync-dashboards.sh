@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pack every *.json under dashboards/ into ConfigMap monitoring/grafana-dashboards on ro-hub.
-# Grafana file-provisions it into folder "resource-optimizer" (the ConfigMap volume refreshes within ~1 min).
+# Grafana file-provisions it into folder "kerf" (the ConfigMap volume refreshes within ~1 min).
 # Nested paths are flattened: dashboards/fleet/overview.json -> key fleet_overview.json.
 . "$(dirname "$0")/lib.sh"
 export LOG_PREFIX=dashboards

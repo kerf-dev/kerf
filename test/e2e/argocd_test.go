@@ -34,8 +34,8 @@ func gitWrite(t *testing.T, ns string, files map[string][]byte, msg string) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = work
-		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=e2e", "GIT_AUTHOR_EMAIL=e2e@resource-optimizer.local",
-			"GIT_COMMITTER_NAME=e2e", "GIT_COMMITTER_EMAIL=e2e@resource-optimizer.local")
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=e2e", "GIT_AUTHOR_EMAIL=e2e@kerf.local",
+			"GIT_COMMITTER_NAME=e2e", "GIT_COMMITTER_EMAIL=e2e@kerf.local")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
@@ -56,7 +56,7 @@ func gitWrite(t *testing.T, ns string, files map[string][]byte, msg string) {
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git add: %v\n%s", err, out)
 		}
-		commit := exec.Command("git", "-c", "user.name=e2e", "-c", "user.email=e2e@resource-optimizer.local", "commit", "-q", "-m", msg)
+		commit := exec.Command("git", "-c", "user.name=e2e", "-c", "user.email=e2e@kerf.local", "commit", "-q", "-m", msg)
 		commit.Dir = filepath.Join(work, "repo")
 		if out, err := commit.CombinedOutput(); err != nil {
 			if strings.Contains(string(out), "nothing to commit") {
@@ -81,7 +81,7 @@ func gitWrite(t *testing.T, ns string, files map[string][]byte, msg string) {
 var applicationGVK = schema.GroupVersionKind{Group: "argoproj.io", Version: "v1alpha1", Kind: "Application"}
 
 // argoApp creates an Application syncing e2e/<ns>/ into ns with the D-006 settings (same as the
-// main `workloads` Application: ignore fields of field manager resource-optimizer, respect the
+// main `workloads` Application: ignore fields of field manager kerf, respect the
 // ignored differences on sync, automated sync with self-heal). Deleted (cascading) at the end.
 func argoApp(t *testing.T, cl cluster, ns string) string {
 	t.Helper()
@@ -94,7 +94,7 @@ func argoApp(t *testing.T, cl cluster, ns string) string {
 	app.SetFinalizers([]string{"resources-finalizer.argocd.argoproj.io"})
 	ignore := []any{}
 	for _, k := range [][2]string{{"apps", "Deployment"}, {"apps", "StatefulSet"}, {"apps", "DaemonSet"}, {"batch", "CronJob"}} {
-		ignore = append(ignore, map[string]any{"group": k[0], "kind": k[1], "managedFieldsManagers": []any{"resource-optimizer"}})
+		ignore = append(ignore, map[string]any{"group": k[0], "kind": k[1], "managedFieldsManagers": []any{"kerf"}})
 	}
 	app.Object["spec"] = map[string]any{
 		"project":     "default",

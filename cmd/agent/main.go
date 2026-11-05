@@ -1,4 +1,4 @@
-// Command agent is the per-cluster resource-optimizer agent (WO-06). It pulls recommendations
+// Command agent is the per-cluster Kerf agent (WO-06). It pulls recommendations
 // from the hub, resolves the effective policy of every workload, enforces the guardrails and
 // applies changes in place (pods/resize) or by rollout (server-side apply on the pod template).
 //
@@ -33,15 +33,15 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent"
-	"github.com/tomer1983/resource-optimizer/internal/agent/configsync"
-	"github.com/tomer1983/resource-optimizer/internal/agent/controller"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubstub"
-	"github.com/tomer1983/resource-optimizer/internal/agent/selfcheck"
-	"github.com/tomer1983/resource-optimizer/internal/agent/windows"
-	"github.com/tomer1983/resource-optimizer/internal/health"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent"
+	"github.com/kerf-dev/kerf/internal/agent/configsync"
+	"github.com/kerf-dev/kerf/internal/agent/controller"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/internal/agent/hubstub"
+	"github.com/kerf-dev/kerf/internal/agent/selfcheck"
+	"github.com/kerf-dev/kerf/internal/agent/windows"
+	"github.com/kerf-dev/kerf/internal/health"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
@@ -150,7 +150,7 @@ func run(args []string) error {
 	var (
 		cluster        = fs.String("cluster-name", os.Getenv("CLUSTER_NAME"), "cluster name, as known to the hub (required)")
 		hubURL         = fs.String("hub-url", "http://hub-api.hub.svc:8080", "hub base URL")
-		tokenFile      = fs.String("hub-token-file", "/var/run/secrets/resource-optimizer/hub/token", "file with the hub bearer token (re-read on every request)")
+		tokenFile      = fs.String("hub-token-file", "/var/run/secrets/kerf/hub/token", "file with the hub bearer token (re-read on every request)")
 		defaultsFile   = fs.String("cluster-defaults", "", "YAML file with the cluster default policy (a RightsizingPolicy spec)")
 		freezeFile     = fs.String("freeze-file", "", "YAML file with the cluster-wide freeze {now: bool, windows: [TimeWindow]} (WO-10)")
 		pullInterval   = fs.Duration("pull-interval", time.Minute, "how often recommendations are pulled")
@@ -187,7 +187,7 @@ func run(args []string) error {
 		docsBaseURL       = fs.String("docs-base-url", "", "base of the readiness docs links")
 
 		configSync    = fs.Bool("config-sync", true, "pull the hub config: hub-managed policies, pause and approve-once (D-022, WO-21)")
-		configStateCM = fs.String("config-state-configmap", "resource-optimizer-agent-config-state", "ConfigMap in $POD_NAMESPACE that persists the last hub config; empty disables persistence")
+		configStateCM = fs.String("config-state-configmap", "kerf-agent-config-state", "ConfigMap in $POD_NAMESPACE that persists the last hub config; empty disables persistence")
 	)
 	fs.Var(&metricsExtra, "metrics-extra-matcher", "extra PromQL label matcher for --metrics-url, e.g. env=\"prod\"; repeatable")
 	fs.Var(&argocdNamespaces, "argocd-namespace", "namespace searched for argocd-cm (default argocd); repeatable")
@@ -239,7 +239,7 @@ func run(args []string) error {
 		Metrics:                 metricsserver.Options{BindAddress: *metricsAddr},
 		HealthProbeBindAddress:  *probeAddr,
 		LeaderElection:          *leaderElect,
-		LeaderElectionID:        "resource-optimizer-agent",
+		LeaderElectionID:        "kerf-agent",
 		LeaderElectionNamespace: os.Getenv("POD_NAMESPACE"),
 	})
 	if err != nil {
@@ -263,7 +263,7 @@ func run(args []string) error {
 		Reader:   mgr.GetAPIReader(),
 		Store:    store,
 		Reporter: rep,
-		Recorder: mgr.GetEventRecorder("resource-optimizer-agent"),
+		Recorder: mgr.GetEventRecorder("kerf-agent"),
 		Log:      log.With("component", "reconciler"),
 		Cfg: controller.Config{
 			ClusterName:              *cluster,

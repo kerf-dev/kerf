@@ -28,9 +28,9 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 
-	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 const (
@@ -617,8 +617,8 @@ func TestReadiness(t *testing.T) {
 	}
 }
 
-// agentClusterRole is the spoke agent's ClusterRole (Helm release resource-optimizer-agent).
-func agentClusterRole() string { return getenv("E2E_AGENT_CLUSTERROLE", "resource-optimizer-agent") }
+// agentClusterRole is the spoke agent's ClusterRole (Helm release kerf-agent).
+func agentClusterRole() string { return getenv("E2E_AGENT_CLUSTERROLE", "kerf-agent") }
 
 func hasResizeRule(cr *rbacv1.ClusterRole) int {
 	for i, r := range cr.Rules {
@@ -730,10 +730,10 @@ func TestReadinessRBAC(t *testing.T) {
 
 // Scenario 11 (D-025): kube-state-metrics scaled to 0 on ro-spoke-2 → metrics.freshness fails
 // (blocking) and the banner condition (blocking > 0) holds. Disruptive for every track using
-// spoke-2's metrics: only with RO_E2E_DISRUPTIVE=1 (and the user's OK).
+// spoke-2's metrics: only with KERF_E2E_DISRUPTIVE=1 (and the user's OK).
 func TestReadinessKSMDown(t *testing.T) {
-	if os.Getenv("RO_E2E_DISRUPTIVE") != "1" {
-		t.Skip("scales kube-state-metrics on ro-spoke-2 to 0: set RO_E2E_DISRUPTIVE=1 (needs the user's OK)")
+	if os.Getenv("KERF_E2E_DISRUPTIVE") != "1" {
+		t.Skip("scales kube-state-metrics on ro-spoke-2 to 0: set KERF_E2E_DISRUPTIVE=1 (needs the user's OK)")
 	}
 	t.Parallel()
 	cl := env.Spoke2

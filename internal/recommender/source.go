@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // RawContainer holds the raw series of one container.
@@ -313,8 +313,8 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	hpaNum("hpaMax", q.HPAReplicaBounds("max", cfg.InventoryLookback), hpaMax)
 	hpaNum("hpaPeak", q.HPAPeakReplicas(window), hpaPeak)
 	var cpuRate, memRate, nodes float64
-	cpuAvg, cpuCount := q.Pricing("ro_cpu_core_hourly_cost_usd", time.Hour)
-	memAvg, _ := q.Pricing("ro_memory_gib_hourly_cost_usd", time.Hour)
+	cpuAvg, cpuCount := q.Pricing("kerf_cpu_core_hourly_cost_usd", time.Hour)
+	memAvg, _ := q.Pricing("kerf_memory_gib_hourly_cost_usd", time.Hour)
 	// Pricing series are in the hub's own store.
 	instantOn(s.Q, "pricingCPU", cpuAvg, func(r VectorSample) { cpuRate = r.Sample.V })
 	instantOn(s.Q, "pricingMemory", memAvg, func(r VectorSample) { memRate = r.Sample.V })
@@ -356,8 +356,8 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 // cluster has no pricing series then.
 func (s *Source) PricingAt(ctx context.Context, cluster string, t time.Time) (Pricing, bool, error) {
 	q := Queries{Cluster: cluster, RateWindow: s.Cfg.RateWindow}
-	cpuAvg, cpuCount := q.Pricing("ro_cpu_core_hourly_cost_usd", time.Hour)
-	memAvg, _ := q.Pricing("ro_memory_gib_hourly_cost_usd", time.Hour)
+	cpuAvg, cpuCount := q.Pricing("kerf_cpu_core_hourly_cost_usd", time.Hour)
+	memAvg, _ := q.Pricing("kerf_memory_gib_hourly_cost_usd", time.Hour)
 	var v [3]float64
 	for i, query := range []string{cpuAvg, memAvg, cpuCount} {
 		res, err := s.Q.Instant(ctx, query, t)

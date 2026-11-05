@@ -28,14 +28,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/apply"
-	"github.com/tomer1983/resource-optimizer/internal/agent/guardrails"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
-	"github.com/tomer1983/resource-optimizer/internal/agent/policy"
-	"github.com/tomer1983/resource-optimizer/internal/agent/windows"
-	"github.com/tomer1983/resource-optimizer/internal/agent/workload"
-	"github.com/tomer1983/resource-optimizer/internal/health"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent/apply"
+	"github.com/kerf-dev/kerf/internal/agent/guardrails"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/internal/agent/policy"
+	"github.com/kerf-dev/kerf/internal/agent/windows"
+	"github.com/kerf-dev/kerf/internal/agent/workload"
+	"github.com/kerf-dev/kerf/internal/health"
 )
 
 // Condition reasons used only on RightsizingRecommendation conditions for states that are not
@@ -1175,7 +1175,7 @@ func (w *run) upsertSpec(targets []v1alpha1.ContainerRecommendation, strategy v1
 	}
 	rsr := &v1alpha1.RightsizingRecommendation{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: w.k.Namespace,
-			Labels: map[string]string{"app.kubernetes.io/managed-by": "resource-optimizer-agent"}},
+			Labels: map[string]string{"app.kubernetes.io/managed-by": "kerf-agent"}},
 		Spec: spec,
 	}
 	if err := controllerutil.SetOwnerReference(w.obj, rsr, r.Client.Scheme()); err != nil {
@@ -1675,7 +1675,7 @@ func approvedLive(st v1alpha1.RightsizingRecommendationStatus) bool {
 }
 
 // approvedHold returns the owned template resources the agent keeps after an approve-once apply
-// although they are in audit (D-027): Argo CD's ignoreDifferences on the resource-optimizer field
+// although they are in audit (D-027): Argo CD's ignoreDifferences on the Kerf field
 // manager then keeps self-heal from reverting the approved values. The hold ends for a resource
 // set to off, and for all of them when the health watch rolled the change back or a newer
 // recommendation recommends different values (a new recommendation id with the same values

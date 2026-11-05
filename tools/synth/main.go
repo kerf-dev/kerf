@@ -1,4 +1,4 @@
-// Command synth generates synthetic Kubernetes usage history for resource-optimizer.
+// Command synth generates synthetic Kubernetes usage history for Kerf.
 //
 //	synth backfill --scenario tools/synth/scenarios/fleet-default.yaml --vm-url http://localhost:18428 --replace
 //	synth fixtures --scenario tools/synth/scenarios/fleet-small.yaml --out testdata/series
@@ -22,7 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/tools/synth/synth"
+	"github.com/kerf-dev/kerf/tools/synth/synth"
 )
 
 func main() {

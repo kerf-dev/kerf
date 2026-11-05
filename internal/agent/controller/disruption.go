@@ -15,12 +15,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/apply"
-	"github.com/tomer1983/resource-optimizer/internal/agent/guardrails"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
-	"github.com/tomer1983/resource-optimizer/internal/agent/policy"
-	"github.com/tomer1983/resource-optimizer/internal/agent/workload"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent/apply"
+	"github.com/kerf-dev/kerf/internal/agent/guardrails"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/internal/agent/policy"
+	"github.com/kerf-dev/kerf/internal/agent/workload"
 )
 
 // Defaults of the OnDelete roll.

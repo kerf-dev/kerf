@@ -25,7 +25,7 @@ type NodeCost struct {
 	Weight   float64
 }
 
-// Reasons a node is not priced (label `reason` of ro_pricing_nodes).
+// Reasons a node is not priced (label `reason` of kerf_pricing_nodes).
 const (
 	ReasonNoInstanceType      = "no-instance-type"
 	ReasonNoRegion            = "no-region"
@@ -38,15 +38,15 @@ const (
 var costLabels = []string{"cluster", "node", "instance_type", "capacity_type", "region", "zone", "provider"}
 
 var (
-	nodeCostDesc = prometheus.NewDesc("ro_node_hourly_cost_usd",
+	nodeCostDesc = prometheus.NewDesc("kerf_node_hourly_cost_usd",
 		"Hourly price of the whole node in USD.", costLabels, nil)
-	cpuCostDesc = prometheus.NewDesc("ro_cpu_core_hourly_cost_usd",
+	cpuCostDesc = prometheus.NewDesc("kerf_cpu_core_hourly_cost_usd",
 		"CPU share of the node price per allocatable vCPU, in USD per hour.", costLabels, nil)
-	memCostDesc = prometheus.NewDesc("ro_memory_gib_hourly_cost_usd",
+	memCostDesc = prometheus.NewDesc("kerf_memory_gib_hourly_cost_usd",
 		"Memory share of the node price per allocatable GiB, in USD per hour.", costLabels, nil)
 )
 
-// Exporter periodically prices every discovered node and exports the ro_*_hourly_cost_usd series.
+// Exporter periodically prices every discovered node and exports the kerf_*_hourly_cost_usd series.
 type Exporter struct {
 	Nodes    NodeLister
 	Provider Provider
@@ -71,22 +71,22 @@ func NewExporter(nodes NodeLister, p Provider, s *Splitter, log *slog.Logger) *E
 	return &Exporter{
 		Nodes: nodes, Provider: p, Splitter: s, Log: log,
 		refreshes: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "ro_pricing_refreshes_total", Help: "Pricing refreshes by result (success|error).",
+			Name: "kerf_pricing_refreshes_total", Help: "Pricing refreshes by result (success|error).",
 		}, []string{"result"}),
 		lastSuccess: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "ro_pricing_last_success_timestamp_seconds", Help: "Unix time of the last successful refresh.",
+			Name: "kerf_pricing_last_success_timestamp_seconds", Help: "Unix time of the last successful refresh.",
 		}),
 		duration: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "ro_pricing_refresh_duration_seconds", Help: "Duration of the last refresh.",
+			Name: "kerf_pricing_refresh_duration_seconds", Help: "Duration of the last refresh.",
 		}),
 		nodeCount: prometheus.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "ro_pricing_nodes", Help: "Nodes seen in the last refresh by status (priced|skipped) and skip reason.",
+			Name: "kerf_pricing_nodes", Help: "Nodes seen in the last refresh by status (priced|skipped) and skip reason.",
 		}, []string{"status", "reason"}),
 	}
 }
 
 // Register registers the cost series on costReg (whose series carry their own `cluster` label) and the
-// operational ro_pricing_* series on opsReg (which should add cluster=<the hub's name>).
+// operational kerf_pricing_* series on opsReg (which should add cluster=<the hub's name>).
 func (e *Exporter) Register(costReg, opsReg prometheus.Registerer) error {
 	if err := costReg.Register(e); err != nil {
 		return err

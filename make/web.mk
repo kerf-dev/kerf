@@ -2,16 +2,16 @@
 # Included by the root Makefile. Node 22+ must be on PATH (see CLAUDE.md "Toolchain").
 
 WEB_DIR        := web
-WEB_IMAGE      ?= localhost:5005/resource-optimizer/web
+WEB_IMAGE      ?= localhost:5005/kerf/web
 WEB_TAG        ?= dev-$(shell date +%Y%m%d-%H%M%S)
 # Expand once: a recursive $(shell date) would give docker push and helm different tags.
 WEB_TAG        := $(WEB_TAG)
 WEB_CONTEXT    ?= k3d-ro-hub
-WEB_NAMESPACE  ?= resource-optimizer
+WEB_NAMESPACE  ?= kerf
 # Real hub for `web-dev-live` (WO-04 NodePort 30080) and its development `ui` token
 # (deploy/charts/hub/values-dev.yaml). The Vite proxy adds the token; the browser never sees it.
-RO_HUB_URL     ?= http://localhost:18080
-RO_HUB_TOKEN   ?= ro-dev-ui-97446cd3a095035d6290abc5
+KERF_HUB_URL     ?= http://localhost:18080
+KERF_HUB_TOKEN   ?= ro-dev-ui-97446cd3a095035d6290abc5
 
 .PHONY: web-install web-dev web-dev-live web-lint web-typecheck web-test web-e2e web-build web-check-api \
         web-verify docker-web push-web deploy-web web-screenshots
@@ -25,8 +25,8 @@ web-install: $(WEB_DIR)/node_modules ## Install web UI dependencies (npm ci).
 web-dev: $(WEB_DIR)/node_modules ## Run the web UI on :5173 against the MSW mock API (no hub needed).
 	cd $(WEB_DIR) && npm run dev
 
-web-dev-live: $(WEB_DIR)/node_modules ## Run the web UI on :5173, proxying /v1 to a real hub (RO_HUB_URL, RO_HUB_TOKEN).
-	cd $(WEB_DIR) && RO_HUB_URL=$(RO_HUB_URL) RO_HUB_TOKEN=$(RO_HUB_TOKEN) npm run dev:live
+web-dev-live: $(WEB_DIR)/node_modules ## Run the web UI on :5173, proxying /v1 to a real hub (KERF_HUB_URL, KERF_HUB_TOKEN).
+	cd $(WEB_DIR) && KERF_HUB_URL=$(KERF_HUB_URL) KERF_HUB_TOKEN=$(KERF_HUB_TOKEN) npm run dev:live
 
 web-lint: $(WEB_DIR)/node_modules ## ESLint + Prettier check for the web UI.
 	cd $(WEB_DIR) && npm run lint && npm run format:check
@@ -63,6 +63,6 @@ push-web: docker-web ## Build and push the web image to the k3d registry.
 deploy-web: push-web ## Build, push and helm upgrade --install the web UI into ro-hub (http://localhost:19090).
 	helm upgrade --install web deploy/charts/web --kube-context $(WEB_CONTEXT) -n $(WEB_NAMESPACE) --create-namespace \
 	  -f deploy/charts/web/values-dev.yaml \
-	  --set-string image.repository=k3d-ro-registry:5005/resource-optimizer/web --set-string image.tag=$(WEB_TAG) \
+	  --set-string image.repository=k3d-ro-registry:5005/kerf/web --set-string image.tag=$(WEB_TAG) \
 	  --wait --timeout 3m
 	@echo "web UI: http://localhost:19090"

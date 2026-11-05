@@ -96,7 +96,7 @@ When they run:
 | `metrics.hpa` | hub | warning | – | `kube_horizontalpodautoscaler_*` missing. |
 | `metrics.node-labels` | hub | warning | – | `kube_node_labels` lacks instance type, capacity type, zone or region (KSM `--metric-labels-allowlist`). |
 | `metrics.node-allocatable` | hub | warning | – | `kube_node_status_allocatable` missing. |
-| `pricing.coverage` | hub | warning | – | Priced nodes / all nodes below 100 % (`ro_pricing_nodes{status="skipped"}`). |
+| `pricing.coverage` | hub | warning | – | Priced nodes / all nodes below 100 % (`kerf_pricing_nodes{status="skipped"}`). |
 | `metrics.recommendations` | hub | blocking | ReadyAudit | No recommendation produced yet for the cluster's live workloads. |
 | `rbac.read` | agent | blocking | AgentConnected | Missing list/watch on pods, workloads, HPAs, nodes. |
 | `rbac.resize` | agent | blocking | AutomationReady | Missing `patch pods/resize`. |
@@ -109,7 +109,7 @@ When they run:
 | `webhook.healthy` | agent | warning | – | MutatingWebhookConfiguration missing, no `caBundle`, no ready endpoints, or a dry-run pod is not mutated. |
 | `webhook.cert-manager` | agent | info | – | cert-manager present when the webhook uses it. |
 | `nodes.in-place-memory` | agent | info | – | Share of nodes with swap or static CPU/memory manager; `details.nodes`. |
-| `integration.argocd` | agent | warning | – | Argo CD installed and `argocd-cm` lacks `managedFieldsManagers: [resource-optimizer]`; `unknown` if unreadable. Remediation: the snippet. |
+| `integration.argocd` | agent | warning | – | Argo CD installed and `argocd-cm` lacks `managedFieldsManagers: [kerf]`; `unknown` if unreadable. Remediation: the snippet. |
 | `policy.namespace-coverage` | agent | info | – | Namespaces excluded by policy or label. |
 
 Each `rbac.*` check also arrives as an `AgentCapability {name, granted, missing[], message}`. `missing` lists
@@ -167,9 +167,9 @@ Without `binding`, only `datasource.reachable` runs, plus `labelValues` for `clu
 
 `GET /v1/admin/clusters/{c}/install?format=helm&webhook=true` (admin)
 → `InstallSnippet {"format": "helm", "content": "kubectl create secret … \nhelm upgrade --install …",
-"filename": "install.sh", "argocdIgnoreDifferences": "resource.customizations.ignoreDifferences.all: |\n  managedFieldsManagers:\n  - resource-optimizer\n", "notes": […]}`.
+"filename": "install.sh", "argocdIgnoreDifferences": "resource.customizations.ignoreDifferences.all: |\n  managedFieldsManagers:\n  - kerf\n", "notes": […]}`.
 - `format=values` returns a `values.yaml`; `format=argocd` returns an Argo CD `Application` manifest.
-- The token is never in the snippet. The snippet references the Secret `resource-optimizer-agent-token`
+- The token is never in the snippet. The snippet references the Secret `kerf-agent-token`
   (key `token`), and the value comes from cluster creation or `POST /v1/admin/tokens` (shown once).
 
 Lists and status batch:
@@ -179,5 +179,5 @@ Lists and status batch:
 
 ## 5. Metrics
 
-`ro_cluster_readiness{cluster,check,severity}` (gauge) and `ro_cluster_readiness_state{cluster,state}`
+`kerf_cluster_readiness{cluster,check,severity}` (gauge) and `kerf_cluster_readiness_state{cluster,state}`
 (gauge) are documented in `docs/contracts/metrics.md`.

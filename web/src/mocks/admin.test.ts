@@ -828,7 +828,7 @@ describe('clusters, automation, readiness', () => {
         `/v1/admin/clusters/staging-eu-west-1/install?format=${format}&webhook=true`,
       )
       expectValid('InstallSnippet', s.json)
-      expect(s.json.content).toContain('resource-optimizer-agent-token')
+      expect(s.json.content).toContain('kerf-agent-token')
       expect(s.json.content).not.toContain(r.json.agentToken.value)
     }
     expectProblem(

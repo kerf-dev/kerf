@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to resource-optimizer are listed here. The format follows
+All notable changes to Kerf are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
 Until 1.0.0, a minor version may change the chart values or the CRDs; the notes say how to upgrade.
 
@@ -11,6 +11,16 @@ version without its section here.
 ## [Unreleased]
 
 First public version.
+
+### Changed
+
+- **Renamed from resource-optimizer to Kerf** (D-029, D-030), before the first public release. Name map:
+  repository and Go module `github.com/tomer1983/resource-optimizer` → `github.com/kerf-dev/kerf`; images and
+  charts `ghcr.io/tomer1983/resource-optimizer/…` → `ghcr.io/kerf-dev/kerf/…`; umbrella chart
+  `resource-optimizer` → `kerf`; CRD API group, label and annotation prefix `resource-optimizer.oz.io` →
+  `kerf.getkerf.dev`; namespace and object prefix `resource-optimizer` → `kerf`; database and role
+  `resource_optimizer` / `ro` → `kerf`; metric prefix `ro_` → `kerf_`; environment prefix `RO_` → `KERF_`;
+  alerts `ResourceOptimizer…` → `Kerf…`; UI name Resource Optimizer → Kerf.
 
 ### Added
 
@@ -26,7 +36,7 @@ First public version.
   approve, apply and roll back from the UI.
 - **Cluster onboarding.** An add-cluster wizard, per-cluster metrics sources and readiness checks
   (Registered → Agent connected → Metrics OK → Ready for audit → Automation ready).
-- **Install.** One Helm chart (`resource-optimizer`, `global.mode: hub | spoke | all`) with zone spread,
+- **Install.** One Helm chart (`kerf`, `global.mode: hub | spoke | all`) with zone spread,
   autoscaling, External Secrets, Postgres over verified TLS, ingress, NetworkPolicies, alerts and Grafana
   dashboards. The hub runs highly available (leader election on Postgres).
 - **Release.** Multi-arch images (`linux/amd64`, `linux/arm64`) with SBOM and provenance, signed with cosign,

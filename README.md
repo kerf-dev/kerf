@@ -1,8 +1,10 @@
-# resource-optimizer
+# Kerf
 
 Kubernetes rightsizing that you run yourself. It measures what every container really uses, recommends
 CPU and memory requests and limits, prices the difference per node type, and, where you allow it,
 applies the change for you: an in-place pod resize or a rollout, with guardrails and automatic rollback.
+
+The name: a *kerf* is the width of a saw cut, the precise amount a cut trims away.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
@@ -40,14 +42,14 @@ VictoriaMetrics with cAdvisor and kube-state-metrics, and PostgreSQL 12 or later
 Releases publish multi-arch images and the Helm charts to GitHub Container Registry, signed with cosign:
 
 ```bash
-helm install resource-optimizer oci://ghcr.io/tomer1983/resource-optimizer/charts/resource-optimizer \
-  --version <version> --namespace resource-optimizer --create-namespace -f values.yaml
+helm install kerf oci://ghcr.io/kerf-dev/kerf/charts/kerf \
+  --version <version> --namespace kerf --create-namespace -f values.yaml
 ```
 
 - **Amazon EKS, step by step:** [docs/install/eks.md](docs/install/eks.md), with example values in
   [deploy/examples/eks](deploy/examples/eks).
-- **Chart reference:** [deploy/charts/resource-optimizer](deploy/charts/resource-optimizer/README.md).
-- **Releases and changes:** [GitHub Releases](https://github.com/tomer1983/resource-optimizer/releases) and
+- **Chart reference:** [deploy/charts/kerf](deploy/charts/kerf/README.md).
+- **Releases and changes:** [GitHub Releases](https://github.com/kerf-dev/kerf/releases) and
   [CHANGELOG.md](CHANGELOG.md).
 
 ## Develop

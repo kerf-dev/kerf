@@ -190,7 +190,7 @@ type RightsizingRecommendationStatus struct {
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Namespaced,shortName=rsr,categories=resource-optimizer
+// +kubebuilder:resource:scope=Namespaced,shortName=rsr,categories=kerf
 // +kubebuilder:printcolumn:name="Kind",type=string,JSONPath=`.spec.targetRef.kind`
 // +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetRef.name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`

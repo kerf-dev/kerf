@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
 // Server is the stub hub. Zero value is not usable; use New.

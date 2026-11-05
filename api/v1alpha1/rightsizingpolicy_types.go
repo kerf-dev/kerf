@@ -282,7 +282,7 @@ type RightsizingPolicyStatus struct {
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster,shortName=rsp,categories=resource-optimizer
+// +kubebuilder:resource:scope=Cluster,shortName=rsp,categories=kerf
 // +kubebuilder:printcolumn:name="Priority",type=integer,JSONPath=`.spec.priority`
 // +kubebuilder:printcolumn:name="CPU",type=string,JSONPath=`.spec.cpu.mode`
 // +kubebuilder:printcolumn:name="Memory",type=string,JSONPath=`.spec.memory.mode`

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/tools/synth/synth"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/tools/synth/synth"
 )
 
 func boolp(b bool) *bool { return &b }

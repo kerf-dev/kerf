@@ -71,7 +71,7 @@ export const CHECK_TITLES: Record<string, string> = {
   'webhook.healthy': 'Webhook installed and healthy',
   'webhook.cert-manager': 'cert-manager present',
   'nodes.in-place-memory': 'Nodes without swap or static managers',
-  'integration.argocd': 'Argo CD ignores resource-optimizer fields',
+  'integration.argocd': 'Argo CD ignores Kerf fields',
   'policy.namespace-coverage': 'Namespace coverage',
 }
 export const checkTitle = (id: string) => CHECK_TITLES[id] ?? id

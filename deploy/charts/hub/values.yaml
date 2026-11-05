@@ -2,7 +2,7 @@
 # feature below is shown switched on in ci/values-prod.yaml (EKS example, rendered by
 # `make charts-lint`).
 
-# Set by an umbrella chart; read by every resource-optimizer chart.
+# Set by an umbrella chart; read by every kerf chart.
 global:
   # Registry prefixed to image.repository (e.g. 123456789012.dkr.ecr.eu-west-1.amazonaws.com);
   # image.registry wins over it.
@@ -16,7 +16,7 @@ global:
 image:
   # Optional registry; empty = repository holds the full reference.
   registry: ""
-  repository: localhost:5005/resource-optimizer/hub
+  repository: localhost:5005/kerf/hub
   tag: dev
   # sha256:... appended as repository:tag@digest (pins the image).
   digest: ""
@@ -107,7 +107,7 @@ service:
 #     alb.ingress.kubernetes.io/ssl-redirect: "443"
 #     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account>:certificate/<id>
 #     alb.ingress.kubernetes.io/healthcheck-path: /readyz
-#     alb.ingress.kubernetes.io/group.name: resource-optimizer   # share one ALB with the web UI
+#     alb.ingress.kubernetes.io/group.name: kerf   # share one ALB with the web UI
 #   hosts: [{host: hub.example.internal, paths: [{path: /, pathType: Prefix}]}]
 #   tls: [{hosts: [hub.example.internal]}]            # ALB: the certificate comes from ACM
 ingress:
@@ -128,7 +128,7 @@ database:
   # Used to build the URL when externalSecret.source is rds (D-028: RDS with verify-full).
   host: ""
   port: 5432
-  name: resource_optimizer
+  name: kerf
   sslmode: verify-full
   # sslrootcert path in the URL; default: the mounted caBundle (/etc/hub/db-ca/ca.pem) when set.
   sslrootcert: ""
@@ -149,7 +149,7 @@ database:
     # url: the property (or the whole secret) is the full URL.
     source: rds
     remoteRef:
-      key: ""             # e.g. rds!db-0123abcd-... or resource-optimizer/hub/database
+      key: ""             # e.g. rds!db-0123abcd-... or kerf/hub/database
       property: ""
       version: ""
     refreshInterval: ""   # default externalSecrets.refreshInterval
@@ -191,7 +191,7 @@ auth:
     externalSecret:
       enabled: false
       remoteRef:
-        key: ""           # e.g. resource-optimizer/hub/bootstrap-admin
+        key: ""           # e.g. kerf/hub/bootstrap-admin
         property: ""      # e.g. password (JSON secret); empty = the whole secret string
         version: ""
       refreshInterval: ""
@@ -219,8 +219,8 @@ config:
     agentPullInterval: 1m
     minAgentVersion: ""
     # Install snippets of the cluster wizard (WO-18f): the hub URL as agents reach it and the
-    # umbrella chart resource-optimizer, installed with global.mode spoke
-    # (oci://registry/path/resource-optimizer, <repo URL>|resource-optimizer, or a local chart path).
+    # umbrella chart kerf, installed with global.mode spoke
+    # (oci://registry/path/kerf, <repo URL>|kerf, or a local chart path).
     hubURL: ""
     chart: ""
     # Empty: the hub's version when it is a release version (the agent matches the hub).
@@ -230,9 +230,9 @@ config:
     # The agent token from a secret store (External Secrets Operator) instead of an existing Secret:
     # agentTokenExternalSecret:
     #   secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}
-    #   remoteRef: {key: "resource-optimizer/clusters/{cluster}/agent-token", property: token}
+    #   remoteRef: {key: "kerf/clusters/{cluster}/agent-token", property: token}
     # Deprecated: the component chart references. agentChart still works (the chart defaults to
-    # the resource-optimizer chart next to it); webhookChart is ignored.
+    # the Kerf chart next to it); webhookChart is ignored.
     # agentChart: ""
     # webhookChart: ""
 
@@ -249,7 +249,7 @@ onboarding:
     externalSecret:
       enabled: false
       remoteRef:
-        key: ""           # e.g. resource-optimizer/hub/datasource-key
+        key: ""           # e.g. kerf/hub/datasource-key
         property: ""
         version: ""
       refreshInterval: ""
@@ -329,7 +329,7 @@ prometheusRule:
     # No successful recommender run for a cluster for 2 intervals. staleAfter: a Go duration;
     # empty = 2 x config.recommender.interval (an interval set in the admin UI is not seen here).
     recommenderStale: {enabled: true, for: 15m, severity: warning, staleAfter: ""}
-    # No hub replica holds the leader lock (ro_hub_leader, WO-18a).
+    # No hub replica holds the leader lock (kerf_hub_leader, WO-18a).
     noLeader: {enabled: true, for: 5m, severity: critical}
     # Webhook admissions ending in error, as a share of all admissions of a cluster.
     webhookErrors: {enabled: true, for: 15m, severity: warning, ratio: 0.05}
@@ -345,4 +345,4 @@ dashboards:
   labels:
     grafana_dashboard: "1"
   annotations:
-    grafana_folder: resource-optimizer
+    grafana_folder: kerf

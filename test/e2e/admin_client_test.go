@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // Dev users seeded by deploy/charts/hub/values-dev.yaml (E2E_<USER>_PASSWORD overrides).

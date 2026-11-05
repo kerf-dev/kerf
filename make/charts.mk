@@ -21,7 +21,7 @@ CHART_REQUIRED_webhook := --set-string clusterName=lint
 
 # The umbrella chart (WO-18d): rendered per mode with the values each mode requires ("defaults") and
 # with the EKS examples (deploy/examples/eks).
-UMBRELLA            := resource-optimizer
+UMBRELLA            := kerf
 UMBRELLA_DIR        := $(CHARTS_DIR)/$(UMBRELLA)
 UMBRELLA_EXAMPLES   := deploy/examples/eks
 UMBRELLA_REQUIRED   := --set-string global.imageRegistry=123456789012.dkr.ecr.eu-west-1.amazonaws.com \
@@ -31,8 +31,8 @@ UMBRELLA_EXAMPLE_spoke := -f $(UMBRELLA_EXAMPLES)/values-spoke.yaml
 UMBRELLA_EXAMPLE_all   := -f $(UMBRELLA_EXAMPLES)/values-hub.yaml -f $(UMBRELLA_EXAMPLES)/values-spoke.yaml
 # Deployments (app.kubernetes.io/name) and CRDs each mode must render, and no others (the gate).
 UMBRELLA_WANT_hub   := hub pricing web
-UMBRELLA_WANT_spoke := resource-optimizer-agent resource-optimizer-webhook
-UMBRELLA_WANT_all   := hub pricing resource-optimizer-agent resource-optimizer-webhook web
+UMBRELLA_WANT_spoke := kerf-agent kerf-webhook
+UMBRELLA_WANT_all   := hub kerf-agent kerf-webhook pricing web
 UMBRELLA_CRDS_hub   := 0
 UMBRELLA_CRDS_spoke := 2
 UMBRELLA_CRDS_all   := 2
@@ -76,7 +76,7 @@ charts-lint: charts-check-sync charts-check-crds kubeconform yq ## helm lint + h
 	    case $$v in defaults) vf="";; dev) vf="-f $$d/values-dev.yaml";; prod) vf="-f $$d/ci/values-prod.yaml";; esac; \
 	    echo "== $$c ($$v)"; \
 	    helm lint --strict $$d $$req $$vf --quiet; \
-	    helm template $$c $$d -n resource-optimizer --include-crds $$req $$vf \
+	    helm template $$c $$d -n kerf --include-crds $$req $$vf \
 	      | $(KUBECONFORM) -strict -summary -kubernetes-version $(CHARTS_K8S_VERSION) -cache $(KUBECONFORM_CACHE) \
 	          -skip CustomResourceDefinition -schema-location default -schema-location '$(CRDS_CATALOG)'; \
 	  done; \
@@ -96,7 +96,7 @@ charts-lint-umbrella: kubeconform yq ## helm lint + kubeconform of the umbrella 
 	    echo "== $(UMBRELLA) (mode $$m, $$v)"; \
 	    lo=$$(helm lint --strict $(UMBRELLA_DIR) --set global.mode=$$m $$vf --quiet 2>&1) || { echo "$$lo"; exit 1; }; \
 	    echo "$$lo" | grep -v 'symbolic link' || true; \
-	    helm template $(UMBRELLA) $(UMBRELLA_DIR) -n resource-optimizer --set global.mode=$$m $$vf 2>/dev/null > $$out; \
+	    helm template $(UMBRELLA) $(UMBRELLA_DIR) -n kerf --set global.mode=$$m $$vf 2>/dev/null > $$out; \
 	    $(KUBECONFORM) -strict -summary -kubernetes-version $(CHARTS_K8S_VERSION) -cache $(KUBECONFORM_CACHE) \
 	      -skip CustomResourceDefinition -schema-location default -schema-location '$(CRDS_CATALOG)' $$out; \
 	    got=$$($(YQ) e -N 'select(.kind == "Deployment") | .spec.template.metadata.labels["app.kubernetes.io/name"]' $$out | sort | xargs); \
@@ -106,12 +106,12 @@ charts-lint-umbrella: kubeconform yq ## helm lint + kubeconform of the umbrella 
 	    echo "   components: $$got; CRDs: $$crds"; \
 	  done; \
 	done; \
-	echo "== $(UMBRELLA) wiring (mode all, release $(UMBRELLA), namespace resource-optimizer)"; \
-	helm template $(UMBRELLA) $(UMBRELLA_DIR) -n resource-optimizer --set global.mode=all $(UMBRELLA_REQUIRED) --set-string agent.hub.url= 2>/dev/null > $$out; \
-	hub=hub.resource-optimizer.svc.cluster.local:8080; \
+	echo "== $(UMBRELLA) wiring (mode all, release $(UMBRELLA), namespace kerf)"; \
+	helm template $(UMBRELLA) $(UMBRELLA_DIR) -n kerf --set global.mode=all $(UMBRELLA_REQUIRED) --set-string agent.hub.url= 2>/dev/null > $$out; \
+	hub=hub.kerf.svc.cluster.local:8080; \
 	web=$$($(YQ) e -N 'select(.kind == "Deployment" and .metadata.name == "web") | .spec.template.spec.containers[0].env[] | select(.name == "HUB_UPSTREAM") | .value' $$out); \
 	pricing=$$($(YQ) e -N 'select(.kind == "Deployment" and .metadata.name == "pricing") | .spec.template.spec.containers[0].args[] | select(test("^--hub-url="))' $$out); \
-	agent=$$($(YQ) e -N 'select(.kind == "Deployment" and .metadata.name == "resource-optimizer-agent") | .spec.template.spec.containers[0].args[] | select(test("^--hub-url="))' $$out); \
+	agent=$$($(YQ) e -N 'select(.kind == "Deployment" and .metadata.name == "kerf-agent") | .spec.template.spec.containers[0].args[] | select(test("^--hub-url="))' $$out); \
 	echo "   web HUB_UPSTREAM=$$web  pricing $$pricing  agent $$agent"; \
 	[ "$$web" = "$$hub" ] && [ "$$pricing" = "--hub-url=http://$$hub" ] && [ "$$agent" = "--hub-url=http://$$hub" ] || { echo "wiring to the hub Service $$hub is wrong"; exit 1; }; \
 	echo "== $(UMBRELLA_EXAMPLES): manifests and IAM policies"; \
@@ -137,7 +137,7 @@ charts-check-crds: yq ## Rendered CRD templates (agent; webhook with crds.instal
 	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
 	cat api/crds/*.yaml | $(CRDS_STRIP) > $$tmp/want.yaml; \
 	for c in agent webhook; do \
-	  helm template $$c $(CHARTS_DIR)/$$c -n resource-optimizer --set-string clusterName=lint --set crds.install=true -s templates/crds.yaml > $$tmp/$$c.yaml; \
+	  helm template $$c $(CHARTS_DIR)/$$c -n kerf --set-string clusterName=lint --set crds.install=true -s templates/crds.yaml > $$tmp/$$c.yaml; \
 	  test "$$(grep -c 'helm.sh/resource-policy: keep' $$tmp/$$c.yaml)" = "$$(ls api/crds/*.yaml | wc -l | tr -d ' ')" || { echo "$$c: CRDs without helm.sh/resource-policy: keep"; exit 1; }; \
 	  $(CRDS_STRIP) $$tmp/$$c.yaml > $$tmp/$$c.got.yaml; \
 	  diff -u $$tmp/want.yaml $$tmp/$$c.got.yaml || { echo "$$c: rendered CRDs differ from api/crds"; exit 1; }; \
@@ -160,7 +160,7 @@ charts-diff-dev: yq ## Diff the dev render of every chart: $(CHARTS_DIFF_BASE) v
 	  for side in base head; do \
 	    if [ $$side = base ]; then d=$$base/$(CHARTS_DIR)/$$c; else d=$(CHARTS_DIR)/$$c; fi; \
 	    args=$$(echo "$$*" | sed "s|-f |-f $$d/|g"); \
-	    helm template $$rel $$d -n resource-optimizer $$args | $(CHARTS_NORMALISE) > $$base/$$c.$$side.yaml; \
+	    helm template $$rel $$d -n kerf $$args | $(CHARTS_NORMALISE) > $$base/$$c.$$side.yaml; \
 	  done; \
 	  if diff -u --label "$$c@$(CHARTS_DIFF_BASE)" --label "$$c@HEAD" $$base/$$c.base.yaml $$base/$$c.head.yaml > $$base/$$c.diff; then \
 	    echo "== $$c: no difference"; \
@@ -169,7 +169,7 @@ charts-diff-dev: yq ## Diff the dev render of every chart: $(CHARTS_DIFF_BASE) v
 	if [ -d $$base/$(UMBRELLA_DIR) ]; then \
 	  for side in base head; do \
 	    if [ $$side = base ]; then d=$$base/$(UMBRELLA_DIR); else d=$(UMBRELLA_DIR); fi; \
-	    helm template $(UMBRELLA) $$d -n resource-optimizer $(UMBRELLA_DEV) 2>/dev/null | $(CHARTS_NORMALISE) > $$base/umbrella.$$side.yaml; \
+	    helm template $(UMBRELLA) $$d -n kerf $(UMBRELLA_DEV) 2>/dev/null | $(CHARTS_NORMALISE) > $$base/umbrella.$$side.yaml; \
 	  done; \
 	  if diff -u --label "$(UMBRELLA)@$(CHARTS_DIFF_BASE)" --label "$(UMBRELLA)@HEAD" $$base/umbrella.base.yaml $$base/umbrella.head.yaml > $$base/umbrella.diff; then \
 	    echo "== $(UMBRELLA) (mode all): no difference"; \

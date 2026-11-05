@@ -25,7 +25,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // Defaults of a datasource.
@@ -80,7 +80,7 @@ func DefaultCredentials(ctx context.Context, s hubapi.DatasourceSigV4) (aws.Cred
 		return cfg.Credentials, nil
 	}
 	return aws.NewCredentialsCache(stscreds.NewAssumeRoleProvider(sts.NewFromConfig(cfg), s.RoleARN,
-		func(o *stscreds.AssumeRoleOptions) { o.RoleSessionName = "resource-optimizer-hub" })), nil
+		func(o *stscreds.AssumeRoleOptions) { o.RoleSessionName = "kerf-hub" })), nil
 }
 
 // HTTPClient returns an HTTP client that adds the datasource's headers and auth to every request.

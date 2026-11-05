@@ -42,4 +42,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/tomer1983/resource-optimizer
+        - github.com/kerf-dev/kerf

@@ -6,7 +6,7 @@
 # substituted, so nginx variables like $cookie_ro_session stay as they are.
 
 # Authentication (D-023, docs/contracts/admin.md §3):
-# - With a session cookie the browser is a logged-in user: forward only `ro_session` and send no
+# - With a session cookie the browser is a logged-in user: forward only `kerf_session` and send no
 #   bearer token, so the hub sees exactly that user and role.
 # - Without one, add the read-only `ui` token (anonymous viewer) if ANONYMOUS_READ is on; otherwise
 #   send nothing and the hub answers 401, which sends the UI to its login page.
@@ -17,7 +17,7 @@ map $cookie_ro_session $hub_authorization {
 }
 map $cookie_ro_session $hub_cookie {
     ""      "";
-    default "ro_session=$cookie_ro_session";
+    default "kerf_session=$cookie_ro_session";
 }
 
 server_tokens off;

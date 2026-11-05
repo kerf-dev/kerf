@@ -16,7 +16,7 @@ import (
 )
 
 // fieldManager is the agent's server-side-apply field manager (D-006).
-const fieldManager = "resource-optimizer"
+const fieldManager = "kerf"
 
 // ownsCPURequest reports whether the agent's field manager owns
 // spec.template.spec.containers[*].resources.requests.cpu.

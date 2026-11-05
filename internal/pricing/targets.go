@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // HubTargets lists the clusters with a metrics binding from the hub (GET

@@ -1,4 +1,4 @@
-// Package webhook is the resource-optimizer mutating admission webhook (WO-07, D-007).
+// Package webhook is the Kerf mutating admission webhook (WO-07, D-007).
 //
 // On pod CREATE it resolves the owning workload from ownerReferences, looks up the workload's
 // RightsizingRecommendation in an informer cache and, when the recommendation is Applied with
@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // GVKs of the intermediate owners, read as metadata only (PartialObjectMetadata).
@@ -35,7 +35,7 @@ type Owner struct {
 }
 
 // ErrUnmanaged means the pod has no owner, or an owner chain that does not end in one of the
-// workload kinds resource-optimizer manages (e.g. a bare ReplicaSet or a Job without a CronJob).
+// workload kinds Kerf manages (e.g. a bare ReplicaSet or a Job without a CronJob).
 type ErrUnmanaged struct{ Reason string }
 
 func (e *ErrUnmanaged) Error() string { return "unmanaged pod: " + e.Reason }

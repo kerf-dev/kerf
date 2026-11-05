@@ -1,7 +1,7 @@
 # Release (WO-18c, D-028): multi-arch images and OCI Helm charts for a registry such as ECR.
 # Included by the root Makefile. Guide: docs/release.md.
 #
-#   make release       REGISTRY=<acct>.dkr.ecr.<region>.amazonaws.com/resource-optimizer VERSION=0.1.0
+#   make release       REGISTRY=<acct>.dkr.ecr.<region>.amazonaws.com/kerf VERSION=0.1.0
 #   make release-chart REGISTRY=... VERSION=...      (charts only; `release` runs it too)
 #   make release-dry                                 (build both platforms and package charts, push nothing)
 #
@@ -19,7 +19,7 @@ VERSION   := $(VERSION)
 RELEASE_IMAGES    ?= hub pricing agent webhook web
 # The umbrella chart (WO-18d, what docs/install/eks.md and the hub's cluster wizard install) and the
 # component charts (installs from before the umbrella: docs/install/eks.md, "Moving from the component charts").
-RELEASE_CHARTS    ?= resource-optimizer hub pricing agent webhook web
+RELEASE_CHARTS    ?= kerf hub pricing agent webhook web
 RELEASE_CHART_DIR ?= deploy/charts
 RELEASE_DIR       ?= $(LOCALBIN)/release
 # buildx builder (docker-container driver: multi-platform output, SBOM and provenance attestations).
@@ -35,7 +35,7 @@ RELEASE_ALLOW_DIRTY ?=
 RELEASE_BUILD_ARGS  ?=
 
 RELEASE_REVISION := $(shell git rev-parse HEAD 2>/dev/null)
-RELEASE_SOURCE   ?= https://github.com/tomer1983/resource-optimizer
+RELEASE_SOURCE   ?= https://github.com/kerf-dev/kerf
 
 RELEASE_BUILDX = docker buildx build --builder $(RELEASE_BUILDER) --platform $(PLATFORMS) \
   --build-arg VERSION=$(VERSION) $(RELEASE_BUILD_ARGS) \
@@ -51,7 +51,7 @@ release: release-images release-chart ## Build and push multi-arch images and OC
 	@echo "released $(VERSION) to $(REGISTRY):"; cat $(RELEASE_DIR)/images.txt $(RELEASE_DIR)/charts.txt
 
 release-check:
-	@test -n "$(REGISTRY)" || { echo "REGISTRY is required, e.g. REGISTRY=<acct>.dkr.ecr.<region>.amazonaws.com/resource-optimizer"; exit 1; }
+	@test -n "$(REGISTRY)" || { echo "REGISTRY is required, e.g. REGISTRY=<acct>.dkr.ecr.<region>.amazonaws.com/kerf"; exit 1; }
 	@case "$(REGISTRY)" in *://*|*/) echo "REGISTRY is host[/path], without scheme or trailing slash: $(REGISTRY)"; exit 1 ;; esac
 	@echo "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$$' || \
 	  { echo "VERSION must be semver without a leading v or build metadata (got '$(VERSION)')"; exit 1; }
@@ -90,17 +90,17 @@ release-images: release-check release-builder ## Build and push the images with 
 # Packages each chart with version and appVersion $(VERSION) into bin/release/charts.
 # RELEASE_CHART_DEFAULT_REGISTRY=1 (the GitHub release workflow sets it) also makes the packaged charts
 # default to the images of this release: the umbrella's global.imageRegistry becomes $(REGISTRY) without
-# its trailing /resource-optimizer, and each component chart's image.repository becomes $(REGISTRY)/<name>.
+# its trailing /kerf, and each component chart's image.repository becomes $(REGISTRY)/<name>.
 # A user then installs the chart with no registry setting. Explicit values still win.
 RELEASE_CHART_DEFAULT_REGISTRY ?=
-RELEASE_IMAGE_HOST = $(patsubst %/resource-optimizer,%,$(REGISTRY))
+RELEASE_IMAGE_HOST = $(patsubst %/kerf,%,$(REGISTRY))
 
 .PHONY: release-chart-package
 release-chart-package:
 	@echo "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$$' || \
 	  { echo "VERSION must be semver without a leading v or build metadata (got '$(VERSION)')"; exit 1; }
 	@if [ "$(RELEASE_CHART_DEFAULT_REGISTRY)" = 1 ]; then \
-	  case "$(REGISTRY)" in */resource-optimizer) ;; *) echo "RELEASE_CHART_DEFAULT_REGISTRY=1 needs REGISTRY=<host>[/path]/resource-optimizer (got '$(REGISTRY)')"; exit 1 ;; esac; fi
+	  case "$(REGISTRY)" in */kerf) ;; *) echo "RELEASE_CHART_DEFAULT_REGISTRY=1 needs REGISTRY=<host>[/path]/kerf (got '$(REGISTRY)')"; exit 1 ;; esac; fi
 	@rm -rf $(RELEASE_DIR)/charts $(RELEASE_DIR)/_stage; mkdir -p $(RELEASE_DIR)/charts $(RELEASE_DIR)/_stage
 	@for c in $(RELEASE_CHARTS); do \
 	  dir=$(RELEASE_CHART_DIR)/$$c; test -f $$dir/Chart.yaml || { echo "no chart at $$dir"; exit 1; }; \
@@ -120,7 +120,7 @@ release-chart-package:
 	  else \
 	    : "A component chart: its image tag defaults to the chart appVersion (= VERSION), not the dev tag."; \
 	    sed -E -e 's|^  tag: dev$$|  tag: ""|' \
-	      $(if $(filter 1,$(RELEASE_CHART_DEFAULT_REGISTRY)),-e 's|^  repository: [^ ]+/resource-optimizer/([a-z-]+)$$|  repository: $(REGISTRY)/\1|',) \
+	      $(if $(filter 1,$(RELEASE_CHART_DEFAULT_REGISTRY)),-e 's|^  repository: [^ ]+/kerf/([a-z-]+)$$|  repository: $(REGISTRY)/\1|',) \
 	      $$stage/values.yaml > $$stage/values.yaml.new && mv $$stage/values.yaml.new $$stage/values.yaml; \
 	  fi; \
 	  helm package $$stage $$deps --version $(VERSION) --app-version $(VERSION) -d $(RELEASE_DIR)/charts; \

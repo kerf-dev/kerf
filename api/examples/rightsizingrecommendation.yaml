@@ -1,5 +1,5 @@
 # Example RightsizingRecommendation as written by the agent (WO-06). Users never create these.
-apiVersion: resource-optimizer.oz.io/v1alpha1
+apiVersion: kerf.getkerf.dev/v1alpha1
 kind: RightsizingRecommendation
 metadata:
   name: checkout

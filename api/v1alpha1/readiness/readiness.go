@@ -1,7 +1,7 @@
 // Package readiness is the catalog of cluster readiness checks (D-025, docs/contracts/readiness.md).
 //
 // Check ids are stable: the hub (metrics checks), the agent (self-checks), the UI, the metric
-// ro_cluster_readiness{check} and the stored history all use them. Adding a check is a contract
+// kerf_cluster_readiness{check} and the stored history all use them. Adding a check is a contract
 // change: add it to Catalog and to the table in docs/contracts/readiness.md (a test keeps both in
 // sync). Never rename or reuse an id.
 package readiness
@@ -188,7 +188,7 @@ var Catalog = []Check{
 	{ID: CheckWebhook, Category: CategoryWebhook, Severity: SeverityWarning, Source: SourceAgent, Title: "Webhook installed and healthy"},
 	{ID: CheckCertManager, Category: CategoryWebhook, Severity: SeverityInfo, Source: SourceAgent, Title: "cert-manager present"},
 	{ID: CheckNodesInPlaceMemory, Category: CategoryNodes, Severity: SeverityInfo, Source: SourceAgent, Title: "Nodes without swap or static managers"},
-	{ID: CheckArgoCD, Category: CategoryIntegration, Severity: SeverityWarning, Source: SourceAgent, Title: "Argo CD ignores resource-optimizer fields"},
+	{ID: CheckArgoCD, Category: CategoryIntegration, Severity: SeverityWarning, Source: SourceAgent, Title: "Argo CD ignores Kerf fields"},
 	{ID: CheckPolicyNamespaceCovers, Category: CategoryPolicy, Severity: SeverityInfo, Source: SourceAgent, Title: "Namespace coverage"},
 }
 

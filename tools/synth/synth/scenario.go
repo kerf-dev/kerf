@@ -1,5 +1,5 @@
 // Package synth generates realistic synthetic Kubernetes usage history (cAdvisor and
-// kube-state-metrics series) for the resource-optimizer hub, dashboards and UI.
+// kube-state-metrics series) for the Kerf hub, dashboards and UI.
 //
 // A Scenario (YAML) describes clusters, node pools and workloads, either listed explicitly or
 // generated from a weighted profile mix. Run expands the scenario, simulates every pod and

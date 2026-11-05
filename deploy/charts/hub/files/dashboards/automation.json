@@ -3,7 +3,7 @@
   "title": "Rightsizing / Automation",
   "description": "What the agents did: actions by type over time, rollbacks, blocked/skipped reasons, phases, and the health of the recommendation pipeline.",
   "tags": [
-    "resource-optimizer"
+    "kerf"
   ],
   "editable": true,
   "graphTooltip": 1,
@@ -21,10 +21,10 @@
   "timepicker": {},
   "links": [
     {
-      "title": "resource-optimizer",
+      "title": "kerf",
       "type": "dashboards",
       "tags": [
-        "resource-optimizer"
+        "kerf"
       ],
       "asDropdown": false,
       "includeVars": true,
@@ -79,10 +79,10 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(ro_workload_mode, cluster)",
+        "definition": "label_values(kerf_workload_mode, cluster)",
         "query": {
           "qryType": 1,
-          "query": "label_values(ro_workload_mode, cluster)",
+          "query": "label_values(kerf_workload_mode, cluster)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -112,10 +112,10 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(ro_workload_mode{cluster=~\"$cluster\"}, namespace)",
+        "definition": "label_values(kerf_workload_mode{cluster=~\"$cluster\"}, namespace)",
         "query": {
           "qryType": 1,
-          "query": "label_values(ro_workload_mode{cluster=~\"$cluster\"}, namespace)",
+          "query": "label_values(kerf_workload_mode{cluster=~\"$cluster\"}, namespace)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -145,10 +145,10 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\"}, workload)",
+        "definition": "label_values(kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\"}, workload)",
         "query": {
           "qryType": 1,
-          "query": "label_values(ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\"}, workload)",
+          "query": "label_values(kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\"}, workload)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
@@ -189,7 +189,7 @@
     {
       "type": "stat",
       "title": "Events in range",
-      "description": "Events stored by the hub in the selected time range, by type (ro_actions_total; resets on hub restart, so always read through increase()). One increment per resource listed in an event.",
+      "description": "Events stored by the hub in the selected time range, by type (kerf_actions_total; resets on hub restart, so always read through increase()). One increment per resource listed in an event.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -201,7 +201,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "label_replace((sum(increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"applied\"}[$__range]))) or vector(0), \"type\", \"applied\", \"\", \"\")\n or label_replace((sum(increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"skipped\"}[$__range]))) or vector(0), \"type\", \"skipped\", \"\", \"\")\n or label_replace((sum(increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"blocked\"}[$__range]))) or vector(0), \"type\", \"blocked\", \"\", \"\")\n or label_replace((sum(increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"fallback\"}[$__range]))) or vector(0), \"type\", \"fallback\", \"\", \"\")\n or label_replace((sum(increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"rolled_back\"}[$__range]))) or vector(0), \"type\", \"rolled_back\", \"\", \"\")\n or label_replace((sum(increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"released\"}[$__range]))) or vector(0), \"type\", \"released\", \"\", \"\")\n or label_replace((sum(increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"failed\"}[$__range]))) or vector(0), \"type\", \"failed\", \"\", \"\")",
+          "expr": "label_replace((sum(increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"applied\"}[$__range]))) or vector(0), \"type\", \"applied\", \"\", \"\")\n or label_replace((sum(increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"skipped\"}[$__range]))) or vector(0), \"type\", \"skipped\", \"\", \"\")\n or label_replace((sum(increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"blocked\"}[$__range]))) or vector(0), \"type\", \"blocked\", \"\", \"\")\n or label_replace((sum(increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"fallback\"}[$__range]))) or vector(0), \"type\", \"fallback\", \"\", \"\")\n or label_replace((sum(increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"rolled_back\"}[$__range]))) or vector(0), \"type\", \"rolled_back\", \"\", \"\")\n or label_replace((sum(increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"released\"}[$__range]))) or vector(0), \"type\", \"released\", \"\", \"\")\n or label_replace((sum(increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"failed\"}[$__range]))) or vector(0), \"type\", \"failed\", \"\", \"\")",
           "legendFormat": "{{type}}",
           "range": false,
           "instant": true,
@@ -375,7 +375,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (type) (increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}[$__interval]))",
+          "expr": "sum by (type) (increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}[$__interval]))",
           "legendFormat": "{{type}}",
           "range": true,
           "instant": false,
@@ -566,7 +566,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (reason) (increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"rolled_back\"}[$__interval]))",
+          "expr": "sum by (reason) (increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"rolled_back\"}[$__interval]))",
           "legendFormat": "{{reason}}",
           "range": true,
           "instant": false,
@@ -651,7 +651,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sort_desc(sum by (reason) (increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"blocked\"}[$__range])) > 0)",
+          "expr": "sort_desc(sum by (reason) (increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"blocked\"}[$__range])) > 0)",
           "legendFormat": "{{reason}}",
           "range": false,
           "instant": true,
@@ -721,7 +721,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sort_desc(sum by (reason) (increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"skipped\"}[$__range])) > 0)",
+          "expr": "sort_desc(sum by (reason) (increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"skipped\"}[$__range])) > 0)",
           "legendFormat": "{{reason}}",
           "range": false,
           "instant": true,
@@ -792,7 +792,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sort_desc(sum by (type, reason) (increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=~\"fallback|failed\"}[$__range])) > 0)",
+          "expr": "sort_desc(sum by (type, reason) (increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=~\"fallback|failed\"}[$__range])) > 0)",
           "legendFormat": "{{type}} · {{reason}}",
           "range": false,
           "instant": true,
@@ -862,7 +862,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (cluster, namespace, workload_kind, workload) (increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"applied\"}[$__range])) > 0",
+          "expr": "sum by (cluster, namespace, workload_kind, workload) (increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"applied\"}[$__range])) > 0",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -875,7 +875,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (cluster, namespace, workload_kind, workload) (increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"rolled_back\"}[$__range])) > 0",
+          "expr": "sum by (cluster, namespace, workload_kind, workload) (increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"rolled_back\"}[$__range])) > 0",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -888,7 +888,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (cluster, namespace, workload_kind, workload) (increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"blocked\"}[$__range])) > 0",
+          "expr": "sum by (cluster, namespace, workload_kind, workload) (increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"blocked\"}[$__range])) > 0",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -901,7 +901,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (cluster, namespace, workload_kind, workload) (increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"failed\"}[$__range])) > 0",
+          "expr": "sum by (cluster, namespace, workload_kind, workload) (increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"failed\"}[$__range])) > 0",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -914,7 +914,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (cluster, namespace, workload_kind, workload) (increase(ro_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"skipped\"}[$__range])) > 0",
+          "expr": "sum by (cluster, namespace, workload_kind, workload) (increase(kerf_actions_total{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\", type=\"skipped\"}[$__range])) > 0",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -1250,7 +1250,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count by (phase) (max by (cluster, namespace, workload_kind, workload, phase) (ro_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) == 1)",
+          "expr": "count by (phase) (max by (cluster, namespace, workload_kind, workload, phase) (kerf_workload_phase{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) == 1)",
           "legendFormat": "{{phase}}",
           "range": true,
           "instant": false,
@@ -1424,7 +1424,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "count by (resource, mode, source) (max by (cluster, namespace, workload_kind, workload, resource, mode, source) (ro_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) == 1)",
+          "expr": "count by (resource, mode, source) (max by (cluster, namespace, workload_kind, workload, resource, mode, source) (kerf_workload_mode{cluster=~\"$cluster\", namespace=~\"$namespace\", workload=~\"$workload\"}) == 1)",
           "legendFormat": "__auto",
           "range": false,
           "instant": true,
@@ -1608,7 +1608,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "time() - max by (cluster) (ro_recommender_last_success_timestamp_seconds{cluster=~\"$cluster\"})",
+          "expr": "time() - max by (cluster) (kerf_recommender_last_success_timestamp_seconds{cluster=~\"$cluster\"})",
           "legendFormat": "{{cluster}}",
           "range": false,
           "instant": true,
@@ -1683,7 +1683,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "time() - max by (cluster) (ro_agent_last_successful_pull_timestamp_seconds{cluster=~\"$cluster\"})",
+          "expr": "time() - max by (cluster) (kerf_agent_last_successful_pull_timestamp_seconds{cluster=~\"$cluster\"})",
           "legendFormat": "{{cluster}}",
           "range": false,
           "instant": true,
@@ -1771,7 +1771,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (status) (increase(ro_recommender_runs_total[$__range]))",
+          "expr": "sum by (status) (increase(kerf_recommender_runs_total[$__range]))",
           "legendFormat": "{{status}}",
           "range": false,
           "instant": true,
@@ -1885,7 +1885,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (cluster, result) (rate(ro_agent_hub_requests_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+          "expr": "sum by (cluster, result) (rate(kerf_agent_hub_requests_total{cluster=~\"$cluster\"}[$__rate_interval]))",
           "legendFormat": "{{cluster}} · {{result}}",
           "range": true,
           "instant": false,
@@ -1985,7 +1985,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max by (cluster) (ro_agent_events_buffered{cluster=~\"$cluster\"})",
+          "expr": "max by (cluster) (kerf_agent_events_buffered{cluster=~\"$cluster\"})",
           "legendFormat": "{{cluster}} buffered",
           "range": true,
           "instant": false,
@@ -1998,7 +1998,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (cluster) (increase(ro_agent_events_dropped_total{cluster=~\"$cluster\"}[$__interval]))",
+          "expr": "sum by (cluster) (increase(kerf_agent_events_dropped_total{cluster=~\"$cluster\"}[$__interval]))",
           "legendFormat": "{{cluster}} dropped",
           "range": true,
           "instant": false,
@@ -2098,7 +2098,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(ro_recommender_run_duration_seconds_sum[$__interval])) / sum(increase(ro_recommender_run_duration_seconds_count[$__interval]))",
+          "expr": "sum(increase(kerf_recommender_run_duration_seconds_sum[$__interval])) / sum(increase(kerf_recommender_run_duration_seconds_count[$__interval]))",
           "legendFormat": "avg run",
           "range": true,
           "instant": false,

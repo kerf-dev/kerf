@@ -69,7 +69,7 @@ func TestTokens(t *testing.T) {
 func TestCookies(t *testing.T) {
 	exp := time.Date(2026, 11, 5, 2, 0, 0, 0, time.UTC)
 	c := SessionCookie("v", exp, true)
-	if c.Name != "ro_session" || !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteStrictMode || c.Path != "/" || !c.Expires.Equal(exp) {
+	if c.Name != "kerf_session" || !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteStrictMode || c.Path != "/" || !c.Expires.Equal(exp) {
 		t.Errorf("SessionCookie = %+v", c)
 	}
 	s := c.String()

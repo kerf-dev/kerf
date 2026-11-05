@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
 // Hub HA (WO-18a, D-028). Every replica serves the whole API from the database. One replica, the

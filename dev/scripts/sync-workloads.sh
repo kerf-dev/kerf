@@ -17,10 +17,10 @@ for c in "${targets[@]}"; do
     kc "$c" -n git-server create configmap workloads-seed "${files[@]/#/--from-file=}" --dry-run=client -o yaml \
       | kc "$c" apply --server-side --force-conflicts -f - >/dev/null
     current="$(kc "$c" -n git-server get deploy git-server \
-      -o jsonpath='{.spec.template.metadata.annotations.dev\.resource-optimizer/seed-hash}' 2>/dev/null || true)"
+      -o jsonpath='{.spec.template.metadata.annotations.dev\.kerf/seed-hash}' 2>/dev/null || true)"
     if [[ "$current" != "$hash" ]]; then
       kc "$c" -n git-server patch deploy git-server --type merge \
-        -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"dev.resource-optimizer/seed-hash\":\"$hash\"}}}}}" >/dev/null
+        -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"dev.kerf/seed-hash\":\"$hash\"}}}}}" >/dev/null
     fi
     kc "$c" -n git-server rollout status deploy/git-server --timeout=3m >/dev/null
     if kc "$c" -n argocd get application workloads >/dev/null 2>&1; then

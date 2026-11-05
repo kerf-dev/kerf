@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 func rl(cpu, mem string) corev1.ResourceList {
@@ -27,7 +27,7 @@ func rl(cpu, mem string) corev1.ResourceList {
 func TestOwnedResources(t *testing.T) {
 	d := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{ManagedFields: []metav1.ManagedFieldsEntry{
 		{Manager: "argocd-controller", FieldsV1: metav1.NewFieldsV1(`{"f:spec":{"f:template":{"f:spec":{"f:containers":{"k:{\"name\":\"app\"}":{"f:resources":{"f:requests":{"f:memory":{}}}}}}}}}`)},
-		{Manager: FieldManager, Operation: metav1.ManagedFieldsOperationApply, FieldsV1: metav1.NewFieldsV1(`{"f:metadata":{"f:annotations":{"f:resource-optimizer.oz.io/managed":{}}},"f:spec":{"f:template":{"f:spec":{"f:containers":{"k:{\"name\":\"app\"}":{".":{},"f:name":{},"f:resources":{"f:limits":{"f:cpu":{}}}}}}}}}`)},
+		{Manager: FieldManager, Operation: metav1.ManagedFieldsOperationApply, FieldsV1: metav1.NewFieldsV1(`{"f:metadata":{"f:annotations":{"f:kerf.getkerf.dev/managed":{}}},"f:spec":{"f:template":{"f:spec":{"f:containers":{"k:{\"name\":\"app\"}":{".":{},"f:name":{},"f:resources":{"f:limits":{"f:cpu":{}}}}}}}}}`)},
 	}}}
 	got := OwnedResources(d)
 	if !got[corev1.ResourceCPU] || got[corev1.ResourceMemory] {

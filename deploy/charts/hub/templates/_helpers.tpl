@@ -3,7 +3,7 @@
 {{- define "hub.labels" -}}
 app.kubernetes.io/name: hub
 app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/part-of: resource-optimizer
+app.kubernetes.io/part-of: kerf
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 {{- end -}}

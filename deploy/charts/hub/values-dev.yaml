@@ -1,6 +1,6 @@
 # Shared k3d dev environment (ro-hub). Endpoints: docs/handover/WO-01-handover.md.
 image:
-  repository: k3d-ro-registry:5005/resource-optimizer/hub
+  repository: k3d-ro-registry:5005/kerf/hub
   pullPolicy: Always
 
 service:
@@ -8,7 +8,7 @@ service:
   nodePort: 30080          # host localhost:18080; spokes use http://hub-api.hub.svc:8080
 
 database:
-  url: postgres://ro:ro@postgres.postgres.svc:5432/resource_optimizer?sslmode=disable
+  url: postgres://kerf:kerf@postgres.postgres.svc:5432/kerf?sslmode=disable
 
 # Development tokens — documented in README.md. Never reuse outside the local environment.
 devSeed:
@@ -50,5 +50,5 @@ config:
   onboarding:
     checkInterval: 10m
     hubURL: http://hub-api.hub.svc:8080
-    chart: deploy/charts/resource-optimizer
+    chart: deploy/charts/kerf
     imageRegistry: k3d-ro-registry:5005

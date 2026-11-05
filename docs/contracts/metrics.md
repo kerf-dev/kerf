@@ -9,16 +9,16 @@ All queries must be valid PromQL and run on both Prometheus and VictoriaMetrics 
 - **`cluster` label is mandatory** on every series and equals the cluster name used in the hub API
   path (`/v1/clusters/{cluster}/...`), e.g. `ro-spoke-1`.
   - Input series from a spoke get it from vmagent `externalLabels: {cluster: <name>}` (WO-01).
-  - `ro_*` series exported by hub-side components (pricing, hub) set `cluster` themselves, one value
+  - `kerf_*` series exported by hub-side components (pricing, hub) set `cluster` themselves, one value
     per spoke. The hub-side scrape config must use `honor_labels: true` and must not add or
     overwrite a `cluster` label for these jobs; otherwise `cluster` becomes `exported_cluster`.
-- Our own series use the `ro_` prefix. Base units only: seconds, bytes, cores, USD.
+- Our own series use the `kerf_` prefix. Base units only: seconds, bytes, cores, USD.
 - Workload identity labels, wherever a series is about a workload:
   `namespace`, `workload_kind` (`Deployment|StatefulSet|DaemonSet|CronJob`), `workload` (name),
   and `container` when per container.
 - Components may export extra operational series under their own prefix without a contract change:
-  `ro_hub_*`, `ro_recommender_*`, `ro_pricing_*`, `ro_agent_*`, `ro_webhook_*`, `ro_health_*`.
-  Everything else under `ro_` is listed in this file.
+  `kerf_hub_*`, `kerf_recommender_*`, `kerf_pricing_*`, `kerf_agent_*`, `kerf_webhook_*`, `kerf_health_*`.
+  Everything else under `kerf_` is listed in this file.
 
 ## 1. Input series (spokes → hub VictoriaMetrics)
 
@@ -72,14 +72,14 @@ One series per spoke node. All are gauges, in USD per hour, for the current pric
 
 | Series | Meaning |
 |---|---|
-| `ro_node_hourly_cost_usd` | price of the whole node |
-| `ro_cpu_core_hourly_cost_usd` | CPU share of the node price, per vCPU (allocatable) |
-| `ro_memory_gib_hourly_cost_usd` | memory share of the node price, per GiB (allocatable) |
+| `kerf_node_hourly_cost_usd` | price of the whole node |
+| `kerf_cpu_core_hourly_cost_usd` | CPU share of the node price, per vCPU (allocatable) |
+| `kerf_memory_gib_hourly_cost_usd` | memory share of the node price, per GiB (allocatable) |
 
 Labels (all three): `cluster`, `node`, `instance_type`, `capacity_type` (`on-demand`\|`spot`),
 `region`, `zone`, `provider` (`aws`\|`static`).
 
-Invariant: `ro_cpu_core_hourly_cost_usd * allocatable_cores + ro_memory_gib_hourly_cost_usd * allocatable_gib ≈ ro_node_hourly_cost_usd`.
+Invariant: `kerf_cpu_core_hourly_cost_usd * allocatable_cores + kerf_memory_gib_hourly_cost_usd * allocatable_gib ≈ kerf_node_hourly_cost_usd`.
 
 ## 3. Hub series (exported by the hub, WO-04)
 
@@ -89,24 +89,24 @@ Workload labels below = `cluster, namespace, workload_kind, workload`.
 
 | Series | Type | Extra labels | Meaning |
 |---|---|---|---|
-| `ro_recommendation_cpu_cores` | gauge | container, `type` (`request`\|`limit`), `source` (`current`\|`recommended`) | CPU in cores. No series for an unset or removed limit. |
-| `ro_recommendation_memory_bytes` | gauge | container, `type`, `source` | memory in bytes |
-| `ro_recommendation_monthly_savings_usd` | gauge | container, `resource` (`cpu`\|`memory`) | estimated monthly savings; negative for increases |
-| `ro_recommendation_confidence` | gauge | – | 0–1 |
-| `ro_recommendation_data_coverage_ratio` | gauge | – | 0–1, fraction of the window with data |
-| `ro_recommendation_risk_flag` | gauge | `flag` (hub API `RiskFlag` values) | 1 while the flag is set; no series otherwise |
-| `ro_recommendation_generated_timestamp_seconds` | gauge | – | unix time the recommendation was generated |
-| `ro_recommendation_average_replicas` | gauge | – | replicas used for savings |
+| `kerf_recommendation_cpu_cores` | gauge | container, `type` (`request`\|`limit`), `source` (`current`\|`recommended`) | CPU in cores. No series for an unset or removed limit. |
+| `kerf_recommendation_memory_bytes` | gauge | container, `type`, `source` | memory in bytes |
+| `kerf_recommendation_monthly_savings_usd` | gauge | container, `resource` (`cpu`\|`memory`) | estimated monthly savings; negative for increases |
+| `kerf_recommendation_confidence` | gauge | – | 0–1 |
+| `kerf_recommendation_data_coverage_ratio` | gauge | – | 0–1, fraction of the window with data |
+| `kerf_recommendation_risk_flag` | gauge | `flag` (hub API `RiskFlag` values) | 1 while the flag is set; no series otherwise |
+| `kerf_recommendation_generated_timestamp_seconds` | gauge | – | unix time the recommendation was generated |
+| `kerf_recommendation_average_replicas` | gauge | – | replicas used for savings |
 
 ### Modes and actions (from agent reports)
 
 | Series | Type | Extra labels | Meaning |
 |---|---|---|---|
-| `ro_workload_mode` | gauge | `resource` (`cpu`\|`memory`), `mode` (`off`\|`audit`\|`auto-patch`), `source` (`global-default`\|`cluster-default`\|`policy`\|`annotation`) | 1 for the effective mode. Workloads the agent never reported have `mode="audit"`, `source="global-default"`. |
-| `ro_workload_phase` | gauge | `phase` (`Pending`\|`Applying`\|`Applied`\|`Blocked`\|`RolledBack`\|`Released`\|`Deferred`) | 1 for the current phase |
-| `ro_actions_total` | counter | `type` (event type), `strategy`, `resource` (`cpu`\|`memory`\|`""`), `reason` | incremented once per event stored by the hub (duplicates are not counted); one increment per resource listed in the event. Carries the workload labels like every hub series (the event's workload). |
+| `kerf_workload_mode` | gauge | `resource` (`cpu`\|`memory`), `mode` (`off`\|`audit`\|`auto-patch`), `source` (`global-default`\|`cluster-default`\|`policy`\|`annotation`) | 1 for the effective mode. Workloads the agent never reported have `mode="audit"`, `source="global-default"`. |
+| `kerf_workload_phase` | gauge | `phase` (`Pending`\|`Applying`\|`Applied`\|`Blocked`\|`RolledBack`\|`Released`\|`Deferred`) | 1 for the current phase |
+| `kerf_actions_total` | counter | `type` (event type), `strategy`, `resource` (`cpu`\|`memory`\|`""`), `reason` | incremented once per event stored by the hub (duplicates are not counted); one increment per resource listed in the event. Carries the workload labels like every hub series (the event's workload). |
 
-`ro_actions_total` lives in the hub process and resets on restart; always use `increase()`/`rate()`.
+`kerf_actions_total` lives in the hub process and resets on restart; always use `increase()`/`rate()`.
 
 ### Cluster readiness (WO-19 contract, WO-25; D-025, `docs/contracts/readiness.md`)
 
@@ -114,11 +114,11 @@ Labels: `cluster` only (no workload labels).
 
 | Series | Type | Extra labels | Meaning |
 |---|---|---|---|
-| `ro_cluster_readiness` | gauge | `check` (check id, e.g. `metrics.ksm-owners`), `severity` (`blocking`\|`warning`\|`info`) | 1 when the latest result of the check is `pass`, 0 when it is `warn`, `fail` or `unknown`. One series per catalog check per registered cluster. |
-| `ro_cluster_readiness_state` | gauge | `state` (`Registered`\|`AgentConnected`\|`MetricsOK`\|`ReadyAudit`\|`AutomationReady`) | 1 for the cluster's current readiness state, 0 for the others. |
+| `kerf_cluster_readiness` | gauge | `check` (check id, e.g. `metrics.ksm-owners`), `severity` (`blocking`\|`warning`\|`info`) | 1 when the latest result of the check is `pass`, 0 when it is `warn`, `fail` or `unknown`. One series per catalog check per registered cluster. |
+| `kerf_cluster_readiness_state` | gauge | `state` (`Registered`\|`AgentConnected`\|`MetricsOK`\|`ReadyAudit`\|`AutomationReady`) | 1 for the cluster's current readiness state, 0 for the others. |
 
-Alert examples: `ro_cluster_readiness{severity="blocking"} == 0` (a blocking check is failing);
-`ro_cluster_readiness_state{state="AutomationReady"} == 0 and on(cluster) (sum by (cluster) (ro_workload_mode{mode="auto-patch"}) > 0)`
+Alert examples: `kerf_cluster_readiness{severity="blocking"} == 0` (a blocking check is failing);
+`kerf_cluster_readiness_state{state="AutomationReady"} == 0 and on(cluster) (sum by (cluster) (kerf_workload_mode{mode="auto-patch"}) > 0)`
 (auto-patch workloads on a cluster that lost automation readiness).
 
 ### Hub replicas (WO-18a, D-028)
@@ -129,16 +129,16 @@ two series have no `cluster` label because they describe the hub process, not a 
 
 | Series | Type | Extra labels | Meaning |
 |---|---|---|---|
-| `ro_hub_leader` | gauge | – | 1 while this replica is the leader, 0 otherwise. `sum(ro_hub_leader)` is 1 in a healthy hub (0 during a failover, at most 15 s). |
-| `ro_hub_leader_transitions_total` | counter | – | changes of `ro_hub_leader` on this replica (acquired or lost); resets on restart, use `increase()`. |
+| `kerf_hub_leader` | gauge | – | 1 while this replica is the leader, 0 otherwise. `sum(kerf_hub_leader)` is 1 in a healthy hub (0 during a failover, at most 15 s). |
+| `kerf_hub_leader_transitions_total` | counter | – | changes of `kerf_hub_leader` on this replica (acquired or lost); resets on restart, use `increase()`. |
 
 **Which replica exports what.** Series computed from the database are exported by the leader
-only, so N replicas never export N copies: every `ro_recommendation_*`, `ro_workload_mode`,
-`ro_workload_phase` and `ro_cluster_readiness*` series, and `ro_recommender_last_success_timestamp_seconds`,
-`ro_recommender_pricing_fallback`, `ro_recommender_recommendations`. After a failover they come
+only, so N replicas never export N copies: every `kerf_recommendation_*`, `kerf_workload_mode`,
+`kerf_workload_phase` and `kerf_cluster_readiness*` series, and `kerf_recommender_last_success_timestamp_seconds`,
+`kerf_recommender_pricing_fallback`, `kerf_recommender_recommendations`. After a failover they come
 from the new leader (they keep their values; only the scrape's pod label changes). Per-process
-series are exported by every replica and add up across replicas: `ro_actions_total` (events stored
-by that replica), `ro_hub_http_*`, `ro_recommender_runs_total`, `ro_recommender_run_duration_seconds`.
+series are exported by every replica and add up across replicas: `kerf_actions_total` (events stored
+by that replica), `kerf_hub_http_*`, `kerf_recommender_runs_total`, `kerf_recommender_run_duration_seconds`.
 
 ## 4. Reference PromQL
 
@@ -175,7 +175,7 @@ max by (cluster, namespace, pod, workload_kind, workload) (
 )
 ```
 
-The hub (WO-04) owns the canonical version of these queries; dashboards (WO-05) may use the `ro_*`
+The hub (WO-04) owns the canonical version of these queries; dashboards (WO-05) may use the `kerf_*`
 series instead of re-implementing the joins.
 
 CPU throttling ratio per container:

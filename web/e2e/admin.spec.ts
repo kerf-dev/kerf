@@ -206,7 +206,7 @@ test.describe('admin writes', () => {
     await page.getByTestId('register-cluster').click()
     await confirmWrite(page, 'write-dialog', 'new staging cluster (e2e)')
     await expect(page.getByTestId('secret-value')).toHaveText(/\S{12,}/)
-    await expect(page.getByTestId('install-content')).toContainText('resource-optimizer-agent-token')
+    await expect(page.getByTestId('install-content')).toContainText('kerf-agent-token')
     await page.getByTestId('wizard-next').click()
     await expect(page.getByTestId('verify-step')).toBeVisible()
     await expect(page.getByTestId('readiness-stepper')).toBeVisible()

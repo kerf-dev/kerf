@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# resource-optimizer mutating admission webhook (WO-07). Build context: repository root.
+# Kerf mutating admission webhook (WO-07). Build context: repository root.
 # Multi-arch (D-028, WO-18c): the Go stage runs on the build host and cross-compiles for the target
 # platform, so `docker buildx build --platform linux/amd64,linux/arm64` needs no emulation.
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build

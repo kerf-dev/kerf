@@ -38,7 +38,7 @@ go test ./tools/synth/...    # TestFixturesUpToDate fails if the files are stale
 
 ## Schema (`schemaVersion: 1`)
 
-Load with `synth.LoadFixture(path)` (`github.com/tomer1983/resource-optimizer/tools/synth/synth`),
+Load with `synth.LoadFixture(path)` (`github.com/kerf-dev/kerf/tools/synth/synth`),
 which maps `null` to `NaN`.
 
 ```jsonc

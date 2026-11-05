@@ -4,8 +4,8 @@
 Static checks (no network):
   * every dashboard file is valid JSON and matches what build.py generates;
   * UIDs are unique, every panel has a title and a description and uses the ${datasource} variable;
-  * every ro_* metric is listed in docs/contracts/metrics.md (or uses an allowed operational prefix) and
-    every label matched on a contract ro_* metric is one of its contract labels.
+  * every kerf_* metric is listed in docs/contracts/metrics.md (or uses an allowed operational prefix) and
+    every label matched on a contract kerf_* metric is one of its contract labels.
 
 Live checks (--live): resolve the template variables like Grafana does, then run every panel query and
 annotation through Grafana's /api/ds/query (the same path a panel uses) for each cluster value. A query
@@ -34,25 +34,25 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(HERE))
 import build  # noqa: E402
 
-OPS_PREFIXES = ("ro_hub_", "ro_recommender_", "ro_pricing_", "ro_agent_", "ro_webhook_", "ro_health_")
+OPS_PREFIXES = ("kerf_hub_", "kerf_recommender_", "kerf_pricing_", "kerf_agent_", "kerf_webhook_", "kerf_health_")
 SCRAPE_LABELS = {"cluster", "__name__"}
 WL_LABELS = {"cluster", "namespace", "workload_kind", "workload"}
 PRICING_LABELS = {"cluster", "node", "instance_type", "capacity_type", "region", "zone", "provider"}
 CONTRACT_LABELS = {
-    "ro_node_hourly_cost_usd": PRICING_LABELS,
-    "ro_cpu_core_hourly_cost_usd": PRICING_LABELS,
-    "ro_memory_gib_hourly_cost_usd": PRICING_LABELS,
-    "ro_recommendation_cpu_cores": WL_LABELS | {"container", "type", "source"},
-    "ro_recommendation_memory_bytes": WL_LABELS | {"container", "type", "source"},
-    "ro_recommendation_monthly_savings_usd": WL_LABELS | {"container", "resource"},
-    "ro_recommendation_confidence": WL_LABELS,
-    "ro_recommendation_data_coverage_ratio": WL_LABELS,
-    "ro_recommendation_risk_flag": WL_LABELS | {"flag"},
-    "ro_recommendation_generated_timestamp_seconds": WL_LABELS,
-    "ro_recommendation_average_replicas": WL_LABELS,
-    "ro_workload_mode": WL_LABELS | {"resource", "mode", "source"},
-    "ro_workload_phase": WL_LABELS | {"phase"},
-    "ro_actions_total": WL_LABELS | {"type", "strategy", "resource", "reason"},
+    "kerf_node_hourly_cost_usd": PRICING_LABELS,
+    "kerf_cpu_core_hourly_cost_usd": PRICING_LABELS,
+    "kerf_memory_gib_hourly_cost_usd": PRICING_LABELS,
+    "kerf_recommendation_cpu_cores": WL_LABELS | {"container", "type", "source"},
+    "kerf_recommendation_memory_bytes": WL_LABELS | {"container", "type", "source"},
+    "kerf_recommendation_monthly_savings_usd": WL_LABELS | {"container", "resource"},
+    "kerf_recommendation_confidence": WL_LABELS,
+    "kerf_recommendation_data_coverage_ratio": WL_LABELS,
+    "kerf_recommendation_risk_flag": WL_LABELS | {"flag"},
+    "kerf_recommendation_generated_timestamp_seconds": WL_LABELS,
+    "kerf_recommendation_average_replicas": WL_LABELS,
+    "kerf_workload_mode": WL_LABELS | {"resource", "mode", "source"},
+    "kerf_workload_phase": WL_LABELS | {"phase"},
+    "kerf_actions_total": WL_LABELS | {"type", "strategy", "resource", "reason"},
 }
 
 GRAFANA = os.environ.get("GRAFANA_URL", "http://localhost:13000").rstrip("/")
@@ -84,7 +84,7 @@ def exprs_of(dash):
 def static_checks():
     errors = []
     contract_text = CONTRACT.read_text()
-    contract_names = set(re.findall(r"`(ro_[a-z0-9_]+)`", contract_text))
+    contract_names = set(re.findall(r"`(kerf_[a-z0-9_]+)`", contract_text))
     missing = [m for m in CONTRACT_LABELS if m not in contract_names]
     if missing:
         errors.append("verify.py lists metrics that are not in the contract: " + ", ".join(missing))
@@ -115,11 +115,11 @@ def static_checks():
                 errors.append(f"{name}: panel '{p.get('title')}' does not use ${{datasource}}")
         for p, t in exprs_of(dash):
             expr = t["expr"]
-            for metric in set(re.findall(r"\b(ro_[a-z0-9_]+)", expr)):
+            for metric in set(re.findall(r"\b(kerf_[a-z0-9_]+)", expr)):
                 base = re.sub(r"_(bucket|sum|count)$", "", metric)
                 if metric not in contract_names and not base.startswith(OPS_PREFIXES):
                     errors.append(f"{name}: '{p['title']}' uses {metric}, not in docs/contracts/metrics.md")
-            for metric, body in re.findall(r"\b(ro_[a-z0-9_]+)\{([^}]*)\}", expr):
+            for metric, body in re.findall(r"\b(kerf_[a-z0-9_]+)\{([^}]*)\}", expr):
                 allowed = CONTRACT_LABELS.get(metric)
                 if allowed is None:
                     continue
@@ -270,7 +270,7 @@ def drill_targets(cluster):
     data = prom("query", {"query": (
         'topk by (workload_kind) (1, sum by (namespace, workload_kind, workload) '
         '(max by (namespace, workload_kind, workload, container, resource) '
-        '(ro_recommendation_monthly_savings_usd{cluster="' + cluster + '"})))')})
+        '(kerf_recommendation_monthly_savings_usd{cluster="' + cluster + '"})))')})
     out = []
     for s in sorted(data["result"], key=lambda s: s["metric"]["workload_kind"]):
         m = s["metric"]

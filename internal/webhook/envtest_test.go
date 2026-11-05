@@ -23,7 +23,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // envtestAssets finds envtest binaries: $KUBEBUILDER_ASSETS or ./bin/envtest/k8s/1.35*.
@@ -58,9 +58,9 @@ func TestEnvtest(t *testing.T) {
 		BinaryAssetsDirectory: assets,
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
 			MutatingWebhooks: []*admissionregistrationv1.MutatingWebhookConfiguration{{
-				ObjectMeta: metav1.ObjectMeta{Name: "resource-optimizer-webhook"},
+				ObjectMeta: metav1.ObjectMeta{Name: "kerf-webhook"},
 				Webhooks: []admissionregistrationv1.MutatingWebhook{{
-					Name:                    "pods.resource-optimizer.oz.io",
+					Name:                    "pods.kerf.getkerf.dev",
 					AdmissionReviewVersions: []string{"v1"},
 					SideEffects:             &none,
 					FailurePolicy:           &ignore,

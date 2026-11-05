@@ -7,7 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 func resMetric(name corev1.ResourceName, typ autoscalingv2.MetricTargetType, util int32) autoscalingv2.MetricSpec {

@@ -1,7 +1,7 @@
 # Defaults for a real installation. Development overrides: values-dev.yaml. Every production
 # feature is shown switched on in ci/values-prod.yaml (rendered by `make charts-lint`).
 
-# Set by an umbrella chart; read by every resource-optimizer chart.
+# Set by an umbrella chart; read by every kerf chart.
 global:
   imageRegistry: ""         # prefixed to image.repository; image.registry wins over it
   imagePullSecrets: []      # names or {name: ...}
@@ -10,7 +10,7 @@ global:
 
 image:
   registry: ""
-  repository: localhost:5005/resource-optimizer/web
+  repository: localhost:5005/kerf/web
   tag: dev
   digest: ""                # sha256:..., appended as @digest
   pullPolicy: IfNotPresent
@@ -92,7 +92,7 @@ extraVolumeMounts: []
 hub:
   # host:port of the hub API Service (the WO-04 chart names it after its release, `hub`). nginx resolves
   # it per request with the cluster DNS, which does not apply search domains: use the full name.
-  upstream: hub.resource-optimizer.svc.cluster.local:8080
+  upstream: hub.kerf.svc.cluster.local:8080
 
 # Sign-in (D-023): users log in against the hub, which sets an HttpOnly session cookie; nginx forwards
 # only that cookie and sends no bearer token for those requests.
@@ -113,7 +113,7 @@ token:
   externalSecret:
     enabled: false
     remoteRef:
-      key: ""             # e.g. resource-optimizer/web/hub-token
+      key: ""             # e.g. kerf/web/hub-token
       property: ""        # e.g. token (JSON secret); empty = the whole secret string
       version: ""
     refreshInterval: ""

@@ -39,7 +39,7 @@ spec:
             - name: HUB_UPSTREAM
               value: {{ .Values.hub.upstream | quote }}
             - name: HUB_TOKEN_FILE
-              value: /etc/resource-optimizer/hub-token/token
+              value: /etc/kerf/hub-token/token
             - name: ANONYMOUS_READ
               value: {{ .Values.auth.anonymousRead | quote }}
             {{- with .Values.extraEnv }}{{ toYaml . | nindent 12 }}{{ end }}
@@ -65,7 +65,7 @@ spec:
           resources: {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: hub-token
-              mountPath: /etc/resource-optimizer/hub-token
+              mountPath: /etc/kerf/hub-token
               readOnly: true
             {{- if $ro }}
             {{- range $i, $p := .Values.readOnlyPaths }}

@@ -3,7 +3,7 @@
 # the mounted Secret and, when anonymous read access is on (ANONYMOUS_READ, default true), exports
 # HUB_ANON_AUTHORIZATION="Bearer <token>" for requests without a session cookie. With
 # ANONYMOUS_READ=false (or no token) it is empty: the hub answers 401 and the UI asks for a login.
-token_file="${HUB_TOKEN_FILE:-/etc/resource-optimizer/hub-token/token}"
+token_file="${HUB_TOKEN_FILE:-/etc/kerf/hub-token/token}"
 if [ -z "${HUB_TOKEN:-}" ] && [ -r "$token_file" ]; then
   HUB_TOKEN="$(tr -d '\r\n' < "$token_file")"
 fi

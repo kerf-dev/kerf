@@ -17,12 +17,12 @@ configs:
   cm:
     timeout.reconciliation: 60s
     timeout.reconciliation.jitter: 10s
-    # D-006: fields owned by the resource-optimizer agent (server-side apply field manager) never
+    # D-006: fields owned by the Kerf agent (server-side apply field manager) never
     # count as drift, for every resource kind. Applications must also set RespectIgnoreDifferences=true
     # so a sync does not overwrite those fields (see dev/manifests/spoke-1/argocd-app.yaml).
     resource.customizations.ignoreDifferences.all: |
       managedFieldsManagers:
-        - resource-optimizer
+        - kerf
 
 dex:
   enabled: false

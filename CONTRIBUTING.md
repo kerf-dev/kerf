@@ -1,4 +1,4 @@
-# Contributing to resource-optimizer
+# Contributing to Kerf
 
 Thanks for helping. Bug reports, fixes, docs and features are all welcome.
 

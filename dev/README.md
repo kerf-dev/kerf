@@ -42,7 +42,7 @@ The root `Makefile` includes `make/*.mk`; until it exists use `make -f make/dev.
 |---|---|---|
 | VictoriaMetrics (query, `/api/v1/import`, `/api/v1/write`) | http://localhost:18428 | `victoria-metrics.monitoring.svc:8428` (hub), `victoria-metrics.hub.svc:8428` (spokes) |
 | Grafana | http://localhost:13000 (anonymous admin, or `admin`/`admin`) | `grafana.monitoring.svc:80` (hub) |
-| Postgres | `postgres://ro:ro@localhost:15432/resource_optimizer?sslmode=disable` | `postgres.postgres.svc:5432` (hub), Secret `postgres/postgres` has `DATABASE_URL` |
+| Postgres | `postgres://kerf:kerf@localhost:15432/kerf?sslmode=disable` | `postgres.postgres.svc:5432` (hub), Secret `postgres/postgres` has `DATABASE_URL` |
 | Hub API (reserved for WO-04, NodePort 30080 on the hub) | http://localhost:18080 | `hub-api.hub.svc:8080` (spokes) |
 | Web UI (WO-14, NodePort 30090 on the hub) | http://localhost:19090 | – |
 | Argo CD (spoke-1) | http://localhost:18090 (`admin`/`admin123`) | `argocd-server.argocd.svc` |
@@ -79,7 +79,7 @@ writing to the local VictoriaMetrics. Pricing and the hub (WO-03/04) get scraped
 `honor_labels: true` keeps the `cluster` label their series carry (`docs/contracts/metrics.md`).
 VictoriaMetrics' own Service is annotated, so `up{job="annotated-services"}` is non-empty from the start.
 Discovery metadata goes to `kubernetes_namespace` / `kubernetes_service` / `kubernetes_pod`, never to
-`namespace`, so it cannot clobber the workload labels in `ro_*` series.
+`namespace`, so it cannot clobber the workload labels in `kerf_*` series.
 
 Fake EKS/Karpenter node labels: spoke-1 `m6i.xlarge` / `on-demand` / `eu-west-1a`, spoke-2 `c6a.2xlarge` / `spot` / `eu-west-1b`.
 
@@ -89,7 +89,7 @@ synthetic backfill (WO-02) writes 30 days.
 ## Grafana dashboards
 
 Every `*.json` under the repo's `dashboards/` (nested paths flattened to `dir_file.json`) is packed into
-ConfigMap `monitoring/grafana-dashboards` and file-provisioned into folder **resource-optimizer**, with
+ConfigMap `monitoring/grafana-dashboards` and file-provisioned into folder **kerf**, with
 VictoriaMetrics (Prometheus type, uid `victoriametrics`) as the default datasource. Use
 `${datasource}` or uid `victoriametrics` in dashboard JSON. Changes appear ~1 minute after
 `make dev-dashboards` (or immediately via Tilt's `dashboards` resource plus the ConfigMap refresh).
@@ -97,7 +97,7 @@ VictoriaMetrics (Prometheus type, uid `victoriametrics`) as the default datasour
 ## Argo CD and the git server (spoke-1)
 
 Argo CD is installed without dex, notifications or the ApplicationSet controller. Per D-006 it ignores
-fields owned by field manager `resource-optimizer`, globally (`resource.customizations.ignoreDifferences.all`
+fields owned by field manager `kerf`, globally (`resource.customizations.ignoreDifferences.all`
 in `argocd-cm`) and on the Application `argocd/workloads` (`ignoreDifferences.managedFieldsManagers`
 plus `RespectIgnoreDifferences=true`, automated sync with prune and self-heal, 60 s reconciliation).
 
@@ -138,7 +138,7 @@ on both spokes; spoke-1 gets them through Argo CD, spoke-2 through `kubectl appl
 `agent`, `webhook` (on both spokes) — each skipped until `deploy/charts/<name>/` exists. A resource builds
 the image (first of `cmd/<name>/Dockerfile`, `build/<name>/Dockerfile`, `build/<name>.Dockerfile`, or a
 root `Dockerfile` with `--build-arg COMPONENT=<name>`), pushes it to `localhost:5005`, and
-`helm upgrade --install`s the chart into namespace `resource-optimizer` with `image.repository`,
+`helm upgrade --install`s the chart into namespace `kerf` with `image.repository`,
 `image.tag` and `clusterName` set, plus `values-dev.yaml` / `values-<cluster>.yaml` if the chart has them.
 See [`scripts/tilt-deploy.sh`](scripts/tilt-deploy.sh). The `dashboards` and `workloads` resources
 re-sync on file changes. Tilt's own kube context does not matter: every resource passes `--kube-context`

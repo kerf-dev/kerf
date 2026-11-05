@@ -24,7 +24,7 @@ import (
 )
 
 // suiteFieldManager is the field manager of every write of the suite.
-const suiteFieldManager = "resource-optimizer-e2e"
+const suiteFieldManager = "kerf-e2e"
 
 // legacyFieldManager is the default manager earlier suite versions wrote with (the test binary).
 const legacyFieldManager = "e2e.test"
@@ -87,7 +87,7 @@ func markRun() error {
 			}
 		}
 		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: runMarker, Labels: map[string]string{suiteLabel: "true", runMarkerLabel: "true"},
-			Annotations: map[string]string{"e2e.resource-optimizer.oz.io/note": "make e2e is running: don't deploy agent/webhook to this cluster until it is gone"}}}
+			Annotations: map[string]string{"e2e.kerf.getkerf.dev/note": "make e2e is running: don't deploy agent/webhook to this cluster until it is gone"}}}
 		if err := cl.C.Create(c, ns); err != nil {
 			return fmt.Errorf("%s: create run marker: %w", cl.Name, err)
 		}
@@ -96,7 +96,7 @@ func markRun() error {
 	return nil
 }
 
-const runMarkerLabel = "e2e.resource-optimizer.oz.io/run-marker"
+const runMarkerLabel = "e2e.kerf.getkerf.dev/run-marker"
 
 // unmarkRun deletes this run's marker (also with E2E_KEEP: it only signals a running suite).
 func unmarkRun() {

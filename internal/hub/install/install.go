@@ -1,11 +1,11 @@
 // Package install renders the install instructions of a workload cluster for the onboarding
 // wizard: a Helm script, a values file, or an Argo CD Application, plus the Argo CD
 // ignoreDifferences snippet for argocd-cm (D-006). All three install the umbrella chart
-// resource-optimizer with global.mode spoke (D-028, docs/install/eks.md step 5.3): the agent, the
+// kerf with global.mode spoke (D-028, docs/install/eks.md step 5.3): the agent, the
 // admission webhook and the CRDs in one release.
 //
-// The token never appears: the snippets reference the Secret resource-optimizer-agent-token (key
-// token), either an existing one (the Helm script creates it from $RO_AGENT_TOKEN) or one the
+// The token never appears: the snippets reference the Secret kerf-agent-token (key
+// token), either an existing one (the Helm script creates it from $KERF_AGENT_TOKEN) or one the
 // chart's ExternalSecret builds from a secret store. Its value is shown once at cluster creation or
 // token creation. docs/contracts/readiness.md §4.
 package install
@@ -21,27 +21,27 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // Defaults of Options.
 const (
-	DefaultNamespace       = "resource-optimizer"
+	DefaultNamespace       = "kerf"
 	DefaultArgoCDNamespace = "argocd"
 	DefaultArgoCDProject   = "default"
 	DefaultCertManagerRef  = "oci://quay.io/jetstack/charts/cert-manager"
 	DefaultCertManagerVer  = "v1.19.1"
 	// DefaultTokenKey is the secret store key of a cluster's agent token ({cluster} = its name),
 	// as in docs/install/eks.md step 5.2.
-	DefaultTokenKey      = "resource-optimizer/clusters/{cluster}/agent-token"
+	DefaultTokenKey      = "kerf/clusters/{cluster}/agent-token"
 	DefaultTokenProperty = "token"
-	// ChartName and ReleaseName of the umbrella chart (deploy/charts/resource-optimizer).
-	ChartName   = "resource-optimizer"
-	ReleaseName = "resource-optimizer"
+	// ChartName and ReleaseName of the umbrella chart (deploy/charts/kerf).
+	ChartName   = "kerf"
+	ReleaseName = "kerf"
 	// FieldManager is the agent's server-side apply field manager (D-006).
-	FieldManager = "resource-optimizer"
+	FieldManager = "kerf"
 	// TokenEnv is the shell variable the Helm snippet reads the agent token from.
-	TokenEnv = "RO_AGENT_TOKEN"
+	TokenEnv = "KERF_AGENT_TOKEN"
 	// AgentReplicas: two agents with leader election (the umbrella chart's production default).
 	AgentReplicas = 2
 )
@@ -51,8 +51,8 @@ type Options struct {
 	Cluster string
 	// HubURL is the hub base URL as reachable from the cluster.
 	HubURL string
-	// Chart is the umbrella chart reference: oci://registry/path/resource-optimizer,
-	// <helm repo URL>|resource-optimizer, or a local chart path.
+	// Chart is the umbrella chart reference: oci://registry/path/kerf,
+	// <helm repo URL>|kerf, or a local chart path.
 	Chart string
 	// ChartVersion is the chart version (empty = latest). The images default to it.
 	ChartVersion string
@@ -179,8 +179,8 @@ func RegistryOf(ref string) string {
 
 // UmbrellaFromComponent derives the umbrella chart reference from a component chart reference
 // (the pre-WO-18f onboarding.agentChart): make release publishes it next to the components, e.g.
-// oci://<registry>/charts/agent -> oci://<registry>/charts/resource-optimizer,
-// <repo>|agent -> <repo>|resource-optimizer, deploy/charts/agent -> deploy/charts/resource-optimizer.
+// oci://<registry>/charts/agent -> oci://<registry>/charts/kerf,
+// <repo>|agent -> <repo>|kerf, deploy/charts/agent -> deploy/charts/kerf.
 func UmbrellaFromComponent(ref string) string {
 	if ref == "" {
 		return ""
@@ -217,7 +217,7 @@ func Render(format string, o Options) (hubapi.InstallSnippet, error) {
 		s.Filename = valuesName(o)
 		s.Content, err = valuesFile(o)
 	case hubapi.InstallArgoCD:
-		s.Filename = "resource-optimizer-" + o.Cluster + ".yaml"
+		s.Filename = "kerf-" + o.Cluster + ".yaml"
 		s.Content, err = argoCD(o)
 	default:
 		return s, fmt.Errorf("unknown format %q (want helm, values or argocd)", format)
@@ -244,7 +244,7 @@ func notes(format string, o Options) []string {
 			hubapi.AgentTokenSecretName, hubapi.AgentTokenSecretKey, o.Namespace))
 	}
 	n = append(n,
-		"This installs the umbrella chart resource-optimizer in mode spoke with the settings of this cluster. docs/install/eks.md step 5.3 (deploy/examples/eks/values-spoke.yaml) adds the production extras: NetworkPolicies, ServiceMonitors, the webhook port and a private hub CA.",
+		"This installs the umbrella chart kerf in mode spoke with the settings of this cluster. docs/install/eks.md step 5.3 (deploy/examples/eks/values-spoke.yaml) adds the production extras: NetworkPolicies, ServiceMonitors, the webhook port and a private hub CA.",
 		"If Argo CD manages the workloads, add the argocdIgnoreDifferences entry to argocd-cm so it does not revert the agent's changes.",
 	)
 	if o.ReadOnly {
@@ -274,7 +274,7 @@ func chartCLI(ref, version string) string {
 
 // valuesDelimiter ends the values heredoc of the Helm script. The values are YAML mappings of
 // validated single-line strings, so no line equals it.
-const valuesDelimiter = "RO_VALUES"
+const valuesDelimiter = "KERF_VALUES"
 
 func helmScript(o Options) (string, error) {
 	vals, err := marshal(spokeVals(o))
@@ -283,7 +283,7 @@ func helmScript(o Options) (string, error) {
 	}
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\nset -eu\n")
-	fmt.Fprintf(&b, "# resource-optimizer (chart %s, global.mode spoke) for cluster %s.\n# Run with kubectl and helm pointed at the cluster.\n", ChartName, o.Cluster)
+	fmt.Fprintf(&b, "# Kerf (chart %s, global.mode spoke) for cluster %s.\n# Run with kubectl and helm pointed at the cluster.\n", ChartName, o.Cluster)
 	if t := o.TokenExternalSecret; t != nil {
 		fmt.Fprintf(&b, "# The agent token comes from the secret store %s: store the token shown once when the\n# cluster was created (or POST /v1/admin/tokens) as %s, property %s, first.\n\n",
 			t.SecretStoreName, t.Key, t.Property)
@@ -418,7 +418,7 @@ func valuesFile(o Options) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("# resource-optimizer (chart %s, global.mode spoke) values for cluster %s.\n", ChartName, o.Cluster) + tokenComment(o) + body, nil
+	return fmt.Sprintf("# Kerf (chart %s, global.mode spoke) values for cluster %s.\n", ChartName, o.Cluster) + tokenComment(o) + body, nil
 }
 
 // ---- Argo CD (docs/install/eks.md steps 6 and 7) ----
@@ -488,8 +488,8 @@ func argoSource(ref, version string) appSource {
 func argoCD(o Options) (string, error) {
 	var a application
 	a.APIVersion, a.Kind = "argoproj.io/v1alpha1", "Application"
-	a.Metadata.Name, a.Metadata.Namespace = "resource-optimizer-"+o.Cluster, o.ArgoCDNamespace
-	a.Metadata.Labels = map[string]string{"app.kubernetes.io/part-of": "resource-optimizer"}
+	a.Metadata.Name, a.Metadata.Namespace = "kerf-"+o.Cluster, o.ArgoCDNamespace
+	a.Metadata.Labels = map[string]string{"app.kubernetes.io/part-of": "kerf"}
 	a.Spec.Project = o.ArgoCDProject
 	a.Spec.Source = argoSource(o.Chart, o.ChartVersion)
 	a.Spec.Source.Helm.ReleaseName, a.Spec.Source.Helm.ValuesObject = ReleaseName, spokeVals(o)

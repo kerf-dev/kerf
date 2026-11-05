@@ -1,4 +1,4 @@
-# resource-optimizer web UI (WO-14, WO-22)
+# Kerf web UI (WO-14, WO-22)
 
 The primary interface for platform and FinOps teams (D-014): where the savings are, why each
 recommendation was made, and what automation did.
@@ -35,9 +35,9 @@ Press <kbd>⌘K</kbd> anywhere to search workloads and namespaces. Light, dark a
 
 ```bash
 make web-dev        # Vite on :5173 with the MSW mock API (2 clusters × ~200 workloads, no hub needed)
-make web-dev-live   # Vite on :5173, /v1 proxied to the real hub (RO_HUB_URL, default http://localhost:18080)
+make web-dev-live   # Vite on :5173, /v1 proxied to the real hub (KERF_HUB_URL, default http://localhost:18080)
 make web-verify     # API types check, lint, prettier, typecheck, unit + contract tests, build, Playwright smoke
-make deploy-web     # build + push localhost:5005/resource-optimizer/web, helm install into ro-hub → http://localhost:19090
+make deploy-web     # build + push localhost:5005/kerf/web, helm install into ro-hub → http://localhost:19090
 ```
 
 In mock mode, the **Mock API** menu in the top bar switches to an empty fleet, a slow hub or a failing
@@ -55,15 +55,15 @@ hub, and between anonymous read-only access and "login required". Mock users: `a
   roles, CSRF, If-Match, readiness, preview). `handlers.test.ts` and `admin.test.ts` validate every mock
   response against `hub.yaml` with a JSON Schema validator, so the UI built on the mocks matches the real hub.
   The service worker is preferred. Where service workers are unavailable, it falls back to patching `fetch`.
-- **Sign-in (D-023).** `POST /v1/auth/login` sets the HttpOnly `ro_session` cookie; `GET /v1/me` gives
+- **Sign-in (D-023).** `POST /v1/auth/login` sets the HttpOnly `kerf_session` cookie; `GET /v1/me` gives
   the role and the CSRF token, which the client sends as `X-CSRF-Token` on writes (`src/api/auth.ts`).
   A `401` on `/v1/me` means login required; `authMethod: token` means anonymous read-only.
 - **No token in the browser.** The browser only talks to its own origin. nginx proxies `/v1/` (all
-  methods): with a `ro_session` cookie it forwards only that cookie and no bearer token; without one it adds
+  methods): with a `kerf_session` cookie it forwards only that cookie and no bearer token; without one it adds
   `Authorization: Bearer <ui token>` from a mounted Secret when `auth.anonymousRead` is on (default), or
   nothing (the UI then asks for a login). Whatever the browser sends in `Authorization` is dropped, and the
   raw `$request_uri` is passed through so `%2F` is never decoded. In live dev mode the Vite proxy does the
-  same with `RO_HUB_TOKEN`.
+  same with `KERF_HUB_TOKEN`.
 
 ## Production image and chart
 

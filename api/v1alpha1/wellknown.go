@@ -8,12 +8,12 @@ import (
 
 // Identifiers (D-006, D-012).
 const (
-	// Prefix of every annotation and label key owned by resource-optimizer.
-	Prefix = "resource-optimizer.oz.io/"
+	// Prefix of every annotation and label key owned by Kerf.
+	Prefix = "kerf.getkerf.dev/"
 
 	// FieldManager is the server-side-apply field manager for every write to workloads (D-006).
 	// Argo CD ignores fields owned by this manager.
-	FieldManager = "resource-optimizer"
+	FieldManager = "kerf"
 )
 
 // Annotations set by users on workload objects (Deployment, StatefulSet, DaemonSet, CronJob).
@@ -35,7 +35,7 @@ const (
 	AnnotationAllowDisruption = Prefix + "allow-disruption"
 )
 
-// Annotations written by resource-optimizer.
+// Annotations written by Kerf.
 const (
 	// AnnotationManaged is set to "true" on a workload while the agent owns resource fields on it
 	// (rollout strategy). Removed on release.
@@ -131,7 +131,7 @@ func RecommendationName(kind WorkloadKind, name string, taken bool) string {
 }
 
 // Reasons. They are used verbatim as metav1.Condition reasons, as the "reason" of events
-// (docs/contracts/events.md, hub API Event.reason) and as the "reason" label of ro_actions_total.
+// (docs/contracts/events.md, hub API Event.reason) and as the "reason" label of kerf_actions_total.
 const (
 	// skipped
 	ReasonModeOff             = "ModeOff"

@@ -15,20 +15,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v1alpha1 "github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
-// The webhook (WO-07) is the Helm release `webhook`, Deployment resource-optimizer/webhook.
+// The webhook (WO-07) is the Helm release `webhook`, Deployment kerf/webhook.
 var (
-	webhookNamespace  = getenv("E2E_WEBHOOK_NAMESPACE", "resource-optimizer")
+	webhookNamespace  = getenv("E2E_WEBHOOK_NAMESPACE", "kerf")
 	webhookDeployment = getenv("E2E_WEBHOOK_DEPLOYMENT", "webhook")
 )
 
 const (
-	injectedAnnotation = "resource-optimizer.oz.io/injected-resources"
+	injectedAnnotation = "kerf.getkerf.dev/injected-resources"
 	// scaledFromAnnotation records the webhook's replicas while scenario 8 has it scaled to 0, so
 	// `make e2e-unblock` can restore it after a killed run.
-	scaledFromAnnotation = "e2e.resource-optimizer.oz.io/scaled-from"
+	scaledFromAnnotation = "e2e.kerf.getkerf.dev/scaled-from"
 )
 
 func scale(t *testing.T, cl cluster, ns, name string, replicas int32) {
@@ -75,7 +75,7 @@ func webhookDown(t *testing.T, cl cluster) func() {
 	eventually(t, 2*time.Minute, 2*time.Second, "webhook pods gone", func() (bool, string) {
 		var list corev1.PodList
 		if err := cl.C.List(ctx(t), &list, client.InNamespace(webhookNamespace),
-			client.MatchingLabels{"app.kubernetes.io/name": "resource-optimizer-webhook"}); err != nil {
+			client.MatchingLabels{"app.kubernetes.io/name": "kerf-webhook"}); err != nil {
 			return false, err.Error()
 		}
 		return len(list.Items) == 0, fmt.Sprintf("%d webhook pods", len(list.Items))

@@ -8,11 +8,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1/validate"
-	"github.com/tomer1983/resource-optimizer/internal/hub/admin"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1/validate"
+	"github.com/kerf-dev/kerf/internal/hub/admin"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
 // ---- hub-managed policies (D-022; docs/contracts/admin.md "Policies") ----

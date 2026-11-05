@@ -9,7 +9,7 @@ E2E_SPOKE1_CONTEXT ?= k3d-ro-spoke-1
 E2E_SPOKE2_CONTEXT ?= k3d-ro-spoke-2
 export E2E_SPOKE1_CONTEXT E2E_SPOKE2_CONTEXT
 
-E2E_LABEL := e2e.resource-optimizer.oz.io/suite=true
+E2E_LABEL := e2e.kerf.getkerf.dev/suite=true
 
 ##@ End-to-end (WO-09, WO-24)
 

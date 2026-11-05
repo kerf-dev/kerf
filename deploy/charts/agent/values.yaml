@@ -1,9 +1,9 @@
-# resource-optimizer agent. One release per cluster, namespace resource-optimizer.
+# Kerf agent. One release per cluster, namespace kerf.
 
 # Cluster name as known to the hub (required). Tilt / dev scripts set it per cluster.
 clusterName: ""
 
-# Set by an umbrella chart; read by every resource-optimizer chart.
+# Set by an umbrella chart; read by every kerf chart.
 global:
   imageRegistry: ""         # prefixed to image.repository; image.registry wins over it
   imagePullSecrets: []      # names or {name: ...}
@@ -12,13 +12,13 @@ global:
 
 image:
   registry: ""
-  repository: localhost:5005/resource-optimizer/agent
+  repository: localhost:5005/kerf/agent
   tag: dev
   digest: ""                # sha256:..., appended as @digest
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 
-# The resource-optimizer CRDs (copies of api/crds, `make charts-sync`), rendered as templates with
+# The Kerf CRDs (copies of api/crds, `make charts-sync`), rendered as templates with
 # helm.sh/resource-policy: keep: `helm upgrade` upgrades them and `helm uninstall` leaves them
 # (and every RightsizingPolicy and RightsizingRecommendation) in place. Exactly one release per
 # cluster renders them: this chart by default (the webhook chart has crds.install: false).
@@ -34,13 +34,13 @@ hub:
   # re-read on every request (rotation needs no restart). The Secret is optional: without it
   # the hub answers 401 and the agent behaves as offline (nothing new is applied).
   tokenSecret:
-    name: resource-optimizer-agent-token
+    name: kerf-agent-token
     key: token
     # create: true makes the chart create the Secret from `token` (local development only).
     create: false
     token: ""
     # External Secrets Operator: builds Secret `name` (key `key`) from Secrets Manager, e.g. one
-    # secret per cluster: resource-optimizer/agents/<cluster>.
+    # secret per cluster: kerf/agents/<cluster>.
     externalSecret:
       enabled: false
       remoteRef:
@@ -51,7 +51,7 @@ hub:
       secretStoreRef: {}
   # CA that signed the hub's HTTPS certificate, when it is not publicly trusted (a private CA; an
   # ACM public certificate needs nothing). Added to the system roots (SSL_CERT_DIR), mounted at
-  # /etc/resource-optimizer/hub-ca. One of existingConfigMap, existingSecret or pem (inline,
+  # /etc/kerf/hub-ca. One of existingConfigMap, existingSecret or pem (inline,
   # rendered into ConfigMap <fullname>-hub-ca).
   caBundle:
     existingConfigMap: ""
@@ -99,13 +99,13 @@ freeze:
 readOnly: false
 
 # Hub-managed configuration (D-022, WO-21): on every pull the agent fetches the cluster config,
-# makes the RightsizingPolicy CRs labelled resource-optimizer.oz.io/managed-by=hub equal to the
+# makes the RightsizingPolicy CRs labelled kerf.getkerf.dev/managed-by=hub equal to the
 # hub's policies (never touching other CRs), applies the hub's pause flag like a cluster-wide
 # freeze and applies approve-once grants. The last config is kept in the ConfigMap
 # <fullname>-config-state, so a restart without the hub keeps the pause flag and approvals.
 # With readOnly the CRs are not written; the inventory is still reported.
 # Before downgrading the agent below WO-21, delete the hub CRs:
-#   kubectl delete rsp -l resource-optimizer.oz.io/managed-by=hub
+#   kubectl delete rsp -l kerf.getkerf.dev/managed-by=hub
 configSync:
   enabled: true
 
@@ -118,7 +118,7 @@ logLevel: info
 
 # Label selectors of nodes where in-place resize must not be used (static CPU/Memory Manager
 # policy, which the API does not expose). Nodes with swap are detected automatically.
-# Example: ["resource-optimizer.oz.io/no-in-place=true", "node.kubernetes.io/cpu-manager-static"]
+# Example: ["kerf.getkerf.dev/no-in-place=true", "node.kubernetes.io/cpu-manager-static"]
 unsupportedNodeSelectors: []
 
 # Health watch and rollback after every automatic change (WO-08). Thresholds and the watch
@@ -197,7 +197,7 @@ priorityClassName: ""
 serviceAccount:
   # false: use an existing ServiceAccount `name` (the ClusterRole is still bound to it).
   create: true
-  name: ""                  # default: the chart's full name (resource-optimizer-agent)
+  name: ""                  # default: the chart's full name (kerf-agent)
   annotations: {}
 
 extraEnv: []

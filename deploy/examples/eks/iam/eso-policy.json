@@ -2,14 +2,14 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ReadResourceOptimizerSecrets",
+      "Sid": "ReadKerfSecrets",
       "Effect": "Allow",
       "Action": [
         "secretsmanager:GetSecretValue",
         "secretsmanager:DescribeSecret",
         "secretsmanager:ListSecretVersionIds"
       ],
-      "Resource": "arn:aws:secretsmanager:eu-west-1:123456789012:secret:resource-optimizer/*"
+      "Resource": "arn:aws:secretsmanager:eu-west-1:123456789012:secret:kerf/*"
     }
   ]
 }

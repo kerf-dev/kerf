@@ -5,7 +5,7 @@
 {{- define "pricing.labels" -}}
 app.kubernetes.io/name: pricing
 app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/part-of: resource-optimizer
+app.kubernetes.io/part-of: kerf
 app.kubernetes.io/version: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
 {{- end -}}

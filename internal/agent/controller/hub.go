@@ -12,30 +12,30 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
-// Agent metrics (prefix ro_agent_, docs/contracts/metrics.md).
+// Agent metrics (prefix kerf_agent_, docs/contracts/metrics.md).
 var (
 	eventsDropped = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "ro_agent_events_dropped_total",
+		Name: "kerf_agent_events_dropped_total",
 		Help: "Events dropped because the buffer for the hub was full (oldest first).",
 	})
 	eventsBuffered = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "ro_agent_events_buffered",
+		Name: "kerf_agent_events_buffered",
 		Help: "Events waiting to be sent to the hub.",
 	})
 	hubRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "ro_agent_hub_requests_total",
+		Name: "kerf_agent_hub_requests_total",
 		Help: "Requests to the hub by operation and result (ok, not_modified, error).",
 	}, []string{"operation", "result"})
 	lastPull = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "ro_agent_last_successful_pull_timestamp_seconds",
+		Name: "kerf_agent_last_successful_pull_timestamp_seconds",
 		Help: "Unix time of the last successful recommendation pull.",
 	})
 	recommendations = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "ro_agent_recommendations",
+		Name: "kerf_agent_recommendations",
 		Help: "Recommendations currently known to the agent.",
 	})
 )

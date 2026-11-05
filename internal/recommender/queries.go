@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
 )
 
 // Queries builds the canonical PromQL of the hub (docs/contracts/metrics.md, section 4). Every

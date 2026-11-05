@@ -527,8 +527,8 @@ max by (cluster, namespace, horizontalpodautoscaler) (last_over_time(kube_horizo
 max by (cluster, namespace, horizontalpodautoscaler) (max_over_time(kube_horizontalpodautoscaler_status_current_replicas{cluster="ro-spoke-1"}[168h]))
 
 ## Pricing/avg
-avg by (cluster) (max by (cluster, node) (last_over_time(ro_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}[1h])))
+avg by (cluster) (max by (cluster, node) (last_over_time(kerf_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}[1h])))
 
 ## Pricing/count
-count by (cluster) (max by (cluster, node) (last_over_time(ro_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}[1h])))
+count by (cluster) (max by (cluster, node) (last_over_time(kerf_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}[1h])))
 

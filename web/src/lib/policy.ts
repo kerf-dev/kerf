@@ -5,7 +5,7 @@ import { toYaml } from './yaml'
 /** A RightsizingPolicy manifest for Git (no hub label, so the agent treats it as a Git policy). */
 export function policyManifest(name: string, spec: RightsizingPolicySpec) {
   return toYaml({
-    apiVersion: 'resource-optimizer.oz.io/v1alpha1',
+    apiVersion: 'kerf.getkerf.dev/v1alpha1',
     kind: 'RightsizingPolicy',
     metadata: { name },
     spec,

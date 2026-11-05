@@ -8,15 +8,15 @@
 {{- end -}}
 
 {{- define "webhook.labels" -}}
-app.kubernetes.io/name: resource-optimizer-webhook
+app.kubernetes.io/name: kerf-webhook
 app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/part-of: resource-optimizer
+app.kubernetes.io/part-of: kerf
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 {{- end -}}
 
 {{- define "webhook.selectorLabels" -}}
-app.kubernetes.io/name: resource-optimizer-webhook
+app.kubernetes.io/name: kerf-webhook
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 

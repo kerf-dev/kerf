@@ -15,7 +15,7 @@ Until 1.0.0, only the latest minor release gets security fixes.
 
 ## Scope notes
 
-resource-optimizer changes pod resources in your clusters. Reports about these areas are especially welcome:
+Kerf changes pod resources in your clusters. Reports about these areas are especially welcome:
 
 - the agent's and webhook's RBAC and what a compromised component could change;
 - the hub API's authentication (agent tokens, user sessions, API tokens) and authorization (roles);

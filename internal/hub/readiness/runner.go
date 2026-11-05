@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // DefaultInterval is how often the hub re-runs the metrics checks of every cluster.

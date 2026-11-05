@@ -41,12 +41,12 @@ jobs:
       - name: Deploy hub, pricing, agents
         run: |
           make deploy-hub deploy-pricing
-          kubectl --context k3d-ro-hub -n resource-optimizer rollout status deploy/hub --timeout=5m
+          kubectl --context k3d-ro-hub -n kerf rollout status deploy/hub --timeout=5m
           make deploy-agent
           # Agent tokens (WO-06 hand-over): key <cluster> of Secret hub-dev-tokens on ro-hub.
           for c in ro-spoke-1 ro-spoke-2; do
-            kubectl --context k3d-ro-hub -n resource-optimizer get secret hub-dev-tokens -o jsonpath="{.data.$c}" | base64 -d \
-              | kubectl --context k3d-$c -n resource-optimizer create secret generic resource-optimizer-agent-token \
+            kubectl --context k3d-ro-hub -n kerf get secret hub-dev-tokens -o jsonpath="{.data.$c}" | base64 -d \
+              | kubectl --context k3d-$c -n kerf create secret generic kerf-agent-token \
                   --from-file=token=/dev/stdin --dry-run=client -o yaml | kubectl --context k3d-$c apply -f -
           done
       - name: Run e2e

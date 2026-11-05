@@ -4,7 +4,7 @@ Owner: WO-00. Changing a type, reason or field here is a contract change (see `C
 
 Events are the audit trail of what the agent decided and did. The agent sends them to the hub with
 `POST /v1/clusters/{cluster}/events` (schema `Event` in `api/openapi/hub.yaml`); the hub stores them
-in `audit_events` (`db/migrations/0001_init.sql`), counts them in `ro_actions_total`
+in `audit_events` (`db/migrations/0001_init.sql`), counts them in `kerf_actions_total`
 (`docs/contracts/metrics.md`) and serves them with `GET /v1/audit`.
 
 ## Delivery
@@ -12,7 +12,7 @@ in `audit_events` (`db/migrations/0001_init.sql`), counts them in `ro_actions_to
 - Each event has an agent-generated UUID `id`. The hub ignores an `id` it already stored, so the
   agent retries whole batches freely (at-least-once delivery, exactly-once storage).
 - While the hub is unreachable the agent buffers events (bounded, oldest dropped first, with an
-  `ro_agent_events_dropped_total` counter) and sends them when the hub is back. Rollbacks never wait
+  `kerf_agent_events_dropped_total` counter) and sends them when the hub is back. Rollbacks never wait
   for delivery (WO-08).
 - The agent also records each event as a Kubernetes `Event` on the `RightsizingRecommendation`
   (`reason` = event reason, `type` = `Normal` except `failed`, `rolled_back`, `fallback` = `Warning`).
@@ -40,7 +40,7 @@ same rule per resource.
 
 Reasons are CamelCase and identical to the `Reason*` constants in `api/v1alpha1/wellknown.go`, to
 the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the `reason` label of
-`ro_actions_total`. Adding a reason is a contract change: add the constant and a row here.
+`kerf_actions_total`. Adding a reason is a contract change: add the constant and a row here.
 
 ### Reason meanings
 
@@ -63,7 +63,7 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 | `JVMFixedHeap` | Memory change on a JVM container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`, detected live or flagged `jvm-fixed-heap` by the hub); memory is audit-only (WO-12). |
 | `HubUnreachable` | No fresh recommendation because the hub cannot be reached; nothing new is applied. |
 | `Paused` | Automation of the cluster (or of the whole fleet) is paused in the hub (`GET /v1/clusters/{cluster}/config`, `flags.paused`, D-022). Behaves like the cluster-wide freeze: no change and no release of field ownership; health-watch rollbacks still run. `details.pauseScope` is `cluster` or `fleet`. |
-| `SingleReplicaUnsafe` | The workload is single-replica (Deployment/StatefulSet with `replicas: 1`, or a PodDisruptionBudget that allows 0 disruptions) and the change would leave it without a Ready pod: the in-place resize restarts a container (`resizePolicy: RestartContainer`), or the rollout has no surge (needs maxSurge ≥ 1 and maxUnavailable 0; Recreate and StatefulSets never qualify). Also when an in-place fallback to such a rollout is refused (`details.fallbackReason`). Opt in with the annotation `resource-optimizer.oz.io/allow-disruption: "true"` (WO-13). |
+| `SingleReplicaUnsafe` | The workload is single-replica (Deployment/StatefulSet with `replicas: 1`, or a PodDisruptionBudget that allows 0 disruptions) and the change would leave it without a Ready pod: the in-place resize restarts a container (`resizePolicy: RestartContainer`), or the rollout has no surge (needs maxSurge ≥ 1 and maxUnavailable 0; Recreate and StatefulSets never qualify). Also when an in-place fallback to such a rollout is refused (`details.fallbackReason`). Opt in with the annotation `kerf.getkerf.dev/allow-disruption: "true"` (WO-13). |
 | `PodDisruptionBudget` | A PodDisruptionBudget refused (or the API server held) the eviction of an outdated pod of an `OnDelete` StatefulSet after its template was patched; the agent retries (`details.pod`, WO-13). |
 | `ResizeInfeasible` | Pod resize status `Infeasible`. |
 | `ResizeDeferredTimeout` | Pod resize stayed `Deferred` longer than `apply.fallbackAfter`. |

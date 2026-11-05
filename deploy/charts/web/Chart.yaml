@@ -1,8 +1,8 @@
 apiVersion: v2
 name: web
-description: resource-optimizer web UI (WO-14) — static SPA on nginx, /v1/ proxied to the hub with the `ui` token
+description: Kerf web UI (WO-14) — static SPA on nginx, /v1/ proxied to the hub with the `ui` token
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-home: https://github.com/tomer1983/resource-optimizer
-sources: [https://github.com/tomer1983/resource-optimizer]
+home: https://github.com/kerf-dev/kerf
+sources: [https://github.com/kerf-dev/kerf]

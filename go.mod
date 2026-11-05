@@ -1,4 +1,4 @@
-module github.com/tomer1983/resource-optimizer
+module github.com/kerf-dev/kerf
 
 go 1.26.0
 

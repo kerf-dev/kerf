@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"time"
 
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/install"
-	"github.com/tomer1983/resource-optimizer/internal/hub/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/install"
+	"github.com/kerf-dev/kerf/internal/hub/readiness"
+	"github.com/kerf-dev/kerf/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
 // Onboarding is the hub side of D-025: datasources, metrics bindings, readiness and install.
@@ -92,7 +92,7 @@ func (s *Server) RunReadiness(ctx context.Context) {
 	}
 }
 
-// refreshReadinessGauges sets ro_cluster_readiness* of every registered cluster from the
+// refreshReadinessGauges sets kerf_cluster_readiness* of every registered cluster from the
 // database and drops the series of deregistered ones.
 func (s *Server) refreshReadinessGauges(ctx context.Context) {
 	names, err := s.clusterNames(ctx)

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // TestSourceBinder: a bound cluster's data queries go to its datasource with its matcher and are
@@ -30,7 +30,7 @@ func TestSourceBinder(t *testing.T) {
 		t.Fatal("no query on the bound datasource")
 	}
 	for q := range bound.called {
-		if strings.Contains(q, "ro_cpu_core_hourly_cost_usd") || strings.Contains(q, "ro_memory_gib_hourly_cost_usd") {
+		if strings.Contains(q, "kerf_cpu_core_hourly_cost_usd") || strings.Contains(q, "kerf_memory_gib_hourly_cost_usd") {
 			t.Errorf("pricing query on the bound datasource: %.80s", q)
 		}
 		if !strings.Contains(q, `k8s_cluster="prod"`) || !strings.Contains(q, `"cluster", "c1", "", ""`) {

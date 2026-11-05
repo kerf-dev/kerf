@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // TestJVMFixedHeap (WO-12): the agent reports the JVM heap settings to the hub and never changes

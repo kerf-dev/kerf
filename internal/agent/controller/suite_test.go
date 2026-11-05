@@ -20,10 +20,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/configsync"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubstub"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent/configsync"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/internal/agent/hubstub"
 )
 
 const testCluster = "envtest"
@@ -114,7 +114,7 @@ func runSuite(m *testing.M) int {
 	rep := NewReporter(hub, "test", 100, log)
 	r := &Reconciler{
 		Client: mgr.GetClient(), Reader: mgr.GetAPIReader(), Store: store, Reporter: rep,
-		Recorder: mgr.GetEventRecorder("resource-optimizer-agent"), Log: log,
+		Recorder: mgr.GetEventRecorder("kerf-agent"), Log: log,
 		Cfg: Config{ClusterName: testCluster, ApplyingRequeue: 200 * time.Millisecond, OnDeleteSettle: 300 * time.Millisecond},
 	}
 	ctx, cancel := context.WithCancel(context.Background())

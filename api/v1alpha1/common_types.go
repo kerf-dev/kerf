@@ -4,7 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Mode controls what resource-optimizer does for one resource (CPU or memory) of a workload (D-005).
+// Mode controls what Kerf does for one resource (CPU or memory) of a workload (D-005).
 // +kubebuilder:validation:Enum=off;audit;auto-patch
 type Mode string
 
@@ -47,7 +47,7 @@ const (
 	DefaultStrategy = StrategyInPlace
 )
 
-// WorkloadKind is a workload kind resource-optimizer manages.
+// WorkloadKind is a workload kind Kerf manages.
 // +kubebuilder:validation:Enum=Deployment;StatefulSet;DaemonSet;CronJob
 type WorkloadKind string
 

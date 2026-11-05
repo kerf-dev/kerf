@@ -27,10 +27,10 @@ import (
 
 	admissionv1 "k8s.io/api/admissionregistration/v1"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/agent/apply"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/agent/apply"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
 // Remediation types.
@@ -47,7 +47,7 @@ const (
 	// through the pods/resize subresource (D-007).
 	InPlaceMinVersion = "1.33.0"
 	// FieldManager is the agent's server-side apply field manager (D-006).
-	FieldManager = "resource-optimizer"
+	FieldManager = "kerf"
 	// IgnoreDifferencesKey is the argocd-cm key holding ignoreDifferences for every resource.
 	IgnoreDifferencesKey = "resource.customizations.ignoreDifferences.all"
 )
@@ -60,7 +60,7 @@ type Config struct {
 	// ReadOnly: the agent was installed with readOnly: true (no write RBAC).
 	ReadOnly bool
 	// WebhookConfigName is the MutatingWebhookConfiguration of the webhook chart; empty =
-	// the first one with a webhook named *.webhook.resource-optimizer.oz.io.
+	// the first one with a webhook named *.webhook.kerf.getkerf.dev.
 	WebhookConfigName string
 	// WebhookDryRun creates a pod with dryRun=All to see the webhook mutate it. It needs `create
 	// pods`, which the agent chart does not grant by default.
@@ -176,7 +176,7 @@ func (c *Checker) checkVersion(r *result, in Inputs) {
 	if in.HubVersion != "" {
 		d["hubVersion"] = in.HubVersion
 	}
-	upgrade := "helm upgrade agent <chart> -n resource-optimizer --reuse-values --version <hub version>"
+	upgrade := "helm upgrade agent <chart> -n kerf --reuse-values --version <hub version>"
 	if agent == nil {
 		r.add(rd.CheckAgentVersion, rd.StatusPass, fmt.Sprintf("development build %q: version not compared", c.Cfg.AgentVersion), "", "", d)
 		return
@@ -375,7 +375,7 @@ func (c *Checker) checkInPlace(r *result) {
 	}
 }
 
-const webhookSuffix = ".webhook.resource-optimizer.oz.io"
+const webhookSuffix = ".webhook.kerf.getkerf.dev"
 
 func (c *Checker) findWebhook(ctx context.Context) (*admissionv1.MutatingWebhookConfiguration, error) {
 	if c.Cfg.WebhookConfigName != "" {
@@ -401,7 +401,7 @@ func (c *Checker) findWebhook(ctx context.Context) (*admissionv1.MutatingWebhook
 }
 
 func (c *Checker) checkWebhook(ctx context.Context, r *result) {
-	installRem := "helm upgrade --install webhook <webhook chart> -n resource-optimizer --set-string clusterName=<cluster>   # needs cert-manager"
+	installRem := "helm upgrade --install webhook <webhook chart> -n kerf --set-string clusterName=<cluster>   # needs cert-manager"
 	m, err := c.findWebhook(ctx)
 	switch {
 	case apierrors.IsForbidden(err):
@@ -413,7 +413,7 @@ func (c *Checker) checkWebhook(ctx context.Context, r *result) {
 		r.add(rd.CheckCertManager, rd.StatusUnknown, "webhook configuration unreadable", "", "", nil)
 		return
 	case m == nil:
-		r.add(rd.CheckWebhook, rd.StatusWarn, "the resource-optimizer webhook is not installed: new pods start with their template values until the agent resizes them", installRem, RemediationCommand, nil)
+		r.add(rd.CheckWebhook, rd.StatusWarn, "the Kerf webhook is not installed: new pods start with their template values until the agent resizes them", installRem, RemediationCommand, nil)
 		r.add(rd.CheckCertManager, rd.StatusPass, "no webhook, cert-manager not needed", "", "", nil)
 		return
 	}
@@ -458,7 +458,7 @@ func (c *Checker) checkWebhook(ctx context.Context, r *result) {
 	}
 	if len(problems) > 0 {
 		r.add(rd.CheckWebhook, rd.StatusWarn, strings.Join(problems, "; "),
-			"kubectl -n resource-optimizer get pods,certificate -l app.kubernetes.io/name=resource-optimizer-webhook && kubectl -n resource-optimizer logs deploy/webhook", RemediationCommand, d)
+			"kubectl -n kerf get pods,certificate -l app.kubernetes.io/name=kerf-webhook && kubectl -n kerf logs deploy/webhook", RemediationCommand, d)
 		return
 	}
 	r.add(rd.CheckWebhook, rd.StatusPass, "webhook "+m.Name+" configured with a CA and ready endpoints", "", "", d)

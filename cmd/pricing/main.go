@@ -20,7 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/tomer1983/resource-optimizer/internal/pricing"
+	"github.com/kerf-dev/kerf/internal/pricing"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
@@ -48,7 +48,7 @@ func main() {
 	var o options
 	fs := flag.NewFlagSet("pricing", flag.ExitOnError)
 	fs.StringVar(&o.provider, "provider", envOr("PRICING_PROVIDER", "static"), "price provider: static or aws")
-	fs.StringVar(&o.pricesFile, "prices", envOr("PRICING_PRICES_FILE", "/etc/resource-optimizer/prices.yaml"), "static provider: price file")
+	fs.StringVar(&o.pricesFile, "prices", envOr("PRICING_PRICES_FILE", "/etc/kerf/prices.yaml"), "static provider: price file")
 	fs.StringVar(&o.vmURL, "vm-url", envOr("PRICING_VM_URL", "http://localhost:8428"), "VictoriaMetrics/Prometheus query URL holding spoke node metrics")
 	fs.StringVar(&o.listen, "listen", envOr("PRICING_LISTEN", ":9090"), "address serving /metrics, /healthz, /readyz")
 	fs.DurationVar(&o.interval, "interval", 5*time.Minute, "node discovery and pricing interval")
@@ -57,7 +57,7 @@ func main() {
 	fs.Float64Var(&o.cpuWeight, "cpu-memory-weight", 0, "weight of 1 vCPU in GiB of memory for the cost split; 0 derives it per instance family (fallback 9)")
 	fs.StringVar(&o.clusters, "clusters", envOr("PRICING_CLUSTERS", ""), "regex of cluster label values to price (default all)")
 	fs.StringVar(&o.defaultRegion, "default-region", envOr("PRICING_DEFAULT_REGION", ""), "region for nodes without region/zone labels")
-	fs.StringVar(&o.selfCluster, "cluster-name", envOr("CLUSTER_NAME", "ro-hub"), "cluster this service runs in (cluster label of its own ro_pricing_* series)")
+	fs.StringVar(&o.selfCluster, "cluster-name", envOr("CLUSTER_NAME", "ro-hub"), "cluster this service runs in (cluster label of its own kerf_pricing_* series)")
 	fs.StringVar(&o.pricingRegion, "aws-pricing-region", pricing.DefaultPricingRegion, "aws provider: AWS Pricing API endpoint region")
 	fs.StringVar(&o.logLevel, "log-level", envOr("LOG_LEVEL", "info"), "debug, info, warn or error")
 	fs.StringVar(&o.hubURL, "hub-url", envOr("PRICING_HUB_URL", ""), "hub API URL: clusters with a metrics binding are discovered in their datasource through the hub's query proxy (D-025, D-026); empty = only --vm-url")

@@ -17,9 +17,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1/validate"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1/validate"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
 // Messages reported in the policy inventory.
@@ -41,7 +41,7 @@ type Result struct {
 }
 
 // Materialise makes the hub-labelled RightsizingPolicy CRs equal to cfg.Policies: it creates and
-// updates them (server-side apply, field manager resource-optimizer) and deletes labelled CRs
+// updates them (server-side apply, field manager kerf) and deletes labelled CRs
 // whose name is not in the list. CRs without the label are never touched; a hub policy whose
 // name is taken by one is reported invalid. Invalid hub policies are not applied (an older valid
 // CR of the same name stays). With cfg nil (no config received yet) or readOnly nothing is

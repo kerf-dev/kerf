@@ -12,7 +12,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // Stats are statistics of a per-step usage series (per-pod maximum across the workload's pods).
@@ -117,7 +117,7 @@ func (w WorkloadData) ContainerNames() []string {
 type Pricing struct {
 	CPUCoreHour   float64 `json:"cpuCoreHourUSD"`
 	MemoryGiBHour float64 `json:"memoryGiBHourUSD"`
-	// Source is "metrics" when the rates come from ro_*_hourly_cost_usd, "default" otherwise.
+	// Source is "metrics" when the rates come from kerf_*_hourly_cost_usd, "default" otherwise.
 	Source string `json:"source"`
 	// Nodes is the number of priced nodes the rates were averaged over.
 	Nodes int `json:"nodes,omitempty"`

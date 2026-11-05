@@ -17,7 +17,7 @@ import { SwitchRow } from './policy-form'
 import { WriteDialog } from './write-dialog'
 
 /**
- * Install instructions in three flavours (D-025): the umbrella chart resource-optimizer in mode spoke
+ * Install instructions in three flavours (D-025): the umbrella chart kerf in mode spoke
  * (agent, webhook and CRDs; WO-18f). They reference the token Secret, never the token.
  */
 export function InstallSnippets({ cluster, compact }: { cluster: string; compact?: boolean }) {
@@ -103,9 +103,9 @@ const HUB_VALUES: { key: string; what: string; match: RegExp; example: string }[
   },
   {
     key: 'hub.config.onboarding.chart',
-    what: 'the resource-optimizer chart (oci://…, <repo URL>|<chart>, or a path)',
+    what: 'the Kerf chart (oci://…, <repo URL>|<chart>, or a path)',
     match: /chart reference/i,
-    example: 'oci://registry.example.com/resource-optimizer/charts/resource-optimizer',
+    example: 'oci://registry.example.com/kerf/charts/kerf',
   },
   {
     key: 'hub.config.onboarding.imageRegistry',
@@ -128,7 +128,7 @@ const HUB_VALUES: { key: string; what: string; match: RegExp; example: string }[
 function InstallNotConfigured({ detail }: { detail?: string }) {
   const missing = HUB_VALUES.filter((v) => detail && v.match.test(detail))
   const list = missing.length ? missing : HUB_VALUES.slice(0, 2)
-  const cmd = `helm upgrade resource-optimizer deploy/charts/resource-optimizer -n resource-optimizer --reuse-values \\\n${list
+  const cmd = `helm upgrade kerf deploy/charts/kerf -n kerf --reuse-values \\\n${list
     .filter((v) => v.example)
     .map((v) => `  --set ${v.key}=${v.example}`)
     .join(' \\\n')}`
@@ -296,7 +296,7 @@ export function TokenCreatedDialog({
 }) {
   const secretCmd =
     created && cluster
-      ? `kubectl -n resource-optimizer create secret generic resource-optimizer-agent-token \\\n  --from-literal=token='${created.value}' --dry-run=client -o yaml | kubectl apply -f -`
+      ? `kubectl -n kerf create secret generic kerf-agent-token \\\n  --from-literal=token='${created.value}' --dry-run=client -o yaml | kubectl apply -f -`
       : undefined
   return (
     <Dialog open={!!created} onOpenChange={(o) => !o && onClose()}>

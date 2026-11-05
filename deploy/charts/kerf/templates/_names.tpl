@@ -4,7 +4,7 @@ Object names inside this chart (WO-18d). The component charts name their objects
 These definitions replace the components' "<name>.fullname": Helm parses a parent chart's templates
 after its subcharts', so a parent's `define` of the same name wins (one template namespace).
 
-  release resource-optimizer : hub, web, pricing, webhook, resource-optimizer-agent
+  release kerf : hub, web, pricing, webhook, kerf-agent
   any other release, e.g. ro : ro-hub, ro-web, ro-pricing, ro-webhook, ro-agent
 
 `<component>.fullnameOverride` replaces the name of one component. The rule itself is

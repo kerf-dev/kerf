@@ -10,8 +10,8 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/install"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	"github.com/kerf-dev/kerf/internal/hub/install"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
 // Duration is a time.Duration that (un)marshals as a Go duration string ("5m").
@@ -94,8 +94,8 @@ type OnboardingConfig struct {
 	HubVersion      string `json:"hubVersion"`
 	MinAgentVersion string `json:"minAgentVersion"`
 	// Install snippets of the cluster wizard (internal/hub/install, WO-18f): the hub URL as agents
-	// reach it and the umbrella chart resource-optimizer (installed with global.mode spoke):
-	// oci://registry/path/resource-optimizer, <repo URL>|resource-optimizer, or a local chart path.
+	// reach it and the umbrella chart kerf (installed with global.mode spoke):
+	// oci://registry/path/kerf, <repo URL>|kerf, or a local chart path.
 	HubURL string `json:"hubURL"`
 	Chart  string `json:"chart"`
 	// ChartVersion pins the chart. Empty: hubVersion when it is a release version (the agent
@@ -107,7 +107,7 @@ type OnboardingConfig struct {
 	// External Secrets Operator (as docs/install/eks.md does). Unset: an existing Secret.
 	AgentTokenExternalSecret *TokenExternalSecretConfig `json:"agentTokenExternalSecret,omitempty"`
 	// Deprecated (component charts, before WO-18f): Chart defaults to the umbrella chart next to
-	// AgentChart (…/agent -> …/resource-optimizer). WebhookChart is ignored.
+	// AgentChart (…/agent -> …/kerf). WebhookChart is ignored.
 	AgentChart   string `json:"agentChart"`
 	WebhookChart string `json:"webhookChart"`
 }
@@ -120,7 +120,7 @@ type TokenExternalSecretConfig struct {
 		Name string `json:"name"`
 	} `json:"secretStoreRef"`
 	RemoteRef struct {
-		// Key: {cluster} is replaced (default resource-optimizer/clusters/{cluster}/agent-token).
+		// Key: {cluster} is replaced (default kerf/clusters/{cluster}/agent-token).
 		Key      string `json:"key"`
 		Property string `json:"property"` // default token
 	} `json:"remoteRef"`

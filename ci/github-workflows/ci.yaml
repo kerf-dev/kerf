@@ -75,7 +75,7 @@ jobs:
           go-version-file: go.mod
       - run: make charts-lint
       - name: Package the charts as a release would
-        run: make release-chart-package VERSION=0.0.0-ci REGISTRY=ghcr.io/example/resource-optimizer RELEASE_CHART_DEFAULT_REGISTRY=1
+        run: make release-chart-package VERSION=0.0.0-ci REGISTRY=ghcr.io/example/kerf RELEASE_CHART_DEFAULT_REGISTRY=1
 
   images:
     name: images (build, not pushed)

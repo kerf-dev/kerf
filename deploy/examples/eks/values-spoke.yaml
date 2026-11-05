@@ -1,5 +1,5 @@
-# resource-optimizer on a workload cluster (EKS): agent + admission webhook + CRDs.
-# docs/install/eks.md, step 5. One release per cluster, namespace resource-optimizer.
+# kerf on a workload cluster (EKS): agent + admission webhook + CRDs.
+# docs/install/eks.md, step 5. One release per cluster, namespace kerf.
 #
 # Placeholders: docs/install/eks.md replaces them with sed. Each one appears only as written here:
 #   123456789012                                       AWS account ($ACCOUNT)
@@ -22,11 +22,11 @@ agent:
     # The hub's internal ALB (an ACM certificate: publicly trusted, no caBundle needed).
     url: https://hub.ro.example.com
     # The token the cluster wizard showed once, stored in Secrets Manager as {"token": "..."}.
-    # Becomes Secret resource-optimizer-agent-token (key token); re-read on every request.
+    # Becomes Secret kerf-agent-token (key token); re-read on every request.
     tokenSecret:
       externalSecret:
         enabled: true
-        remoteRef: {key: resource-optimizer/clusters/prod-eu1/agent-token, property: token}
+        remoteRef: {key: kerf/clusters/prod-eu1/agent-token, property: token}
     # A hub certificate from a private CA instead of ACM: the CA as a ConfigMap.
     # caBundle:
     #   existingConfigMap: corp-root-ca

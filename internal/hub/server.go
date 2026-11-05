@@ -1,5 +1,5 @@
 // Package hub is the central service: HTTP API (api/openapi/hub.yaml), recommender scheduler,
-// Postgres persistence and the ro_recommendation_* metrics.
+// Postgres persistence and the kerf_recommendation_* metrics.
 package hub
 
 import (
@@ -16,10 +16,10 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/auth"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	"github.com/kerf-dev/kerf/internal/hub/auth"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
 // Server serves the hub API.

@@ -20,16 +20,16 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
-// Integration tests run against Postgres when RO_TEST_DATABASE_URL is set to a superuser URL,
-// e.g. postgres://ro:ro@localhost:15432/postgres?sslmode=disable. Every test creates its own
-// database ro_hub_test_<random> and drops it at the end.
+// Integration tests run against Postgres when KERF_TEST_DATABASE_URL is set to a superuser URL,
+// e.g. postgres://kerf:kerf@localhost:15432/postgres?sslmode=disable. Every test creates its own
+// database kerf_hub_test_<random> and drops it at the end.
 
-const testDBPrefix = "ro_hub_test_"
+const testDBPrefix = "kerf_hub_test_"
 
 // newTestStore creates a fresh migrated database and returns a store on it.
 func newTestStore(t *testing.T, createOpts string) *store.Store {
@@ -49,9 +49,9 @@ func newTestStore(t *testing.T, createOpts string) *store.Store {
 // newTestDB creates a fresh empty database, dropped at the end of the test, and returns its URL.
 func newTestDB(t *testing.T, createOpts string) string {
 	t.Helper()
-	base := os.Getenv("RO_TEST_DATABASE_URL")
+	base := os.Getenv("KERF_TEST_DATABASE_URL")
 	if base == "" {
-		t.Skip("RO_TEST_DATABASE_URL not set; skipping Postgres integration test")
+		t.Skip("KERF_TEST_DATABASE_URL not set; skipping Postgres integration test")
 	}
 	ctx := context.Background()
 	b := make([]byte, 6)

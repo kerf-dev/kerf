@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // fakeQuerier routes by query text. A query present in a map (even with a nil result) is known;
@@ -121,8 +121,8 @@ func buildSourceQueries(cfg Config) sourceQueries {
 		hpaPeak:    q.HPAPeakReplicas(14 * 24 * time.Hour),
 		res:        map[string]map[bool]map[bool]string{},
 	}
-	sq.priceCPU, sq.priceNodes = q.Pricing("ro_cpu_core_hourly_cost_usd", time.Hour)
-	sq.priceMem, _ = q.Pricing("ro_memory_gib_hourly_cost_usd", time.Hour)
+	sq.priceCPU, sq.priceNodes = q.Pricing("kerf_cpu_core_hourly_cost_usd", time.Hour)
+	sq.priceMem, _ = q.Pricing("kerf_memory_gib_hourly_cost_usd", time.Hour)
 	for _, m := range []string{"requests", "limits"} {
 		sq.res[m] = map[bool]map[bool]string{}
 		for _, init := range []bool{false, true} {

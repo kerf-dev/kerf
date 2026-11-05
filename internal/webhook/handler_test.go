@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 func recFor(name string, kind v1alpha1.WorkloadKind, target string, phase v1alpha1.Phase, strategy v1alpha1.Strategy,
@@ -203,7 +203,7 @@ func TestHandle(t *testing.T) {
 				t.Fatalf("pod denied: %+v", resp.Result)
 			}
 			if got := testutil.ToFloat64(h.Metrics.Admissions.WithLabelValues(tt.wantResult, tt.wantReason)); got != 1 {
-				t.Fatalf("ro_webhook_admissions_total{result=%q,reason=%q} = %v", tt.wantResult, tt.wantReason, got)
+				t.Fatalf("kerf_webhook_admissions_total{result=%q,reason=%q} = %v", tt.wantResult, tt.wantReason, got)
 			}
 			if tt.wantResult != ResultMutated {
 				if len(resp.Patches) != 0 {

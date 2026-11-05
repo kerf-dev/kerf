@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
     deleted_at            timestamptz
 );
 
--- Browser sessions (cookie ro_session). Only the SHA-256 of the session token is stored. The CSRF
+-- Browser sessions (cookie kerf_session). Only the SHA-256 of the session token is stored. The CSRF
 -- token is returned by login and GET /v1/me, so it is kept as is (it is useless without the cookie).
 CREATE TABLE IF NOT EXISTS sessions (
     id_sha256     bytea       PRIMARY KEY CHECK (length(id_sha256) = 32),

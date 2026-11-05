@@ -1,12 +1,12 @@
 # Mutating admission webhook (WO-07) targets. Included by the root Makefile.
 
-WEBHOOK_IMAGE         ?= localhost:5005/resource-optimizer/webhook
-WEBHOOK_IMAGE_PULL    ?= k3d-ro-registry:5005/resource-optimizer/webhook
+WEBHOOK_IMAGE         ?= localhost:5005/kerf/webhook
+WEBHOOK_IMAGE_PULL    ?= k3d-ro-registry:5005/kerf/webhook
 WEBHOOK_TAG           ?= dev-$(shell date +%Y%m%d-%H%M%S)
 # Expand once: a recursive $(shell date) would give docker push and helm different tags.
 WEBHOOK_TAG           := $(WEBHOOK_TAG)
 WEBHOOK_CHART         := deploy/charts/webhook
-WEBHOOK_NAMESPACE     ?= resource-optimizer
+WEBHOOK_NAMESPACE     ?= kerf
 WEBHOOK_CLUSTERS      ?= ro-spoke-1 ro-spoke-2
 WEBHOOK_ENVTEST_K8S   ?= 1.35.0
 WEBHOOK_SETUP_ENVTEST ?= $(LOCALBIN)/setup-envtest

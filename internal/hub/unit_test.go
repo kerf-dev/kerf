@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
 func discardLog() *slog.Logger { return slog.New(slog.DiscardHandler) }
@@ -770,7 +770,7 @@ func TestHandlerWithoutStore(t *testing.T) {
 		})
 	}
 	// /metrics works before any refresh.
-	if rr := do(http.MethodGet, "/metrics", nil); rr.Code != 200 || !strings.Contains(rr.Body.String(), "ro_hub_http_requests_total") {
+	if rr := do(http.MethodGet, "/metrics", nil); rr.Code != 200 || !strings.Contains(rr.Body.String(), "kerf_hub_http_requests_total") {
 		t.Errorf("metrics: %d", rr.Code)
 	}
 }
@@ -861,8 +861,8 @@ func TestMetricsCountAction(t *testing.T) {
 		{map[string]string{"cluster": "c1", "type": "applied", "strategy": "in-place", "resource": "memory", "reason": "Applied"}, "1"},
 		{map[string]string{"cluster": "c1", "type": "blocked", "strategy": "", "resource": "", "reason": "PDBViolation"}, "1"},
 	} {
-		if v, ok := ms.find("ro_actions_total", want.labels); !ok || v != want.value {
-			t.Errorf("ro_actions_total%v = %q (found %v)", want.labels, v, ok)
+		if v, ok := ms.find("kerf_actions_total", want.labels); !ok || v != want.value {
+			t.Errorf("kerf_actions_total%v = %q (found %v)", want.labels, v, ok)
 		}
 	}
 }

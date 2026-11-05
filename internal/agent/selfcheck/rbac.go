@@ -8,8 +8,8 @@ import (
 
 	authv1 "k8s.io/api/authorization/v1"
 
-	rd "github.com/tomer1983/resource-optimizer/api/v1alpha1/readiness"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
 // Permission is one verb on one resource the agent needs, cluster-wide.
@@ -31,7 +31,7 @@ func (p Permission) String() string {
 	return p.Verb + " " + r
 }
 
-const crdGroup = "resource-optimizer.oz.io"
+const crdGroup = "kerf.getkerf.dev"
 
 func perms(group string, resources []string, verbs ...string) []Permission {
 	var out []Permission

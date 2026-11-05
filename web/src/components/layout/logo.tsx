@@ -29,7 +29,7 @@ export function Logo({ size = 'md' }: { size?: 'md' | 'lg' }) {
     <div className="flex items-center gap-2.5">
       <LogoMark />
       <div className="hidden leading-tight lg:block">
-        <div className="text-[13px] font-semibold tracking-tight">Resource Optimizer</div>
+        <div className="text-[13px] font-semibold tracking-tight">Kerf</div>
         <div className="text-[11px] text-muted-foreground">Kubernetes rightsizing</div>
       </div>
     </div>

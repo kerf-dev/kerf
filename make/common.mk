@@ -15,7 +15,7 @@ GO          ?= go
 GOFLAGS     ?=
 export PATH := $(LOCALBIN):$(PATH)
 
-MODULE := github.com/tomer1983/resource-optimizer
+MODULE := github.com/kerf-dev/kerf
 
 # Pinned tool versions.
 CONTROLLER_GEN_VERSION ?= v0.23.0

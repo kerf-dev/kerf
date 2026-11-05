@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # Web UI (WO-14): static SPA served by nginx, /v1/ proxied to the hub with the `ui` token.
-# Build context: web/  (docker build -t resource-optimizer/web:dev web/)
+# Build context: web/  (docker build -t kerf/web:dev web/)
 #
 # Multi-arch (D-028, WO-18c): the Node stage runs on the build host (its output is plain JS/CSS), and the
 # runtime stage has no RUN step, so `--platform linux/amd64,linux/arm64` needs no emulation.
@@ -23,8 +23,8 @@ FROM nginx:1.29-alpine
 # /tmp/conf.d (writable), which nginx.conf includes; the stock /etc/nginx/conf.d is not read.
 ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1 \
     NGINX_ENVSUBST_OUTPUT_DIR=/tmp \
-    HUB_UPSTREAM=hub.resource-optimizer.svc.cluster.local:8080 \
-    HUB_TOKEN_FILE=/etc/resource-optimizer/hub-token/token
+    HUB_UPSTREAM=hub.kerf.svc.cluster.local:8080 \
+    HUB_TOKEN_FILE=/etc/kerf/hub-token/token
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
 COPY nginx/default.conf.template /etc/nginx/templates/conf.d/default.conf.template
 COPY nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf

@@ -19,7 +19,7 @@ metadata:
   name: {{ include "webhook.clusterName" . }}
   labels: {{- include "webhook.labels" . | nindent 4 }}
 rules:
-  - apiGroups: ["resource-optimizer.oz.io"]
+  - apiGroups: ["kerf.getkerf.dev"]
     resources: ["rightsizingrecommendations"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]

@@ -8,7 +8,7 @@ package hubclient
 import (
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
 // Schema names used by spec_test.go to map Go types to components/schemas entries.

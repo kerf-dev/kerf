@@ -6,7 +6,7 @@
 apiVersion: generators.external-secrets.io/v1alpha1
 kind: ECRAuthorizationToken
 metadata:
-  name: ecr-resource-optimizer
+  name: ecr-kerf
   namespace: argocd
 spec:
   region: eu-west-1
@@ -14,7 +14,7 @@ spec:
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
-  name: repo-resource-optimizer-charts
+  name: repo-kerf-charts
   namespace: argocd
 spec:
   refreshInterval: 6h
@@ -23,9 +23,9 @@ spec:
         generatorRef:
           apiVersion: generators.external-secrets.io/v1alpha1
           kind: ECRAuthorizationToken
-          name: ecr-resource-optimizer
+          name: ecr-kerf
   target:
-    name: repo-resource-optimizer-charts
+    name: repo-kerf-charts
     creationPolicy: Owner
     template:
       engineVersion: v2
@@ -33,9 +33,9 @@ spec:
         labels:
           argocd.argoproj.io/secret-type: repository
       data:
-        name: resource-optimizer-charts
+        name: kerf-charts
         type: helm
         enableOCI: "true"
-        url: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts
+        url: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf/charts
         username: "{{ .username }}"
         password: "{{ .password }}"

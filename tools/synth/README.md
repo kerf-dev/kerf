@@ -36,7 +36,7 @@ make synth-delete                        # stop live mode, remove all synthetic 
 ```
 
 Live mode keeps its binary, a copy of the scenario, its pid and its log in
-`~/.cache/resource-optimizer/synth-live/` so it keeps running when this worktree goes away. It reads
+`~/.cache/kerf/synth-live/` so it keeps running when this worktree goes away. It reads
 where to continue from VictoriaMetrics (`synth_scenario_start_timestamp_seconds`,
 `synth_scenario_anchor_timestamp_seconds`, the last `kube_node_labels` sample), so it can be stopped
 and restarted at any time and fills the gap. Each tick re-simulates the fleet (~4 s of CPU per

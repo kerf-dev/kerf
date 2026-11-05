@@ -1,29 +1,29 @@
-# Argo CD: one resource-optimizer Application per labelled cluster (docs/install/eks.md, "Argo CD").
+# Argo CD: one kerf Application per labelled cluster (docs/install/eks.md, "Argo CD").
 #
 # Cluster Secrets (argocd namespace) select what is installed:
-#   label      resource-optimizer.oz.io/mode: hub | spoke
-#   annotation resource-optimizer.oz.io/cluster-name: <name in the hub>        (default: the Argo CD cluster name)
-#   annotation resource-optimizer.oz.io/agent-token-key: <Secrets Manager key> (default: resource-optimizer/clusters/<name>/agent-token)
-#   annotation resource-optimizer.oz.io/vpc-cidr: <the cluster's VPC CIDR>      (spoke: the API server's ENIs, webhook NetworkPolicy)
+#   label      kerf.getkerf.dev/mode: hub | spoke
+#   annotation kerf.getkerf.dev/cluster-name: <name in the hub>        (default: the Argo CD cluster name)
+#   annotation kerf.getkerf.dev/agent-token-key: <Secrets Manager key> (default: kerf/clusters/<name>/agent-token)
+#   annotation kerf.getkerf.dev/vpc-cidr: <the cluster's VPC CIDR>      (spoke: the API server's ENIs, webhook NetworkPolicy)
 # e.g. argocd cluster add <kube context> --name prod-eu1 \
-#        --label resource-optimizer.oz.io/mode=spoke --annotation resource-optimizer.oz.io/vpc-cidr=10.1.0.0/16
+#        --label kerf.getkerf.dev/mode=spoke --annotation kerf.getkerf.dev/vpc-cidr=10.1.0.0/16
 #
 # Placeholders (the guide replaces them with sed):
 #   123456789012 / eu-west-1                                    account / region
-#   https://git.example.com/platform/resource-optimizer-config.git  your Git repo with the values files
-#                                                                  (resource-optimizer/values-hub.yaml, values-spoke.yaml)
+#   https://git.example.com/platform/kerf-config.git  your Git repo with the values files
+#                                                                  (kerf/values-hub.yaml, values-spoke.yaml)
 #   0.1.0                                                       the chart version (make release VERSION=)
 #
 # Argo CD itself, on every Argo CD instance that syncs workloads the agent patches (D-006), needs in
 # argocd-cm:
 #   resource.customizations.ignoreDifferences.all: |
 #     managedFieldsManagers:
-#     - resource-optimizer
+#     - kerf
 # and those Applications need syncOptions RespectIgnoreDifferences=true (ServerSideApply=true recommended).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: resource-optimizer
+  name: kerf
   namespace: argocd
 spec:
   goTemplate: true
@@ -36,54 +36,54 @@ spec:
     - clusters:
         selector:
           matchExpressions:
-            - {key: resource-optimizer.oz.io/mode, operator: In, values: [hub, spoke]}
+            - {key: kerf.getkerf.dev/mode, operator: In, values: [hub, spoke]}
   template:
     metadata:
-      name: 'resource-optimizer-{{ .name }}'
+      name: 'kerf-{{ .name }}'
       labels:
-        app.kubernetes.io/part-of: resource-optimizer
+        app.kubernetes.io/part-of: kerf
       # No resources-finalizer: deleting the Application leaves the objects (see above).
     spec:
       project: default
       destination:
         server: '{{ .server }}'
-        namespace: resource-optimizer
+        namespace: kerf
       sources:
         # The chart from ECR (helm OCI repository, enableOCI; argocd-ecr-repo.yaml keeps its credentials fresh).
-        - repoURL: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts
-          chart: resource-optimizer
+        - repoURL: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf/charts
+          chart: kerf
           targetRevision: 0.1.0
           helm:
-            releaseName: resource-optimizer
+            releaseName: kerf
             valueFiles:
-              - '$values/resource-optimizer/values-{{ index .metadata.labels "resource-optimizer.oz.io/mode" }}.yaml'
+              - '$values/kerf/values-{{ index .metadata.labels "kerf.getkerf.dev/mode" }}.yaml'
             # Per cluster, from the cluster Secret (unused keys are ignored in mode hub).
             valuesObject:
               global:
-                clusterName: '{{ index .metadata.annotations "resource-optimizer.oz.io/cluster-name" | default .name }}'
+                clusterName: '{{ index .metadata.annotations "kerf.getkerf.dev/cluster-name" | default .name }}'
               agent:
                 hub:
                   tokenSecret:
                     externalSecret:
                       remoteRef:
-                        key: '{{ index .metadata.annotations "resource-optimizer.oz.io/agent-token-key" | default (printf "resource-optimizer/clusters/%s/agent-token" (index .metadata.annotations "resource-optimizer.oz.io/cluster-name" | default .name)) }}'
+                        key: '{{ index .metadata.annotations "kerf.getkerf.dev/agent-token-key" | default (printf "kerf/clusters/%s/agent-token" (index .metadata.annotations "kerf.getkerf.dev/cluster-name" | default .name)) }}'
               webhook:
                 networkPolicy:
                   ingress:
                     apiServerFrom:
                       - ipBlock:
-                          cidr: '{{ index .metadata.annotations "resource-optimizer.oz.io/vpc-cidr" | default "10.0.0.0/8" }}'
+                          cidr: '{{ index .metadata.annotations "kerf.getkerf.dev/vpc-cidr" | default "10.0.0.0/8" }}'
         # Your values files (values-hub.yaml / values-spoke.yaml after the guide's sed).
-        - repoURL: https://git.example.com/platform/resource-optimizer-config.git
+        - repoURL: https://git.example.com/platform/kerf-config.git
           targetRevision: main
           ref: values
       # D-006: fields other controllers own on these objects.
       ignoreDifferences:
-        # The agent rightsizes workloads with server-side apply (field manager resource-optimizer),
+        # The agent rightsizes workloads with server-side apply (field manager kerf),
         # these components included when a policy covers this namespace.
         - group: '*'
           kind: '*'
-          managedFieldsManagers: [resource-optimizer]
+          managedFieldsManagers: [kerf]
         # cert-manager's CA injector writes the webhook's caBundle.
         - group: admissionregistration.k8s.io
           kind: MutatingWebhookConfiguration

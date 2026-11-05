@@ -1,12 +1,12 @@
 # Agent (WO-06) targets. Included by the root Makefile.
 
-AGENT_IMAGE      ?= localhost:5005/resource-optimizer/agent
-AGENT_IMAGE_PULL ?= k3d-ro-registry:5005/resource-optimizer/agent
+AGENT_IMAGE      ?= localhost:5005/kerf/agent
+AGENT_IMAGE_PULL ?= k3d-ro-registry:5005/kerf/agent
 AGENT_TAG        ?= dev-$(shell date +%Y%m%d-%H%M%S)
 # Expand once: a recursive $(shell date) would give docker push and helm different tags.
 AGENT_TAG        := $(AGENT_TAG)
 AGENT_CHART      := deploy/charts/agent
-AGENT_NAMESPACE  ?= resource-optimizer
+AGENT_NAMESPACE  ?= kerf
 AGENT_CLUSTERS   ?= ro-spoke-1 ro-spoke-2
 ENVTEST_K8S      ?= 1.35.0
 SETUP_ENVTEST    ?= $(LOCALBIN)/setup-envtest

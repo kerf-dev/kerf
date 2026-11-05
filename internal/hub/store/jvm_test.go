@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // TestReportedJVM (WO-12): JVM containers reported with the status are stored next to the settings

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
 type batchHub struct {

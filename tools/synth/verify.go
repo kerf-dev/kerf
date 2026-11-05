@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/tools/synth/synth"
+	"github.com/kerf-dev/kerf/tools/synth/synth"
 )
 
 // verify checks with PromQL that a backfilled scenario is in VictoriaMetrics with the expected

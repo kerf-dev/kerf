@@ -8,7 +8,7 @@
       "Resource": "*"
     },
     {
-      "Sid": "PullResourceOptimizerCharts",
+      "Sid": "PullKerfCharts",
       "Effect": "Allow",
       "Action": [
         "ecr:BatchGetImage",
@@ -16,7 +16,7 @@
         "ecr:BatchCheckLayerAvailability",
         "ecr:DescribeImages"
       ],
-      "Resource": "arn:aws:ecr:eu-west-1:123456789012:repository/resource-optimizer/charts/*"
+      "Resource": "arn:aws:ecr:eu-west-1:123456789012:repository/kerf/charts/*"
     }
   ]
 }

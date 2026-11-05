@@ -1,6 +1,6 @@
-# resource-optimizer agent chart (WO-06)
+# Kerf agent chart (WO-06)
 
-One release per workload cluster, namespace `resource-optimizer`:
+One release per workload cluster, namespace `kerf`:
 
 ```bash
 make deploy-agent                       # build, push, helm upgrade --install on ro-spoke-1 and ro-spoke-2
@@ -25,7 +25,7 @@ make test-agent                         # unit + envtest (downloads kube-apiserv
 ## Hub connection
 
 `hub.url` (default `http://hub-api.hub.svc:8080`), bearer token from Secret
-`hub.tokenSecret.name` (default `resource-optimizer-agent-token`), key `token`, mounted as a file and
+`hub.tokenSecret.name` (default `kerf-agent-token`), key `token`, mounted as a file and
 re-read on every request. The Secret is optional: without it the hub answers 401 and the agent is
 "offline" (nothing new is applied, nothing is reverted, events are buffered).
 
@@ -33,7 +33,7 @@ re-read on every request. The Secret is optional: without it the hub answers 401
 
 | Resource | Verbs | Why |
 |---|---|---|
-| apps deployments, statefulsets, daemonsets; batch cronjobs | get list watch (+ patch) | policy resolution; rollout = SSA under field manager `resource-optimizer`, release = managedFields patch |
+| apps deployments, statefulsets, daemonsets; batch cronjobs | get list watch (+ patch) | policy resolution; rollout = SSA under field manager `kerf`, release = managedFields patch |
 | apps replicasets, batch jobs | get list | owner chain to find a workload's pods |
 | pods | get list watch (+ patch) | in-place status, health watch (restarts, OOM kills); patch only for the `previous-resources` / `recommendation-id` annotations |
 | pods/resize | patch | in-place resize (D-007) |
@@ -42,7 +42,7 @@ re-read on every request. The Secret is optional: without it the hub answers 401
 | nodes | get list watch | swap / unsupported-node detection |
 | nodes/proxy | get (only with `health.cadvisorFallback`) | throttling from kubelet cAdvisor when the hub metrics are unreachable; reaches every kubelet API, hence off by default |
 | autoscaling horizontalpodautoscalers | get list watch (+ patch unless readOnly) | HPA coupling (D-011); target set by HPA coordination (WO-11) |
-| rightsizingpolicies | get list watch (+ create update patch delete unless readOnly) | policy resolution; writes only CRs labelled `resource-optimizer.oz.io/managed-by=hub` (hub config, D-022) |
+| rightsizingpolicies | get list watch (+ create update patch delete unless readOnly) | policy resolution; writes only CRs labelled `kerf.getkerf.dev/managed-by=hub` (hub config, D-022) |
 | rightsizingrecommendations (+ /status) | get list watch create update patch delete | the agent's record per workload |
 | events (core and events.k8s.io) | create patch | Kubernetes Events on RightsizingRecommendations |
 | leases (namespaced Role, only with leaderElection) | all | leader election |
@@ -54,8 +54,8 @@ The bracketed write verbs are dropped with `readOnly: true`, which also caps eve
 
 With `configSync.enabled` (default) the agent pulls `GET /v1/clusters/{cluster}/config` on every
 pull (ETag) and:
-- makes the `RightsizingPolicy` CRs labelled `resource-optimizer.oz.io/managed-by=hub` equal to the
-  hub's policies (server-side apply, field manager `resource-optimizer`). CRs without the label
+- makes the `RightsizingPolicy` CRs labelled `kerf.getkerf.dev/managed-by=hub` equal to the
+  hub's policies (server-side apply, field manager `kerf`). CRs without the label
   (Git) are never written; a hub policy whose name is taken by one is reported invalid.
 - layers `ro-global-defaults` / `ro-cluster-defaults` / `ro-override-…` around the winning policy
   (`docs/contracts/admin.md` §2),
@@ -64,7 +64,7 @@ pull (ETag) and:
 
 The last config is kept in the ConfigMap `<fullname>-config-state`. A hub without the endpoint
 (404) changes nothing. **Before downgrading the agent below WO-21, delete the hub CRs:**
-`kubectl delete rsp -l resource-optimizer.oz.io/managed-by=hub`.
+`kubectl delete rsp -l kerf.getkerf.dev/managed-by=hub`.
 
 ## Values
 

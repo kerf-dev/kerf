@@ -17,7 +17,7 @@ import (
 
 // NotifyChannel is the Postgres LISTEN/NOTIFY channel the hub replicas use to tell each other
 // about changes (payloads Notify*).
-const NotifyChannel = "ro_hub"
+const NotifyChannel = "kerf_hub"
 
 // Notification payloads on NotifyChannel.
 const (
@@ -206,7 +206,7 @@ type LastClusterRun struct {
 }
 
 // LastClusterRuns returns, per registered cluster, its latest successful non-backfill run (the
-// ro_recommender_* gauges a new leader starts from).
+// kerf_recommender_* gauges a new leader starts from).
 func (s *Store) LastClusterRuns(ctx context.Context) ([]LastClusterRun, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT ON (rc.cluster) rc.cluster, rc.finished_at, rc.recommendations, rc.pricing
 		FROM recommender_run_clusters rc JOIN recommender_runs r ON r.id = rc.run_id JOIN clusters c ON c.name = rc.cluster

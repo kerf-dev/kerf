@@ -1,4 +1,4 @@
--- resource-optimizer hub schema (WO-00 contract).
+-- Kerf hub schema (WO-00 contract).
 -- Migration tool: pressly/goose (SQL migrations, one file per version, Up and Down sections).
 -- Later migrations (0002+) are owned by WO-04. Enumerations are text + CHECK so they can be
 -- extended by a later migration without enum type gymnastics; values match api/openapi/hub.yaml.

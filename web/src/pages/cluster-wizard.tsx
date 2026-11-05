@@ -468,14 +468,12 @@ export default function ClusterWizardPage() {
                       </div>
                       <SecretOnce value={created.agentToken.value} />
                       <pre className="mt-2 overflow-x-auto rounded-lg border bg-muted/40 px-3.5 py-3 font-mono text-[12px]">
-                        {`kubectl create namespace resource-optimizer\nkubectl -n resource-optimizer create secret generic resource-optimizer-agent-token \\\n  --from-literal=token='<the token above>'`}
+                        {`kubectl create namespace kerf\nkubectl -n kerf create secret generic kerf-agent-token \\\n  --from-literal=token='<the token above>'`}
                       </pre>
                     </div>
                   ) : null}
                   <div>
-                    <div className="mb-2 text-sm font-semibold">
-                      2. Install resource-optimizer (agent and webhook)
-                    </div>
+                    <div className="mb-2 text-sm font-semibold">2. Install kerf (agent and webhook)</div>
                     <InstallSnippets cluster={created.cluster.name} compact />
                   </div>
                 </>

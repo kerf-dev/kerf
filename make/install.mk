@@ -8,8 +8,8 @@ STAGING := VERSION=$(STAGING_VERSION) ./test/install/staging.sh
 .PHONY: install-staging install-staging-verify install-staging-wizard install-staging-upgrade install-staging-uninstall install-staging-down
 
 install-staging: ## Staging: clusters, prerequisites, release STAGING_VERSION, then the guide's steps 3-5.
-	@if ! helm show chart oci://localhost:5005/resource-optimizer/charts/resource-optimizer --version $(STAGING_VERSION) --plain-http >/dev/null 2>&1; then \
-	  $(MAKE) release REGISTRY=localhost:5005/resource-optimizer VERSION=$(STAGING_VERSION); fi
+	@if ! helm show chart oci://localhost:5005/kerf/charts/kerf --version $(STAGING_VERSION) --plain-http >/dev/null 2>&1; then \
+	  $(MAKE) release REGISTRY=localhost:5005/kerf VERSION=$(STAGING_VERSION); fi
 	$(STAGING) up
 	$(STAGING) install
 
@@ -21,8 +21,8 @@ install-staging-wizard: ## Staging (WO-18f): a third cluster ro-stg-spoke-2, reg
 
 install-staging-upgrade: ## Staging: upgrade to STAGING_UPGRADE_VERSION (released first) with a no-5xx probe.
 	@test -n "$(STAGING_UPGRADE_VERSION)" || { echo "STAGING_UPGRADE_VERSION is required"; exit 1; }
-	@if ! helm show chart oci://localhost:5005/resource-optimizer/charts/resource-optimizer --version $(STAGING_UPGRADE_VERSION) --plain-http >/dev/null 2>&1; then \
-	  $(MAKE) release REGISTRY=localhost:5005/resource-optimizer VERSION=$(STAGING_UPGRADE_VERSION); fi
+	@if ! helm show chart oci://localhost:5005/kerf/charts/kerf --version $(STAGING_UPGRADE_VERSION) --plain-http >/dev/null 2>&1; then \
+	  $(MAKE) release REGISTRY=localhost:5005/kerf VERSION=$(STAGING_UPGRADE_VERSION); fi
 	$(STAGING) upgrade $(STAGING_UPGRADE_VERSION)
 
 install-staging-uninstall: ## Staging: the guide's step 9 (uninstall, then remove everything).

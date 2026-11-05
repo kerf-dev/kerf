@@ -7,7 +7,7 @@ global:
 
 clusterName: prod-eu-1
 image:
-  repository: resource-optimizer/agent
+  repository: kerf/agent
   tag: 0.2.0
   digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
@@ -16,7 +16,7 @@ hub:
   tokenSecret:
     externalSecret:
       enabled: true
-      remoteRef: {key: resource-optimizer/agents/prod-eu-1, property: token}
+      remoteRef: {key: kerf/agents/prod-eu-1, property: token}
   caBundle:
     existingConfigMap: corp-root-ca
     key: ca.crt

@@ -7,9 +7,9 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1/validate"
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/api/v1alpha1/validate"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // ErrUnknownPolicy is returned (wrapped, with the id) for a change that names an unknown policyId.

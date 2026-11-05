@@ -1,5 +1,5 @@
 # Example RightsizingPolicy. Unset fields inherit the cluster default, then the global default (D-005).
-apiVersion: resource-optimizer.oz.io/v1alpha1
+apiVersion: kerf.getkerf.dev/v1alpha1
 kind: RightsizingPolicy
 metadata:
   name: team-payments-production

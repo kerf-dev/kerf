@@ -1,4 +1,4 @@
-// Command hub runs the resource-optimizer hub: API, recommender scheduler and metrics (WO-04).
+// Command hub runs the Kerf hub: API, recommender scheduler and metrics (WO-04).
 // Several replicas may run on one database (WO-18a): see internal/hub/leader.go.
 package main
 
@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub"
-	"github.com/tomer1983/resource-optimizer/internal/hub/datasource"
-	"github.com/tomer1983/resource-optimizer/internal/hub/store"
-	"github.com/tomer1983/resource-optimizer/internal/recommender"
+	"github.com/kerf-dev/kerf/internal/hub"
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").

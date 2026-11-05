@@ -14,7 +14,7 @@ token, so the read-only UI keeps working without a login.
 UI (session, role) ──PUT/POST──► hub ──► Postgres: policies + policy_versions, settings(+_versions),
                                               cluster_automation, workload_approvals, audit_events
 agent ──GET /v1/clusters/{c}/config (ETag, every pull)──► hub
-agent: make CRs labelled resource-optimizer.oz.io/managed-by=hub equal to config.policies
+agent: make CRs labelled kerf.getkerf.dev/managed-by=hub equal to config.policies
        (create / update / delete only those), apply flags.paused like a cluster freeze,
        apply approvals once
 agent ──POST /v1/clusters/{c}/workload-status {configVersion, policyInventory[]}──► hub
@@ -27,10 +27,10 @@ UI ◄── GET /v1/admin/policy-inventory, /v1/admin/clusters/{c} (in sync? Gi
    instead of `304`. For each `config.policies[i]` it validates the spec with
    `validate.HubPolicy(type, name, &spec)` and creates or updates the CR:
    - `metadata.name` = `name`
-   - label `resource-optimizer.oz.io/managed-by: hub`
-   - annotations `resource-optimizer.oz.io/hub-policy-id: <id>`,
-     `resource-optimizer.oz.io/hub-version: "<version>"`,
-     `resource-optimizer.oz.io/hub-policy-type: <type>`
+   - label `kerf.getkerf.dev/managed-by: hub`
+   - annotations `kerf.getkerf.dev/hub-policy-id: <id>`,
+     `kerf.getkerf.dev/hub-version: "<version>"`,
+     `kerf.getkerf.dev/hub-policy-type: <type>`
    - `spec` = `spec`
 
    It deletes hub-labelled CRs whose name is not in the list. It never creates, updates or deletes
@@ -80,7 +80,7 @@ every other policy and an override wins.
 the other criteria (AND). An agent older than this field drops it when it decodes the CR, which
 would widen an override's selector. Hence the hub always also sets `namespaces` and `kinds` on an
 override. **Before downgrading an agent below WO-21, delete the hub CRs**:
-`kubectl delete rsp -l resource-optimizer.oz.io/managed-by=hub`.
+`kubectl delete rsp -l kerf.getkerf.dev/managed-by=hub`.
 
 **Validation** (`api/v1alpha1/validate`):
 - `Spec`: every CRD rule (enums, bounds, patterns, the CEL rules) plus what the agent checks when
@@ -106,7 +106,7 @@ accepts. For authorization a `ui` token counts as `viewer` and an `admin` token 
 (`hubapi.TokenUserRole`, `hubapi.UserRoleAtLeast`). Machine tokens (`agent`, `ui`, `admin`, D-012)
 are unchanged.
 
-- **Login:** `POST /v1/auth/login` sets the cookie `ro_session` (HttpOnly, SameSite=Strict, Path=/,
+- **Login:** `POST /v1/auth/login` sets the cookie `kerf_session` (HttpOnly, SameSite=Strict, Path=/,
   Secure behind TLS). The session token is stored as SHA-256 in `sessions`. The response carries
   `csrfToken`.
 - **CSRF:** every session write needs `X-CSRF-Token: <csrfToken>`; bearer requests need none.
@@ -139,7 +139,7 @@ are unchanged.
 
 ## 5. Endpoints with examples
 
-Headers in the examples: `C` = `Cookie: ro_session=…`, `X` = `X-CSRF-Token: …`. Errors use the
+Headers in the examples: `C` = `Cookie: kerf_session=…`, `X` = `X-CSRF-Token: …`. Errors use the
 `Problem` schema.
 
 ### Auth
@@ -147,7 +147,7 @@ Headers in the examples: `C` = `Cookie: ro_session=…`, `X` = `X-CSRF-Token: �
 `POST /v1/auth/login` (no auth)
 ```json
 → {"username": "alice", "password": "correct horse battery"}
-← 200  Set-Cookie: ro_session=…; HttpOnly; SameSite=Strict; Path=/
+← 200  Set-Cookie: kerf_session=…; HttpOnly; SameSite=Strict; Path=/
 {"authMethod": "session", "role": "admin", "csrfToken": "q8…Zt",
  "sessionExpiresAt": "2026-11-05T02:00:00Z",
  "user": {"username": "alice", "displayName": "Alice", "role": "admin", "disabled": false,
@@ -273,10 +273,10 @@ workload (`policy.workloadId`).
    {"source": "global-default", "name": "ro-global-defaults", "origin": "hub", "policyId": "…", "priority": 0, "applied": true, "spec": {"guardrails": {"minConfidence": "0.8"}}},
    {"source": "policy", "name": "team-defaults", "origin": "git", "priority": 50, "applied": false, "note": "priority 50 < 100 of payments-cpu-auto"},
    {"source": "policy", "name": "payments-cpu-auto", "origin": "hub", "policyId": "…", "priority": 100, "applied": true, "spec": {"cpu": {"mode": "auto-patch"}}},
-   {"source": "annotation", "name": "resource-optimizer.oz.io/memory-mode", "applied": true, "spec": {"memory": {"mode": "off"}}}],
+   {"source": "annotation", "name": "kerf.getkerf.dev/memory-mode", "applied": true, "spec": {"memory": {"mode": "off"}}}],
  "fields": [
    {"path": "cpu.mode", "value": "auto-patch", "source": "policy", "name": "payments-cpu-auto"},
-   {"path": "memory.mode", "value": "off", "source": "annotation", "name": "resource-optimizer.oz.io/memory-mode"},
+   {"path": "memory.mode", "value": "off", "source": "annotation", "name": "kerf.getkerf.dev/memory-mode"},
    {"path": "guardrails.minConfidence", "value": "0.8", "source": "global-default", "name": "ro-global-defaults"},
    {"path": "apply.strategy", "value": "in-place", "source": "built-in"}],
  "modes": {"cpu": "auto-patch", "memory": "off", "cpuSource": "policy", "memorySource": "annotation"},

@@ -1,16 +1,16 @@
-# resource-optimizer mutating admission webhook (WO-07). One release per spoke cluster,
-# namespace resource-optimizer. Needs cert-manager and the resource-optimizer CRDs (rendered by
+# Kerf mutating admission webhook (WO-07). One release per spoke cluster,
+# namespace kerf. Needs cert-manager and the Kerf CRDs (rendered by
 # the agent chart; see crds.install). Every production feature is shown switched on in
 # ci/values-prod.yaml (rendered by `make charts-lint`).
 
-# Set by an umbrella chart; read by every resource-optimizer chart.
+# Set by an umbrella chart; read by every kerf chart.
 global:
   imageRegistry: ""         # prefixed to image.repository; image.registry wins over it
   imagePullSecrets: []      # names or {name: ...}
   externalSecrets:
     secretStoreRef: {}
 
-# The resource-optimizer CRDs as templates (helm.sh/resource-policy: keep). Off: the agent chart
+# The Kerf CRDs as templates (helm.sh/resource-policy: keep). Off: the agent chart
 # renders them, and exactly one release per cluster may (Helm refuses a CRD owned by another
 # release). Turn it on only where the webhook is installed without the agent.
 crds:
@@ -26,7 +26,7 @@ fullnameOverride: ""
 
 image:
   registry: ""
-  repository: localhost:5005/resource-optimizer/webhook
+  repository: localhost:5005/kerf/webhook
   tag: dev
   digest: ""                # sha256:..., appended as @digest
   pullPolicy: IfNotPresent
@@ -67,7 +67,7 @@ webhook:
   # API server timeout (1-30s; the handler only reads informer caches).
   timeoutSeconds: 2
   # Namespaces never sent to the webhook, in addition to kube-system and the release namespace.
-  # A namespace (or pod) labelled resource-optimizer.oz.io/skip-webhook=true is skipped too.
+  # A namespace (or pod) labelled kerf.getkerf.dev/skip-webhook=true is skipped too.
   excludeNamespaces: []
 
 logLevel: info

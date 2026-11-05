@@ -692,7 +692,7 @@ export default function ClusterDetailPage() {
                       <div>
                         <CardTitle>Install the agent</CardTitle>
                         <CardDescription>
-                          The snippets read the token from the Secret resource-optimizer-agent-token.
+                          The snippets read the token from the Secret kerf-agent-token.
                         </CardDescription>
                       </div>
                     </CardHeader>

@@ -1,6 +1,6 @@
 # grafana-community/grafana on ro-hub, namespace monitoring. NodePort 30300 -> http://localhost:13000
 # Dashboards: every *.json under the repo's dashboards/ directory is packed into ConfigMap
-# `grafana-dashboards` by dev/scripts/sync-dashboards.sh and file-provisioned into folder "resource-optimizer".
+# `grafana-dashboards` by dev/scripts/sync-dashboards.sh and file-provisioned into folder "kerf".
 adminUser: admin
 adminPassword: admin # dev only
 
@@ -60,15 +60,15 @@ dashboardProviders:
   dashboardproviders.yaml:
     apiVersion: 1
     providers:
-      - name: resource-optimizer
+      - name: kerf
         orgId: 1
-        folder: resource-optimizer
+        folder: kerf
         type: file
         disableDeletion: false
         allowUiUpdates: true
         updateIntervalSeconds: 30
         options:
-          path: /var/lib/grafana/dashboards/resource-optimizer
+          path: /var/lib/grafana/dashboards/kerf
 
 dashboardsConfigMaps:
-  resource-optimizer: grafana-dashboards
+  kerf: grafana-dashboards

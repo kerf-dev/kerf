@@ -26,16 +26,16 @@ func TestInstallConfigFromCharts(t *testing.T) {
 		chart, version, store string
 	}{
 		"eks example": {
-			args:  []string{filepath.Join(root, "charts/resource-optimizer"), "-f", filepath.Join(root, "examples/eks/values-hub.yaml"), "--show-only", "charts/hub/templates/configmap.yaml"},
-			chart: "oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/resource-optimizer/charts/resource-optimizer", version: "0.1.0", store: "aws-secrets-manager",
+			args:  []string{filepath.Join(root, "charts/kerf"), "-f", filepath.Join(root, "examples/eks/values-hub.yaml"), "--show-only", "charts/hub/templates/configmap.yaml"},
+			chart: "oci://123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf/charts/kerf", version: "0.1.0", store: "aws-secrets-manager",
 		},
 		"dev": {
 			args:  []string{filepath.Join(root, "charts/hub"), "-f", filepath.Join(root, "charts/hub/values-dev.yaml"), "--show-only", "templates/configmap.yaml"},
-			chart: "deploy/charts/resource-optimizer", version: "",
+			chart: "deploy/charts/kerf", version: "",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			cmd := exec.Command(helm, append([]string{"template", "resource-optimizer"}, tc.args...)...)
+			cmd := exec.Command(helm, append([]string{"template", "kerf"}, tc.args...)...)
 			var stderr strings.Builder
 			cmd.Stderr = &stderr
 			out, err := cmd.Output()

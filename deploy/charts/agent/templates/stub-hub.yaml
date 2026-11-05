@@ -23,14 +23,14 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: resource-optimizer-stub-hub
+      app.kubernetes.io/name: kerf-stub-hub
       app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: resource-optimizer-stub-hub
+        app.kubernetes.io/name: kerf-stub-hub
         app.kubernetes.io/instance: {{ .Release.Name }}
-        resource-optimizer.oz.io/skip-webhook: "true"
+        kerf.getkerf.dev/skip-webhook: "true"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -68,7 +68,7 @@ metadata:
   labels: {{- include "agent.labels" . | nindent 4 }}
 spec:
   selector:
-    app.kubernetes.io/name: resource-optimizer-stub-hub
+    app.kubernetes.io/name: kerf-stub-hub
     app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
     - name: http

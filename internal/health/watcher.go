@@ -25,10 +25,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/tomer1983/resource-optimizer/api/v1alpha1"
-	"github.com/tomer1983/resource-optimizer/internal/agent/hubclient"
-	"github.com/tomer1983/resource-optimizer/internal/agent/policy"
-	"github.com/tomer1983/resource-optimizer/internal/agent/workload"
+	"github.com/kerf-dev/kerf/api/v1alpha1"
+	"github.com/kerf-dev/kerf/internal/agent/hubclient"
+	"github.com/kerf-dev/kerf/internal/agent/policy"
+	"github.com/kerf-dev/kerf/internal/agent/workload"
 )
 
 // HealthWatch condition reasons that are not rollback reasons (conditions only, never events).
@@ -41,23 +41,23 @@ const (
 
 var (
 	watchesInProgress = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "ro_health_watches_in_progress",
+		Name: "kerf_health_watches_in_progress",
 		Help: "Workloads currently watched after an automatic change.",
 	})
 	rollbacks = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "ro_health_rollbacks_total",
+		Name: "kerf_health_rollbacks_total",
 		Help: "Rollbacks by reason (OOMKills, Restarts, Throttling) and strategy.",
 	}, []string{"reason", "strategy"})
 	watchesCompleted = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "ro_health_watches_completed_total",
+		Name: "kerf_health_watches_completed_total",
 		Help: "Watches that ended without a rollback.",
 	})
 	throttleErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "ro_health_throttling_query_errors_total",
+		Name: "kerf_health_throttling_query_errors_total",
 		Help: "Failed throttling-ratio lookups by source (promql, cadvisor).",
 	}, []string{"source"})
 	rollbackErrors = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "ro_health_rollback_errors_total",
+		Name: "kerf_health_rollback_errors_total",
 		Help: "Rollbacks that failed (retried with backoff).",
 	})
 )

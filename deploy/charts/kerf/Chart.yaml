@@ -1,7 +1,7 @@
 apiVersion: v2
-name: resource-optimizer
+name: kerf
 description: >-
-  resource-optimizer in one chart (WO-18d, D-028): global.mode hub installs the hub, web UI and
+  Kerf in one chart (WO-18d, D-028): global.mode hub installs the hub, web UI and
   pricing service; spoke installs the agent, admission webhook and CRDs on a workload cluster;
   all installs everything in one cluster.
 type: application
@@ -9,8 +9,8 @@ type: application
 version: 0.1.0
 appVersion: "0.1.0"
 keywords: [kubernetes, rightsizing, eks]
-home: https://github.com/tomer1983/resource-optimizer
-sources: [https://github.com/tomer1983/resource-optimizer]
+home: https://github.com/kerf-dev/kerf
+sources: [https://github.com/kerf-dev/kerf]
 # The component charts, linked into charts/ (symlinks to deploy/charts/<name>, so an in-tree render
 # always uses the current charts; `helm package` stores real copies). Do not run `helm dependency
 # update` here: it would replace the links with archives. There are no `condition:`s: Helm cannot

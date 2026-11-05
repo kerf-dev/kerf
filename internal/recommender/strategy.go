@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/tomer1983/resource-optimizer/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // Proposal is a strategy's unrounded per-pod request for one container, with the explanation of
