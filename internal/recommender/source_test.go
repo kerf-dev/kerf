@@ -814,3 +814,51 @@ func keysOf[V any](m map[string]V) []string {
 	sort.Strings(out)
 	return out
 }
+
+// EndAlignment moves a run's data end to its own alignment (dev/e2e); the step and the query
+// shapes stay the same.
+func TestSourceLoadEndAlignment(t *testing.T) {
+	cases := []struct {
+		name  string
+		align time.Duration
+		at    time.Duration // after testEnd
+		want  time.Duration // data end after testEnd
+	}{
+		{"default: the step", 0, 4*time.Minute + 50*time.Second, 0},
+		{"30s", 30 * time.Second, 4*time.Minute + 50*time.Second, 4*time.Minute + 30*time.Second},
+		{"1m", time.Minute, 61 * time.Second, time.Minute},
+		{"equal to the step", 5 * time.Minute, 4 * time.Minute, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.EndAlignment = tc.align
+			if err := cfg.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			f, sq := sourceFixture(cfg)
+			src := &Source{Q: f, Cfg: cfg}
+			d, err := src.Load(context.Background(), "c1", testEnd.Add(tc.at), 7*24*time.Hour)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := testEnd.Add(tc.want)
+			if !d.End.Equal(want) || !f.ends[sq.cpu].Equal(want) || f.steps[sq.cpu] != cfg.Step {
+				t.Errorf("end %v, cpu query end/step %v/%v; want end %v step %v", d.End, f.ends[sq.cpu], f.steps[sq.cpu], want, cfg.Step)
+			}
+		})
+	}
+}
+
+func TestConfigEndAlignmentValidate(t *testing.T) {
+	for _, tc := range []struct {
+		align time.Duration
+		ok    bool
+	}{{0, true}, {30 * time.Second, true}, {5 * time.Minute, true}, {-time.Second, false}, {6 * time.Minute, false}} {
+		cfg := DefaultConfig()
+		cfg.EndAlignment = tc.align
+		if err := cfg.Validate(); (err == nil) != tc.ok {
+			t.Errorf("endAlignment %s: err %v, want ok=%v", tc.align, err, tc.ok)
+		}
+	}
+}

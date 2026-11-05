@@ -258,7 +258,10 @@ type RecommenderConfig struct {
 	// as real (WO-04d). Default 30m; negative disables the check.
 	IncompleteMetricsGrace Duration `json:"incompleteMetricsGrace"`
 
-	Step                  *Duration `json:"step"`
+	Step *Duration `json:"step"`
+	// EndAlignment (dev/e2e): runs use data up to their time truncated to this instead of the
+	// step, so a run (or POST /v1/admin/recompute) sees the last minute. Default: the step.
+	EndAlignment          *Duration `json:"endAlignment"`
 	RateWindow            *Duration `json:"rateWindow"`
 	RiskWindow            *Duration `json:"riskWindow"`
 	InventoryLookback     *Duration `json:"inventoryLookback"`
@@ -359,6 +362,7 @@ func (c Config) RecommenderConfig() (recommender.Config, error) {
 		}
 	}
 	setD(&out.Step, r.Step)
+	setD(&out.EndAlignment, r.EndAlignment)
 	setD(&out.RateWindow, r.RateWindow)
 	setD(&out.RiskWindow, r.RiskWindow)
 	setD(&out.InventoryLookback, r.InventoryLookback)

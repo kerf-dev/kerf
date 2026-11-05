@@ -60,6 +60,7 @@ recommender:
   strategy: percentile
   backfill: {runs: 3, every: 24h}
   step: 1m
+  endAlignment: 30s
   rateWindow: 2m
   minCPU: 20m
   minMemory: 64Mi
@@ -112,7 +113,7 @@ history:
 		t.Fatal(err)
 	}
 	def := recommender.DefaultConfig()
-	if rc.Step != time.Minute || rc.RateWindow != 2*time.Minute || rc.RiskWindow != def.RiskWindow {
+	if rc.Step != time.Minute || rc.EndAlignment != 30*time.Second || rc.RateWindow != 2*time.Minute || rc.RiskWindow != def.RiskWindow {
 		t.Errorf("durations: step %s rate %s risk %s", rc.Step, rc.RateWindow, rc.RiskWindow)
 	}
 	if rc.MinCPUCores != 0.02 || rc.MinMemoryBytes != 64*recommender.MiB {
