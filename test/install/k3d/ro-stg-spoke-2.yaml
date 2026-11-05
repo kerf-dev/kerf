@@ -1,0 +1,43 @@
+# WO-18f staging: a second workload cluster, installed with the hub wizard's Helm snippet.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: ro-stg-spoke-2
+servers: 1
+agents: 0
+kubeAPI:
+  hostIP: 127.0.0.1
+  hostPort: "16449"
+network: ro-dev
+registries:
+  use:
+    - k3d-ro-registry:5005
+    - k3d-ro-dockerio-cache:5000
+  config: |
+    mirrors:
+      docker.io:
+        endpoint:
+          - http://k3d-ro-dockerio-cache:5000
+options:
+  k3d:
+    wait: true
+    timeout: 240s
+    disableLoadbalancer: true
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik,servicelb,metrics-server
+        nodeFilters: [server:*]
+      - arg: --kubelet-arg=eviction-hard=imagefs.available<1%,nodefs.available<1%
+        nodeFilters: [server:*]
+    nodeLabels:
+      - label: node.kubernetes.io/instance-type=m6i.xlarge
+        nodeFilters: [server:*]
+      - label: karpenter.sh/capacity-type=on-demand
+        nodeFilters: [server:*]
+      - label: topology.kubernetes.io/region=eu-west-1
+        nodeFilters: [server:*]
+      - label: topology.kubernetes.io/zone=eu-west-1a
+        nodeFilters: [server:*]
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: false

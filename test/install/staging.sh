@@ -3,6 +3,7 @@
 #   staging.sh up        clusters + the guide's prerequisites (step 1) + AWS stand-ins (step 3)
 #   staging.sh install   steps 4 and 5 of the guide (hub cluster, first sign-in, tokens, workload cluster)
 #   staging.sh verify    every Check of steps 4-6, failover, upgrade without 5xx
+#   staging.sh wizard    WO-18f: a second workload cluster installed with the hub wizard's Helm snippet
 #   staging.sh uninstall step 9
 #   staging.sh down      delete both clusters
 # Run `make release REGISTRY=localhost:5005/resource-optimizer VERSION=$VERSION` first (step 2).
@@ -217,20 +218,71 @@ step5() {
   wait_state AutomationReady 20
 }
 
-register_cluster() {
+register_cluster() { # [cluster]
   # The wizard (web/src) calls POST /v1/clusters with the identity and metrics binding, then shows the
   # agent token once. Same calls here.
-  local body token
-  body=$(jq -cn --arg c "$CLUSTER" '{name: $c, environment: "non-prod", owner: "platform", provider: "aws",
+  local c=${1:-$CLUSTER} body token
+  body=$(jq -cn --arg c "$c" '{name: $c, environment: "non-prod", owner: "platform", provider: "aws",
     region: "eu-west-1", metrics: {datasourceId: "local", clusterLabel: "cluster", clusterLabelValue: $c},
     createAgentToken: true, reason: "staging install (WO-18e)"}')
   token=$(curl -sS -b "$WORK/cookies" -H "X-CSRF-Token: $CSRF" -H 'Content-Type: application/json' -d "$body" \
     https://$UI_HOST/v1/admin/clusters | tee "$WORK/register.json" | jq -r '.agentToken.value // empty')
   [ -n "$token" ] || { echo "register failed: $(jq -c 'del(.agentToken,.token)' "$WORK/register.json")"; return 1; }
   AGENT_TOKEN=$token
-  aws secretsmanager create-secret --name resource-optimizer/clusters/$CLUSTER/agent-token \
+  aws secretsmanager create-secret --name resource-optimizer/clusters/$c/agent-token \
     --secret-string "$(jq -cn --arg t "$AGENT_TOKEN" '{token: $t}')" --query Name --output text
   unset AGENT_TOKEN
+}
+
+# --- WO-18f: a second workload cluster, installed with the cluster wizard's Helm snippet -----------------
+# The hub (values-hub.yaml) renders the snippets for the umbrella chart with the token from Secrets
+# Manager; this runs the snippet as the wizard shows it. Stand-ins, as for step 5.3: the registry as
+# this machine reaches it (plain HTTP) and the staging CA (agent.hub.caBundle), added by a helm wrapper.
+wizard() {
+  log "wizard: cluster $WIZ_CLUSTER (ESO and the DNS stand-in; the snippet installs cert-manager)"
+  k3d cluster list "$WIZ_CLUSTER" >/dev/null 2>&1 || k3d cluster create --config "$INSTALL/k3d/$WIZ_CLUSTER.yaml" --image "$K3S_IMAGE"
+  helm --kube-context "$WIZ_CTX" upgrade --install external-secrets "$ESO_CHART" --version "$ESO_VERSION" \
+    -n external-secrets --create-namespace --wait >/dev/null
+  sed -e "s|HUB_NODE_IP|$(hub_node_ip)|; s|HUB_HOST|$HUB_HOST|; s|UI_HOST|$UI_HOST|" "$INSTALL/manifests/coredns-custom.yaml" \
+    | kw apply -f - >/dev/null
+  kw -n kube-system rollout restart deploy/coredns >/dev/null
+  sm_apply
+  echo "Check: ClusterSecretStore Ready=$(kw get clustersecretstore aws-secrets-manager -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
+
+  log "wizard: register $WIZ_CLUSTER (POST /v1/admin/clusters) and store its token (step 5.2)"
+  signin
+  if [ "$(aws secretsmanager get-secret-value --secret-id resource-optimizer/clusters/$WIZ_CLUSTER/agent-token)" = null ]; then
+    register_cluster "$WIZ_CLUSTER"
+  fi
+
+  log "wizard: the Helm snippet (GET /v1/admin/clusters/$WIZ_CLUSTER/install?format=helm, webhook and cert-manager on)"
+  curl -sS -b "$WORK/cookies" "https://$UI_HOST/v1/admin/clusters/$WIZ_CLUSTER/install?format=helm&webhook=true&certManager=true" \
+    > "$WORK/install-$WIZ_CLUSTER.json"
+  jq -r .content "$WORK/install-$WIZ_CLUSTER.json" > "$WORK/install-$WIZ_CLUSTER.sh"
+  cat "$WORK/install-$WIZ_CLUSTER.sh"
+  jq -r '.notes[] | "  note: " + .' "$WORK/install-$WIZ_CLUSTER.json"
+  kubectl config view --minify --flatten --context "$WIZ_CTX" > "$WORK/kubeconfig-$WIZ_CLUSTER"
+  mkdir -p "$WORK/wizard-bin"
+  cat > "$WORK/wizard-bin/helm" <<WRAPPER
+#!/bin/sh
+# Staging stand-ins for the wizard's script (WO-18f): the registry as this machine reaches it, over
+# plain HTTP, and the staging CA for the hub's certificate.
+for a do
+  shift
+  case \$a in oci://$ECR_IN_CLUSTER/*) a="oci://$ECR/\${a#oci://$ECR_IN_CLUSTER/}" ;; esac
+  set -- "\$@" "\$a"
+done
+case " \$* " in *" oci://$ECR/"*) set -- "\$@" $HELM_OCI_FLAGS --set-file agent.hub.caBundle.pem=$WORK/ca.crt ;; esac
+exec $(command -v helm) "\$@"
+WRAPPER
+  chmod +x "$WORK/wizard-bin/helm"
+  KUBECONFIG="$WORK/kubeconfig-$WIZ_CLUSTER" PATH="$WORK/wizard-bin:$PATH" sh "$WORK/install-$WIZ_CLUSTER.sh"
+
+  log "wizard: checks (as step 5.3)"
+  kw -n "$NS" get externalsecret "$AGENT_SECRET"
+  kw -n "$NS" get pods -l app.kubernetes.io/instance=resource-optimizer
+  kw -n "$NS" logs deploy/resource-optimizer-agent | grep -m1 'starting agent' || true
+  CLUSTER=$WIZ_CLUSTER wait_state AgentConnected 5
 }
 
 readiness() {
@@ -352,7 +404,9 @@ case "${1:-}" in
   recompute) signin >/dev/null; curl -sS -b "$WORK/cookies" -H "X-CSRF-Token: $CSRF" -X POST "https://$UI_HOST/v1/admin/recompute?cluster=$CLUSTER" | jq -c . ;;
   upgrade) upgrade "${2:?version}" ;;
   uninstall) uninstall ;;
-  step3|step4|step5|signin|leader_check|readiness|prereqs|clusters|autopatch|failover) "$1" ;;
-  down) k3d cluster delete ro-stg-hub ro-stg-spoke; rm -rf "$WORK" ;;
+  step3|step4|step5|signin|leader_check|readiness|prereqs|clusters|autopatch|failover|wizard) "$1" ;;
+  down) k3d cluster delete ro-stg-hub ro-stg-spoke
+    if k3d cluster list "$WIZ_CLUSTER" >/dev/null 2>&1; then k3d cluster delete "$WIZ_CLUSTER"; fi
+    rm -rf "$WORK" ;;
   *) echo "usage: $0 up|install|verify|uninstall|down"; exit 2 ;;
 esac

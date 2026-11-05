@@ -473,7 +473,9 @@ export default function ClusterWizardPage() {
                     </div>
                   ) : null}
                   <div>
-                    <div className="mb-2 text-sm font-semibold">2. Install the agent</div>
+                    <div className="mb-2 text-sm font-semibold">
+                      2. Install resource-optimizer (agent and webhook)
+                    </div>
                     <InstallSnippets cluster={created.cluster.name} compact />
                   </div>
                 </>

@@ -337,7 +337,7 @@ test.describe('WO-22c readiness alignment', () => {
     await page.evaluate(() => localStorage.setItem('ro-mock-install', 'unconfigured'))
     await page.goto('/clusters/dr-eu-central-1?tab=agent')
     const box = page.getByTestId('install-not-configured')
-    await expect(box).toContainText('config.onboarding.agentChart')
+    await expect(box).toContainText('config.onboarding.chart')
     await expect(box).toContainText('config.onboarding.hubURL')
     await page.evaluate(() => localStorage.removeItem('ro-mock-install'))
   })

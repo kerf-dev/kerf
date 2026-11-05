@@ -16,10 +16,14 @@ import { CodeBlock, SecretOnce } from './common'
 import { SwitchRow } from './policy-form'
 import { WriteDialog } from './write-dialog'
 
-/** Install instructions in three flavours (D-025). They reference the token Secret, never the token. */
+/**
+ * Install instructions in three flavours (D-025): the umbrella chart resource-optimizer in mode spoke
+ * (agent, webhook and CRDs; WO-18f). They reference the token Secret, never the token.
+ */
 export function InstallSnippets({ cluster, compact }: { cluster: string; compact?: boolean }) {
   const [format, setFormat] = useState<InstallFormat>('helm')
-  const [webhook, setWebhook] = useState(false)
+  // Part of mode spoke, as docs/install/eks.md installs it; off sets webhook.enabled false.
+  const [webhook, setWebhook] = useState(true)
   const [certManager, setCertManager] = useState(true)
   const q = useInstallSnippet(cluster, format, { webhook, ...(webhook ? { certManager } : {}) })
   return (
@@ -55,7 +59,7 @@ export function InstallSnippets({ cluster, compact }: { cluster: string; compact
       </div>
       {q.isError ? (
         q.error instanceof ApiError && q.error.code === 'install_not_configured' ? (
-          <InstallNotConfigured detail={q.error.problem?.detail} webhook={webhook} />
+          <InstallNotConfigured detail={q.error.problem?.detail} />
         ) : (
           <ErrorState error={q.error} compact onRetry={() => q.refetch()} />
         )
@@ -90,37 +94,43 @@ export function InstallSnippets({ cluster, compact }: { cluster: string; compact
   )
 }
 
-const HUB_VALUES: { key: string; what: string; match: RegExp; when?: 'webhook' }[] = [
-  { key: 'config.onboarding.hubURL', what: 'the hub URL as agents reach it', match: /hub URL/i },
+const HUB_VALUES: { key: string; what: string; match: RegExp; example: string }[] = [
   {
-    key: 'config.onboarding.agentChart',
-    what: 'the agent chart (oci://…, <repo URL>|<chart>, or a path)',
-    match: /agent chart/i,
+    key: 'hub.config.onboarding.hubURL',
+    what: 'the hub URL as agents reach it',
+    match: /hub URL/i,
+    example: 'https://hub.example.com',
   },
   {
-    key: 'config.onboarding.webhookChart',
-    what: 'the webhook chart, for the webhook option',
-    match: /webhook chart/i,
-    when: 'webhook',
+    key: 'hub.config.onboarding.chart',
+    what: 'the resource-optimizer chart (oci://…, <repo URL>|<chart>, or a path)',
+    match: /chart reference/i,
+    example: 'oci://registry.example.com/resource-optimizer/charts/resource-optimizer',
   },
-  { key: 'config.onboarding.chartVersion', what: 'optional: pin the chart version', match: /$^/ },
+  {
+    key: 'hub.config.onboarding.imageRegistry',
+    what: 'the image registry host (only when the chart is not oci://)',
+    match: /image registry/i,
+    example: 'registry.example.com',
+  },
+  {
+    key: 'hub.config.onboarding.chartVersion',
+    what: 'optional: pin the chart version',
+    match: /$^/,
+    example: '',
+  },
 ]
 
 /**
  * `409 install_not_configured` (WO-25): the hub cannot render install snippets until its chart sets
  * the onboarding values. Names the missing ones (from the hub's message) and shows how to set them.
  */
-function InstallNotConfigured({ detail, webhook }: { detail?: string; webhook: boolean }) {
+function InstallNotConfigured({ detail }: { detail?: string }) {
   const missing = HUB_VALUES.filter((v) => detail && v.match.test(detail))
-  const list = missing.length
-    ? missing
-    : HUB_VALUES.filter((v) => v.when !== 'webhook' || webhook).slice(0, webhook ? 3 : 2)
-  const cmd = `helm upgrade hub deploy/charts/hub -n resource-optimizer --reuse-values \\\n${list
-    .filter((v) => !v.key.endsWith('chartVersion'))
-    .map(
-      (v) =>
-        `  --set ${v.key}=${v.key.endsWith('hubURL') ? 'https://hub.example.com' : v.key.endsWith('webhookChart') ? 'oci://registry.example.com/resource-optimizer/webhook' : 'oci://registry.example.com/resource-optimizer/agent'}`,
-    )
+  const list = missing.length ? missing : HUB_VALUES.slice(0, 2)
+  const cmd = `helm upgrade resource-optimizer deploy/charts/resource-optimizer -n resource-optimizer --reuse-values \\\n${list
+    .filter((v) => v.example)
+    .map((v) => `  --set ${v.key}=${v.example}`)
     .join(' \\\n')}`
   return (
     <div className="flex flex-col gap-3" data-testid="install-not-configured">

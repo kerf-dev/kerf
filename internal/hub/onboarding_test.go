@@ -363,13 +363,38 @@ func TestInstallSnippetAPI(t *testing.T) {
 	e := newEnv(t)
 	e.initOnboarding()
 	e.problem(e.do(http.MethodGet, "/v1/admin/clusters/c1/install", tokAdmin, nil), 409, "install_not_configured")
+	// the pre-WO-18f component chart key still works: the umbrella chart next to it
 	e.srv.Cfg.Onboarding.AgentChart = "oci://ghcr.io/x/charts/agent"
 	e.srv.Cfg.Onboarding.HubURL = "http://hub-api.hub.svc:8080"
+	e.srv.Cfg.Onboarding.HubVersion = "0.2.0"
 	var s hubapi.InstallSnippet
 	e.getJSON("/v1/admin/clusters/c1/install?format=values", tokAdmin, &s)
-	if s.Format != "values" || !strings.Contains(s.Content, "clusterName: c1") || !strings.Contains(s.ArgoCDIgnoreDifferences, "resource-optimizer") {
+	for _, want := range []string{"mode: spoke", "clusterName: c1", "imageRegistry: ghcr.io", "url: http://hub-api.hub.svc:8080", "replicaCount: 2"} {
+		if !strings.Contains(s.Content, want) {
+			t.Errorf("values lack %q:\n%s", want, s.Content)
+		}
+	}
+	if s.Format != "values" || !strings.Contains(s.ArgoCDIgnoreDifferences, "resource-optimizer") ||
+		!strings.Contains(strings.Join(s.Notes, "\n"), "helm upgrade --install resource-optimizer oci://ghcr.io/x/charts/resource-optimizer --version 0.2.0 ") {
 		t.Errorf("snippet %+v", s)
 	}
+	// onboarding.chart wins; the token from the secret store
+	e.srv.Cfg.Onboarding.Chart, e.srv.Cfg.Onboarding.ImageRegistry = "deploy/charts/resource-optimizer", "k3d-ro-registry:5005"
+	e.srv.Cfg.Onboarding.HubVersion, e.srv.Cfg.Onboarding.ChartVersion = "dev", ""
+	es := &TokenExternalSecretConfig{}
+	es.SecretStoreRef.Name = "aws-secrets-manager"
+	e.srv.Cfg.Onboarding.AgentTokenExternalSecret = es
+	e.getJSON("/v1/admin/clusters/c1/install?format=helm&webhook=true", tokAdmin, &s)
+	for _, want := range []string{"helm upgrade --install resource-optimizer deploy/charts/resource-optimizer \\\n", "imageRegistry: k3d-ro-registry:5005",
+		"key: resource-optimizer/clusters/c1/agent-token", "name: aws-secrets-manager"} {
+		if !strings.Contains(s.Content, want) {
+			t.Errorf("helm lacks %q:\n%s", want, s.Content)
+		}
+	}
+	if strings.Contains(s.Content, "--version") || strings.Contains(s.Content, "webhook:") {
+		t.Errorf("helm:\n%s", s.Content)
+	}
+	e.srv.Cfg.Onboarding.AgentTokenExternalSecret = nil
 	e.problem(e.do(http.MethodGet, "/v1/admin/clusters/c1/install?format=tf", tokAdmin, nil), 400, "invalid_format")
 	expectCode(t, "ui", e.do(http.MethodGet, "/v1/admin/clusters/c1/install", tokUI, nil), 403)
 	// a bound cluster gets the health watch matchers
@@ -377,7 +402,7 @@ func TestInstallSnippetAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.getJSON("/v1/admin/clusters/c1/install?format=helm", tokAdmin, &s)
-	if !strings.Contains(s.Content, "health.clusterLabel=k8s_cluster") || !strings.Contains(s.Content, "health.clusterLabelValue=prod") {
+	if !strings.Contains(s.Content, "clusterLabel: k8s_cluster") || !strings.Contains(s.Content, "clusterLabelValue: prod") {
 		t.Errorf("helm snippet %s", s.Content)
 	}
 }

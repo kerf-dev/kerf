@@ -141,7 +141,7 @@ make release REGISTRY=$REGISTRY VERSION=$VERSION
 
 `make release` builds on a clean commit (it refuses uncommitted changes) and needs Docker buildx.
 It pushes the umbrella chart and the five component charts. The hub's cluster wizard renders its
-install snippets with the component charts.
+install snippets with the umbrella chart.
 
 The chart's `global.imageRegistry` is `$ECR`. The image repositories default to
 `resource-optimizer/<component>`, and the tags default to the chart version, which is `$VERSION`.
@@ -539,9 +539,11 @@ In the UI: **Clusters → Add cluster** (`https://$UI_HOST/clusters/new`).
      --secret-string "$(jq -cn --arg t "$AGENT_TOKEN" '{token: $t}')" --query Name --output text
    unset AGENT_TOKEN
    ```
-   The wizard's Helm, values and Argo CD snippets install the component charts. This guide installs
-   the umbrella chart instead (5.3), so you only need the token. The wizard's Argo CD `ignoreDifferences`
-   snippet is the one in [step 6](#6-turning-on-auto-patch).
+   The wizard's Helm, values and Argo CD snippets install the same chart in mode spoke, with this
+   cluster's name, the hub URL and the token from Secrets Manager. 5.3 uses `values-spoke.yaml`
+   instead, which adds the production settings (NetworkPolicies, ServiceMonitors, the webhook port,
+   the throttling metrics). The wizard's Argo CD `ignoreDifferences` snippet is the one in
+   [step 6](#6-turning-on-auto-patch).
 4. **Verify:** leave the wizard open. It fills in as the agent connects.
 
 **Check:** the `aws` command prints `resource-optimizer/clusters/<cluster>/agent-token`, and the cluster

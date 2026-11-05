@@ -17,8 +17,8 @@ VERSION   ?= $(shell git describe --tags --match 'v[0-9]*' --always --dirty 2>/d
 VERSION   := $(VERSION)
 
 RELEASE_IMAGES    ?= hub pricing agent webhook web
-# The umbrella chart (WO-18d, what docs/install/eks.md installs) and the component charts (the hub's
-# cluster wizard renders install snippets for the agent and webhook charts).
+# The umbrella chart (WO-18d, what docs/install/eks.md and the hub's cluster wizard install) and the
+# component charts (installs from before the umbrella: docs/install/eks.md, "Moving from the component charts").
 RELEASE_CHARTS    ?= resource-optimizer hub pricing agent webhook web
 RELEASE_CHART_DIR ?= deploy/charts
 RELEASE_DIR       ?= $(LOCALBIN)/release

@@ -617,8 +617,14 @@ func (s *Server) getClusterInstall(w http.ResponseWriter, r *http.Request) {
 		hubURL = "https://" + r.Host
 	}
 	opts := install.Options{
-		Cluster: cluster, HubURL: hubURL, AgentChart: o.AgentChart, WebhookChart: o.WebhookChart, ChartVersion: o.ChartVersion,
+		Cluster: cluster, HubURL: hubURL, Chart: o.InstallChart(), ChartVersion: o.InstallChartVersion(), ImageRegistry: o.ImageRegistry,
 		Webhook: q.Get("webhook") == "true", CertManager: q.Get("certManager") == "true",
+	}
+	if es := o.AgentTokenExternalSecret; es != nil {
+		opts.TokenExternalSecret = &install.TokenExternalSecret{
+			SecretStoreKind: es.SecretStoreRef.Kind, SecretStoreName: es.SecretStoreRef.Name,
+			Key: es.RemoteRef.Key, Property: es.RemoteRef.Property,
+		}
 	}
 	if s.Onb != nil {
 		if res, err := s.Onb.Bind.Resolve(r.Context(), cluster); err == nil && res.Bound {

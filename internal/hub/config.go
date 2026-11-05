@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	"sigs.k8s.io/yaml"
 
+	"github.com/tomer1983/resource-optimizer/internal/hub/install"
 	"github.com/tomer1983/resource-optimizer/internal/recommender"
 )
 
@@ -91,12 +93,58 @@ type OnboardingConfig struct {
 	// HubVersion and MinAgentVersion are sent to agents for the agent.version check.
 	HubVersion      string `json:"hubVersion"`
 	MinAgentVersion string `json:"minAgentVersion"`
-	// Install snippets: the hub URL as agents reach it, and the chart references
-	// (oci://registry/path/<chart>, <repo URL>|<chart>, or a local chart path).
-	HubURL       string `json:"hubURL"`
+	// Install snippets of the cluster wizard (internal/hub/install, WO-18f): the hub URL as agents
+	// reach it and the umbrella chart resource-optimizer (installed with global.mode spoke):
+	// oci://registry/path/resource-optimizer, <repo URL>|resource-optimizer, or a local chart path.
+	HubURL string `json:"hubURL"`
+	Chart  string `json:"chart"`
+	// ChartVersion pins the chart. Empty: hubVersion when it is a release version (the agent
+	// matches the hub), else the latest.
+	ChartVersion string `json:"chartVersion"`
+	// ImageRegistry is the snippets' global.imageRegistry. Empty: the host of an oci:// chart.
+	ImageRegistry string `json:"imageRegistry"`
+	// AgentTokenExternalSecret: the snippets let the chart build the agent token Secret with the
+	// External Secrets Operator (as docs/install/eks.md does). Unset: an existing Secret.
+	AgentTokenExternalSecret *TokenExternalSecretConfig `json:"agentTokenExternalSecret,omitempty"`
+	// Deprecated (component charts, before WO-18f): Chart defaults to the umbrella chart next to
+	// AgentChart (…/agent -> …/resource-optimizer). WebhookChart is ignored.
 	AgentChart   string `json:"agentChart"`
 	WebhookChart string `json:"webhookChart"`
-	ChartVersion string `json:"chartVersion"`
+}
+
+// TokenExternalSecretConfig: where the agent tokens are in the secret store (chart values
+// global.externalSecrets.secretStoreRef and agent.hub.tokenSecret.externalSecret.remoteRef).
+type TokenExternalSecretConfig struct {
+	SecretStoreRef struct {
+		Kind string `json:"kind"` // default ClusterSecretStore
+		Name string `json:"name"`
+	} `json:"secretStoreRef"`
+	RemoteRef struct {
+		// Key: {cluster} is replaced (default resource-optimizer/clusters/{cluster}/agent-token).
+		Key      string `json:"key"`
+		Property string `json:"property"` // default token
+	} `json:"remoteRef"`
+}
+
+// InstallChart is the umbrella chart reference of the install snippets.
+func (o OnboardingConfig) InstallChart() string {
+	if o.Chart != "" {
+		return o.Chart
+	}
+	return install.UmbrellaFromComponent(o.AgentChart)
+}
+
+var releaseVersion = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
+
+// InstallChartVersion is the chart version of the install snippets: ChartVersion, else the hub's
+// release version for a chart from a registry (a local chart path has no versions).
+func (o OnboardingConfig) InstallChartVersion() string {
+	chart := o.InstallChart()
+	fromRegistry := strings.HasPrefix(chart, "oci://") || strings.Contains(chart, "|")
+	if o.ChartVersion == "" && fromRegistry && releaseVersion.MatchString(o.HubVersion) {
+		return o.HubVersion
+	}
+	return o.ChartVersion
 }
 
 // DevSeed registers clusters and tokens at startup. Development only.

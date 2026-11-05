@@ -218,12 +218,23 @@ config:
     checkInterval: 1h
     agentPullInterval: 1m
     minAgentVersion: ""
-    # Install snippets: the hub URL as agents reach it and the chart references
-    # (oci://registry/path/<chart>, <repo URL>|<chart>, or a local chart path).
+    # Install snippets of the cluster wizard (WO-18f): the hub URL as agents reach it and the
+    # umbrella chart resource-optimizer, installed with global.mode spoke
+    # (oci://registry/path/resource-optimizer, <repo URL>|resource-optimizer, or a local chart path).
     hubURL: ""
-    agentChart: ""
-    webhookChart: ""
+    chart: ""
+    # Empty: the hub's version when it is a release version (the agent matches the hub).
     chartVersion: ""
+    # global.imageRegistry of the snippets. Empty: the host of an oci:// chart.
+    imageRegistry: ""
+    # The agent token from a secret store (External Secrets Operator) instead of an existing Secret:
+    # agentTokenExternalSecret:
+    #   secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}
+    #   remoteRef: {key: "resource-optimizer/clusters/{cluster}/agent-token", property: token}
+    # Deprecated: the component chart references. agentChart still works (the chart defaults to
+    # the resource-optimizer chart next to it); webhookChart is ignored.
+    # agentChart: ""
+    # webhookChart: ""
 
 # Datasource secrets (bearer tokens, passwords, mTLS keys) are encrypted at rest with this key
 # (D-025). create: the chart generates a random key once and keeps it (helm.sh/resource-policy:
