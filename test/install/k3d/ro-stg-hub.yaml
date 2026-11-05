@@ -1,0 +1,47 @@
+# WO-18e staging: the "hub cluster" of docs/install/eks.md. Two nodes in two zones (spread), traefik +
+# servicelb stand in for the AWS Load Balancer Controller (HTTPS on 127.0.0.1:19443).
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: ro-stg-hub
+servers: 1
+agents: 1
+kubeAPI:
+  hostIP: 127.0.0.1
+  hostPort: "16447"
+network: ro-dev
+registries:
+  use:
+    - k3d-ro-registry:5005
+    - k3d-ro-dockerio-cache:5000
+  config: |
+    mirrors:
+      docker.io:
+        endpoint:
+          - http://k3d-ro-dockerio-cache:5000
+ports:
+  - port: 127.0.0.1:19443:443   # traefik (the "ALB") for HUB_HOST and UI_HOST
+    nodeFilters: [server:0:direct]
+options:
+  k3d:
+    wait: true
+    timeout: 240s
+    disableLoadbalancer: true
+  k3s:
+    extraArgs:
+      - arg: --disable=metrics-server
+        nodeFilters: [server:*]
+      - arg: --kubelet-arg=eviction-hard=imagefs.available<1%,nodefs.available<1%
+        nodeFilters: [server:*, agent:*]
+    nodeLabels:
+      - label: node.kubernetes.io/instance-type=m6i.large
+        nodeFilters: [server:*, agent:*]
+      - label: topology.kubernetes.io/region=eu-west-1
+        nodeFilters: [server:*, agent:*]
+      - label: topology.kubernetes.io/zone=eu-west-1a
+        nodeFilters: [server:*]
+      - label: topology.kubernetes.io/zone=eu-west-1b
+        nodeFilters: [agent:*]
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: false
