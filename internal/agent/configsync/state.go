@@ -7,6 +7,7 @@ package configsync
 
 import (
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,11 +22,16 @@ type State struct {
 	etag string
 	// consumed holds approvals the agent applied (id -> when), until the hub stops sending them.
 	consumed map[string]time.Time
-	dirty    bool
+	// held holds approvals whose change is in flight (id -> approval), until it is consumed or
+	// expires: a recommender run may supersede them in the hub meanwhile (WO-29).
+	held  map[string]hubclient.ConfigApproval
+	dirty bool
 }
 
 // NewState returns an empty state: not paused, no approvals, no config.
-func NewState() *State { return &State{consumed: map[string]time.Time{}} }
+func NewState() *State {
+	return &State{consumed: map[string]time.Time{}, held: map[string]hubclient.ConfigApproval{}}
+}
 
 // Config returns the last config (nil if none). It must not be modified.
 func (s *State) Config() *hubclient.ClusterConfig {
@@ -55,27 +61,50 @@ func (s *State) Flags() hubclient.ConfigFlags {
 }
 
 // Approval returns the approve-once grant for the workload's recommendation recID, if there is
-// one that is not expired and not consumed yet.
+// one that is not expired and not consumed yet: one the hub sends, or one held for a change in
+// flight.
 func (s *State) Approval(w hubclient.WorkloadRef, recID string, now time.Time) *hubclient.ConfigApproval {
 	if recID == "" {
 		return nil
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.cfg == nil {
-		return nil
-	}
-	for i := range s.cfg.Approvals {
-		a := s.cfg.Approvals[i]
+	usable := func(a hubclient.ConfigApproval) bool {
 		if a.Workload != w || a.RecommendationID != recID {
-			continue
+			return false
 		}
-		if _, done := s.consumed[a.ID]; done || (!a.ExpiresAt.IsZero() && !now.Before(a.ExpiresAt)) {
-			continue
+		_, done := s.consumed[a.ID]
+		return !done && !expired(a, now)
+	}
+	if s.cfg != nil {
+		for _, a := range s.cfg.Approvals {
+			if usable(a) {
+				return &a
+			}
 		}
-		return &a
+	}
+	for _, a := range s.held {
+		if usable(a) {
+			return &a
+		}
 	}
 	return nil
+}
+
+func expired(a hubclient.ConfigApproval, now time.Time) bool {
+	return !a.ExpiresAt.IsZero() && !now.Before(a.ExpiresAt)
+}
+
+// Hold keeps an approval whose change is in flight (an in-place resize): Approval returns it
+// until it is consumed or expires, also after the hub stops sending it because a recommender run
+// superseded it. The agent acted on it, so the change finishes and its applied event consumes it.
+func (s *State) Hold(a hubclient.ConfigApproval) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.held[a.ID]; !ok {
+		s.held[a.ID] = a
+		s.dirty = true
+	}
 }
 
 // Consume marks an approval applied: it is never applied again, even while the hub still sends
@@ -87,16 +116,26 @@ func (s *State) Consume(id string, now time.Time) {
 		s.consumed[id] = now.UTC()
 		s.dirty = true
 	}
+	if _, ok := s.held[id]; ok {
+		delete(s.held, id)
+		s.dirty = true
+	}
 }
 
-// set replaces the config. Consumed approvals the hub no longer sends are forgotten.
-func (s *State) set(cfg *hubclient.ClusterConfig, etag string) {
+// set replaces the config. Consumed approvals the hub no longer sends are forgotten, and so are
+// held approvals that expired.
+func (s *State) set(cfg *hubclient.ClusterConfig, etag string, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cfg, s.etag, s.dirty = cfg, etag, true
 	for id := range s.consumed {
 		if !slices.ContainsFunc(cfg.Approvals, func(a hubclient.ConfigApproval) bool { return a.ID == id }) {
 			delete(s.consumed, id)
+		}
+	}
+	for id, a := range s.held {
+		if expired(a, now) {
+			delete(s.held, id)
 		}
 	}
 }
@@ -115,6 +154,10 @@ func (s *State) snapshot() (persisted, bool) {
 	for k, v := range s.consumed {
 		p.Consumed[k] = v
 	}
+	for _, a := range s.held {
+		p.Held = append(p.Held, a)
+	}
+	slices.SortFunc(p.Held, func(a, b hubclient.ConfigApproval) int { return strings.Compare(a.ID, b.ID) })
 	dirty := s.dirty
 	s.dirty = false
 	return p, dirty
@@ -134,6 +177,10 @@ func (s *State) restore(p persisted) {
 	for k, v := range p.Consumed {
 		s.consumed[k] = v
 	}
+	s.held = map[string]hubclient.ConfigApproval{}
+	for _, a := range p.Held {
+		s.held[a.ID] = a
+	}
 }
 
 // persisted is the form stored in the state ConfigMap.
@@ -141,4 +188,6 @@ type persisted struct {
 	ETag     string                   `json:"etag,omitempty"`
 	Config   *hubclient.ClusterConfig `json:"config,omitempty"`
 	Consumed map[string]time.Time     `json:"consumed,omitempty"`
+	// Held: approvals whose change is in flight (WO-29).
+	Held []hubclient.ConfigApproval `json:"held,omitempty"`
 }
