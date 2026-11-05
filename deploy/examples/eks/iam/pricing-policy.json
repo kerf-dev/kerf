@@ -1,0 +1,14 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ResourceOptimizerPricing",
+      "Effect": "Allow",
+      "Action": [
+        "pricing:GetProducts",
+        "ec2:DescribeSpotPriceHistory"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

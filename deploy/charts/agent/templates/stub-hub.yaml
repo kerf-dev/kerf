@@ -1,3 +1,4 @@
+{{- if include "agent.c.enabled" . -}}
 {{- if .Values.stubHub.enabled }}
 # Local development only: a stub of the hub's agent endpoints (`agent stub-hub`), serving the
 # recommendations in .Values.stubHub.recommendations. Auth is disabled.
@@ -74,3 +75,4 @@ spec:
       port: 8080
       targetPort: http
 {{- end }}
+{{ end -}}

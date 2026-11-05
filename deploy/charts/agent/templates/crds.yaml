@@ -1,3 +1,4 @@
+{{- if include "agent.c.enabled" . -}}
 {{- /* The resource-optimizer CRDs (files/crds = api/crds, `make charts-sync`). Templates rather than
 crds/, so that helm upgrade upgrades them; resource-policy keep, so that helm uninstall never
 deletes them with every custom resource (D-028). Exactly one release per cluster renders them. */}}
@@ -12,3 +13,4 @@ deletes them with every custom resource (D-028). Exactly one release per cluster
 {{ toYaml $crd }}
 {{- end }}
 {{- end }}
+{{ end -}}

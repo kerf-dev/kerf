@@ -1,3 +1,4 @@
+{{- if include "agent.c.enabled" . -}}
 {{- if not .Values.clusterName }}{{ fail "clusterName is required" }}{{ end }}
 apiVersion: v1
 kind: ConfigMap
@@ -219,3 +220,4 @@ spec:
     - name: metrics
       port: {{ .Values.metrics.port }}
       targetPort: metrics
+{{ end -}}

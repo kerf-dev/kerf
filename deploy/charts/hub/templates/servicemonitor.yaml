@@ -1,1 +1,3 @@
+{{- if include "hub.c.enabled" . -}}
 {{- include "hub.c.serviceMonitor" (dict "ctx" . "port" "http") }}
+{{ end -}}

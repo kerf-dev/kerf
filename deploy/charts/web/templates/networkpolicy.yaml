@@ -1,3 +1,4 @@
+{{- if include "web.c.enabled" . -}}
 {{- if .Values.networkPolicy.enabled }}
 {{- $np := .Values.networkPolicy }}
 apiVersion: networking.k8s.io/v1
@@ -20,3 +21,4 @@ spec:
     {{- include "web.c.egressRules" (dict "ctx" . "ports" $np.egress.ports) }}
   {{- end }}
 {{- end }}
+{{ end -}}

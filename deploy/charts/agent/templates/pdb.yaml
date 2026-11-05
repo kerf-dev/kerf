@@ -1,1 +1,3 @@
+{{- if include "agent.c.enabled" . -}}
 {{- include "agent.c.pdb" . }}
+{{ end -}}

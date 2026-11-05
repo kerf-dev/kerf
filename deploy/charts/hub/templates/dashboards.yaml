@@ -1,3 +1,4 @@
+{{- if include "hub.c.enabled" . -}}
 {{- if .Values.dashboards.enabled }}
 {{- range $path, $_ := .Files.Glob "files/dashboards/*.json" }}
 {{- $name := base $path | trimSuffix ".json" }}
@@ -19,3 +20,4 @@ data:
     {{- $.Files.Get $path | nindent 4 }}
 {{- end }}
 {{- end }}
+{{ end -}}
