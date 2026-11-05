@@ -56,6 +56,10 @@ serviceAccount:
 # securityContext below.
 containerPort: 8080
 
+# Seconds nginx keeps serving after the pod is marked terminating, so the ingress controller removes
+# it from its endpoints first (no 502s during a rolling update). Built-in preStop sleep action. 0 = off.
+preStopSleepSeconds: 5
+
 # The image (WO-18c) runs nginx as user 101 on 8080 with a read-only root filesystem.
 podSecurityContext:
   runAsNonRoot: true

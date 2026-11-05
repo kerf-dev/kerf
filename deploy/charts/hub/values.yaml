@@ -37,8 +37,13 @@ updateStrategy:
     maxUnavailable: 0
     maxSurge: 1
 
-# Leader stop (<= 15 s) + HTTP drain (10 s) on SIGTERM; keep >= 30.
+# preStop sleep (5 s) + leader stop (<= 15 s) + HTTP drain (10 s) on SIGTERM; keep >= 30.
 terminationGracePeriodSeconds: 30
+
+# Seconds the pod keeps serving after it is marked terminating, so the ingress controller and
+# kube-proxy remove it from their endpoints before the hub stops accepting connections (no 502s
+# during a rolling update). Uses the built-in preStop sleep action (no shell in the image). 0 = off.
+preStopSleepSeconds: 5
 
 # Created only when more than one hub pod can run (replicaCount > 1 or autoscaling.minReplicas > 1).
 podDisruptionBudget:

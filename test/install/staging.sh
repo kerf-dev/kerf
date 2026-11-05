@@ -289,8 +289,10 @@ upgrade() { # VERSION=<new> (released beforehand)
   log "step 8: upgrade the hub to $1 with an API probe loop (expect no 5xx)"
   : > "$WORK/probe.txt"
   ( end=$(( $(date +%s) + 240 )); while [ "$(date +%s)" -lt $end ]; do
-      curl -sS -o /dev/null -w '%{http_code}\n' --max-time 5 "https://$HUB_HOST/readyz" >> "$WORK/probe.txt" 2>/dev/null || echo 000 >> "$WORK/probe.txt"
-      curl -sS -o /dev/null -w '%{http_code}\n' --max-time 5 "https://$UI_HOST/v1/me" >> "$WORK/probe.txt" 2>/dev/null || echo 000 >> "$WORK/probe.txt"
+      for u in "https://$HUB_HOST/readyz" "https://$UI_HOST/v1/me"; do
+        c=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$u" 2>/dev/null) || c=000
+        echo "$c $(date +%H:%M:%S) $u" >> "$WORK/probe.txt"
+      done
       sleep 0.5; done ) &
   local probe=$!
   helm --kube-context "$HUB_CTX" upgrade resource-optimizer "oci://$REGISTRY/charts/resource-optimizer" $HELM_OCI_FLAGS \
@@ -301,10 +303,11 @@ upgrade() { # VERSION=<new> (released beforehand)
     --version "$1" -n "$NS" -f "$WORK/values-spoke-$CLUSTER.yaml" -f "$INSTALL/values-staging-spoke.yaml" \
     --set-file agent.hub.caBundle.pem="$WORK/ca.crt" --wait --timeout 10m >/dev/null
   wait $probe || true
-  echo "Check: probe status codes: $(sort "$WORK/probe.txt" | uniq -c | tr '\n' ' ')"
+  echo "Check: probe status codes: $(cut -d' ' -f1 "$WORK/probe.txt" | sort | uniq -c | tr '\n' ' ')"
+  grep -vE '^200 ' "$WORK/probe.txt" || true
   helm --kube-context "$HUB_CTX" -n "$NS" history resource-optimizer | tail -2
   leader_check
-  ! grep -qE '^(5..|000)$' "$WORK/probe.txt"
+  ! grep -qE '^(5..|000) ' "$WORK/probe.txt"
 }
 
 uninstall() {
