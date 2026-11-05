@@ -1,0 +1,30 @@
+# Stand-in for the metrics store the guide expects (step 1). NAME, PORT and NODEPORT are replaced by
+# staging.sh: on the hub cluster `vmsingle` on 8428 (METRICS_URL, NodePort 30428 for the spoke's
+# remote-write); on the spoke `prometheus-operated` on 9090 (SPOKE_METRICS_URL; the agent's
+# NetworkPolicy opens 9090, so the server itself listens on 9090).
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: NAME, namespace: monitoring}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: NAME}}
+  template:
+    metadata: {labels: {app: NAME}}
+    spec:
+      containers:
+        - name: vm
+          image: VM_IMAGE
+          args: [-httpListenAddr=:PORT, -retentionPeriod=7d, -storageDataPath=/data, -search.latencyOffset=0s]
+          ports: [{containerPort: PORT, name: http}]
+          readinessProbe: {httpGet: {path: /health, port: PORT}}
+          resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}
+          volumeMounts: [{name: data, mountPath: /data}]
+      volumes: [{name: data, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: NAME, namespace: monitoring}
+spec:
+  type: SVCTYPE
+  selector: {app: NAME}
+  ports: [{name: http, port: PORT, targetPort: PORT NODEPORT}]

@@ -1,0 +1,5 @@
+# WO-18e: the only differences from docs/install/eks.md step 5.3 on the staging workload cluster.
+# The hub's certificate comes from the private staging CA, so the agent trusts it with
+# agent.hub.caBundle.pem (staging.sh passes the file with --set-file), as the guide's
+# troubleshooting ("x509: certificate signed by unknown authority") says.
+{}

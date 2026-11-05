@@ -1,0 +1,21 @@
+# Stand-in for ACM (guide step 3.5): a private CA from cert-manager. ClusterIssuer `ro-staging-ca`
+# issues the ingress certificate for HUB_HOST and UI_HOST; agents trust it through agent.hub.caBundle.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata: {name: ro-staging-selfsigned}
+spec: {selfSigned: {}}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: {name: ro-staging-ca, namespace: cert-manager}
+spec:
+  isCA: true
+  commonName: ro-staging-ca
+  secretName: ro-staging-ca
+  privateKey: {algorithm: ECDSA, size: 256}
+  issuerRef: {name: ro-staging-selfsigned, kind: ClusterIssuer}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata: {name: ro-staging-ca}
+spec: {ca: {secretName: ro-staging-ca}}
