@@ -25,7 +25,7 @@ func TestStateApprovals(t *testing.T) {
 		{ID: "a1", Workload: w, RecommendationID: "r1", ExpiresAt: t0.Add(time.Hour), ApprovedBy: "bob"},
 		{ID: "a2", Workload: hubclient.WorkloadRef{Namespace: "shop", Kind: "Deployment", Name: "api"}, RecommendationID: "r2", ExpiresAt: t0.Add(-time.Minute)},
 	}}
-	s.set(cfg, `"c-1"`)
+	s.set(cfg, `"c-1"`, t0)
 	if a := s.Approval(w, "r1", t0); a == nil || a.ID != "a1" {
 		t.Fatalf("approval %+v", a)
 	}
@@ -50,13 +50,60 @@ func TestStateApprovals(t *testing.T) {
 		t.Fatal("consumed approval returned")
 	}
 	// Still sent by the hub: stays consumed. No longer sent: forgotten.
-	s.set(cfg, `"c-1"`)
+	s.set(cfg, `"c-1"`, t0)
 	if s.Approval(w, "r1", t0) != nil {
 		t.Fatal("consumed approval revived by the same config")
 	}
-	s.set(&hubclient.ClusterConfig{ConfigVersion: "c-2"}, `"c-2"`)
+	s.set(&hubclient.ClusterConfig{ConfigVersion: "c-2"}, `"c-2"`, t0)
 	if len(s.consumed) != 0 {
 		t.Fatalf("consumed not pruned: %v", s.consumed)
+	}
+}
+
+// TestStateHeld (WO-29): an approval held for a change in flight is still returned after the hub
+// stops sending it (a recommender run superseded it), until it is consumed or expires; it survives
+// a restart.
+func TestStateHeld(t *testing.T) {
+	w := hubclient.WorkloadRef{Namespace: "shop", Kind: "Deployment", Name: "web"}
+	a1 := hubclient.ConfigApproval{ID: "a1", Workload: w, RecommendationID: "r1", ExpiresAt: t0.Add(time.Hour), ApprovedBy: "bob"}
+	b := hubclient.ConfigApproval{ID: "b1", Workload: w, RecommendationID: "r2", ExpiresAt: t0.Add(time.Hour), ApprovedBy: "bob"}
+	s := NewState()
+	s.set(&hubclient.ClusterConfig{ConfigVersion: "c-1", Approvals: []hubclient.ConfigApproval{a1}}, `"c-1"`, t0)
+	s.Hold(a1)
+	s.set(&hubclient.ClusterConfig{ConfigVersion: "c-2", Approvals: []hubclient.ConfigApproval{b}}, `"c-2"`, t0)
+	tests := []struct {
+		name string
+		rec  string
+		at   time.Time
+		want string
+	}{
+		{"held, no longer sent", "r1", t0, "a1"},
+		{"sent", "r2", t0, "b1"},
+		{"held, expired", "r1", t0.Add(time.Hour), ""},
+		{"held, other recommendation", "r3", t0, ""},
+	}
+	for _, tt := range tests {
+		got := ""
+		if a := s.Approval(w, tt.rec, tt.at); a != nil {
+			got = a.ID
+		}
+		if got != tt.want {
+			t.Errorf("%s: approval %q, want %q", tt.name, got, tt.want)
+		}
+	}
+	p, _ := s.snapshot()
+	s2 := NewState()
+	s2.restore(p)
+	if a := s2.Approval(w, "r1", t0); a == nil || a.ID != "a1" {
+		t.Fatalf("held approval not restored: %+v", a)
+	}
+	s.Consume("a1", t0)
+	if a := s.Approval(w, "r1", t0); a != nil || len(s.held) != 0 {
+		t.Fatalf("consumed held approval returned: %+v, held %v", a, s.held)
+	}
+	s2.set(&hubclient.ClusterConfig{ConfigVersion: "c-3"}, `"c-3"`, t0.Add(2*time.Hour))
+	if len(s2.held) != 0 {
+		t.Fatalf("expired held approval not pruned: %v", s2.held)
 	}
 }
 

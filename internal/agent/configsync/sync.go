@@ -117,7 +117,7 @@ func (s *Syncer) Sync(ctx context.Context) {
 		configPulls.WithLabelValues("ok").Inc()
 		s.unsupported = false
 		prev := s.State.Flags()
-		s.State.set(cfg, etag)
+		s.State.set(cfg, etag, time.Now())
 		configPaused.Set(b2f(cfg.Flags.Paused))
 		if prev.Paused != cfg.Flags.Paused {
 			s.Log.InfoContext(ctx, "automation pause changed", "paused", cfg.Flags.Paused, "scope", cfg.Flags.PauseScope, "reason", cfg.Flags.PauseReason)

@@ -343,9 +343,11 @@ func approve(t *testing.T, user string, cl cluster, ns, name string) hubapi.Appr
 }
 
 // approveApplied approves the latest recommendation and waits for the agent's applied/ApprovedOnce
-// event. A recommender run between the approval and the agent's next pull supersedes the approval
-// (only the latest recommendation can be approved): then it approves the new one, up to 3 times.
-// The suite's own recompute requests are held off meanwhile.
+// event for it (the event names the approved recommendation). A recommender run between the
+// approval and the agent's next pull supersedes the approval (only the latest recommendation can
+// be approved): then it approves the new one, up to 3 times. The applied event of a superseded
+// approval may still arrive (the agent had applied it, WO-29); it is not the one waited for. The
+// suite's own recompute requests are held off meanwhile.
 func approveApplied(t *testing.T, user string, cl cluster, ns, name string) (hubapi.Approval, auditEvent) {
 	t.Helper()
 	release := env.Hub.holdRecompute(t)
@@ -360,7 +362,7 @@ func approveApplied(t *testing.T, user string, cl cluster, ns, name string) (hub
 				return false, err.Error()
 			}
 			for _, e := range evs {
-				if e.Reason == v1alpha1.ReasonApprovedOnce {
+				if e.Reason == v1alpha1.ReasonApprovedOnce && e.RecommendationID == a.RecommendationID {
 					ev = e
 					return true, ""
 				}

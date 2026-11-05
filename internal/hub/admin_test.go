@@ -511,6 +511,62 @@ func strPtr(s string) *string { return &s }
 
 // ---- overrides, approvals, automation ----
 
+// TestApprovalSupersededBeforeEvent (WO-29, the TestApproveOnce e2e flake): the agent applies
+// approval A, a recommender run supersedes A before the hub stores A's applied event, and the
+// operator approves the new recommendation B. A's late event consumes A only; B stays pending until
+// the agent's applied/ApprovedOnce event for B (B's values are live already) consumes it.
+func TestApprovalSupersededBeforeEvent(t *testing.T) {
+	e := newEnv(t)
+	e.seedUsers()
+	operator, _ := e.login("operator", testPassword)
+	var d hubapi.WorkloadDetail
+	e.getJSON(wlPath(kCheckout, ""), tokUI, &d)
+	r := e.sdo(operator, http.MethodPost, wlPath(kCheckout, "/approve"), hubapi.ApprovalRequest{RecommendationID: d.Recommendation.ID, Reason: "A"})
+	expectCode(t, "approve A", r, 201)
+	var a hubapi.Approval
+	mustJSON(t, r.body, &a)
+
+	e.advance(10 * time.Minute)
+	e.run(e.now, false)
+	e.getJSON(wlPath(kCheckout, ""), tokUI, &d)
+	if d.Approval == nil || d.Approval.ID != a.ID || d.Approval.State != hubapi.ApprovalSuperseded || d.Recommendation.ID == a.RecommendationID {
+		t.Fatalf("after the recommender run: approval %+v, recommendation %s", d.Approval, d.Recommendation.ID)
+	}
+	r = e.sdo(operator, http.MethodPost, wlPath(kCheckout, "/approve"), hubapi.ApprovalRequest{RecommendationID: d.Recommendation.ID, Reason: "B"})
+	expectCode(t, "approve B", r, 201)
+	var b hubapi.Approval
+	mustJSON(t, r.body, &b)
+
+	applied := func(id int, ap hubapi.Approval) hubapi.Event {
+		return hubapi.Event{ID: newUUID(id), Type: "applied", Reason: v1alpha1.ReasonApprovedOnce, Time: e.now, Workload: kCheckout.Ref(),
+			RecommendationID: ap.RecommendationID, Details: map[string]string{"approvalId": ap.ID, "approvedBy": "operator"}}
+	}
+	var res hubapi.BatchResult
+	e.postJSON("/v1/clusters/c1/events", tokC1, hubapi.EventBatch{Items: []hubapi.Event{applied(291, a)}}, &res)
+	var consumedEvent *string
+	if err := e.st.Pool.QueryRow(e.ctx, `SELECT consumed_event_id::text FROM workload_approvals WHERE id = $1`, a.ID).Scan(&consumedEvent); err != nil ||
+		consumedEvent == nil || *consumedEvent != newUUID(291) {
+		t.Fatalf("approval A after its late event: consumed by %v, %v", consumedEvent, err)
+	}
+	e.getJSON(wlPath(kCheckout, ""), tokUI, &d)
+	if d.Approval == nil || d.Approval.ID != b.ID || d.Approval.State != hubapi.ApprovalPending {
+		t.Fatalf("approval B after A's event: %+v", d.Approval)
+	}
+	c1, _ := e.config(tokC1, "c1", "")
+	if len(c1.Approvals) != 1 || c1.Approvals[0].ID != b.ID {
+		t.Fatalf("config approvals: %+v", c1.Approvals)
+	}
+
+	e.postJSON("/v1/clusters/c1/events", tokC1, hubapi.EventBatch{Items: []hubapi.Event{applied(292, b)}}, &res)
+	e.getJSON(wlPath(kCheckout, ""), tokUI, &d)
+	if d.Approval == nil || d.Approval.ID != b.ID || d.Approval.State != hubapi.ApprovalConsumed || d.Approval.ConsumedEventID != newUUID(292) {
+		t.Fatalf("approval B after its event: %+v", d.Approval)
+	}
+	if c1, _ = e.config(tokC1, "c1", ""); len(c1.Approvals) != 0 {
+		t.Fatalf("consumed approvals still sent: %+v", c1.Approvals)
+	}
+}
+
 func TestOverridesApprovalsAutomation(t *testing.T) {
 	e := newEnv(t)
 	e.seedUsers()

@@ -93,6 +93,8 @@ type Reconciler struct {
 type AdminState interface {
 	Flags() hubclient.ConfigFlags
 	Approval(w hubclient.WorkloadRef, recID string, now time.Time) *hubclient.ConfigApproval
+	// Hold keeps an approval whose change is in flight, also once the hub stops sending it (WO-29).
+	Hold(a hubclient.ConfigApproval)
 	Consume(id string, now time.Time)
 }
 
@@ -492,9 +494,17 @@ func (w *run) decide() (ctrl.Result, error) {
 				// not report it again (D-017).
 				w.reason, w.message = c.Reason, c.Message
 			}
+			w.consumeLive()
 			return w.keepLive()
 		case w.adoptable(dec, auto):
 			w.reason, w.message = v1alpha1.ReasonRecommendationApplied, "recommended values are live"
+			if w.approval != nil {
+				if err := w.adopt(); err != nil {
+					return ctrl.Result{}, err
+				}
+				w.consumeLive()
+				return w.keepLive()
+			}
 			if dec.Outcome == guardrails.Skipped && dec.Reason == v1alpha1.ReasonNoSignificantChange {
 				// Reported once, as before (D-017): the new recommendation changes nothing.
 				w.reason, w.message = dec.Reason, dec.Message
@@ -927,6 +937,11 @@ func (w *run) startInPlace(dec guardrails.Decision) (ctrl.Result, error) {
 	w.rsr.Status.Previous = previous
 	w.rsr.Status.Phase = v1alpha1.PhaseApplying
 	w.reason, w.message = condReasonApplying, "resizing running pods: "+guardrails.Summary(dec.Changes)
+	if w.approval != nil {
+		// The resize finishes under this approval, even if a recommender run supersedes it in the
+		// hub meanwhile (WO-29).
+		r.Admin.Hold(*w.approval)
+	}
 	if err := w.writeStatus(); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1636,8 +1651,10 @@ func pauseMessage(f hubclient.ConfigFlags) string {
 
 // approve applies an approve-once grant for the workload's current recommendation: its audit
 // resources count as auto-patch for this one change, with every guardrail. The grant is
-// consumed by the applied event (emit); until then it also carries an in-place change already in
-// flight. A recommendation that is already live is not applied again.
+// consumed by the applied event (emit). An in-place change in flight is carried by its own grant
+// only (held, WO-29), never by a grant for a newer recommendation: the applied event names the
+// recommendation its grant approved. A grant whose recommendation advises the live values changes
+// nothing and is consumed (consumeLive).
 func (w *run) approve() {
 	r := w.r
 	if r.Admin == nil || r.Cfg.ReadOnly {
@@ -1645,11 +1662,11 @@ func (w *run) approve() {
 	}
 	ref := hubclient.WorkloadRef{Namespace: w.k.Namespace, Kind: w.k.Kind, Name: w.k.Name}
 	var a *hubclient.ConfigApproval
-	if w.rec != nil && (w.rsr == nil || w.prev.Phase != v1alpha1.PhaseApplied || w.rsr.Status.AppliedRecommendationID != w.rec.ID) {
-		a = r.Admin.Approval(ref, w.rec.ID, w.now)
-	}
-	if a == nil && w.rsr != nil && w.prev.Phase == v1alpha1.PhaseApplying {
+	switch {
+	case w.rsr != nil && w.prev.Phase == v1alpha1.PhaseApplying:
 		a = r.Admin.Approval(ref, w.rsr.Spec.Source.RecommendationID, w.now)
+	case w.rec != nil:
+		a = r.Admin.Approval(ref, w.rec.ID, w.now)
 	}
 	if a == nil {
 		return
@@ -1663,6 +1680,20 @@ func (w *run) approve() {
 	if raised {
 		w.approval = a
 	}
+}
+
+// consumeLive consumes the approval of a recommendation that advises the live values (the
+// applied one, or one adopted with the applied values): nothing changes, and the
+// applied/ApprovedOnce event names the recommendation so the hub marks the approval consumed. The
+// Applied condition then says ApprovedOnce (D-027). Without it the approval stayed pending after
+// a recommender run had superseded the approval the agent applied (WO-29).
+func (w *run) consumeLive() {
+	if w.approval == nil {
+		return
+	}
+	w.reason, w.message = v1alpha1.ReasonRecommendationApplied, "recommended values are already live: nothing to change"
+	w.emit(hubclient.Event{Type: hubclient.EventApplied, Reason: v1alpha1.ReasonRecommendationApplied,
+		RecommendationID: w.rec.ID, Strategy: string(w.rsr.Spec.Strategy), Message: w.message}, "", nil)
 }
 
 // approvedLive reports whether the live values come from an approve-once apply (D-024).

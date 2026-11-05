@@ -317,8 +317,15 @@ func TestApproveOnce(t *testing.T) {
 	requireActor(t, waitConfigChange(t, url.Values{"workloadId": {workloadID(cl, ns, "web")}}, hubapi.ActionWorkloadApproved, nil),
 		hubapi.Actor{Type: hubapi.ActorUser, Name: operator, Role: operator})
 
-	// The next recommendation stays in audit.
+	// The next recommendation stays in audit. When a recommender run superseded an approval the
+	// agent had applied, a second applied/ApprovedOnce event (no change) consumed the re-approval
+	// (WO-29): one applied event changed values, and none follows.
 	pods := snapshot(t, cl, ns, "web")
+	applied, err := env.Hub.audit(ctx(t), cl.Name, ns, deployment, "web", "applied")
+	must(t, err)
+	if n := len(slices.DeleteFunc(slices.Clone(applied), func(e auditEvent) bool { return len(e.Resources) == 0 })); n != 1 {
+		t.Errorf("%d applied events with changes, want 1: %+v", n, applied)
+	}
 	next := waitHubRecommendation(t, cl, ns, deployment, "web", func(rec *workloadRec) (bool, string) {
 		return rec.ID != a.RecommendationID, "still the approved recommendation"
 	})
@@ -332,7 +339,7 @@ func TestApproveOnce(t *testing.T) {
 		if err != nil {
 			return true, ""
 		}
-		return len(evs) == 1, fmt.Sprintf("%d applied events, want 1", len(evs))
+		return len(evs) == len(applied), fmt.Sprintf("%d applied events, want %d", len(evs), len(applied))
 	})
 }
 
