@@ -23,6 +23,9 @@ import (
 	"github.com/tomer1983/resource-optimizer/internal/pricing"
 )
 
+// version is set at build time (-ldflags "-X main.version=...").
+var version = "dev"
+
 type options struct {
 	provider      string
 	pricesFile    string
@@ -116,7 +119,7 @@ func run(ctx context.Context, o options, log *slog.Logger) error {
 	go exp.Run(ctx, o.interval)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
-	log.InfoContext(ctx, "pricing started", "provider", base.Name(), "listen", o.listen, "vm_url", o.vmURL, "interval", o.interval.String())
+	log.InfoContext(ctx, "pricing started", "version", version, "provider", base.Name(), "listen", o.listen, "vm_url", o.vmURL, "interval", o.interval.String())
 
 	select {
 	case err := <-errc:

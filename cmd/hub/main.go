@@ -19,6 +19,9 @@ import (
 	"github.com/tomer1983/resource-optimizer/internal/recommender"
 )
 
+// version is set at build time (-ldflags "-X main.version=...").
+var version = "dev"
+
 func main() {
 	configPath := flag.String("config", os.Getenv("HUB_CONFIG"), "path to the hub YAML config (e.g. dev/hub.yaml)")
 	devSeed := flag.Bool("dev-seed", false, "register dev clusters and tokens at startup (development only; also devSeed.enabled)")
@@ -114,7 +117,7 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	httpSrv := &http.Server{Addr: cfg.Listen, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	errc := make(chan error, 1)
 	go func() {
-		log.Info("listening", "addr", cfg.Listen, "prometheus", cfg.PrometheusURL, "interval", cfg.Recommender.Interval.D(), "pod", identity)
+		log.Info("listening", "version", version, "addr", cfg.Listen, "prometheus", cfg.PrometheusURL, "interval", cfg.Recommender.Interval.D(), "pod", identity)
 		errc <- httpSrv.ListenAndServe()
 	}()
 	electorCtx, stopElector := context.WithCancel(ctx)

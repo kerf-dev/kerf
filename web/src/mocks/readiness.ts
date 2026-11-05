@@ -326,13 +326,13 @@ function remediationFor(
       return { remediation: helmSnippet(cluster, false, false), remediationType: 'command' }
     case 'agent.version':
       return {
-        remediation: `helm upgrade resource-optimizer-agent oci://ghcr.io/oz/resource-optimizer/charts/agent --version 0.4.2 -n resource-optimizer --reuse-values`,
+        remediation: `helm upgrade resource-optimizer-agent oci://ghcr.io/tomer1983/resource-optimizer/charts/agent --version 0.4.2 -n resource-optimizer --reuse-values`,
         remediationType: 'command',
       }
     case 'agent.crds':
       return {
         remediation:
-          'kubectl apply --server-side -f https://github.com/oz/resource-optimizer/releases/download/v0.4.2/crds.yaml',
+          'kubectl apply --server-side -f https://github.com/tomer1983/resource-optimizer/releases/download/v0.4.2/crds.yaml',
         remediationType: 'command',
       }
     case 'agent.clock-skew':
@@ -381,7 +381,7 @@ function remediationFor(
     case 'webhook.healthy':
       return {
         remediation:
-          'helm upgrade --install resource-optimizer-webhook oci://ghcr.io/oz/resource-optimizer/charts/webhook -n resource-optimizer --set certManager.enabled=true',
+          'helm upgrade --install resource-optimizer-webhook oci://ghcr.io/tomer1983/resource-optimizer/charts/webhook -n resource-optimizer --set certManager.enabled=true',
         remediationType: 'command',
       }
     case 'integration.argocd':
@@ -746,7 +746,7 @@ function helmSnippet(cluster: string, webhook: boolean, certManager: boolean) {
     '  --from-literal=token="$RO_AGENT_TOKEN"',
     '',
     '# 2. Install the agent:',
-    'helm upgrade --install resource-optimizer-agent oci://ghcr.io/oz/resource-optimizer/charts/agent \\',
+    'helm upgrade --install resource-optimizer-agent oci://ghcr.io/tomer1983/resource-optimizer/charts/agent \\',
     '  --version 0.4.2 -n resource-optimizer \\',
     `  --set clusterName=${cluster} \\`,
     `  --set hub.url=${HUB_URL} \\`,
@@ -756,7 +756,7 @@ function helmSnippet(cluster: string, webhook: boolean, certManager: boolean) {
     lines.push(
       '',
       '# 3. Optional: the mutating webhook (keeps requests on new pods):',
-      'helm upgrade --install resource-optimizer-webhook oci://ghcr.io/oz/resource-optimizer/charts/webhook \\',
+      'helm upgrade --install resource-optimizer-webhook oci://ghcr.io/tomer1983/resource-optimizer/charts/webhook \\',
       `  --version 0.4.2 -n resource-optimizer --set certManager.enabled=${certManager ? 'true' : 'false'}`,
     )
   }
@@ -817,7 +817,7 @@ export function installSnippet(
       `    name: ${cluster}`,
       '    namespace: resource-optimizer',
       '  source:',
-      '    repoURL: ghcr.io/oz/resource-optimizer/charts',
+      '    repoURL: ghcr.io/tomer1983/resource-optimizer/charts',
       '    chart: agent',
       '    targetRevision: 0.4.2',
       '    helm:',

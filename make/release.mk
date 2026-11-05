@@ -88,26 +88,42 @@ release-images: release-check release-builder ## Build and push the images with 
 	@echo "wrote $(RELEASE_DIR)/images.txt"; cat $(RELEASE_DIR)/images.txt
 
 # Packages each chart with version and appVersion $(VERSION) into bin/release/charts.
+# RELEASE_CHART_DEFAULT_REGISTRY=1 (the GitHub release workflow sets it) also makes the packaged charts
+# default to the images of this release: the umbrella's global.imageRegistry becomes $(REGISTRY) without
+# its trailing /resource-optimizer, and each component chart's image.repository becomes $(REGISTRY)/<name>.
+# A user then installs the chart with no registry setting. Explicit values still win.
+RELEASE_CHART_DEFAULT_REGISTRY ?=
+RELEASE_IMAGE_HOST = $(patsubst %/resource-optimizer,%,$(REGISTRY))
+
 .PHONY: release-chart-package
 release-chart-package:
 	@echo "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$$' || \
 	  { echo "VERSION must be semver without a leading v or build metadata (got '$(VERSION)')"; exit 1; }
-	@rm -rf $(RELEASE_DIR)/charts; mkdir -p $(RELEASE_DIR)/charts
+	@if [ "$(RELEASE_CHART_DEFAULT_REGISTRY)" = 1 ]; then \
+	  case "$(REGISTRY)" in */resource-optimizer) ;; *) echo "RELEASE_CHART_DEFAULT_REGISTRY=1 needs REGISTRY=<host>[/path]/resource-optimizer (got '$(REGISTRY)')"; exit 1 ;; esac; fi
+	@rm -rf $(RELEASE_DIR)/charts $(RELEASE_DIR)/_stage; mkdir -p $(RELEASE_DIR)/charts $(RELEASE_DIR)/_stage
 	@for c in $(RELEASE_CHARTS); do \
 	  dir=$(RELEASE_CHART_DIR)/$$c; test -f $$dir/Chart.yaml || { echo "no chart at $$dir"; exit 1; }; \
-	  deps=""; grep -q '^dependencies:' $$dir/Chart.yaml && deps=--dependency-update; \
-	  if [ -d $$dir/charts ]; then \
-	    : "The umbrella (WO-18d): charts/ links the component charts. Package a copy with the links"; \
-	    : "resolved and every subchart at version/appVersion VERSION (its image tags default to it)."; \
-	    : "_stage: go ./... skips _-prefixed dirs, so the copied *_test.go never joins make ci."; \
-	    stage=$(RELEASE_DIR)/_stage/$$c; rm -rf $(RELEASE_DIR)/_stage/$$c; mkdir -p $(RELEASE_DIR)/_stage; \
-	    cp -RL $$dir $$stage || exit 1; find $$stage -name "*_test.go" -delete; \
+	  : "Package a staged copy: links resolved (the umbrella's charts/ links the component charts, WO-18d)."; \
+	  : "_stage: go ./... skips _-prefixed dirs, so the copied *_test.go never joins make ci."; \
+	  stage=$(RELEASE_DIR)/_stage/$$c; cp -RL $$dir $$stage || exit 1; find $$stage -name "*_test.go" -delete; \
+	  deps=""; grep -q '^dependencies:' $$stage/Chart.yaml && deps=--dependency-update; \
+	  if [ -d $$stage/charts ]; then \
+	    : "Every subchart at version/appVersion VERSION (its image tags default to it)."; \
 	    for sub in $$stage/charts/*/Chart.yaml; do \
 	      sed -e 's/^version:.*/version: $(VERSION)/' -e 's/^appVersion:.*/appVersion: "$(VERSION)"/' $$sub > $$sub.new && mv $$sub.new $$sub; \
-	    done; \
-	    dir=$$stage; deps=""; \
+	    done; deps=""; \
+	    if [ "$(RELEASE_CHART_DEFAULT_REGISTRY)" = 1 ]; then \
+	      sed -e 's|^  imageRegistry: ""|  imageRegistry: "$(RELEASE_IMAGE_HOST)"|' $$stage/values.yaml > $$stage/values.yaml.new && \
+	        mv $$stage/values.yaml.new $$stage/values.yaml; \
+	    fi; \
+	  else \
+	    : "A component chart: its image tag defaults to the chart appVersion (= VERSION), not the dev tag."; \
+	    sed -E -e 's|^  tag: dev$$|  tag: ""|' \
+	      $(if $(filter 1,$(RELEASE_CHART_DEFAULT_REGISTRY)),-e 's|^  repository: [^ ]+/resource-optimizer/([a-z-]+)$$|  repository: $(REGISTRY)/\1|',) \
+	      $$stage/values.yaml > $$stage/values.yaml.new && mv $$stage/values.yaml.new $$stage/values.yaml; \
 	  fi; \
-	  helm package $$dir $$deps --version $(VERSION) --app-version $(VERSION) -d $(RELEASE_DIR)/charts; \
+	  helm package $$stage $$deps --version $(VERSION) --app-version $(VERSION) -d $(RELEASE_DIR)/charts; \
 	done
 
 release-chart: release-check release-chart-package ## Package the charts (RELEASE_CHARTS=...) and helm push them to oci://$(REGISTRY)/charts.

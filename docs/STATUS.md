@@ -141,7 +141,7 @@ The UI is no longer read-only. Sign-in uses local users with three roles (D-023)
    - the add-cluster wizard still shows component-chart snippets; the guide says to take only the token
    - OIDC login (D-023 says later)
 3. **AWS pricing.** The tests replay AWS responses that were assembled offline. Re-capture them once there is real AWS access.
-4. **Optional clean-up.** `/Users/tomer/Projects/resource-optimizer-plan` duplicates the repo. The linked work sessions are idle and can be archived.
+4. **Optional clean-up.** `../resource-optimizer-plan` (next to this checkout) duplicates the repo. The linked work sessions are idle and can be archived.
 
 ## Process notes
 

@@ -1,0 +1,20 @@
+# Weekly dependency updates. Go modules, the web UI's npm packages, the Dockerfiles' base images and the
+# GitHub Actions (pinned by commit SHA in ci/github-workflows/ and .github/workflows/).
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+    groups:
+      k8s: {patterns: ["k8s.io/*", "sigs.k8s.io/*"]}
+  - package-ecosystem: npm
+    directory: /web
+    schedule: {interval: weekly}
+    groups:
+      minor-and-patch: {update-types: [minor, patch]}
+  - package-ecosystem: docker
+    directories: [/cmd/hub, /cmd/pricing, /cmd/agent, /cmd/webhook, /web]
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}

@@ -14,7 +14,7 @@ Feature set taken from KRR, VPA/Goldilocks, Kubecost, PerfectScale, CAST AI and 
 ## D-003 Platform — Accepted (2026-11-04)
 - Target: up to 10 EKS clusters on Kubernetes 1.35.
 - Metrics: Prometheus or VictoriaMetrics is a hard requirement; all queries must be valid PromQL.
-  Dynatrace exists in the org but is not a dependency.
+  Other monitoring tools (such as Dynatrace) are not a dependency.
 - Audience: platform teams and FinOps.
 
 ## D-004 Hub-and-spoke, agent pulls — Accepted (2026-11-04)

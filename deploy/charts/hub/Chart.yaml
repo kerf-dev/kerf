@@ -4,3 +4,5 @@ description: resource-optimizer hub (API, recommender, metrics) — WO-04
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
+home: https://github.com/tomer1983/resource-optimizer
+sources: [https://github.com/tomer1983/resource-optimizer]

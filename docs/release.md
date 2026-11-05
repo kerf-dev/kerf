@@ -1,4 +1,8 @@
-# Releasing resource-optimizer to ECR
+# Releasing resource-optimizer
+
+Official releases are built by GitHub Actions and published to GitHub Container Registry
+([Releasing on GitHub](#releasing-on-github)). The rest of this page is the same build run by hand with
+`make release`, for example to put a release into your own ECR.
 
 A release publishes five multi-arch container images (`linux/amd64` and `linux/arm64`, D-028) and the
 Helm charts as OCI artifacts. Both go to one registry prefix, for example
@@ -11,6 +15,42 @@ Helm charts as OCI artifacts. Both go to one registry prefix, for example
 
 Every image is an OCI index with one manifest per platform. Each index also holds an SBOM (SPDX) and
 a SLSA provenance attestation (`mode=max`). Charts are packaged with `version` and `appVersion` set to `$VERSION`.
+
+
+## Releasing on GitHub
+
+The release workflow (`.github/workflows/release.yaml`; until it is activated, `ci/github-workflows/`) runs when
+a tag `vX.Y.Z` or `vX.Y.Z-rc.N` is pushed (WO-26).
+
+| Step | What happens |
+|---|---|
+| Checks | `CHANGELOG.md` has a `## [X.Y.Z]` section (final versions only); the whole `ci` workflow passes on the tagged commit; the commit is on `main` |
+| Build and push | `make release REGISTRY=ghcr.io/<owner>/resource-optimizer VERSION=X.Y.Z RELEASE_CHART_DEFAULT_REGISTRY=1`: the five images for both platforms with SBOM and provenance, and the six charts |
+| Chart defaults | `RELEASE_CHART_DEFAULT_REGISTRY=1` makes each packaged chart default to this release's GHCR images, so `helm install` needs no registry setting. Explicit values still win (the EKS guide's ECR values) |
+| Sign | `cosign sign` (keyless, the workflow's GitHub OIDC identity) for every image and chart digest |
+| GitHub Release | Title `resource-optimizer X.Y.Z`. Notes (`tools/release/notes.sh`): the CHANGELOG section, install steps, every artifact with its digest, the `cosign verify` command, then GitHub's list of merged pull requests by label (`.github/release.yml`). Attached: the chart packages, `images.txt`, `charts.txt`, `SHA256SUMS`. A `-rc.N` version is a pre-release and never "latest" |
+
+To release:
+
+```bash
+# 1. In CHANGELOG.md, rename "## [Unreleased]" to "## [0.2.0] - 2026-11-20" and add a new empty Unreleased section.
+git commit -am "Release 0.2.0" && git push origin main
+# 2. Tag the commit on main and push the tag.
+git tag -a v0.2.0 -m "resource-optimizer 0.2.0" && git push origin v0.2.0
+```
+
+For a release candidate, skip step 1 (its notes use the `[0.2.0]` or `[Unreleased]` section) and tag `v0.2.0-rc.1`.
+Preview the notes locally with `tools/release/notes.sh 0.2.0` (after a `make release`, it lists the digests too).
+
+GHCR facts to know:
+
+- Images: `ghcr.io/<owner>/resource-optimizer/{hub,pricing,agent,webhook,web}:X.Y.Z`. Charts:
+  `oci://ghcr.io/<owner>/resource-optimizer/charts/{resource-optimizer,hub,pricing,agent,webhook,web}`.
+- A new package is created private. Once the repository is public, set each of the 11 packages to public
+  once (package settings, "Change visibility"); later releases keep it.
+- GHCR tags can be overwritten, unlike the ECR setup below. The workflow never re-releases a tag; to fix a
+  release, publish a new patch or `-rc.N` version.
+- Every image and chart is signed. Users verify with the `cosign verify` command in the release notes.
 
 ## Prerequisites
 

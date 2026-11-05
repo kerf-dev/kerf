@@ -11,7 +11,7 @@ on:
     paths:
       - "test/e2e/**"
       - "make/e2e.mk"
-      - "ci/github-workflows/e2e.yaml"
+      - ".github/workflows/e2e.yaml"
 
 permissions:
   contents: read
@@ -22,11 +22,11 @@ concurrency:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest-8-cores   # three k3d clusters + Argo CD + VictoriaMetrics need ~10 GiB
+    runs-on: ubuntu-latest   # 4 vCPU / 16 GiB on public repositories; three k3d clusters + Argo CD + VictoriaMetrics need ~10 GiB
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Install k3d, kubectl, helm
@@ -34,7 +34,7 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/v5.9.1/install.sh | TAG=v5.9.1 bash
           curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.35.4/bin/linux/amd64/kubectl
           chmod +x /usr/local/bin/kubectl
-          curl -fsSL https://get.helm.sh/helm-v4.1.3-linux-amd64.tar.gz | tar -xz -C /tmp
+          curl -fsSL https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz | tar -xz -C /tmp
           sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
       - name: Create clusters (WO-01)
         run: make dev-up
@@ -63,7 +63,7 @@ jobs:
           kubectl --context k3d-ro-spoke-1 -n argocd get applications -o yaml > e2e-logs/argocd-applications.yaml || true
       - name: Upload logs
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-logs
           path: e2e-logs

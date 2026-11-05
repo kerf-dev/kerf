@@ -306,7 +306,7 @@ func TestAttachJVM(t *testing.T) {
 func TestIsJVMImage(t *testing.T) {
 	for img, want := range map[string]bool{
 		"eclipse-temurin:21.0.13_9-jdk-alpine-3.23":                                          true,
-		"381492155304.dkr.ecr.eu-west-1.amazonaws.com/payments/checkout:1.4.0-temurin21-jre": true,
+		"123456789012.dkr.ecr.eu-west-1.amazonaws.com/payments/checkout:1.4.0-temurin21-jre": true,
 		"amazoncorretto:21":                   true,
 		"openjdk:17-slim":                     true,
 		"ghcr.io/graalvm/jdk-community:23":    true,

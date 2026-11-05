@@ -27,7 +27,7 @@ clusters:
         replicas: 2
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/flat:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/flat:1.0.0
             requests: {cpu: "1", memory: 1Gi}
             limits: {cpu: "2", memory: 1Gi}
             cpu: {pattern: flat, base: 200m}
@@ -39,7 +39,7 @@ clusters:
         replicas: 3
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/diurnal:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/diurnal:1.0.0
             requests: {cpu: 500m, memory: 512Mi}
             limits: {memory: 512Mi}
             cpu: {pattern: diurnal, base: 150m, diurnal: 0.6, peakHour: 12}
@@ -51,7 +51,7 @@ clusters:
         replicas: 2
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/weekly:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/weekly:1.0.0
             requests: {cpu: "1", memory: 1Gi}
             limits: {cpu: "2", memory: 2Gi}
             cpu: {pattern: weekly, base: 300m, diurnal: 0.5, weekend: 0.4}
@@ -63,7 +63,7 @@ clusters:
         replicas: 2
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/spiky:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/spiky:1.0.0
             requests: {cpu: "2", memory: 2Gi}
             cpu: {pattern: spiky, base: 200m, spikesPerDay: 8, spikeMult: 5, spikeMinutes: 5}
             memory: {pattern: flat, base: 500Mi}
@@ -74,7 +74,7 @@ clusters:
         replicas: 2
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/leak:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/leak:1.0.0
             requests: {cpu: 250m, memory: 512Mi}
             limits: {memory: 512Mi}
             cpu: {pattern: flat, base: 50m}
@@ -87,7 +87,7 @@ clusters:
         replicas: 2
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/step:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/step:1.0.0
             requests: {cpu: "1", memory: 1Gi}
             limits: {memory: 1Gi}
             # Release 4 days before the end triples CPU (150m -> 450m).
@@ -101,7 +101,7 @@ clusters:
         schedule: {every: 1h, offset: 5m, duration: 10m}
         containers:
           - name: job
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/sparse:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/sparse:1.0.0
             requests: {cpu: "1", memory: 1Gi}
             limits: {cpu: "1", memory: 1Gi}
             cpu: {pattern: sparse, base: 700m}
@@ -113,7 +113,7 @@ clusters:
         replicas: 2
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/throttled:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/throttled:1.0.0
             requests: {cpu: 500m, memory: 512Mi}
             limits: {cpu: 500m, memory: 512Mi}
             # Demand peaks at ~765m against a 500m limit: usage is capped, CFS throttling is high.
@@ -127,7 +127,7 @@ clusters:
         hpa: {min: 2, max: 8, metric: cpu, target: 70}
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/hpa:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/hpa:1.0.0
             requests: {cpu: 500m, memory: 512Mi}
             limits: {memory: 512Mi}
             # Base is the per-pod demand at min replicas; the HPA adds pods at the daily peak.
@@ -140,7 +140,7 @@ clusters:
         replicas: 2
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/jvm:1.0.0-temurin21-jre
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/jvm:1.0.0-temurin21-jre
             requests: {cpu: "1", memory: 2Gi}
             limits: {cpu: "2", memory: 2Gi}
             cpu: {pattern: diurnal, base: 150m, diurnal: 0.4, startupMult: 5, startupMinutes: 5}
@@ -153,7 +153,7 @@ clusters:
         replicas: 2
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/sidecar:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/sidecar:1.0.0
             requests: {cpu: 500m, memory: 512Mi}
             limits: {memory: 512Mi}
             cpu: {pattern: diurnal, base: 100m}
@@ -173,7 +173,7 @@ clusters:
         age: 36h
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/new:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/new:1.0.0
             requests: {cpu: 500m, memory: 512Mi}
             cpu: {pattern: diurnal, base: 100m}
             memory: {pattern: flat, base: 200Mi}
@@ -184,7 +184,7 @@ clusters:
         replicas: 2
         containers:
           - name: app
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/restarting:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/restarting:1.0.0
             requests: {cpu: 500m, memory: 512Mi}
             cpu: {pattern: flat, base: 100m}
             memory: {pattern: flat, base: 200Mi}
@@ -196,7 +196,7 @@ clusters:
         kind: DaemonSet
         containers:
           - name: agent
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/daemon:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/daemon:1.0.0
             requests: {cpu: 200m, memory: 256Mi}
             limits: {memory: 512Mi}
             cpu: {pattern: flat, base: 30m}
@@ -209,7 +209,7 @@ clusters:
         replicas: 3
         containers:
           - name: store
-            image: 381492155304.dkr.ecr.eu-west-1.amazonaws.com/patterns/store:1.0.0
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/patterns/store:1.0.0
             requests: {cpu: "2", memory: 4Gi}
             limits: {memory: 4Gi}
             cpu: {pattern: weekly, base: 300m}

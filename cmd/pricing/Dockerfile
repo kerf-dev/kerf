@@ -12,10 +12,11 @@ COPY api/v1alpha1/ api/v1alpha1/
 COPY internal/hub/hubapi/ internal/hub/hubapi/
 COPY internal/hub/datasource/ internal/hub/datasource/
 COPY internal/pricing/ internal/pricing/
+ARG VERSION=dev
 ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags="-s -w" -o /out/pricing ./cmd/pricing
+    go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/pricing ./cmd/pricing
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/pricing /pricing

@@ -3,7 +3,7 @@
 Branch: `wo-00-contracts` (6 commits on top of main 95ad8e9; last 9eeadd6 adds the UI endpoints). **Not pushed yet**: origin rejected the
 push because the keychain PAT lacks the `workflow` scope needed for `.github/workflows/ci.yaml`.
 Push from the worktree with a credential that has `workflow` scope:
-`git -C /Users/tomer/Projects/resource-optimizer/.claude/worktrees/wo-00-contracts-9c44c8 push -u origin wo-00-contracts`
+`git -C .claude/worktrees/wo-00-contracts-9c44c8 push -u origin wo-00-contracts`
 
 ## Toolchain / make
 - `go.mod`: `go 1.26.0` (minimum required by k8s.io v0.37), `toolchain go1.27.3`. CI uses the toolchain.
