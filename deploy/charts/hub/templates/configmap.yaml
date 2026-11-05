@@ -17,7 +17,7 @@ data:
     {{- end }}
     {{- $_ := set $cfg "auth" $auth }}
     {{- $onb := deepCopy (default (dict) .Values.config.onboarding) }}
-    {{- if or .Values.onboarding.secretsKey.create .Values.onboarding.secretsKey.existingSecret }}
+    {{- if include "hub.datasourceKeyEnabled" . }}
     {{- $_ := set $onb "secretsKeyFile" "/etc/hub/datasource-key/key" }}
     {{- end }}
     {{- if .Chart.AppVersion }}

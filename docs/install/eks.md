@@ -205,6 +205,7 @@ export APP_PW=$(openssl rand -hex 24)
 MASTER_PW=$(aws secretsmanager get-secret-value --query SecretString --output text --secret-id \
   $(aws rds describe-db-instances --db-instance-identifier ro-hub --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text) | jq -r .password)
 kubectl --context $HUB_CTX create namespace $NS
+kubectl --context $HUB_CTX label namespace $NS elbv2.k8s.aws/pod-readiness-gate-inject=enabled   # ALB: a new pod counts as ready once its target is healthy
 { echo "$MASTER_PW"
   echo "CREATE ROLE ro LOGIN PASSWORD '$APP_PW';"
   echo "GRANT ro TO ro_admin;"
@@ -215,6 +216,9 @@ unset MASTER_PW
 ```
 
 **Check:** the last command prints `CREATE ROLE`, `GRANT ROLE` and `CREATE DATABASE`, followed by `pod "psql-setup" deleted`.
+kubectl may also print *"All commands and output from this session will be recorded in container logs"*.
+That is its generic notice for `run -i`: psql reads the passwords from stdin without echoing them,
+and `--rm` deletes the pod.
 ```bash
 aws rds describe-db-instances --db-instance-identifier ro-hub --query 'DBInstances[0].[DBInstanceStatus,EngineVersion,PubliclyAccessible]' --output text
 ```
@@ -703,7 +707,11 @@ With Argo CD, change `targetRevision` in the ApplicationSet.
 
 - **CRDs upgrade with the chart.** They are templates, so `helm upgrade` updates them. Install the
   umbrella in mode `spoke` once per cluster: a CRD can belong to one release only.
-- **The hub rolls with no downtime.** RollingUpdate keeps `maxUnavailable: 0`, and the PDB keeps `minAvailable: 1`.
+- **The hub rolls with no downtime.** RollingUpdate keeps `maxUnavailable: 0` and the PDB keeps `minAvailable: 1`.
+  The ALB pod readiness gate (the namespace label from 3.2) holds the rollout until a new pod is healthy in the
+  target group, and `preStopSleepSeconds: 15` (hub and web, in `values-hub.yaml`) keeps a stopping pod serving
+  until the ALB has deregistered it. If requests still fail during a roll, raise both `preStopSleepSeconds` and
+  `hub.terminationGracePeriodSeconds` (keep it at least 25 s above the sleep).
   A new pod applies the database migrations before it reports ready, under a Postgres lock.
   A replica that stops releases the leader lock at once, so another one takes over. A crash fails over in under 15 seconds.
 - **The agent and webhook** roll too: the agent's standby takes the lease, and the webhook's PDB keeps one pod.
