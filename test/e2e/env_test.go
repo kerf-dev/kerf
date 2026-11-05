@@ -134,6 +134,10 @@ func setup() error {
 		}
 	}
 	env.Hub = &hubAPI{Base: strings.TrimRight(getenv("E2E_HUB_URL", "http://localhost:18080"), "/"), Token: token, AdminToken: admin}
+	env.Hub.RecomputeEvery, err = time.ParseDuration(getenv("E2E_RECOMPUTE_EVERY", defaultRecomputeEvery.String()))
+	if err != nil {
+		return fmt.Errorf("E2E_RECOMPUTE_EVERY: %w", err)
+	}
 	if os.Getenv("E2E_HUB_RECOMPUTE") == "off" {
 		env.Hub.AdminToken = ""
 	}

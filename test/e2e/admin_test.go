@@ -330,7 +330,7 @@ func TestApproveOnce(t *testing.T) {
 		return rec.ID != a.RecommendationID, "still the approved recommendation"
 	})
 	t.Logf("next recommendation %s: cpu %s (approved %s)", next.ID, next.Containers[0].Recommended.Requests.CPU, want.String())
-	time.Sleep(time.Minute) // two agent pulls with the new recommendation
+	sleep(t, time.Minute, "two agent pulls with the new recommendation")
 	consistently(t, 45*time.Second, 5*time.Second, "next recommendation not applied", func() (bool, string) {
 		if got := snapshot(t, cl, ns, "web"); fmt.Sprint(got) != fmt.Sprint(pods) {
 			return false, fmt.Sprintf("pods changed: %v -> %v", pods, got)
@@ -480,7 +480,7 @@ func TestApproveOnceArgoCD(t *testing.T) {
 
 	// D-027: the agent holds the approved fields until a newer recommendation with other values
 	// arrives; the suite's recompute requests stay off for the rest of the test.
-	env.Hub.holdRecompute(t)
+	env.Hub.holdRecompute(t, cl.Name)
 	a, ev := approveApplied(t, operator, cl, ns, "web")
 	if ev.Strategy != string(v1alpha1.StrategyRollout) {
 		t.Errorf("approved change applied with strategy %q, want rollout", ev.Strategy)

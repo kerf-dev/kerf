@@ -350,7 +350,7 @@ func approve(t *testing.T, user string, cl cluster, ns, name string) hubapi.Appr
 // suite's own recompute requests are held off meanwhile.
 func approveApplied(t *testing.T, user string, cl cluster, ns, name string) (hubapi.Approval, auditEvent) {
 	t.Helper()
-	release := env.Hub.holdRecompute(t)
+	release := env.Hub.holdRecompute(t, cl.Name)
 	defer release()
 	for attempt := 1; ; attempt++ {
 		a := approve(t, user, cl, ns, name)

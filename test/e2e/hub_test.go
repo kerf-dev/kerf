@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -20,27 +21,32 @@ type hubAPI struct {
 	Base       string
 	Token      string
 	AdminToken string
+	// RecomputeEvery limits the suite's recompute requests per cluster (E2E_RECOMPUTE_EVERY).
+	RecomputeEvery time.Duration
 
 	mu            sync.Mutex
-	lastRecompute time.Time
+	lastRecompute map[string]time.Time // per cluster
 	noRecompute   bool
-	holds         int // > 0: no recompute requests (holdRecompute)
+	holds         map[string]int // cluster -> > 0: no recompute requests (holdRecompute)
 }
 
-// holdRecompute stops the suite's recompute requests until the returned function is called (or
-// the test ends). Every recommender run gives every workload a new recommendation id, even with
-// the same values; a scenario that depends on the id staying the same for a minute (an approval,
-// drift repair of an applied recommendation) holds the suite's extra runs off meanwhile. The hub's
-// periodic run still happens.
-func (h *hubAPI) holdRecompute(t *testing.T) (release func()) {
+// holdRecompute stops the suite's recompute requests for the cluster until the returned function
+// is called (or the test ends). Every recommender run gives every workload of the cluster a new
+// recommendation id, even with the same values; a scenario that depends on the id staying the
+// same for a minute (an approval, drift repair of an applied recommendation) holds the suite's
+// extra runs for its cluster off meanwhile. The hub's periodic run still happens.
+func (h *hubAPI) holdRecompute(t *testing.T, cluster string) (release func()) {
 	h.mu.Lock()
-	h.holds++
+	if h.holds == nil {
+		h.holds = map[string]int{}
+	}
+	h.holds[cluster]++
 	h.mu.Unlock()
 	var once sync.Once
 	release = func() {
 		once.Do(func() {
 			h.mu.Lock()
-			h.holds--
+			h.holds[cluster]--
 			h.mu.Unlock()
 		})
 	}
@@ -48,42 +54,49 @@ func (h *hubAPI) holdRecompute(t *testing.T) (release func()) {
 	return release
 }
 
-// recomputeEvery limits suite-wide recompute requests: every run covers every cluster.
-const recomputeEvery = 2 * time.Minute
+// defaultRecomputeEvery: a run of one dev spoke takes a few seconds, and with the dev hub's
+// recommender.endAlignment (30s) every run sees the last half minute of usage.
+const defaultRecomputeEvery = 30 * time.Second
 
-// maybeRecompute asks the hub for a recommender run, at most every recomputeEvery across the
-// suite. It is a best-effort speed-up: without an admin token, or when the hub has no such
-// endpoint (404/405), the suite relies on the periodic run.
-func (h *hubAPI) maybeRecompute(ctx context.Context, logf func(string, ...any)) {
+// maybeRecompute asks the hub for a recommender run of the cluster, at most every RecomputeEvery
+// per cluster across the suite. It is a best-effort speed-up: without an admin token, or when the
+// hub has no such endpoint (404/405), the suite relies on the periodic run.
+func (h *hubAPI) maybeRecompute(ctx context.Context, cluster string, logf func(string, ...any)) {
 	h.mu.Lock()
-	if h.noRecompute || h.AdminToken == "" || h.holds > 0 || time.Since(h.lastRecompute) < recomputeEvery {
+	if h.lastRecompute == nil {
+		h.lastRecompute = map[string]time.Time{}
+	}
+	if h.noRecompute || h.AdminToken == "" || h.holds[cluster] > 0 || time.Since(h.lastRecompute[cluster]) < h.RecomputeEvery {
 		h.mu.Unlock()
 		return
 	}
-	h.lastRecompute = time.Now()
+	h.lastRecompute[cluster] = time.Now()
 	h.mu.Unlock()
-	h.recompute(ctx, logf)
+	h.recompute(ctx, cluster, logf)
 }
 
-// recomputeNow asks for a recommender run now, outside the rate limit and other scenarios' holds
-// (theirs are robust to a run: approvals are re-approved, the D-027 check ends early). It reports
-// false when the hub has no recompute trigger.
-func (h *hubAPI) recomputeNow(ctx context.Context, logf func(string, ...any)) bool {
+// recomputeNow asks for a recommender run of the cluster now, outside the rate limit and other
+// scenarios' holds (theirs are robust to a run: approvals are re-approved, the D-027 check ends
+// early). It reports false when the hub has no recompute trigger.
+func (h *hubAPI) recomputeNow(ctx context.Context, cluster string, logf func(string, ...any)) bool {
 	h.mu.Lock()
 	if h.noRecompute || h.AdminToken == "" {
 		h.mu.Unlock()
 		return false
 	}
-	h.lastRecompute = time.Now()
+	if h.lastRecompute == nil {
+		h.lastRecompute = map[string]time.Time{}
+	}
+	h.lastRecompute[cluster] = time.Now()
 	h.mu.Unlock()
-	h.recompute(ctx, logf)
+	h.recompute(ctx, cluster, logf)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return !h.noRecompute
 }
 
-func (h *hubAPI) recompute(ctx context.Context, logf func(string, ...any)) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.Base+"/v1/admin/recompute", nil)
+func (h *hubAPI) recompute(ctx context.Context, cluster string, logf func(string, ...any)) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.Base+"/v1/admin/recompute?cluster="+url.QueryEscape(cluster), nil)
 	if err != nil {
 		return
 	}
@@ -96,15 +109,17 @@ func (h *hubAPI) recompute(ctx context.Context, logf func(string, ...any)) {
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 	switch {
+	case resp.StatusCode == http.StatusNotFound && cluster != "" && strings.Contains(string(b), "cluster_not_found"):
+		logf("recompute: unknown cluster %s", cluster)
 	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed:
 		h.mu.Lock()
 		h.noRecompute = true
 		h.mu.Unlock()
 		logf("hub has no recompute trigger (%s); waiting for its periodic run", resp.Status)
 	case resp.StatusCode/100 != 2:
-		logf("recompute: %s: %s", resp.Status, b)
+		logf("recompute %s: %s: %s", cluster, resp.Status, b)
 	default:
-		logf("hub recompute triggered (%s)", resp.Status)
+		logf("hub recompute of %s triggered (%s)", cluster, resp.Status)
 	}
 }
 

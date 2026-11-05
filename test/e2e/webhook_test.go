@@ -198,7 +198,7 @@ func TestWebhook(t *testing.T) {
 func adoptNewRecommendation(t *testing.T, cl cluster, ns, name string, want resource.Quantity) resource.Quantity {
 	t.Helper()
 	before := rsr(t, cl, ns, deployment, name).Status.AppliedRecommendationID
-	if !env.Hub.recomputeNow(ctx(t), t.Logf) {
+	if !env.Hub.recomputeNow(ctx(t), cl.Name, t.Logf) {
 		t.Skip("the hub has no recompute trigger: cannot force a new recommendation id")
 	}
 	rec := waitHubRecommendation(t, cl, ns, deployment, name, func(r *workloadRec) (bool, string) {
