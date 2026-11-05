@@ -48,6 +48,10 @@ prereqs() {
   # a Prometheus stand-in on 9090 (SPOKE_METRICS_URL), and vmagent remote-writing to both.
   vmsingle "$HUB_CTX" vmsingle 8428 NodePort 30428
   vmsingle "$SPOKE_CTX" prometheus-operated 9090 ClusterIP
+  # The hub cluster's own scraper (hub, pricing) writes to the same store (guide step 1).
+  helm --kube-context "$HUB_CTX" upgrade --install vmagent "$VMAGENT_CHART" --version "$VMAGENT_VERSION" \
+    -n monitoring -f "$ROOT/dev/helm/vmagent-hub.yaml" \
+    --set "remoteWrite[0].url=http://vmsingle.monitoring.svc:8428/api/v1/write" >/dev/null
   helm --kube-context "$SPOKE_CTX" upgrade --install kube-state-metrics "$KSM_CHART" --version "$KSM_VERSION" \
     -n monitoring -f "$ROOT/dev/helm/kube-state-metrics.yaml" >/dev/null
   helm --kube-context "$SPOKE_CTX" upgrade --install vmagent "$VMAGENT_CHART" --version "$VMAGENT_VERSION" \
@@ -344,6 +348,7 @@ case "${1:-}" in
   up) clusters; prereqs ;;
   install) step3; step4; step5 ;;
   verify) verify ;;
+  recheck) signin >/dev/null; curl -sS -o /dev/null -b "$WORK/cookies" -H "X-CSRF-Token: $CSRF" -X POST "https://$UI_HOST/v1/clusters/$CLUSTER/readiness/recheck"; sleep 20; readiness ;;
   recompute) signin >/dev/null; curl -sS -b "$WORK/cookies" -H "X-CSRF-Token: $CSRF" -X POST "https://$UI_HOST/v1/admin/recompute?cluster=$CLUSTER" | jq -c . ;;
   upgrade) upgrade "${2:?version}" ;;
   uninstall) uninstall ;;
