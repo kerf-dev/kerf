@@ -1,0 +1,116 @@
+<!doctype html>
+<!-- Source of social-preview.png (1280 x 640, GitHub social preview). Render: node docs/branding/render.mjs -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: Geist;
+        src: url(../../web/node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2) format('woff2');
+        font-weight: 100 900;
+      }
+      @font-face {
+        font-family: 'Geist Mono';
+        src: url(../../web/node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2)
+          format('woff2');
+        font-weight: 100 900;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      html,
+      body {
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+      }
+      body {
+        position: relative;
+        font-family: Geist, sans-serif;
+        color: #eceff2;
+        background:
+          radial-gradient(46rem 26rem at 18% 8%, rgba(47, 189, 167, 0.2), transparent 70%),
+          radial-gradient(40rem 30rem at 95% 100%, rgba(126, 142, 244, 0.14), transparent 70%), #0c0e14;
+      }
+      .grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+        background-size: 40px 40px;
+        mask-image: radial-gradient(ellipse at 30% 40%, black 10%, transparent 70%);
+      }
+      .copy {
+        position: absolute;
+        left: 80px;
+        top: 84px;
+        width: 560px;
+      }
+      .logo {
+        height: 64px;
+        display: block;
+      }
+      h1 {
+        margin-top: 56px;
+        font-size: 54px;
+        line-height: 1.05;
+        font-weight: 650;
+        letter-spacing: -0.03em;
+      }
+      h1 span {
+        color: #2fbda7;
+      }
+      p {
+        margin-top: 24px;
+        font-size: 22px;
+        line-height: 1.45;
+        color: #a9b0bb;
+      }
+      .foot {
+        position: absolute;
+        left: 80px;
+        bottom: 64px;
+        display: flex;
+        gap: 12px;
+        font-family: 'Geist Mono', monospace;
+        font-size: 17px;
+        color: #c9ced4;
+      }
+      .chip {
+        padding: 7px 14px;
+        border: 1px solid #2a2e36;
+        border-radius: 999px;
+        background: rgba(19, 22, 29, 0.8);
+      }
+      .shot {
+        position: absolute;
+        left: 690px;
+        top: 70px;
+        width: 760px;
+        height: 520px;
+        border-radius: 16px;
+        border: 1px solid #2a2e36;
+        background: url(../screenshots/overview-dark.png) -260px -266px / 1440px auto no-repeat #0c0e14;
+        box-shadow:
+          0 30px 80px -20px rgba(0, 0, 0, 0.7),
+          0 0 0 6px rgba(47, 189, 167, 0.06);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid"></div>
+    <div class="shot"></div>
+    <div class="copy">
+      <img class="logo" src="kerf-logo-on-dark.svg" alt="Kerf" />
+      <h1>Trim what your containers <span>don't use.</span></h1>
+      <p>Self-hosted Kubernetes rightsizing. Requests and limits from real usage, priced in dollars, applied with
+        guardrails and automatic rollback.</p>
+    </div>
+    <div class="foot">
+      <span class="chip">github.com/kerf-dev/kerf</span>
+      <span class="chip">Apache-2.0</span>
+    </div>
+  </body>
+</html>

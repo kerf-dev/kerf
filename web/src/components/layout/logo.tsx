@@ -1,25 +1,16 @@
 import { cn } from '@/lib/utils'
 
+// The Kerf mark (docs/branding/brand.md): a tile with one corner trimmed off along a saw cut, the
+// trimmed piece set apart by the width of the cut. Same geometry as docs/branding/kerf-mark-*.svg.
+const BODY = 'M12 4H29L60 35V52A12 12 0 0 1 48 64H12A12 12 0 0 1 0 52V16A12 12 0 0 1 12 4Z'
+const TRIM = 'M33 0H52A12 12 0 0 1 64 12V31Z'
+
 export function LogoMark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   return (
-    <div
-      className={cn(
-        'relative flex shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-[color-mix(in_oklch,var(--primary)_60%,var(--chart-2))] shadow-sm ring-1 ring-black/5',
-        size === 'lg' ? 'size-12 rounded-xl' : 'size-8',
-      )}
-    >
-      <svg viewBox="0 0 32 32" className={size === 'lg' ? 'size-7' : 'size-5'} aria-hidden>
-        <path
-          d="M7 22 13 14.5l4.5 4 7.5-9"
-          fill="none"
-          stroke="white"
-          strokeWidth="2.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="25" cy="9.5" r="2.2" fill="white" />
-      </svg>
-    </div>
+    <svg viewBox="0 0 64 64" className={cn('shrink-0', size === 'lg' ? 'size-12' : 'size-8')} aria-hidden>
+      <path d={BODY} className="fill-primary" />
+      <path d={TRIM} className="fill-[#5cc8b6] dark:fill-[#9ae6d8]" />
+    </svg>
   )
 }
 
