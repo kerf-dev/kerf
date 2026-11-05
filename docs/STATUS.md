@@ -1,7 +1,7 @@
-# Status — 2026-11-04 afternoon
+# Status — 2026-11-05 morning
 
 Everything below runs on the local k3d fleet (`ro-hub`, `ro-spoke-1`, `ro-spoke-2`) from `main`.
-Live tracker: `.claude/state/active-tasks.md` · decisions: `DECISIONS.md` (D-001…D-027) · hand-overs: `docs/handover/`.
+Live tracker: `.claude/state/active-tasks.md` · decisions: `DECISIONS.md` (D-001…D-028) · hand-overs: `docs/handover/`.
 
 ## Open it
 
@@ -15,7 +15,49 @@ Live tracker: `.claude/state/active-tasks.md` · decisions: `DECISIONS.md` (D-00
 
 Screenshots of every page, including the admin area (light, dark, tablet): `docs/screenshots/`.
 
-## New since this morning: admin area and cluster onboarding (phase 4)
+## New overnight: ready for EKS (WO-18, D-028)
+
+**One chart.** `deploy/charts/resource-optimizer` installs either side, chosen by `global.mode`:
+- `hub`: hub, UI and pricing
+- `spoke`: agent and webhook, on each workload cluster
+- `all`: everything in one cluster
+
+The five component charts are its subcharts; dev keeps using them directly.
+
+**Production features** (each is a values switch):
+- availability: 2 hub replicas, PDBs, zone spread, HPA
+- secrets: from AWS Secrets Manager through External Secrets; the schema rejects inline passwords and tokens unless `dev: true`
+- database: RDS with `verify-full` TLS
+- ingress: ALB examples
+- pricing: Pod Identity
+- network: NetworkPolicies
+- monitoring: ServiceMonitors, PrometheusRules (6 alerts), Grafana dashboards
+- CRDs ship as templates that survive an uninstall
+
+**Hub HA.** Hubs elect a leader with a Postgres lock. Only the leader runs the recommender and the background checks. Every replica serves the API. A killed leader is replaced in under a second.
+
+**Release.** `make release REGISTRY=<ecr> VERSION=x.y.z` builds amd64 and arm64 images with an SBOM and pushes them, then pushes the charts to the same registry as OCI artifacts. See `docs/release.md`.
+
+**Install guide.** `docs/install/eks.md` covers every step, from prerequisites through upgrade, uninstall and troubleshooting. Each step has a check command and its expected output. Examples are in `deploy/examples/eks/`: hub and spoke values, an Argo CD ApplicationSet, IAM policies, and the Secrets Manager layout.
+
+**Staging proof (WO-18e).** I followed the guide on two new k3d clusters (`ro-stg-hub`, `ro-stg-spoke`), with local stand-ins for the AWS-only pieces. The results:
+- it installed from the published chart
+- the workload cluster reached *Automation ready*
+- one workload was auto-patched in place
+- leader failover took under 1 s
+- an upgrade under load dropped none of 768 requests
+- uninstall worked
+
+The run found and fixed one real problem. An upgrade used to drop a few requests (2 × 502), because pods stopped accepting connections before the ingress stopped sending them. Fixed with a short `preStop` sleep. Details: `docs/handover/WO-18e-handover.md`. Repeat it with `make install-staging && make install-staging-verify`.
+
+**For the real EKS install I need from you:**
+- the AWS account and region, and the hub and workload clusters
+- an ECR prefix with push access
+- RDS PostgreSQL (or permission for me to create it)
+- an ACM certificate and DNS names for the hub API and the UI; should the UI be internal or internet-facing?
+- which add-ons already run: the AWS Load Balancer Controller, External Secrets, cert-manager, and Prometheus or VictoriaMetrics
+
+## Earlier: admin area and cluster onboarding (phase 4)
 
 The UI is no longer read-only. Sign-in uses local users with three roles (D-023):
 
@@ -95,7 +137,8 @@ The UI is no longer read-only. Sign-in uses local users with three roles (D-023)
    - WO-15 notifications
    - WO-16 CUR-based prices
    - WO-17 realized savings
-   - WO-18 EKS rollout (Pod Identity for pricing, mTLS agent↔hub)
+   - the real EKS install (WO-18 is ready for it; see above), then mTLS agent↔hub
+   - the add-cluster wizard still shows component-chart snippets; the guide says to take only the token
    - OIDC login (D-023 says later)
 3. **AWS pricing.** The tests replay AWS responses that were assembled offline. Re-capture them once there is real AWS access.
 4. **Optional clean-up.** `/Users/tomer/Projects/resource-optimizer-plan` duplicates the repo. The linked work sessions are idle and can be archived.
@@ -105,3 +148,4 @@ The UI is no longer read-only. Sign-in uses local users with three roles (D-023)
 - **Deploys overlapping test runs.** Twice today a track deployed an agent while e2e was running. The suite now creates an `e2e-run-<id>` namespace on both spokes for its whole run, and drops its field ownership after restoring Helm-owned objects. Neither overlap made a test fail.
 - **Pricing deploy.** The pricing image stopped building after WO-25: its Dockerfile didn't copy the hub packages pricing now imports. Its dev settings also pointed at the hub's hostname from the spokes. Both are fixed; the old pod served throughout.
 - **One bad image tag.** During a GitHub outage, a failed push cut short my deploy command, and agents and web went out tagged `main-` for a few minutes. The image content was correct. My deploy commands now stop if the commit id is empty.
+- **`ro-spoke-2` lost its container metrics overnight.** Docker restarted the k3d node containers around 04:30 UTC. Afterwards, kubelet's cAdvisor on `ro-spoke-2` exported series without the `container` label. The readiness check `metrics.cadvisor` caught it and dropped the cluster to *Agent connected*. Restarting that node container fixed it, and both spokes are back to *Automation ready*. On EKS the same check would flag a broken kubelet in the same way.
