@@ -1,6 +1,6 @@
 # Active tasks
 
-Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review` · `done` · `blocked`.
+Updated: 2026-11-05 by orchestrator. Status: `todo` · `in-progress` · `review` · `done` · `blocked`.
 
 | WO | Title | Wave | Status | Track / session | Branch | Blocked by | Notes |
 |---|---|---|---|---|---|---|---|
@@ -46,6 +46,7 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 | WO-18c | Multi-arch images and release | 5 | done | local_04939a0e | wo-18c-release | – | |
 | WO-18d | Umbrella chart + EKS guide | 5 | done | local_5651ac77 | wo-18d-umbrella | – | |
 | WO-18e | Staging install verification (ro-stg-hub + ro-stg-spoke) | 5 | done | orchestrator | main | WO-18a/c/d | make install-staging |
+| WO-26 | GitHub release (GHCR, cosign, notes) + open-source basics | 5 | done (workflows parked) | orchestrator | wo-26-github-release | workflow-scope token | docs/open-source-checklist.md |
 
 ## Open questions for the user
 - Token with GitHub `workflow` scope needed to activate `ci/github-workflows/` (user, morning).
@@ -80,3 +81,4 @@ Updated: 2026-11-04 by orchestrator. Status: `todo` · `in-progress` · `review`
 - 2026-11-05 WO-18d session local_5651ac77 started by the user (worktree .claude/worktrees/wo-18d-umbrella). Next: verify + merge, then write and start WO-18e (staging install on k3d ro-staging).
 - 2026-11-05 WO-18d merged (7df084b). Verified on the branch: charts-lint rc=0 (umbrella × 3 modes × defaults/EKS), charts-diff-dev: components unchanged, make ci rc=0 after fix 7af48de (release staged a copy of the umbrella's _test.go into bin/release/stage, breaking go test ./...). D-028 amended: global.mode. Follow-ups from the handover (hub configmap secretsKeyFile with externalSecret only; wizard snippets for the umbrella; selfcheck webhook label; release.md wording) → next fix-up WO. WO-18e run by the orchestrator.
 - 2026-11-05 WO-18e done on main (orchestrator). Followed docs/install/eks.md on new k3d clusters ro-stg-hub (2 zones) + ro-stg-spoke with stand-ins (ESO Fake for Secrets Manager, CloudNativePG TLS for RDS, cert-manager CA + traefik for ACM/ALB, static pricing). Release 0.1.0-rc.2..rc.5 to localhost:5005/resource-optimizer (multi-arch). Results: AutomationReady ~1 min after install, auto-patch 500m→250m in place, failover <1-2 s, upgrade rc.4→rc.5 768/768 200, uninstall as documented; clean run from nothing: install 8m + verify 3m. Fixes: preStop sleep on hub/web (4b4eda5; before: 2×502 + timeouts per upgrade), EKS example preStop 15 s + ALB readiness gate (e275ef8, unverified without ALB), guide: hub-cluster scraper to METRICS_URL, re-run recompute after install; 18d follow-ups (secretsKeyFile with externalSecret, selfcheck label, release.md). Staging clusters deleted afterwards (4.5 GiB). Dev: ro-spoke-2 lost cAdvisor container labels after Docker restarted the nodes (04:28 UTC); node container restarted, both spokes AutomationReady. Deployed hub/web/agent from main to dev; full make e2e on main PASS 17m (usual skips). Open: wizard snippets for the umbrella chart (internal/hub/install) → own task; real EKS install needs the user's AWS details.
+- 2026-11-05 WO-26 (user: "images and charts should be stored in GitHub; wire GitHub Actions for build with versions and release notes; prepare to open the repo to public"). Release workflow (tag vX.Y.Z → CI → GHCR images+charts, cosign, GitHub Release from CHANGELOG + digests), CI adds web/charts/images jobs, open-source files, public-readiness fixes (placeholder account ID, oz URLs, personal paths). Workflows stay in ci/github-workflows until a workflow-scope credential moves them. Owner decisions listed in docs/open-source-checklist.md (permission/license, CRD group oz.io, history, branches).

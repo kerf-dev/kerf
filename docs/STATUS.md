@@ -1,4 +1,4 @@
-# Status — 2026-11-05 morning
+# Status — 2026-11-05
 
 Everything below runs on the local k3d fleet (`ro-hub`, `ro-spoke-1`, `ro-spoke-2`) from `main`.
 Live tracker: `.claude/state/active-tasks.md` · decisions: `DECISIONS.md` (D-001…D-028) · hand-overs: `docs/handover/`.
@@ -14,6 +14,24 @@ Live tracker: `.claude/state/active-tasks.md` · decisions: `DECISIONS.md` (D-00
 | VictoriaMetrics | http://localhost:18428 |
 
 Screenshots of every page, including the admin area (light, dark, tablet): `docs/screenshots/`.
+
+## New: GitHub releases and going public (WO-26)
+
+**Releases on GitHub.** Pushing a tag `vX.Y.Z` (or `vX.Y.Z-rc.N`) runs the release workflow: CI, then the five
+multi-arch images and six charts go to `ghcr.io/tomer1983/resource-optimizer`, cosign signs each one, and a GitHub
+Release is created with notes from `CHANGELOG.md`, install steps, every digest and the merged pull requests.
+Released charts default to their own GHCR images, so `helm install` needs no registry setting. Details:
+`docs/release.md` ("Releasing on GitHub"). Tested with a full local release (`0.1.0-wo26.1`): the published
+chart renders its own images in production mode, and every binary logs its version.
+
+**Not active yet.** The workflows are in `ci/github-workflows/`, because this machine's GitHub credential
+lacks the `workflow` scope. One command with a credential that has it activates them
+(`ci/github-workflows/README.md`).
+
+**Going public.** LICENSE (Apache-2.0), NOTICE, SECURITY, CONTRIBUTING, code of conduct, issue templates,
+Dependabot and a README for outside users are in. Before flipping visibility, decide the items in
+`docs/open-source-checklist.md`: permission and license, the CRD group `resource-optimizer.oz.io`, history,
+and the 43 `wo-*` branches.
 
 ## New overnight: ready for EKS (WO-18, D-028)
 
