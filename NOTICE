@@ -1,0 +1,12 @@
+resource-optimizer
+Copyright 2026 The resource-optimizer Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party software included in the release artifacts:
+
+- The web image bundles the Geist and Geist Mono fonts (@fontsource-variable/geist,
+  @fontsource-variable/geist-mono), licensed under the SIL Open Font License 1.1.
+- Container images are built on gcr.io/distroless/static-debian12 (hub, pricing, agent, webhook) and
+  nginx:alpine (web); their licenses are listed in each image's SBOM.
+- Go module and npm dependencies keep their own licenses; each release image carries an SPDX SBOM.

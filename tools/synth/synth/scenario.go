@@ -290,7 +290,7 @@ func (sc *Scenario) applyDefaults() {
 		sc.GroundTruth = &t
 	}
 	if sc.ImageRegistry == "" {
-		sc.ImageRegistry = "381492155304.dkr.ecr.eu-west-1.amazonaws.com"
+		sc.ImageRegistry = "123456789012.dkr.ecr.eu-west-1.amazonaws.com"
 	}
 	for i := range sc.Clusters {
 		c := &sc.Clusters[i]

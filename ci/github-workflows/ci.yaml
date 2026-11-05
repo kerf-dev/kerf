@@ -1,39 +1,42 @@
 name: ci
 
+# Every pull request and every push to main. The release workflow runs it too (workflow_call) before it
+# publishes anything. Actions are pinned by commit SHA (Dependabot updates them).
+
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  HELM_VERSION: v4.3.1
 
 jobs:
   go:
-    name: build, vet, lint, test, generate
+    name: go (build, vet, lint, test, generate)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Cache tools
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: bin
           key: tools-${{ runner.os }}-${{ hashFiles('make/common.mk', 'go.mod') }}
-      - name: Build
-        run: make build
-      - name: Vet
-        run: make vet
-      - name: Lint
-        run: make lint
-      - name: Test
-        run: make test
+      - run: make build
+      - run: make vet
+      - run: make lint
+      - run: make test
       - name: Generated files up to date
         run: make verify-generate
 
@@ -41,9 +44,47 @@ jobs:
     name: openapi lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
-      - name: Lint hub API
-        run: make lint-openapi
+      - run: make lint-openapi
+
+  web:
+    name: web (api types, lint, typecheck, test, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: make web-check-api web-lint web-typecheck web-test web-build
+
+  charts:
+    name: charts (lint, render, kubeconform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: make charts-lint
+      - name: Package the charts as a release would
+        run: make release-chart-package VERSION=0.0.0-ci REGISTRY=ghcr.io/example/resource-optimizer RELEASE_CHART_DEFAULT_REGISTRY=1
+
+  images:
+    name: images (build, not pushed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+      # Both platforms: the Go images cross-compile and the web image has no RUN in its runtime stage,
+      # so no QEMU is needed (docs/release.md).
+      - run: make release-dry VERSION=0.0.0-ci
