@@ -7,7 +7,7 @@ Helm charts as OCI artifacts. Both go to one registry prefix, for example
 | Artifact | Reference |
 |---|---|
 | Images | `$REGISTRY/{hub,pricing,agent,webhook,web}:$VERSION` |
-| Charts | `oci://$REGISTRY/charts/{hub,pricing,agent,webhook,web}`, version `$VERSION` (after WO-18d: `oci://$REGISTRY/charts/resource-optimizer`) |
+| Charts | `oci://$REGISTRY/charts/resource-optimizer` (the one chart to install, `docs/install/eks.md`) and the component charts `oci://$REGISTRY/charts/{hub,pricing,agent,webhook,web}`, version `$VERSION` |
 
 Every image is an OCI index with one manifest per platform. Each index also holds an SBOM (SPDX) and
 a SLSA provenance attestation (`mode=max`). Charts are packaged with `version` and `appVersion` set to `$VERSION`.
@@ -40,7 +40,7 @@ done
 
 ECR does not create repositories on push, so every image and chart needs its own repository:
 `resource-optimizer/<image>` and `resource-optimizer/charts/<chart>`. The `charts/resource-optimizer`
-repository is for the umbrella chart (WO-18d), and creating it now does no harm.
+repository holds the one chart you install (`docs/install/eks.md`).
 
 ### Immutable tags
 
@@ -116,7 +116,7 @@ make release REGISTRY=$REGISTRY VERSION=0.1.0   # images + charts
 | `VERSION` | `git describe` of the nearest `v*` tag without the `v`, else `0.0.0-g<sha>` | semver; `+build` metadata is not allowed (not a valid image tag) |
 | `PLATFORMS` | `linux/amd64,linux/arm64` | buildx platform list |
 | `RELEASE_IMAGES` | `hub pricing agent webhook web` | images to build |
-| `RELEASE_CHARTS` | `hub pricing agent webhook web` | charts under `deploy/charts/` (`resource-optimizer` after WO-18d) |
+| `RELEASE_CHARTS` | `resource-optimizer hub pricing agent webhook web` | charts under `deploy/charts/` |
 | `RELEASE_BUILDER` | `ro-release` | buildx builder, created if missing |
 | `RELEASE_INSECURE_REGISTRIES` | `localhost:5005 127.0.0.1:5005` | registries the builder reaches over plain HTTP |
 

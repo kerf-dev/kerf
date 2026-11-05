@@ -22,6 +22,12 @@ global:
     secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}
 
 hub:
+  # Rolling updates without errors behind the ALB: a stopping pod keeps serving until the ALB has
+  # deregistered it (takes longer than inside the cluster; the chart default of 5 s fits in-cluster
+  # ingress controllers). Grace period >= preStop + 25 s (leader step-down and HTTP drain).
+  preStopSleepSeconds: 15
+  terminationGracePeriodSeconds: 45
+
   # RDS PostgreSQL with verify-full (D-028). The ExternalSecret builds Secret hub-db (DATABASE_URL)
   # from the JSON secret {"username": ..., "password": ...} and the CA bundle ConfigMap below.
   database:
@@ -110,6 +116,8 @@ hub:
     namespace: monitoring
 
 web:
+  preStopSleepSeconds: 15   # see hub.preStopSleepSeconds (nginx then stops gracefully within the 30 s grace period)
+
   # The `ui` token (read-only visitors without a session), created after the first sign-in.
   token:
     externalSecret:

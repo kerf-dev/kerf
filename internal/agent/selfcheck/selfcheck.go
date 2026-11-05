@@ -458,7 +458,7 @@ func (c *Checker) checkWebhook(ctx context.Context, r *result) {
 	}
 	if len(problems) > 0 {
 		r.add(rd.CheckWebhook, rd.StatusWarn, strings.Join(problems, "; "),
-			"kubectl -n resource-optimizer get pods,certificate -l app.kubernetes.io/name=webhook && kubectl -n resource-optimizer logs deploy/webhook", RemediationCommand, d)
+			"kubectl -n resource-optimizer get pods,certificate -l app.kubernetes.io/name=resource-optimizer-webhook && kubectl -n resource-optimizer logs deploy/webhook", RemediationCommand, d)
 		return
 	}
 	r.add(rd.CheckWebhook, rd.StatusPass, "webhook "+m.Name+" configured with a CA and ready endpoints", "", "", d)
