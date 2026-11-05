@@ -330,7 +330,7 @@ func TestApproveOnce(t *testing.T) {
 		return rec.ID != a.RecommendationID, "still the approved recommendation"
 	})
 	t.Logf("next recommendation %s: cpu %s (approved %s)", next.ID, next.Containers[0].Recommended.Requests.CPU, want.String())
-	sleep(t, time.Minute, "two agent pulls with the new recommendation")
+	sleep(t, 2*agentFlag(t, cl, "pull-interval", time.Minute), "two agent pulls with the new recommendation")
 	consistently(t, 45*time.Second, 5*time.Second, "next recommendation not applied", func() (bool, string) {
 		if got := snapshot(t, cl, ns, "web"); fmt.Sprint(got) != fmt.Sprint(pods) {
 			return false, fmt.Sprintf("pods changed: %v -> %v", pods, got)
