@@ -40,4 +40,4 @@ Exit criterion: one non-prod EKS namespace on `auto-patch` for 2 weeks with no u
 - WO-15 Notifications (Slack/Teams)
 - WO-16 CUR-based price adjustment (Savings Plans, RIs, spot)
 - WO-17 Realized savings (node cost trend vs. released requests)
-- WO-18 EKS rollout (in progress, D-028): one chart with hub/spoke modes, production chart features, hub HA, multi-arch release, EKS guide, staging verification. mTLS agent↔hub moved to a later WO.
+- WO-18 EKS rollout (D-028): done locally. One chart with hub/spoke modes, production chart features, hub HA, multi-arch release, the EKS guide (`docs/install/eks.md`) and a staging install that follows it (`make install-staging`). Next: the real EKS install (needs AWS details), wizard snippets for the one chart. mTLS agent↔hub moved to a later WO.

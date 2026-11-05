@@ -48,7 +48,7 @@ The five component charts are its subcharts; dev keeps using them directly.
 - an upgrade under load dropped none of 768 requests
 - uninstall worked
 
-The run found and fixed one real problem. An upgrade used to drop a few requests (2 × 502), because pods stopped accepting connections before the ingress stopped sending them. Fixed with a short `preStop` sleep. Details: `docs/handover/WO-18e-handover.md`. Repeat it with `make install-staging && make install-staging-verify`.
+The run found and fixed one real problem. An upgrade used to drop a few requests (2 × 502), because pods stopped accepting connections before the ingress stopped sending them. Fixed with a short `preStop` sleep. Details: `docs/handover/WO-18e-handover.md`. Repeat it with `make install-staging && make install-staging-verify`. Afterwards the full e2e suite on the dev fleet passed again on `main` (17 min, usual skips).
 
 **For the real EKS install I need from you:**
 - the AWS account and region, and the hub and workload clusters

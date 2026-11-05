@@ -1,6 +1,6 @@
 # WO-18 — Production packaging and EKS install
 
-Status: **approved 2026-11-04** (D-028). Track work-orders: WO-18a, WO-18b, WO-18c, then WO-18d, WO-18e.
+Status: **approved 2026-11-04** (D-028). Tracks WO-18a–18e **done 2026-11-05** (handovers in `docs/handover/`). Remaining: the real EKS install.
 
 Goal: one Helm chart, `resource-optimizer`, that installs the hub side (`mode: hub`), a workload cluster (`mode: spoke`) or both (`mode: all`) on EKS 1.35 with production defaults. It ships with a step-by-step EKS guide, and the plan ends with a real EKS install.
 
