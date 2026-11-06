@@ -1786,8 +1786,8 @@ export interface components {
     Phase: 'Pending' | 'Applying' | 'Applied' | 'Blocked' | 'RolledBack' | 'Released' | 'Deferred'
     /**
      * @description `throttled`, `oom-killed`: the workload is under-provisioned; the recommendation is never
-     *     a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only
-     *     (D-011). `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
+     *     a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only.
+     *     `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
      *     container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`); its memory is audit-only,
      *     the agent never changes it.
      * @enum {string}
@@ -1977,7 +1977,7 @@ export interface components {
       gpu?: components['schemas']['GPUUsage']
     }
     /**
-     * @description HPA coordination (lifts D-011). Present when the workload has a CPU- or
+     * @description HPA coordination. Present when the workload has a CPU- or
      *     memory-utilization HPA (risk flag `hpa-coupled`). The HPA's utilization is the pod's usage
      *     over the sum of its containers' requests of `metric`, so changing those requests changes
      *     when it scales. With `recommendedTarget`, the recommended requests of `metric` and that

@@ -35,7 +35,8 @@ Type: string. one of `Pending`, `Applying`, `Applied`, `Blocked`, `RolledBack`, 
 ## RiskFlag { #riskflag }
 
 `throttled`, `oom-killed`: the workload is under-provisioned; the recommendation is never
-a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only. `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
+a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only.
+`low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
 container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`); its memory is audit-only,
 the agent never changes it.
 
@@ -214,12 +215,12 @@ amounts (`RealizedAmount`).
 | `monthlySavingsUSD` | [Savings](schemas.md#savings), required |  | Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized amounts (`RealizedAmount`). |
 | `dataCoverage` | [DataCoverage](schemas.md#datacoverage), required |  |  |
 | `pricing` | [RecommendationPricing](schemas.md#recommendationpricing) |  | Rates used for `monthlySavingsUSD`. `source` is `metrics` when they come from the pricing series (`kerf_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when the cluster had no pricing series and the hub's configured fallback rate was used. Absent on recommendations computed before the field existed. |
-| `hpa` | [HPACoordination](schemas.md#hpacoordination) |  | HPA coordination (lifts). Present when the workload has a CPU- or memory-utilization HPA (risk flag `hpa-coupled`). The HPA's utilization is the pod's usage over the sum of its containers' requests of `metric`, so changing those requests changes when it scales. With `recommendedTarget`, the recommended requests of `metric` and that target keep `usage / (sum of requests x target)` unchanged: the agent may apply both in one change (rollout) and the HPA scales as before. The target stays within 40-90 % (or the current target if it is already outside); the requests were adjusted to keep it there. Without `recommendedTarget` (`skipReason` set) the requests of `metric` must not be changed by the agent. |
+| `hpa` | [HPACoordination](schemas.md#hpacoordination) |  | HPA coordination. Present when the workload has a CPU- or memory-utilization HPA (risk flag `hpa-coupled`). The HPA's utilization is the pod's usage over the sum of its containers' requests of `metric`, so changing those requests changes when it scales. With `recommendedTarget`, the recommended requests of `metric` and that target keep `usage / (sum of requests x target)` unchanged: the agent may apply both in one change (rollout) and the HPA scales as before. The target stays within 40-90 % (or the current target if it is already outside); the requests were adjusted to keep it there. Without `recommendedTarget` (`skipReason` set) the requests of `metric` must not be changed by the agent. |
 | `gpu` | [GPUUsage](schemas.md#gpuusage) |  | GPUs of a workload (pods that request `nvidia.com/gpu`): utilisation and framebuffer memory from the NVIDIA DCGM exporter (`DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`, `DCGM_FI_DEV_FB_FREE`) over the recommender window, the cost of the GPUs and suggestions. Absent for workloads without GPU requests. Visibility only: it never changes a request. |
 
 ## HPACoordination { #hpacoordination }
 
-HPA coordination (lifts). Present when the workload has a CPU- or
+HPA coordination. Present when the workload has a CPU- or
 memory-utilization HPA (risk flag `hpa-coupled`). The HPA's utilization is the pod's usage
 over the sum of its containers' requests of `metric`, so changing those requests changes
 when it scales. With `recommendedTarget`, the recommended requests of `metric` and that
