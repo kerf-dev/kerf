@@ -944,35 +944,23 @@ export const adminHandlers = [
       return badRequest('invalid_request', 'username and password are required')
     const u = g.st.users.get(b.username)
     const key = b.username
-    if (u?.lockedUntilMs && u.lockedUntilMs > Date.now()) {
-      const s = Math.ceil((u.lockedUntilMs - Date.now()) / 1000)
-      return problem(
-        429,
-        'account_locked',
-        'Too Many Requests',
-        `too many failed sign-ins; try again in ${Math.ceil(s / 60)} min`,
-        { 'Retry-After': String(s) },
-      )
-    }
-    if (!u || u.deletedAt || u.disabled || u.password !== b.password) {
+    // Like the hub: one answer for a wrong password and an unknown, disabled or locked user, and one
+    // for every rate limit, so nothing tells whether a username exists.
+    const tooMany = () =>
+      problem(429, 'rate_limited', 'Too Many Requests', 'Too many sign-in attempts. Try again later.', {
+        'Retry-After': '300',
+      })
+    const invalid = () => problem(401, 'invalid_credentials', 'Unauthorized', 'Wrong username or password.')
+    if ((loginFailures.get(key) ?? 0) >= 5) return tooMany()
+    const locked = !!u?.lockedUntilMs && u.lockedUntilMs > Date.now()
+    if (!u || u.deletedAt || u.disabled || locked || u.password !== b.password) {
       const n = (loginFailures.get(key) ?? 0) + 1
       loginFailures.set(key, n)
-      if (u) u.failedLogins = n
-      if (n >= 5) {
-        loginFailures.set(key, 0)
-        if (u) {
-          u.lockedUntilMs = Date.now() + 5 * 60_000
-          u.failedLogins = 0
-        }
-        return problem(
-          429,
-          'account_locked',
-          'Too Many Requests',
-          'too many failed sign-ins; try again in 5 min',
-          { 'Retry-After': '300' },
-        )
+      if (u && !locked) {
+        u.failedLogins = n
+        if (n >= 5) u.lockedUntilMs = Date.now() + 5 * 60_000
       }
-      return problem(401, 'invalid_credentials', 'Unauthorized', 'wrong username or password')
+      return invalid()
     }
     loginFailures.delete(key)
     u.failedLogins = 0
@@ -988,11 +976,16 @@ export const adminHandlers = [
   }),
 
   http.post('*/v1/auth/logout', async ({ request }) => {
-    const g = await gate(request, 'viewer')
+    // Like the hub: always ends the session and clears the cookie; a live session needs its CSRF token.
+    const g = await gate(request, null)
     if (g instanceof Response) return g
-    if (!g.who.session) return unauthorized()
+    if (g.who.session && request.headers.get('X-CSRF-Token') !== g.who.session.csrfToken)
+      return forbidden('csrf_invalid', 'missing or wrong X-CSRF-Token')
     writeSession(null)
-    return new HttpResponse(null, { status: 204 })
+    return new HttpResponse(null, {
+      status: 204,
+      headers: { 'Set-Cookie': 'kerf_session=; Max-Age=0; HttpOnly; SameSite=Strict; Path=/' },
+    })
   }),
 
   http.get('*/v1/me', async ({ request }) => {
@@ -1000,8 +993,7 @@ export const adminHandlers = [
     if (g instanceof Response) return g
     const { who } = g
     if (who.session && who.user) return json(meOut(who.user, who.session))
-    const me: S['Me'] = { authMethod: 'token', role: 'viewer', tokenId: '2' }
-    return json(me)
+    return unauthorized()
   }),
 
   http.post('*/v1/me/password', async ({ request }) => {

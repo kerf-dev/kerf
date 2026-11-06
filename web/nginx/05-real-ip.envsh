@@ -1,0 +1,20 @@
+#!/bin/sh
+# Sourced by the nginx image entrypoint before templates are rendered. Turns TRUSTED_PROXIES (CIDRs or
+# addresses of the load balancer or ingress controller in front of this pod, separated by commas or
+# spaces) into REAL_IP_CONFIG for default.conf.template: nginx then takes the client address from the
+# X-Forwarded-For entry that proxy appended, and the hub rate-limits sign-ins per real client. Empty:
+# the client is the connecting address.
+REAL_IP_CONFIG=""
+for p in $(printf '%s' "${TRUSTED_PROXIES:-}" | tr ',' ' '); do
+  case "$p" in
+    *[!0-9A-Fa-f.:/]*)
+      echo "05-real-ip: TRUSTED_PROXIES entry '$p' is not an address or CIDR, refusing to start" >&2
+      exit 1 ;;
+  esac
+  REAL_IP_CONFIG="${REAL_IP_CONFIG}set_real_ip_from ${p}; "
+done
+if [ -n "$REAL_IP_CONFIG" ]; then
+  # Not recursive: only the entry added by the trusted proxy counts, never one the client sent.
+  REAL_IP_CONFIG="${REAL_IP_CONFIG}real_ip_header X-Forwarded-For; real_ip_recursive off;"
+fi
+export REAL_IP_CONFIG

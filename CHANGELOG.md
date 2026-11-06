@@ -57,7 +57,30 @@ First public version.
   change through their own pull request. Viewers can select rows and copy too. See
   [Copy a recommendation as a patch](docs/copy-as-patch.md).
 
+### Changed
+
+- **Breaking: signing in is always required.** Visitors without a session see only the sign-in page, and the hub
+  answers `401` to every `/v1` request without a session or a bearer token, except sign-in. The UI checks the
+  session before it shows anything, returns to the page you asked for after sign-in, and brings you back to
+  sign-in with a notice when a session expires or is revoked. Bearer tokens for automation are unchanged. Give
+  everyone who used the UI without signing in a user (*Admin → Access → Users*); see
+  [Sign-in and access](docs/auth.md#upgrading-from-anonymous-read-access).
+- Failed sign-ins get one answer whether or not the user exists, also for a locked user, and one message for
+  every rate limit. Sign-out always clears the cookie, also after the session ended.
+
+### Removed
+
+- **Breaking:** the web chart's `auth.anonymousRead` and `token.*` (`web.auth.anonymousRead`, `web.token.*` in
+  the kerf chart), with the token Secret and ExternalSecret. The chart fails with an upgrade message while they
+  are set. Revoke the old `ui` token unless a script uses it.
+
 ### Fixed
 
 - Signing in through the web UI kept users read-only: the web proxy looked for the old session cookie name
   and never forwarded `kerf_session`, so every request still went out with the read-only UI token.
+
+### Security
+
+- Sign-in rate limits per client address can no longer be dodged with a forged `X-Forwarded-For`: the web proxy
+  sends the client it sees, and the hub uses the last entry. Behind an ALB or ingress controller, set
+  `web.trustedProxies` so the limits count real clients.

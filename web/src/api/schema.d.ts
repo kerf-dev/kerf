@@ -358,10 +358,14 @@ export interface paths {
      * @description Checks the username and password and starts a session. The response sets the session
      *     cookie `kerf_session` (`HttpOnly; SameSite=Strict; Path=/`, plus `Secure` behind TLS) and
      *     returns the CSRF token the client sends as `X-CSRF-Token` on every write made with the
-     *     session. Failed logins are rate limited per client address and per user; after repeated
-     *     failures the user is locked for a while (`429` with `Retry-After`, code `account_locked`).
-     *     A wrong username and a wrong password give the same `401` (code `invalid_credentials`).
-     *     A disabled user gets `401` too.
+     *     session. Every other `/v1` endpoint needs a session or a bearer token.
+     *
+     *     A wrong password and an unknown, disabled or locked user all get the same `401` (code
+     *     `invalid_credentials`), so the answer never tells whether a user exists. After repeated
+     *     failures a user is locked for a while; while locked even the right password gets that
+     *     `401`. Attempts are rate limited per username and per client address (the last
+     *     `X-Forwarded-For` entry, else the connection): `429` code `rate_limited` with
+     *     `Retry-After` and one message for both.
      */
     post: operations['login']
     delete?: never
@@ -381,7 +385,9 @@ export interface paths {
     put?: never
     /**
      * End the current session
-     * @description Revokes the session and clears the cookie. Idempotent.
+     * @description Revokes the session and clears the cookie. A live session needs its `X-CSRF-Token`
+     *     (`403` `csrf_invalid` without it). Without a live session (none, expired or revoked) it
+     *     only clears the cookie. Always `204` otherwise; returns no data.
      */
     post: operations['logout']
     delete?: never
@@ -3394,7 +3400,7 @@ export interface components {
         'application/problem+json': components['schemas']['Problem']
       }
     }
-    /** @description Too many failed attempts (code `rate_limited` or `account_locked`). */
+    /** @description Too many attempts (code `rate_limited`). */
     TooManyRequests: {
       headers: {
         /** @description Seconds until the next attempt is allowed. */
@@ -3983,7 +3989,6 @@ export interface operations {
         }
         content?: never
       }
-      401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
     }
   }

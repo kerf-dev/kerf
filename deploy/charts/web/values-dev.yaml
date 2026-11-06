@@ -8,8 +8,3 @@ replicaCount: 1
 service:
   type: NodePort
   nodePort: 30090
-
-# Development `ui` token seeded by the hub chart (deploy/charts/hub/values-dev.yaml, WO-04).
-# Never reuse outside the local environment.
-token:
-  value: ro-dev-ui-97446cd3a095035d6290abc5

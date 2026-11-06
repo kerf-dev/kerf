@@ -4,8 +4,14 @@
  *   make web-screenshots   (or: SCREENSHOTS_DIR=$PWD/../docs/screenshots npx playwright test screenshots)
  */
 import { expect, test } from '@playwright/test'
+import { seedSession } from './session'
 
 const dir = process.env.SCREENSHOTS_DIR
+
+// Every page but the sign-in page needs a session: a viewer unless a shot signs in as someone else.
+test.beforeEach(async ({ page }, info) => {
+  if (!info.title.startsWith('login ')) await seedSession(page, 'viewer')
+})
 const pages = [
   ['overview', '/'],
   ['opportunities', '/opportunities'],

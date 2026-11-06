@@ -103,10 +103,9 @@ web:
   hub:
     # Empty: this release's hub Service (<hub name>.<namespace>.svc.cluster.local:8080).
     upstream: ""
-  # Read-only `ui` token for visitors without a session (auth.anonymousRead). Production:
-  #   token.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/ui-token, property: token}}
-  token:
-    value: ""                # inline token: dev: true only
+  # Signing in is always required (docs/auth.md). Behind an ALB, list its subnets so sign-ins are
+  # rate-limited per real client:
+  #   trustedProxies: [10.0.0.0/16]
   # Ingress for browsers (ALB, scheme of your choice):
   #   ingress:
   #     enabled: true

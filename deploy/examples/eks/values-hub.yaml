@@ -122,11 +122,9 @@ hub:
 web:
   preStopSleepSeconds: 15   # see hub.preStopSleepSeconds (nginx then stops gracefully within the 30 s grace period)
 
-  # The `ui` token (read-only visitors without a session), created after the first sign-in.
-  token:
-    externalSecret:
-      enabled: true
-      remoteRef: {key: kerf/hub/ui-token, property: token}
+  # The ALB connects from the VPC: take the client address from the X-Forwarded-For entry it adds, so
+  # failed sign-ins are rate-limited per client (narrow it to the ALB subnets if you can).
+  trustedProxies: [10.0.0.0/16]
   ingress:
     enabled: true
     className: alb

@@ -62,9 +62,11 @@ For chart developers.
 - **Schema** (`values.schema.json`):
   - It requires `global.mode`, plus `global.clusterName` in `spoke` and `all`, and `agent.hub.url` in `spoke`.
   - In `hub` and `all`, the hub needs a database Secret: `existingSecret` or `externalSecret`.
-  - Unless `dev: true`, it rejects inline secrets (`hub.database.url`, `web.token.value`,
+  - Unless `dev: true`, it rejects inline secrets (`hub.database.url`,
     `{pricing,agent}.hub.tokenSecret.create`/`.token`, `hub.auth.bootstrapAdmin.password`, `hub.devSeed.*`,
     passwords in user lists) and `hub.auth.cookieSecure: false`.
+  - Sign-in is always required. The web chart fails with an upgrade message when the removed
+    `web.auth.anonymousRead` or `web.token` are set ([docs/auth.md](https://github.com/kerf-dev/kerf/blob/main/docs/auth.md)).
 
 ## Values
 
@@ -87,7 +89,7 @@ values: see `deploy/charts/<component>/values.yaml` in the [repository](https://
 | `hub.database.url` | `""` | inline database URL; `dev` only (production: `database.externalSecret` or `existingSecret`) |
 | `hub.auth.cookieSecure` | `true` | `false` only with `dev` |
 | `web.hub.upstream` | `""` | empty: this release's hub Service |
-| `web.token.value` | `""` | inline `ui` token; `dev` only (production: `token.externalSecret`) |
+| `web.trustedProxies` | `[]` | CIDRs of the ALB or ingress controller in front of the UI: sign-ins are rate-limited per real client |
 | `pricing.clusterName` | `""` | empty: `global.clusterName` |
 | `pricing.provider` | `static` | `static` or `aws` (Pod Identity, `iam/pricing-policy.json`) |
 | `pricing.hub.url` | `""` | empty: this release's hub Service |

@@ -15,6 +15,7 @@ with the [README](../README.md) for the overview; this page lists everything els
 | [Component charts](../deploy/charts) | Values of `hub`, `web`, `pricing`, `agent`, `webhook` ([hub](../deploy/charts/hub/README.md), [agent](../deploy/charts/agent/README.md)) |
 | [Grafana dashboards](../dashboards/README.md) | Overview, opportunities, automation and workload dashboards |
 | [Pricing](pricing.md) | Where node rates come from (`cur`, `list`, `spot`, `static`), effective rates from the AWS Cost and Usage Report with Savings Plans and Reserved Instances amortised, its IAM policy and Data Exports settings |
+| [Sign-in and access](auth.md) | Required sign-in, users and roles, sign-in protection, bearer tokens for automation, upgrading from anonymous read access |
 | [Copy a recommendation as a patch](copy-as-patch.md) | Hand a recommendation over as a strategic merge patch, a `kubectl patch` command, a Kustomize patch or Helm values, for one workload or a selection |
 | [Maintenance and updates](maintenance.md) | Component versions, the check for a new release, turning it off |
 | [Changelog](../CHANGELOG.md) | What changed in each release and how to upgrade |
