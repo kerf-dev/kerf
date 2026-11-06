@@ -41,8 +41,8 @@ make deploy-web     # build + push localhost:5005/kerf/web, helm install into ro
 ```
 
 In mock mode, the **Mock API** menu in the top bar switches to an empty fleet, a slow hub or a failing
-hub, and between anonymous read-only access and "login required". Mock users: `admin`, `operator`,
-`viewer` (password `dev-password`; `sam` must change the password, `dana` is disabled).
+hub. Sign in first, like with a real hub. Mock users: `admin`, `operator`, `viewer` (password
+`dev-password`; `sam` must change the password, `dana` is disabled).
 
 ## How it fits together
 
@@ -55,28 +55,33 @@ hub, and between anonymous read-only access and "login required". Mock users: `a
   roles, CSRF, If-Match, readiness, preview). `handlers.test.ts` and `admin.test.ts` validate every mock
   response against `hub.yaml` with a JSON Schema validator, so the UI built on the mocks matches the real hub.
   The service worker is preferred. Where service workers are unavailable, it falls back to patching `fetch`.
-- **Sign-in (D-023).** `POST /v1/auth/login` sets the HttpOnly `kerf_session` cookie; `GET /v1/me` gives
-  the role and the CSRF token, which the client sends as `X-CSRF-Token` on writes (`src/api/auth.ts`).
-  A `401` on `/v1/me` means login required; `authMethod: token` means anonymous read-only.
-- **No token in the browser.** The browser only talks to its own origin. nginx proxies `/v1/` (all
-  methods): with a `kerf_session` cookie it forwards only that cookie and no bearer token; without one it adds
-  `Authorization: Bearer <ui token>` from a mounted Secret when `auth.anonymousRead` is on (default), or
-  nothing (the UI then asks for a login). Whatever the browser sends in `Authorization` is dropped, and the
-  raw `$request_uri` is passed through so `%2F` is never decoded. In live dev mode the Vite proxy does the
-  same with `KERF_HUB_TOKEN`.
+- **Sign-in is required** ([docs/auth.md](../docs/auth.md)). `POST /v1/auth/login` sets the HttpOnly
+  `kerf_session` cookie; `GET /v1/me` gives the role and the CSRF token, which the client sends as
+  `X-CSRF-Token` on writes (`src/api/auth.ts`). The app shell renders nothing but a loading screen until
+  `/v1/me` answers. A `401` sends the browser to `/login?next=<page>`, with a "Your session ended" notice
+  when the tab had a session; after sign-in it returns to `next` (same-origin paths only, `safeNext`).
+- **No token in the browser or the proxy.** The browser only talks to its own origin. nginx proxies `/v1/`
+  (all methods) and forwards only the `kerf_session` cookie: never a bearer token, and never what the
+  browser sends in `Authorization`. The raw `$request_uri` is passed through so `%2F` is never decoded.
+  `X-Forwarded-For` is replaced by the client nginx sees (behind `TRUSTED_PROXIES`, the address they add),
+  so the hub's per-address sign-in limits cannot be dodged. In live dev mode the Vite proxy forwards the
+  cookie the same way.
 
 ## Production image and chart
 
-- `Dockerfile`: a Node 22 build stage, then `nginx:1.29-alpine`. Config lives in `nginx/`. `05-hub-token.envsh`
-  reads the token file (`HUB_TOKEN_FILE`), and the nginx template is rendered at start. `/healthz` is the
-  probe endpoint.
-- `deploy/charts/web`: Deployment, Service and an optional token Secret.
+- `Dockerfile`: a Node 22 build stage, then `nginx:1.29-alpine`. Config lives in `nginx/`. `05-real-ip.envsh`
+  turns `TRUSTED_PROXIES` into nginx `set_real_ip_from` lines, and the nginx template is rendered at start.
+  `/healthz` is the probe endpoint.
+- `deploy/charts/web`: Deployment and Service (plus optional ingress, HPA, PDB, NetworkPolicy).
   - `hub.upstream` is the hub Service's host:port. It must be fully qualified, because nginx resolves it at
     request time and does not apply search domains.
-  - `token.existingSecret` / `token.value` supply the `ui` token.
-  - `auth.anonymousRead` (default `true`): without a session the UI is read-only via the `ui` token;
-    `false` requires a login for every page.
-  - `values-dev.yaml` sets NodePort 30090 (host port 19090 on k3d) and the hub's dev `ui` token.
+  - `trustedProxies`: CIDRs of the ALB or ingress controller in front (docs/auth.md).
+  - The removed `auth.anonymousRead` and `token` make the chart fail with an upgrade message.
+  - `values-dev.yaml` sets NodePort 30090 (host port 19090 on k3d).
+- **Browser tests through a real proxy** (`e2e-live/`, `playwright.live.config.ts`): sign-in, the way back
+  to the page asked for, sign-out, an ended session and an anonymous visit that sees nothing, against
+  `E2E_WEB_URL` (default the dev fleet, http://localhost:19090). The Go e2e suite runs them
+  (`TestWebSignInBrowser`).
 
 ## Stack
 

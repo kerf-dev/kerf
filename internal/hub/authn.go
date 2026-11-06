@@ -206,6 +206,13 @@ func (s *Server) loginLimiters() (*auth.Limiter, *auth.Limiter) {
 	return s.ipLimiter, s.userLimiter
 }
 
+// Sign-in answers: the same for a wrong password, an unknown, disabled or locked user, and every
+// rate limit.
+const (
+	msgInvalidCredentials = "Wrong username or password."
+	msgTooManySignIns     = "Too many sign-in attempts. Try again later."
+)
+
 func tooMany(w http.ResponseWriter, r *http.Request, code string, retry time.Duration, detail string) {
 	w.Header().Set("Retry-After", auth.RetryAfterSeconds(retry))
 	writeProblem(w, r, http.StatusTooManyRequests, code, detail)
@@ -232,29 +239,32 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	username := strings.ToLower(strings.TrimSpace(req.Username))
 	now := s.now()
 	ipL, userL := s.loginLimiters()
+	// One message for every rate limit: it says nothing about whether the user exists.
 	if ok, retry := ipL.Allow(auth.ClientIP(r), now); !ok {
-		tooMany(w, r, hubapi.CodeRateLimited, retry, "Too many login attempts from this address.")
+		tooMany(w, r, hubapi.CodeRateLimited, retry, msgTooManySignIns)
 		return
 	}
 	if ok, retry := userL.Allow(username, now); !ok {
-		tooMany(w, r, hubapi.CodeRateLimited, retry, "Too many login attempts for this user.")
+		tooMany(w, r, hubapi.CodeRateLimited, retry, msgTooManySignIns)
 		return
 	}
 	invalid := func() {
-		writeProblem(w, r, http.StatusUnauthorized, hubapi.CodeInvalidCredentials, "Wrong username or password.")
+		writeProblem(w, r, http.StatusUnauthorized, hubapi.CodeInvalidCredentials, msgInvalidCredentials)
 	}
 	u, err := s.Store.GetUser(r.Context(), username)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		s.internal(w, r, err)
 		return
 	}
-	if err != nil || u.DeletedAt != nil || u.Disabled {
+	// Unknown, deleted, disabled and locked users get exactly the answer of a wrong password, after
+	// the same bcrypt work, so a response never tells whether a username exists.
+	locked := err == nil && u.LockedUntil != nil && now.Before(*u.LockedUntil)
+	if err != nil || u.DeletedAt != nil || u.Disabled || locked {
 		auth.BurnPasswordCheck(req.Password)
+		if locked {
+			s.Log.InfoContext(r.Context(), "login refused: account locked", "user", username, "until", *u.LockedUntil)
+		}
 		invalid()
-		return
-	}
-	if u.LockedUntil != nil && now.Before(*u.LockedUntil) {
-		tooMany(w, r, hubapi.CodeAccountLocked, u.LockedUntil.Sub(now), "Account locked after too many failed logins.")
 		return
 	}
 	if !auth.CheckPassword(u.PasswordHash, req.Password) {
@@ -297,12 +307,27 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.me(&store.Session{CSRFToken: csrf, ExpiresAt: exp, User: u}, true))
 }
 
-// logout serves POST /v1/auth/logout.
+// logout serves POST /v1/auth/logout. It always clears the cookie, also when the session already
+// expired or was revoked, so a browser never keeps a dead cookie. A live session is revoked and
+// needs its CSRF token (no forced sign-out from another page). It returns no data.
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
-	p := PrincipalFrom(r.Context())
-	if err := s.Store.RevokeSession(r.Context(), p.Session.IDHash, s.now()); err != nil {
-		s.internal(w, r, err)
-		return
+	if c, err := r.Cookie(auth.CookieName); err == nil && c.Value != "" {
+		sess, err := s.Store.LookupSession(r.Context(), auth.SHA256(c.Value), s.now())
+		switch {
+		case err == nil:
+			if !auth.TokenEqual(r.Header.Get(hubapi.CSRFHeader), sess.CSRFToken) {
+				writeProblem(w, r, http.StatusForbidden, hubapi.CodeCSRFInvalid, "Missing or wrong "+hubapi.CSRFHeader+" header.")
+				return
+			}
+			if err := s.Store.RevokeSession(r.Context(), sess.IDHash, s.now()); err != nil {
+				s.internal(w, r, err)
+				return
+			}
+			s.Log.InfoContext(r.Context(), "logout", "user", sess.User.Username)
+		case !errors.Is(err, store.ErrNotFound):
+			s.internal(w, r, err)
+			return
+		}
 	}
 	http.SetCookie(w, auth.ClearCookie(s.Cfg.Auth.cookieSecure()))
 	w.WriteHeader(http.StatusNoContent)

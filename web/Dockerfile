@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Web UI (WO-14): static SPA served by nginx, /v1/ proxied to the hub with the `ui` token.
+# Web UI: static SPA served by nginx, /v1/ proxied to the hub (the browser's session cookie only).
 # Build context: web/  (docker build -t kerf/web:dev web/)
 #
 # Multi-arch (D-028, WO-18c): the Node stage runs on the build host (its output is plain JS/CSS), and the
@@ -26,11 +26,11 @@ FROM nginx:1.29-alpine
 ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1 \
     NGINX_ENVSUBST_OUTPUT_DIR=/tmp \
     HUB_UPSTREAM=hub.kerf.svc.cluster.local:8080 \
-    HUB_TOKEN_FILE=/etc/kerf/hub-token/token
+    TRUSTED_PROXIES=""
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
 COPY nginx/default.conf.template /etc/nginx/templates/conf.d/default.conf.template
 COPY nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
-COPY --chmod=0755 nginx/05-hub-token.envsh /docker-entrypoint.d/05-hub-token.envsh
+COPY --chmod=0755 nginx/05-real-ip.envsh /docker-entrypoint.d/05-real-ip.envsh
 COPY --from=build /src/dist /usr/share/nginx/html
 USER 101:101
 EXPOSE 8080

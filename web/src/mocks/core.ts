@@ -155,9 +155,6 @@ export function writeSession(s: MockSession | null) {
   writeLocal(SESSION_KEY, s ? JSON.stringify(s) : null)
 }
 
-/** `ro-mock-anonymous`: `viewer` (default, like nginx's ui token) or `none` (login required). */
-export const anonymousMode = () => (readLocal('ro-mock-anonymous') === 'none' ? 'none' : 'viewer')
-
 export function newSession(username: string): MockSession {
   const r = mulberry32((Date.now() ^ Math.floor(Math.random() * 2 ** 31)) >>> 0)
   return {
@@ -177,7 +174,7 @@ export interface Caller {
   user?: UserRec
 }
 
-/** The caller of a request: the session user, else the anonymous viewer (nginx's ui token). */
+/** The caller of a request: the session user, else nobody (sign-in is required, like the real proxy). */
 export function caller(st: AdminState): Caller | undefined {
   const s = readSession()
   if (s) {
@@ -186,8 +183,7 @@ export function caller(st: AdminState): Caller | undefined {
       return { role: u.role, actor: { type: 'user', name: u.username, role: u.role }, session: s, user: u }
     writeSession(null)
   }
-  if (anonymousMode() === 'none') return undefined
-  return { role: 'viewer', actor: { type: 'token', name: 'token:2', role: 'ui' } }
+  return undefined
 }
 
 export const unauthorized = () => problem(401, 'unauthorized', 'Unauthorized', 'sign in to continue')

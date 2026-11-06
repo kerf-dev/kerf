@@ -1,20 +1,16 @@
 # Rendered at container start by the nginx image's envsubst step (/etc/nginx/templates/conf.d → /tmp/conf.d,
 # see nginx.conf).
-# Variables: HUB_UPSTREAM (host:port of the hub API), HUB_ANON_AUTHORIZATION (set by
-# /docker-entrypoint.d/05-hub-token.envsh: "Bearer <ui token>" when anonymous read access is on, else
-# empty), NGINX_LOCAL_RESOLVERS (from /etc/resolv.conf). Only variables defined in the environment are
-# substituted, so nginx variables like $cookie_kerf_session stay as they are.
+# Variables: HUB_UPSTREAM (host:port of the hub API), REAL_IP_CONFIG (set by
+# /docker-entrypoint.d/05-real-ip.envsh from TRUSTED_PROXIES), NGINX_LOCAL_RESOLVERS (from
+# /etc/resolv.conf). Only variables defined in the environment are substituted, so nginx variables like
+# $cookie_kerf_session stay as they are.
 
-# Authentication (D-023, docs/contracts/admin.md §3):
-# - With a session cookie the browser is a logged-in user: forward only `kerf_session` and send no
-#   bearer token, so the hub sees exactly that user and role.
-# - Without one, add the read-only `ui` token (anonymous viewer) if ANONYMOUS_READ is on; otherwise
-#   send nothing and the hub answers 401, which sends the UI to its login page.
-# Whatever the browser sends in Authorization is never forwarded.
-map $cookie_kerf_session $hub_authorization {
-    ""      "${HUB_ANON_AUTHORIZATION}";
-    default "";
-}
+# Authentication (docs/auth.md): signing in is always required.
+# - With a session cookie the browser is a signed-in user: forward only `kerf_session`, so the hub sees
+#   exactly that user and role.
+# - Without one, forward no credentials at all: the hub answers 401 to everything but sign-in, and the
+#   UI shows its sign-in page.
+# This proxy holds no token, and whatever the browser sends in Authorization is never forwarded.
 map $cookie_kerf_session $hub_cookie {
     ""      "";
     default "kerf_session=$cookie_kerf_session";
@@ -27,7 +23,7 @@ gzip_min_length 1024;
 gzip_vary on;
 gzip_types text/plain text/css application/json application/javascript application/problem+json image/svg+xml;
 
-# Never log the bearer token or query strings with workload names at debug level.
+# Never log cookies or query strings with workload names.
 log_format ro '$remote_addr [$time_local] "$request_method $uri" $status $body_bytes_sent $request_time "$http_user_agent"';
 
 server {
@@ -35,6 +31,9 @@ server {
     server_name _;
     root /usr/share/nginx/html;
     access_log /var/log/nginx/access.log ro;
+
+    # Client address behind a trusted load balancer or ingress controller (TRUSTED_PROXIES).
+    ${REAL_IP_CONFIG}
 
     location = /healthz {
         access_log off;
@@ -59,11 +58,13 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Connection "";
         proxy_set_header Host $hub_upstream;
-        # The `ui` token lives only here (Secret mounted into this pod); the browser never sees it. An
-        # empty value drops the header, so the browser's own Authorization never reaches the hub.
-        proxy_set_header Authorization $hub_authorization;
+        # An empty value drops the header: the browser's own Authorization never reaches the hub, and
+        # the hub sees no cookie but the session.
+        proxy_set_header Authorization "";
         proxy_set_header Cookie $hub_cookie;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # One entry, the client as nginx saw it (after TRUSTED_PROXIES): the hub rate-limits sign-ins by
+        # the last X-Forwarded-For entry, so a client-sent header must not reach it.
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_connect_timeout 5s;
         proxy_read_timeout 60s;

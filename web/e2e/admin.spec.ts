@@ -34,11 +34,10 @@ async function confirmWrite(page: Page, dialog: string, reason = 'e2e test') {
 }
 
 test.beforeEach(async ({ page }) => {
-  // Fresh mock state: no session, anonymous viewer allowed.
+  // Fresh mock state: no session.
   await page.addInitScript(() => {
     if (!sessionStorage.getItem('e2e-init')) {
       localStorage.removeItem('ro-mock-session')
-      localStorage.removeItem('ro-mock-anonymous')
       sessionStorage.setItem('e2e-init', '1')
     }
   })
@@ -78,27 +77,64 @@ test.describe('login and roles', () => {
     await expect(page.getByText('This page needs the admin role')).toBeVisible()
   })
 
-  test('viewer has no admin area; anonymous visitors can sign in', async ({ page }) => {
-    await page.goto('/')
-    await expect(page.getByTestId('sign-in')).toBeVisible()
-    await expect(page.getByTestId('admin-nav')).toHaveCount(0)
+  test('viewer has no admin area', async ({ page }) => {
     await login(page, 'viewer')
     await expect(page.getByTestId('admin-nav')).toHaveCount(0)
     await page.goto('/admin')
     await expect(page.getByText('This page needs the operator role')).toBeVisible()
   })
 
-  test('wrong password is explained; login required without anonymous access', async ({ page }) => {
-    await page.goto('/login')
+  test('without a session only the sign-in page shows, then it returns to the page asked for', async ({
+    page,
+  }) => {
+    const data: string[] = []
+    page.on('response', (r) => {
+      const u = new URL(r.url())
+      if (u.pathname.startsWith('/v1/') && u.pathname !== '/v1/me' && r.ok()) data.push(u.pathname)
+    })
+    await page.goto('/opportunities?kind=StatefulSet')
+    await expect(page).toHaveURL(/\/login\?next=%2Fopportunities%3Fkind%3DStatefulSet$/)
+    await expect(page.getByTestId('login-form')).toBeVisible()
+    await expect(page.locator('main')).toHaveCount(0)
+    await expect(page.getByText('Continue without signing in')).toHaveCount(0)
+    expect(data).toEqual([])
+
     await page.getByLabel('Username').fill('admin')
     await page.getByLabel('Password', { exact: true }).fill('wrong-password')
     await page.getByTestId('login-submit').click()
     await expect(page.getByText('Wrong username or password.')).toBeVisible()
 
-    await page.evaluate(() => localStorage.setItem('ro-mock-anonymous', 'none'))
-    await page.goto('/opportunities')
+    await page.getByLabel('Password', { exact: true }).fill('dev-password')
+    await page.getByTestId('login-submit').click()
+    await expect(page).toHaveURL(/\/opportunities\?kind=StatefulSet$/)
+    await expect(page.getByTestId('user-menu')).toBeVisible()
+  })
+
+  test('a next= pointing to another origin is ignored', async ({ page }) => {
+    for (const next of ['https://evil.example/x', '//evil.example/x', '/\\evil.example/x']) {
+      await page.goto(`/login?next=${encodeURIComponent(next)}`)
+      await page.getByLabel('Username').fill('viewer')
+      await page.getByLabel('Password', { exact: true }).fill('dev-password')
+      await page.getByTestId('login-submit').click()
+      await expect(page.getByTestId('user-menu')).toBeVisible()
+      await expect(page).toHaveURL(/^http:\/\/localhost:\d+\/$/)
+      await page.getByTestId('user-menu').click()
+      await page.getByTestId('sign-out').click()
+      await expect(page).toHaveURL(/\/login$/)
+    }
+  })
+
+  test('an ended session goes back to sign-in with a notice and returns to the page', async ({ page }) => {
+    await login(page, 'operator', '/clusters')
+    // The session ends behind the tab's back (expired or revoked).
+    await page.evaluate(() => localStorage.removeItem('ro-mock-session'))
+    await page.getByRole('link', { name: 'Opportunities' }).first().click()
     await expect(page).toHaveURL(/\/login\?next=%2Fopportunities$/)
-    await expect(page.getByText('Continue without signing in')).toHaveCount(0)
+    await expect(page.getByTestId('session-expired')).toContainText('Your session ended')
+    await page.getByLabel('Username').fill('operator')
+    await page.getByLabel('Password', { exact: true }).fill('dev-password')
+    await page.getByTestId('login-submit').click()
+    await expect(page).toHaveURL(/\/opportunities$/)
   })
 })
 

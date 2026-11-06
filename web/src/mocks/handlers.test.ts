@@ -26,7 +26,11 @@ function expectValid(schema: string, data: unknown) {
 }
 
 const server = setupServer(...handlers)
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+beforeAll(async () => {
+  server.listen({ onUnhandledRequest: 'error' })
+  // Sign-in is required: read as a viewer.
+  await unwrap(api.POST('/v1/auth/login', { body: { username: 'viewer', password: 'dev-password' } }))
+})
 afterAll(() => server.close())
 
 describe('mock fleet', () => {
