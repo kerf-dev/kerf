@@ -41,13 +41,11 @@ The interfaces between components. Changes to them need a design note (see [CONT
 | [Synthetic metrics](../tools/synth/README.md) | Long usage histories for testing the recommender |
 | [Releasing](release.md) | The release workflow, images, charts, signatures |
 
-## Design and history
+## Design
 
 | Document | What it covers |
 |---|---|
-| [DECISIONS.md](../DECISIONS.md) | Every architecture decision, with the reason |
-| [roadmap.md](../roadmap.md) | Phases and what comes next |
-| [Plans](plans) | Designs for the [admin area](plans/admin-area.md) and [cluster onboarding](plans/cluster-onboarding.md) |
-| [Work orders](work-orders) and [hand-overs](handover) | How each part was specified, built and verified. They use the project's former name (D-030 maps it) |
+| [Architecture](architecture.md) | How the hub, agent, webhook and pricing fit together, and the main design choices |
+| [Roadmap](../README.md#roadmap) | What comes next |
 | [Brand guide](branding/brand.md) | Name, positioning, voice, logo, colours; the [comparison sources](branding/comparison.md) |
 | [Screenshots](screenshots) | Every UI page in light, dark and tablet layouts (`make web-screenshots`) |

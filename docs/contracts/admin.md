@@ -1,8 +1,9 @@
 # Admin area contract
 
-Owner: WO-19. Decisions: D-022 (policies: UI + Git), D-023 (local users), D-024 (approve once).
-Plan: `docs/plans/admin-area.md`. Schemas: `api/openapi/hub.yaml` (tags `auth`, `admin`, and the new
-`ui`/`agent`/`audit` operations). Changing anything here is a contract change (see `CLAUDE.md`).
+Covers policies from the UI and from Git, local users, and approve-once
+([architecture](../architecture.md#design-choices)). Schemas: `api/openapi/hub.yaml` (tags `auth`, `admin`,
+and the `ui`/`agent`/`audit` operations). Changing anything here is a contract change (see
+[CONTRIBUTING.md](../../CONTRIBUTING.md#before-you-start)).
 
 Everything is **additive**: agents and UIs that predate it keep working unchanged. Old agents never
 pull `/config`, so they never see hub policies; the nginx of the web chart keeps injecting the `ui`
@@ -58,14 +59,14 @@ Constants (`api/v1alpha1/wellknown.go`): `LabelManagedBy`, `ManagedByHub`, `Anno
 | `policy` | user's name, not starting with `ro-` | 1 – 899999 | `clusters` (empty = all) | any |
 | `workload-override` | `ro-override-<16 hex of sha256("<ns>/<kind>/<name>")>` | 900000 | the workload's cluster | `{namespaces:[ns], kinds:[kind], workloads:[{kind,namespace,name}]}` |
 
-**Layering (agent, WO-21).** The CRD rule "only the winning policy applies" stays for policies
+**Layering (agent).** The CRD rule "only the winning policy applies" stays for policies
 (type `policy` and every Git CR). Hub defaults and overrides are *layers* instead, so they combine
 with the winning policy field by field (unset = inherit):
 
 ```
 built-in defaults < ro-global-defaults < chart clusterDefaults < ro-cluster-defaults
   < winning policy (highest priority among hub `policy` + Git CRs, ties by name)
-  < ro-override-… (the workload's override) < workload annotations (D-005)
+  < ro-override-… (the workload's override) < workload annotations
 ```
 
 The agent recognises the layers by `hub-policy-type` and excludes them from the winner selection.
@@ -79,7 +80,7 @@ every other policy and an override wins.
 **`selector.workloads`** (new, additive): a workload matches if it equals any entry; combined with
 the other criteria (AND). An agent older than this field drops it when it decodes the CR, which
 would widen an override's selector. Hence the hub always also sets `namespaces` and `kinds` on an
-override. **Before downgrading an agent below WO-21, delete the hub CRs**:
+override. **Before downgrading to an agent without hub-managed configuration, delete the hub CRs**:
 `kubectl delete rsp -l kerf.getkerf.dev/managed-by=hub`.
 
 **Validation** (`api/v1alpha1/validate`):
@@ -103,7 +104,7 @@ before.
 
 Each operation's `security` lists `sessionAuth: [<lowest user role>]` next to the bearer roles it
 accepts. For authorization a `ui` token counts as `viewer` and an `admin` token as `admin`
-(`hubapi.TokenUserRole`, `hubapi.UserRoleAtLeast`). Machine tokens (`agent`, `ui`, `admin`, D-012)
+(`hubapi.TokenUserRole`, `hubapi.UserRoleAtLeast`). Machine tokens (`agent`, `ui`, `admin`)
 are unchanged.
 
 - **Login:** `POST /v1/auth/login` sets the cookie `kerf_session` (HttpOnly, SameSite=Strict, Path=/,
@@ -112,14 +113,13 @@ are unchanged.
 - **CSRF:** every session write needs `X-CSRF-Token: <csrfToken>`; bearer requests need none.
   Missing or wrong: `403` `csrf_invalid`.
 - **Both credentials present:** the session wins. The web nginx can keep injecting the `ui` token:
-  an anonymous browser is a `viewer`, a logged-in one has its role. WO-22 must pass the `Cookie`
-  header through (today nginx clears it) and send `credentials: 'include'`. The hub's CORS must then
-  allow credentials and the headers `X-CSRF-Token`, `If-Match` and the methods `PUT`, `PATCH`,
-  `DELETE` (WO-20).
+  an anonymous browser is a `viewer`, a logged-in one has its role. The web UI passes the `Cookie`
+  header through and sends `credentials: 'include'`. The hub's CORS allows
+  credentials and the headers `X-CSRF-Token`, `If-Match` and the methods `PUT`, `PATCH`, `DELETE`.
 - **Lockout:** `401` `invalid_credentials` for wrong user or password (same answer for both).
   `429` `rate_limited` / `account_locked` with `Retry-After`.
-- **Bootstrap:** the initial admin comes from a Secret (D-023). Dev seeds the users `viewer`,
-  `operator` and `admin` with passwords from the chart's dev values (WO-20).
+- **Bootstrap:** the initial admin comes from a Secret. Dev seeds the users `viewer`,
+  `operator` and `admin` with passwords from the chart's dev values.
 
 ## 4. Writes: If-Match, reason, audit
 
@@ -134,7 +134,7 @@ are unchanged.
   `target`, `before`, `after`, `reason`, `version`.
 - Nothing is hard-deleted: policies, users and clusters get `deletedAt`, and their versions and
   audit stay.
-- Until WO-20 implements an endpoint the hub answers `404 not_found` (no route) or `501
+- A hub that does not implement an endpoint answers `404 not_found` (no route) or `501
   not_implemented`.
 
 ## 5. Endpoints with examples
@@ -345,7 +345,7 @@ Resume `{"paused": false, "reason": "…"}`: on a `prod` cluster only an admin (
 `GET /v1/clusters` gains the optional fields `environment`, `owner`, `policySource`, `paused`,
 `automation`, `configSync` and `readiness`.
 
-Onboarding (D-025) adds `provider`, `region` and the metrics binding `metrics` to the cluster
+Onboarding adds `provider`, `region` and the metrics binding `metrics` to the cluster
 schemas. It also adds `readiness` to `ClusterAdmin`, the install snippet
 `GET /v1/admin/clusters/{c}/install`, and the auto-patch gating (`409
 cluster_not_automation_ready`, admin `overrideReadiness`). All of it is specified in
@@ -417,8 +417,8 @@ or disabling the last enabled admin gives `409 last_admin`.
 | `0007_admin_policies_settings` | `settings`, `settings_versions`, `policies` (reserved names, priority bands, one live global default / cluster default per cluster / override per workload, unique live names), `policy_versions`, `clusters` + `environment, owner, policy_source, version, updated_at, updated_by, deleted_at, config_pulled_at, applied_config_version, policy_inventory, policy_inventory_at`, `cluster_automation` (`scope` = cluster or `*` for the fleet) |
 | `0008_users_sessions` | `users` (bcrypt `password_hash`, role, disabled, must_change_password, failed_logins, locked_until, soft delete), `sessions` (`id_sha256`, `csrf_token`, expiry, revoke), `api_tokens` + `last_used_at, created_by, revoked_by` |
 | `0010_onboarding_readiness` | `datasources` (`local` built-in, encrypted `auth_secret`), `cluster_metrics_bindings`, `clusters` + `provider, region`, `cluster_readiness`, `readiness_checks`, `readiness_history`; config audit targets `datasource`, `readiness` (see `docs/contracts/readiness.md`) |
-| `0011_pricing_token_role` | `api_tokens.role` also allows `pricing` (no cluster): the pricing service's token for `/v1/internal/*` (D-026) |
+| `0011_pricing_token_role` | `api_tokens.role` also allows `pricing` (no cluster): the pricing service's token for `/v1/internal/*` |
 | `0009_approvals_config_events` | `workload_approvals` (one open per workload), `audit_events`: type `config_changed`; `cluster, namespace, workload_kind, workload_name` nullable for it only (`audit_events_shape_check`); + `actor, target_type, target_id, target_name, version, before, after` |
 
 All are idempotent (`IF NOT EXISTS`, drop-then-add constraints) and have down migrations. **The
-hub's existing audit queries must add `type <> 'config_changed'`** (WO-20) once it writes such rows.
+hub's existing audit queries must add `type <> 'config_changed'`** once it writes such rows.

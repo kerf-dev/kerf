@@ -100,6 +100,6 @@ jobs:
           case "$VERSION" in *-*) pre="--prerelease --latest=false" ;; esac
           # shellcheck disable=SC2086
           gh release create "$GITHUB_REF_NAME" --verify-tag $pre \
-            --title "kerf $VERSION" \
+            --title "Kerf $VERSION" \
             --notes-file bin/release/notes.md --generate-notes \
             bin/release/charts/*.tgz bin/release/images.txt bin/release/charts.txt bin/release/SHA256SUMS

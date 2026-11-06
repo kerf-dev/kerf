@@ -26,3 +26,14 @@ tilt_modules/
 .vscode/
 *.swp
 .DS_Store
+
+# Internal development notes live outside this repository; never commit them here
+/CLAUDE.md
+/DECISIONS.md
+/roadmap.md
+/.claude/
+/docs/STATUS.md
+/docs/open-source-checklist.md
+/docs/work-orders/
+/docs/handover/
+/docs/plans/

@@ -1,4 +1,4 @@
-# Kerf agent chart (WO-06)
+# Kerf agent chart
 
 One release per workload cluster, namespace `kerf`:
 
@@ -11,11 +11,11 @@ make test-agent                         # unit + envtest (downloads kube-apiserv
 ## What it installs
 
 - **CRDs** as templates (`files/crds/` = copies of `api/crds/`, kept in sync by `make charts-sync`
-  and `deploy/charts/sync_test.go`), annotated `helm.sh/resource-policy: keep` (D-028): `helm upgrade`
+  and `deploy/charts/sync_test.go`), annotated `helm.sh/resource-policy: keep`: `helm upgrade`
   upgrades them, `helm uninstall` leaves them and every custom resource in place. Exactly one release
   per cluster renders them: this chart (`crds.install: true`); the webhook chart has
-  `crds.install: false`. **Upgrading a release installed from the old `crds/` chart** (0.1.0 before
-  WO-18b): the first upgrade needs `--take-ownership` (Helm ≥ 3.17), because the existing CRDs carry
+  `crds.install: false`. **Upgrading a release installed from the old `crds/` chart** (a pre-release
+  0.1.0 build): the first upgrade needs `--take-ownership` (Helm ≥ 3.17), because the existing CRDs carry
   no Helm ownership metadata: `make deploy-agent AGENT_HELM_ARGS=--take-ownership`.
 - Deployment (1 replica; `leaderElection: true` for more), ServiceAccount, ClusterRole/Binding,
   metrics Service (scraped by the spoke vmagent), ConfigMap with the cluster defaults.
@@ -36,13 +36,13 @@ re-read on every request. The Secret is optional: without it the hub answers 401
 | apps deployments, statefulsets, daemonsets; batch cronjobs | get list watch (+ patch) | policy resolution; rollout = SSA under field manager `kerf`, release = managedFields patch |
 | apps replicasets, batch jobs | get list | owner chain to find a workload's pods |
 | pods | get list watch (+ patch) | in-place status, health watch (restarts, OOM kills); patch only for the `previous-resources` / `recommendation-id` annotations |
-| pods/resize | patch | in-place resize (D-007) |
-| pods/eviction | create | OnDelete StatefulSets: outdated pods are evicted so PodDisruptionBudgets apply (WO-13) |
-| policy poddisruptionbudgets | get list watch | single-replica protection: a PDB that allows 0 disruptions (WO-13) |
+| pods/resize | patch | in-place resize |
+| pods/eviction | create | OnDelete StatefulSets: outdated pods are evicted so PodDisruptionBudgets apply |
+| policy poddisruptionbudgets | get list watch | single-replica protection: a PDB that allows 0 disruptions |
 | nodes | get list watch | swap / unsupported-node detection |
 | nodes/proxy | get (only with `health.cadvisorFallback`) | throttling from kubelet cAdvisor when the hub metrics are unreachable; reaches every kubelet API, hence off by default |
-| autoscaling horizontalpodautoscalers | get list watch (+ patch unless readOnly) | HPA coupling (D-011); target set by HPA coordination (WO-11) |
-| rightsizingpolicies | get list watch (+ create update patch delete unless readOnly) | policy resolution; writes only CRs labelled `kerf.getkerf.dev/managed-by=hub` (hub config, D-022) |
+| autoscaling horizontalpodautoscalers | get list watch (+ patch unless readOnly) | HPA detection; target set by HPA coordination |
+| rightsizingpolicies | get list watch (+ create update patch delete unless readOnly) | policy resolution; writes only CRs labelled `kerf.getkerf.dev/managed-by=hub` (hub config) |
 | rightsizingrecommendations (+ /status) | get list watch create update patch delete | the agent's record per workload |
 | events (core and events.k8s.io) | create patch | Kubernetes Events on RightsizingRecommendations |
 | leases (namespaced Role, only with leaderElection) | all | leader election |
@@ -50,7 +50,7 @@ re-read on every request. The Secret is optional: without it the hub answers 401
 
 The bracketed write verbs are dropped with `readOnly: true`, which also caps every mode at audit.
 
-## Hub-managed configuration (WO-21, D-022/D-024)
+## Hub-managed configuration
 
 With `configSync.enabled` (default) the agent pulls `GET /v1/clusters/{cluster}/config` on every
 pull (ETag) and:
@@ -63,11 +63,12 @@ pull (ETag) and:
 - applies approve-once grants (`applied/ApprovedOnce`).
 
 The last config is kept in the ConfigMap `<fullname>-config-state`. A hub without the endpoint
-(404) changes nothing. **Before downgrading the agent below WO-21, delete the hub CRs:**
+(404) changes nothing. **Before downgrading to an agent without hub-managed configuration, delete the hub CRs:**
 `kubectl delete rsp -l kerf.getkerf.dev/managed-by=hub`.
 
 ## Values
 
 See `values.yaml`; every production feature is switched on in `ci/values-prod.yaml` (`make charts-lint`).
-Shared names across the component charts: `docs/handover/WO-18b-handover.md`. `clusterDefaults` is a RightsizingPolicy spec (without selector/priority): the
-cluster default level of D-005. Leave it empty to keep the global default (`audit`).
+Value names shared by the component charts: [deploy/charts/README.md](../README.md#value-names-shared-by-the-component-charts).
+`clusterDefaults` is a RightsizingPolicy spec (without selector/priority): the cluster default level of the mode
+precedence ([architecture](../../../docs/architecture.md#design-choices)). Leave it empty to keep the global default (`audit`).

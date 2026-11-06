@@ -20,7 +20,7 @@ what a release installs:
 
 Each step gives the commands and then a **Check** with its expected output. Run everything from a
 checkout of this repository at the release you install (the examples live in `deploy/examples/eks/`),
-in one shell, so the variables from step 0 stay set. Decisions behind this layout: `DECISIONS.md` D-028.
+in one shell, so the variables from step 0 stay set. The design behind this layout: [architecture](../architecture.md#production-packaging).
 
 **Contents:** [0. Variables](#0-variables) · [1. Prerequisites](#1-prerequisites) ·
 [2. Images and chart](#2-images-and-chart) · [3. AWS resources](#3-aws-resources) ·
@@ -233,7 +233,7 @@ Every secret is a JSON object. The charts read one property of each.
 |---|---|---|---|
 | `kerf/hub/db` | `{"username": "kerf", "password": "…"}` (the RDS-managed secret's format) | hub (Secret `hub-db`, built into `DATABASE_URL` with `sslmode=verify-full`) | now |
 | `kerf/hub/bootstrap-admin` | `{"password": "…"}` | hub: the first admin, user `admin`, created on an empty database | now |
-| `kerf/hub/datasource-key` | `{"key": "<32 random bytes, base64>"}` | hub: encrypts the stored datasource credentials (D-025). **Never lose or change it.** | now |
+| `kerf/hub/datasource-key` | `{"key": "<32 random bytes, base64>"}` | hub: encrypts the stored datasource credentials. **Never lose or change it.** | now |
 | `kerf/hub/ui-token` | `{"token": "…"}` | web: the read-only `ui` token for visitors without a session | step 4.5 |
 | `kerf/hub/pricing-token` | `{"token": "…"}` | pricing: the `pricing` token (the hub's query proxy) | step 4.5 |
 | `kerf/clusters/<cluster>/agent-token` | `{"token": "…"}` | that cluster's agent | step 5.2 |
@@ -612,7 +612,7 @@ Every workload starts in `audit`: kerf recommends but changes nothing. To let it
 1. **Wait for `AutomationReady`** (5.4). The hub refuses with `409 cluster_not_automation_ready` any
    policy, override or approve-once that newly enables `auto-patch` on a cluster below that state. An admin can
    override with a reason (`overrideReadiness`), which is recorded in the audit log.
-2. **Argo CD**, if it syncs the workloads on that cluster (D-006). The agent writes `resources` with
+2. **Argo CD**, if it syncs the workloads on that cluster. The agent writes `resources` with
    server-side apply under the field manager `kerf`. Argo CD must ignore exactly those fields.
    In `argocd-cm` of every Argo CD instance that syncs workloads on the cluster:
    ```bash
@@ -627,7 +627,7 @@ Every workload starts in `audit`: kerf recommends but changes nothing. To let it
    set CPU and/or memory mode `auto-patch`, the apply strategy (`in-place` by default, with
    `rollout` as the fallback) and the guardrails. Before you save, the policy page shows an impact
    preview of the workloads the policy would change. You can also commit a `RightsizingPolicy` to
-   Git and apply it to the cluster, if the cluster's policy source allows Git (D-022).
+   Git and apply it to the cluster, if the cluster's policy source allows Git.
 4. **Watch** *Activity* and the dashboards. Every change is health-watched and rolled back on
    OOM kills, restarts or throttling. *Admin → Automation* pauses a cluster or the whole fleet at once.
 

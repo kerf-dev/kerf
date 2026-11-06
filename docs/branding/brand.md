@@ -12,7 +12,6 @@ containers reserve but never use, and no more than that.
 - Lower case `kerf` only where the system needs it: the namespace, the chart, image names, the
   `kerf.getkerf.dev` API group, the `kerf_` metric prefix, CLI commands.
 - Kerf is a name, so no article: "Kerf recommends", not "the Kerf recommends". "A Kerf hub" is fine.
-- Use the former project name only in history documents (D-030 maps old names to new).
 
 ## Positioning
 

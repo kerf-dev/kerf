@@ -12,16 +12,6 @@ version without its section here.
 
 First public version.
 
-### Changed
-
-- **Renamed from resource-optimizer to Kerf** (D-029, D-030), before the first public release. Name map:
-  repository and Go module `github.com/tomer1983/resource-optimizer` → `github.com/kerf-dev/kerf`; images and
-  charts `ghcr.io/tomer1983/resource-optimizer/…` → `ghcr.io/kerf-dev/kerf/…`; umbrella chart
-  `resource-optimizer` → `kerf`; CRD API group, label and annotation prefix `resource-optimizer.oz.io` →
-  `kerf.getkerf.dev`; namespace and object prefix `resource-optimizer` → `kerf`; database and role
-  `resource_optimizer` / `ro` → `kerf`; metric prefix `ro_` → `kerf_`; environment prefix `RO_` → `KERF_`;
-  alerts `ResourceOptimizer…` → `Kerf…`; UI name Resource Optimizer → Kerf.
-
 ### Added
 
 - **Recommendations and savings (audit).** The hub reads container CPU and memory usage from Prometheus or

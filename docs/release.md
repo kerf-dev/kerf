@@ -4,9 +4,9 @@ Official releases are built by GitHub Actions and published to GitHub Container 
 ([Releasing on GitHub](#releasing-on-github)). The rest of this page is the same build run by hand with
 `make release`, for example to put a release into your own ECR.
 
-A release publishes five multi-arch container images (`linux/amd64` and `linux/arm64`, D-028) and the
+A release publishes five multi-arch container images (`linux/amd64` and `linux/arm64`) and the
 Helm charts as OCI artifacts. Both go to one registry prefix, for example
-`123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf`. The targets are in `make/release.mk` (WO-18c).
+`123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf`. The targets are in `make/release.mk`.
 
 | Artifact | Reference |
 |---|---|
@@ -23,7 +23,7 @@ becomes `$REGISTRY/<component>:$VERSION`, and `artifacthub.io/prerelease` is `"t
 ## Releasing on GitHub
 
 The release workflow (`.github/workflows/release.yaml`) runs when
-a tag `vX.Y.Z` or `vX.Y.Z-rc.N` is pushed (WO-26).
+a tag `vX.Y.Z` or `vX.Y.Z-rc.N` is pushed.
 
 | Step | What happens |
 |---|---|
@@ -233,8 +233,7 @@ Add `RELEASE_ALLOW_DIRTY=1` to release uncommitted changes. The k3d registry acc
 | webhook | 65532 | 9443 TLS, 8080 metrics, 8081 probes | none; the chart mounts the cert dir read-only |
 | web (nginx) | 101:101 | **8080** | **`/tmp`** (emptyDir): rendered `conf.d/default.conf`, `nginx.pid`, `*_temp` buffers |
 
-The agent, webhook and pricing charts already set `readOnlyRootFilesystem: true`. For the hub and web
-charts, WO-18b sets it.
+Every chart sets `readOnlyRootFilesystem: true`; the web chart mounts emptyDirs on nginx's writable paths.
 
 The web image needs no Linux capabilities: drop `ALL` and add nothing. Its health endpoint is `GET /healthz` on 8080.
 To run it locally:

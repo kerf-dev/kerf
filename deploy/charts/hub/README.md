@@ -1,4 +1,4 @@
-# hub chart (WO-04)
+# Kerf hub chart
 
 The Kerf hub: the HTTP API (`api/openapi/hub.yaml`), the recommender scheduler and the
 `kerf_recommendation_*` / `kerf_workload_*` metrics. It applies the goose migrations in `db/migrations`
@@ -17,13 +17,13 @@ helm --kube-context k3d-ro-hub upgrade --install hub deploy/charts/hub -n kerf -
 | What | Where |
 |---|---|
 | API from the host | `http://localhost:18080` (NodePort 30080 on ro-hub) |
-| API from a spoke | `http://hub-api.hub.svc:8080` (selector-less Service → hub NodePort 30080, WO-01) |
+| API from a spoke | `http://hub-api.hub.svc:8080` (selector-less Service → hub NodePort 30080) |
 | API inside ro-hub | `http://hub.kerf.svc:8080` |
 | Metrics | `/metrics` on the same port; the Service carries `prometheus.io/scrape: "true"` so the hub vmagent scrapes it (`honor_labels`, the hub sets `cluster` itself) |
 | Health | `/healthz` (liveness), `/readyz` (migrations done and Postgres reachable) |
 | Postgres | `postgres.postgres.svc:5432`, database `kerf` (Secret `hub-db`) |
 | VictoriaMetrics | `http://victoria-metrics.monitoring.svc:8428` |
-| CORS | `http://localhost:5173` (UI dev server, WO-14) |
+| CORS | `http://localhost:5173` (UI dev server) |
 
 On the host (no image): `make run-hub` (= `go run ./cmd/hub --config dev/hub.yaml`, port 8080, same
 database and tokens). Do not run it while the in-cluster hub is up: both would run the recommender.
@@ -48,7 +48,7 @@ curl -s -H "Authorization: Bearer ro-dev-ui-97446cd3a095035d6290abc5" localhost:
 curl -s -H "Authorization: Bearer ro-dev-rospoke1-2b8dbdc041b28d5865e7caf7" localhost:18080/v1/clusters/ro-spoke-1/recommendations | jq '.items | length'
 ```
 
-The agent (WO-06) on a spoke reads its token from its own Secret; copy the value for its cluster from
+The agent on a spoke reads its token from its own Secret; copy the value for its cluster from
 the table above.
 
 ## Values
@@ -60,18 +60,18 @@ the table above.
 | `database.url` or `database.existingSecret` | – | Postgres URL, passed as `HUB_DATABASE_URL` |
 | `devSeed.enabled`, `.clusters`, `.tokens` | `false` | dev seed and Secret `hub-dev-tokens` |
 | `devSeed.users` | `[]` | local users created when missing (Secret `hub-dev-users`); dev: `viewer`, `operator`, `admin` with the passwords in values-dev.yaml |
-| `auth.cookieSecure`, `.sessionTTL`, `.maxFailedLogins`, `.lockoutDuration` | `true`, `12h`, `5`, `15m` | browser sessions (D-023); dev: `cookieSecure: false` (plain HTTP) |
+| `auth.cookieSecure`, `.sessionTTL`, `.maxFailedLogins`, `.lockoutDuration` | `true`, `12h`, `5`, `15m` | browser sessions; dev: `cookieSecure: false` (plain HTTP) |
 | `auth.bootstrapAdmin.username`, `.password` or `.existingSecret`/`.existingSecretKey` | `admin`, – | initial admin, created only on a database without users |
 | `config` | see values.yaml | the hub config file (`internal/hub/config.go`): `prometheusURL`, `corsOrigins`, `agentStaleAfter`, `recommender.*`, `history.*` |
 | `database.externalSecret` (`source: rds\|url`), `.host`, `.port`, `.name`, `.sslmode`, `.params`, `.caBundle` | off, –, 5432, `kerf`, `verify-full` | External Secrets Operator builds Secret `<release>-db` from an RDS-managed secret (JSON username/password) plus host/port/name, `sslmode` and `sslrootcert` = the mounted CA bundle (`/etc/hub/db-ca/ca.pem`) |
 | `auth.bootstrapAdmin.externalSecret`, `onboarding.secretsKey.externalSecret` | off | the same for the first admin's password and the datasource encryption key (kept on uninstall) |
-| `replicaCount`, `updateStrategy`, `podDisruptionBudget`, `autoscaling`, `topologySpread` | 1, Recreate, on (>1 pod), off, on (>1 pod) | more than one replica needs leader election (WO-18a) and `updateStrategy: RollingUpdate` |
+| `replicaCount`, `updateStrategy`, `podDisruptionBudget`, `autoscaling`, `topologySpread` | 2, RollingUpdate, on (>1 pod), off, on (>1 pod) | replicas elect a leader on Postgres: only the leader runs the recommender, readiness checks and sweeps; every replica serves the API |
 | `serviceAccount.{create,name,annotations,automountServiceAccountToken}` | true, release name, –, false | IRSA / Pod Identity annotations |
 | `startupProbe.{enabled,periodSeconds,failureThreshold}` | on, 5, 120 | migrations run before the hub listens (10 minutes) |
 | `ingress`, `networkPolicy`, `serviceMonitor`, `prometheusRule`, `dashboards` | off | ALB example in values.yaml; alerts (agent offline, readiness blocking, recommender failing / stale, no leader, webhook errors, pricing stale); Grafana dashboard ConfigMaps (`grafana_dashboard: "1"`) |
 
 Every production feature is switched on in `ci/values-prod.yaml` (`make charts-lint`). Names shared by
-all component charts: `docs/handover/WO-18b-handover.md`.
+all component charts: [deploy/charts/README.md](../README.md#value-names-shared-by-the-component-charts).
 
 Recommender settings under `config.recommender` (all optional; defaults in `internal/recommender/config.go`):
 `interval` (production 24h, dev 5m), `backfill.runs`/`every` (dev: 29 × 24h of history before the
@@ -88,7 +88,7 @@ Settings stored through the admin API (`PUT /v1/admin/settings/recommender|prici
 `config.recommender.interval`, the profiles and `history.retention` from the next run on (the
 interval at once); without stored settings the config file applies.
 
-## Log in (admin area, WO-20)
+## Log in (admin area)
 
 ```bash
 curl -s -c jar -H 'Content-Type: application/json' -d '{"username":"admin","password":"ro-dev-admin-pass"}' localhost:18080/v1/auth/login

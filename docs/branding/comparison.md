@@ -41,8 +41,8 @@ cell, and open an issue or a pull request when something here is wrong or out of
 ## Kerf's own claims
 
 Each Kerf cell is backed by this repository: modes and strategies in `api/v1alpha1/common_types.go`, guardrails and
-rollback thresholds in `api/v1alpha1/rightsizingpolicy_types.go`, HPA coordination in `docs/handover/WO-11-handover.md`,
-pricing in `DECISIONS.md` (D-008), metrics sources in `docs/contracts/readiness.md`.
+rollback thresholds in `api/v1alpha1/rightsizingpolicy_types.go`, HPA coordination and
+pricing in [docs/architecture.md](../architecture.md#design-choices), metrics sources in `docs/contracts/readiness.md`.
 
 ## Sources
 

@@ -35,7 +35,7 @@ for the hub, and cert-manager on workload clusters.
 
 ## How it works
 
-For chart developers (WO-18d, D-028).
+For chart developers.
 
 - **Components** are the five component charts (`deploy/charts/{hub,web,pricing,agent,webhook}`),
   linked into `charts/` as symlinks. `helm package` (`make release`) stores real copies and sets their
@@ -69,7 +69,7 @@ For chart developers (WO-18d, D-028).
 ## Values
 
 The umbrella's own values. Everything under `hub`, `web`, `pricing`, `agent` and `webhook` is that component chart's
-values: see `deploy/charts/<component>/values.yaml` in the [repository](https://github.com/kerf-dev/kerf/tree/main/deploy/charts) and the [component values table](https://github.com/kerf-dev/kerf/blob/main/docs/handover/WO-18b-handover.md).
+values: see `deploy/charts/<component>/values.yaml` in the [repository](https://github.com/kerf-dev/kerf/tree/main/deploy/charts) and the [value names shared by the component charts](https://github.com/kerf-dev/kerf/blob/main/deploy/charts/README.md#value-names-shared-by-the-component-charts).
 
 | Value | Default | Description |
 |---|---|---|

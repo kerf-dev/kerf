@@ -1,14 +1,14 @@
 # Metrics contract
 
-Owner: WO-00. Changing a name or label here is a contract change (see `CLAUDE.md`).
+Changing a name or label here is a contract change (see [CONTRIBUTING.md](../../CONTRIBUTING.md#before-you-start)).
 
-All queries must be valid PromQL and run on both Prometheus and VictoriaMetrics (D-003).
+All queries must be valid PromQL and run on both Prometheus and VictoriaMetrics.
 
 ## Rules for every series
 
 - **`cluster` label is mandatory** on every series and equals the cluster name used in the hub API
   path (`/v1/clusters/{cluster}/...`), e.g. `ro-spoke-1`.
-  - Input series from a spoke get it from vmagent `externalLabels: {cluster: <name>}` (WO-01).
+  - Input series from a spoke get it from vmagent `externalLabels: {cluster: <name>}`.
   - `kerf_*` series exported by hub-side components (pricing, hub) set `cluster` themselves, one value
     per spoke. The hub-side scrape config must use `honor_labels: true` and must not add or
     overwrite a `cluster` label for these jobs; otherwise `cluster` becomes `exported_cluster`.
@@ -22,7 +22,7 @@ All queries must be valid PromQL and run on both Prometheus and VictoriaMetrics 
 
 ## 1. Input series (spokes → hub VictoriaMetrics)
 
-Scraped on each spoke and remote-written to the hub (WO-01). Synthetic data (WO-02) must produce the
+Scraped on each spoke and remote-written to the hub. Synthetic data must produce the
 same names and labels, so the hub cannot tell the difference.
 
 ### cAdvisor (kubelet `/metrics/cadvisor`)
@@ -53,7 +53,7 @@ KSM must run with
 | `kube_job_owner` | cluster, namespace, job_name, owner_kind, owner_name | Job → CronJob |
 | `kube_pod_info` | cluster, namespace, pod, node | pod → node |
 | `kube_pod_init_container_info` | cluster, namespace, pod, container | init/sidecar detection |
-| `kube_pod_container_info` | cluster, namespace, pod, container, image | JVM/image detection (WO-12) |
+| `kube_pod_container_info` | cluster, namespace, pod, container, image | JVM/image detection |
 | `kube_pod_container_status_restarts_total` | cluster, namespace, pod, container | `restarting` flag, rollback |
 | `kube_pod_container_status_last_terminated_reason` | cluster, namespace, pod, container, reason (`OOMKilled`) | `oom-killed` flag, rollback |
 | `kube_deployment_spec_replicas` | cluster, namespace, deployment | replicas |
@@ -61,12 +61,12 @@ KSM must run with
 | `kube_daemonset_status_desired_number_scheduled` | cluster, namespace, daemonset | replicas |
 | `kube_horizontalpodautoscaler_info` | cluster, namespace, horizontalpodautoscaler, scaletargetref_kind, scaletargetref_name | HPA target |
 | `kube_horizontalpodautoscaler_spec_target_metric` | cluster, namespace, horizontalpodautoscaler, metric_name, metric_target_type | `hpa-coupled` (metric_name `cpu`/`memory`, target type `utilization`) |
-| `kube_node_labels` | cluster, node, label_node_kubernetes_io_instance_type, label_karpenter_sh_capacity_type, label_topology_kubernetes_io_region, label_topology_kubernetes_io_zone | pricing (WO-03) |
+| `kube_node_labels` | cluster, node, label_node_kubernetes_io_instance_type, label_karpenter_sh_capacity_type, label_topology_kubernetes_io_region, label_topology_kubernetes_io_zone | pricing |
 | `kube_node_status_allocatable` | cluster, node, resource (`cpu`\|`memory`), unit | pricing cost split |
 
 Capacity type values follow Karpenter: `on-demand`, `spot`.
 
-## 2. Pricing series (exported by the pricing service, WO-03)
+## 2. Pricing series (exported by the pricing service)
 
 One series per spoke node. All are gauges, in USD per hour, for the current price.
 
@@ -81,7 +81,7 @@ Labels (all three): `cluster`, `node`, `instance_type`, `capacity_type` (`on-dem
 
 Invariant: `kerf_cpu_core_hourly_cost_usd * allocatable_cores + kerf_memory_gib_hourly_cost_usd * allocatable_gib ≈ kerf_node_hourly_cost_usd`.
 
-## 3. Hub series (exported by the hub, WO-04)
+## 3. Hub series (exported by the hub)
 
 Workload labels below = `cluster, namespace, workload_kind, workload`.
 
@@ -108,7 +108,7 @@ Workload labels below = `cluster, namespace, workload_kind, workload`.
 
 `kerf_actions_total` lives in the hub process and resets on restart; always use `increase()`/`rate()`.
 
-### Cluster readiness (WO-19 contract, WO-25; D-025, `docs/contracts/readiness.md`)
+### Cluster readiness ([readiness.md](readiness.md))
 
 Labels: `cluster` only (no workload labels).
 
@@ -121,7 +121,7 @@ Alert examples: `kerf_cluster_readiness{severity="blocking"} == 0` (a blocking c
 `kerf_cluster_readiness_state{state="AutomationReady"} == 0 and on(cluster) (sum by (cluster) (kerf_workload_mode{mode="auto-patch"}) > 0)`
 (auto-patch workloads on a cluster that lost automation readiness).
 
-### Hub replicas (WO-18a, D-028)
+### Hub replicas
 
 The hub may run as several replicas on one database. One of them, the leader, runs the
 recommender, the readiness checks and the sweeps. Labels: none (the scrape adds the pod); these
@@ -175,7 +175,7 @@ max by (cluster, namespace, pod, workload_kind, workload) (
 )
 ```
 
-The hub (WO-04) owns the canonical version of these queries; dashboards (WO-05) may use the `kerf_*`
+The hub owns the canonical version of these queries; dashboards may use the `kerf_*`
 series instead of re-implementing the joins.
 
 CPU throttling ratio per container:
@@ -185,6 +185,6 @@ sum by (cluster, namespace, pod, container) (rate(container_cpu_cfs_throttled_pe
 / clamp_min(sum by (cluster, namespace, pod, container) (rate(container_cpu_cfs_periods_total[5m])), 1)
 ```
 
-Note for synthetic data (WO-02): real cAdvisor series have no `workload` label. Synthetic series may
+Note for synthetic data: real cAdvisor series have no `workload` label. Synthetic series may
 add one for convenience, but the hub must not depend on it, so the generator must also emit
 `kube_pod_owner` / `kube_replicaset_owner` / `kube_job_owner` for every synthetic pod.

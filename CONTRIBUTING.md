@@ -22,8 +22,8 @@ pull request: you don't need to know Kubernetes internals to improve Kerf.
 - **Features and API changes:** open an issue to agree on the design first. The CRDs (`api/v1alpha1`),
   the hub API (`api/openapi/hub.yaml`), the metric names (`docs/contracts/`) and the database schema
   (`db/migrations/`) are contracts between components; changes to them need a short design note.
-- Architecture decisions are recorded in [DECISIONS.md](DECISIONS.md). Read the relevant ones before
-  changing behaviour they cover. The [documentation index](docs/README.md) shows where everything lives.
+- [docs/architecture.md](docs/architecture.md) explains how the components fit together and why. Read it before
+  changing behaviour it covers. The [documentation index](docs/README.md) shows where everything lives.
 
 ## Run it locally
 
@@ -50,9 +50,8 @@ make deploy-hub deploy-pricing deploy-agent deploy-webhook deploy-web
 make dev-status    # URLs and how to sign in
 ```
 
-[dev/README.md](dev/README.md) explains the local environment; [docs/STATUS.md](docs/STATUS.md) lists the
-local URLs. The dev credentials in `*values-dev.yaml`, `values-ro-spoke-*.yaml` and `dev/` are for the
-local k3d clusters only.
+[dev/README.md](dev/README.md) explains the local environment and lists the local URLs. The dev credentials
+in `*values-dev.yaml`, `values-ro-spoke-*.yaml` and `dev/` are for the local k3d clusters only.
 
 ## Checks
 

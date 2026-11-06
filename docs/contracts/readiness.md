@@ -1,6 +1,7 @@
 # Cluster onboarding and readiness contract
 
-Owner: WO-19 (contract), WO-25 (implementation). Decision D-025. Plan: `docs/plans/cluster-onboarding.md`.
+Contract for per-cluster metrics sources and readiness. Changing anything here is
+a contract change (see [CONTRIBUTING.md](../../CONTRIBUTING.md#before-you-start)).
 Schemas: `api/openapi/hub.yaml` (`Datasource*`, `MetricsBinding`, `ClusterReadiness`, `ReadinessCheck`,
 `AgentCapability`, `InstallSnippet`). Check catalog: `api/v1alpha1/readiness` (a test keeps the table
 below and the catalog in sync). Storage: `db/migrations/0010_onboarding_readiness.sql`.
@@ -103,7 +104,7 @@ When they run:
 | `rbac.rollout` | agent | blocking | AutomationReady | Missing `patch` on deployments, statefulsets, daemonsets. |
 | `rbac.hpa` | agent | blocking | AutomationReady | Missing `patch horizontalpodautoscalers`. |
 | `rbac.evict` | agent | blocking | AutomationReady | Missing `create pods/eviction`. |
-| `rbac.policies` | agent | blocking | AutomationReady | Missing create/update/delete on `rightsizingpolicies` (D-022). |
+| `rbac.policies` | agent | blocking | AutomationReady | Missing create/update/delete on `rightsizingpolicies`. |
 | `rbac.events` | agent | blocking | AutomationReady | Missing `create events`. |
 | `apply.in-place-resize` | agent | warning | – | Server < 1.33 or no `pods/resize` in discovery: `in-place` falls back to `rollout`. |
 | `webhook.healthy` | agent | warning | – | MutatingWebhookConfiguration missing, no `caBundle`, no ready endpoints, or a dry-run pod is not mutated. |

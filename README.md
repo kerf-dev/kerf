@@ -12,7 +12,7 @@
   <a href="https://github.com/kerf-dev/kerf/releases"><img alt="Release" src="https://img.shields.io/github/v/release/kerf-dev/kerf?include_prereleases&sort=semver&color=008979"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-008979"></a>
   <a href="https://goreportcard.com/report/github.com/kerf-dev/kerf"><img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/kerf-dev/kerf"></a>
-  <!-- After the Artifact Hub listing (docs/handover/WO-28-handover.md):
+  <!-- After the Artifact Hub listing:
   <a href="https://artifacthub.io/packages/search?repo=kerf"><img alt="Artifact Hub" src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kerf"></a>
   -->
 </p>
@@ -225,20 +225,21 @@ clusters, use a static price table and expect to report what you find.
 
 **Is it ready for production?**
 Kerf is new (0.x). Run it in `audit` first, then turn on `auto-patch` for one namespace and watch the activity
-log. The [roadmap](roadmap.md) lists what comes next.
+log. The [roadmap](#roadmap) lists what comes next.
 
 ## Documentation
 
 - [Install on Amazon EKS](docs/install/eks.md) and the [chart reference](deploy/charts/kerf/README.md)
 - [Documentation index](docs/README.md): contracts (CRDs, hub API, metrics, events, readiness), release
-  process, design plans
-- [DECISIONS.md](DECISIONS.md): every architecture decision and the reason for it
+  process
+- [Architecture](docs/architecture.md): how the components fit together and the main design choices
 - [CHANGELOG.md](CHANGELOG.md) and [GitHub Releases](https://github.com/kerf-dev/kerf/releases)
 
 ## Roadmap
 
 Next: notifications (Slack, Teams), Cost and Usage Report prices (Savings Plans, reserved instances), realized
-savings from node cost, OIDC sign-in, and mTLS between agents and the hub. See [roadmap.md](roadmap.md).
+savings from node cost, OIDC sign-in, and mTLS between agents and the hub. Ideas and requests are welcome in
+[discussions](https://github.com/kerf-dev/kerf/discussions).
 
 ## Contributing
 
