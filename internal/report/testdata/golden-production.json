@@ -1,0 +1,501 @@
+[
+  {
+    "workload": "patterns/StatefulSet/synth-ledger-store-0",
+    "monthlySavingUSD": 107.86,
+    "confidence": 0.94,
+    "riskFlags": [],
+    "containers": [
+      {
+        "name": "store",
+        "current": {
+          "requests": {
+            "cpu": "2",
+            "memory": "4Gi"
+          },
+          "limits": {
+            "memory": "4Gi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "510m",
+            "memory": "2656Mi"
+          },
+          "limits": {
+            "memory": "2656Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-spiky-0",
+    "monthlySavingUSD": 73.19,
+    "confidence": 0.92,
+    "riskFlags": [],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "2",
+            "memory": "2Gi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "475m",
+            "memory": "616Mi"
+          },
+          "limits": {
+            "memory": "616Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-flat-0",
+    "monthlySavingUSD": 32.84,
+    "confidence": 0.99,
+    "riskFlags": [],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "1",
+            "memory": "1Gi"
+          },
+          "limits": {
+            "cpu": "2",
+            "memory": "1Gi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "285m",
+            "memory": "508Mi"
+          },
+          "limits": {
+            "cpu": "2",
+            "memory": "508Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-jvm-0",
+    "monthlySavingUSD": 28.89,
+    "confidence": 0.95,
+    "riskFlags": [],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "1",
+            "memory": "2Gi"
+          },
+          "limits": {
+            "cpu": "2",
+            "memory": "2Gi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "260m",
+            "memory": "2Gi"
+          },
+          "limits": {
+            "cpu": "2",
+            "memory": "2Gi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-step-0",
+    "monthlySavingUSD": 22.41,
+    "confidence": 0.93,
+    "riskFlags": [],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "1",
+            "memory": "1Gi"
+          },
+          "limits": {
+            "memory": "1Gi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "550m",
+            "memory": "516Mi"
+          },
+          "limits": {
+            "memory": "516Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-weekly-0",
+    "monthlySavingUSD": 19.27,
+    "confidence": 0.93,
+    "riskFlags": [],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "1",
+            "memory": "1Gi"
+          },
+          "limits": {
+            "cpu": "2",
+            "memory": "2Gi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "570m",
+            "memory": "764Mi"
+          },
+          "limits": {
+            "cpu": "2",
+            "memory": "764Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "workload": "patterns/DaemonSet/synth-daemon-0",
+    "monthlySavingUSD": 18.37,
+    "confidence": 0.99,
+    "riskFlags": [],
+    "containers": [
+      {
+        "name": "agent",
+        "current": {
+          "requests": {
+            "cpu": "200m",
+            "memory": "256Mi"
+          },
+          "limits": {
+            "memory": "512Mi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "45m",
+            "memory": "120Mi"
+          },
+          "limits": {
+            "memory": "120Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-sidecar-0",
+    "monthlySavingUSD": 17.54,
+    "confidence": 0.95,
+    "riskFlags": [
+      "sidecar"
+    ],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "limits": {
+            "memory": "512Mi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "195m",
+            "memory": "256Mi"
+          },
+          "limits": {
+            "memory": "256Mi"
+          }
+        }
+      },
+      {
+        "name": "envoy",
+        "current": {
+          "requests": {
+            "cpu": "100m",
+            "memory": "128Mi"
+          },
+          "limits": {
+            "cpu": "500m",
+            "memory": "256Mi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "30m",
+            "memory": "80Mi"
+          },
+          "limits": {
+            "cpu": "500m",
+            "memory": "80Mi"
+          }
+        },
+        "riskFlags": [
+          "sidecar"
+        ]
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-restarting-0",
+    "monthlySavingUSD": 16.61,
+    "confidence": 0.99,
+    "riskFlags": [
+      "restarting"
+    ],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "135m",
+            "memory": "264Mi"
+          },
+          "limits": {
+            "memory": "264Mi"
+          }
+        },
+        "riskFlags": [
+          "restarting"
+        ]
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-new-0",
+    "monthlySavingUSD": 14.05,
+    "confidence": 0.25,
+    "riskFlags": [
+      "low-confidence"
+    ],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "200m",
+            "memory": "264Mi"
+          },
+          "limits": {
+            "memory": "264Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-diurnal-0",
+    "monthlySavingUSD": 12.26,
+    "confidence": 0.94,
+    "riskFlags": [],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "limits": {
+            "memory": "512Mi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "320m",
+            "memory": "392Mi"
+          },
+          "limits": {
+            "memory": "392Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-hpa-0",
+    "monthlySavingUSD": 6.35,
+    "confidence": 0.94,
+    "riskFlags": [
+      "hpa-coupled"
+    ],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "limits": {
+            "memory": "512Mi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "445m",
+            "memory": "260Mi"
+          },
+          "limits": {
+            "memory": "260Mi"
+          }
+        }
+      }
+    ],
+    "hpa": {
+      "name": "synth-hpa-0-hpa",
+      "metric": "cpu",
+      "currentTarget": 70,
+      "recommendedTarget": 79,
+      "minReplicas": 2,
+      "maxReplicas": 8
+    }
+  },
+  {
+    "workload": "patterns/Deployment/synth-leak-0",
+    "monthlySavingUSD": 6.04,
+    "confidence": 0.99,
+    "riskFlags": [
+      "oom-killed",
+      "restarting"
+    ],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "250m",
+            "memory": "512Mi"
+          },
+          "limits": {
+            "memory": "512Mi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "70m",
+            "memory": "616Mi"
+          },
+          "limits": {
+            "memory": "616Mi"
+          }
+        },
+        "riskFlags": [
+          "oom-killed",
+          "restarting"
+        ]
+      }
+    ]
+  },
+  {
+    "workload": "patterns/CronJob/synth-sparse-0",
+    "monthlySavingUSD": 0.53,
+    "confidence": 0.37,
+    "riskFlags": [
+      "short-lived",
+      "low-confidence"
+    ],
+    "containers": [
+      {
+        "name": "job",
+        "current": {
+          "requests": {
+            "cpu": "1",
+            "memory": "1Gi"
+          },
+          "limits": {
+            "cpu": "1",
+            "memory": "1Gi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "960m",
+            "memory": "600Mi"
+          },
+          "limits": {
+            "cpu": "1",
+            "memory": "600Mi"
+          }
+        },
+        "riskFlags": [
+          "short-lived"
+        ]
+      }
+    ]
+  },
+  {
+    "workload": "patterns/Deployment/synth-throttled-0",
+    "monthlySavingUSD": -2.07,
+    "confidence": 0.95,
+    "riskFlags": [
+      "throttled"
+    ],
+    "containers": [
+      {
+        "name": "app",
+        "current": {
+          "requests": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          }
+        },
+        "recommended": {
+          "requests": {
+            "cpu": "600m",
+            "memory": "320Mi"
+          },
+          "limits": {
+            "cpu": "600m",
+            "memory": "320Mi"
+          }
+        },
+        "riskFlags": [
+          "throttled"
+        ]
+      }
+    ]
+  }
+]
