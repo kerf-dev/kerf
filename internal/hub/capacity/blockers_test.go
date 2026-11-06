@@ -54,6 +54,20 @@ func TestBlockers(t *testing.T) {
 			nil, []string{"local-storage Pod shop/p "},
 		},
 		{
+			// A cluster without Karpenter or the Cluster Autoscaler (like the dev fleet): the agent
+			// reports the annotated pods, but only the budget blocks.
+			"no autoscaler: annotations do not block, budgets do",
+			hubapi.CapacityReport{
+				PDBs: []hubapi.CapacityPDB{{Namespace: "shop", Name: "web", ExpectedPods: 2, CurrentHealthy: 2, DesiredHealthy: 2, Workload: web}},
+				Pods: []hubapi.CapacityPod{
+					{Namespace: "shop", Name: "pinned-0", Node: "n1", Reasons: []string{"do-not-disrupt"}},
+					{Namespace: "shop", Name: "scratch-0", Node: "n1", Reasons: []string{"safe-to-evict-false", "local-storage"}},
+				},
+				Nodes: []hubapi.CapacityNode{{Name: "n1", DoNotDisrupt: true, ScaleDownDisabled: true}},
+			},
+			nil, []string{"pdb-zero-disruptions PodDisruptionBudget shop/web c1/shop/Deployment/web"},
+		},
+		{
 			"node annotations",
 			hubapi.CapacityReport{
 				NodePools: []hubapi.CapacityNodePool{{Name: "k", Autoscaler: "karpenter"}, {Name: "ng", Autoscaler: "cluster-autoscaler"}},
