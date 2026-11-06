@@ -44,6 +44,8 @@ export type WorkloadFacets = S['WorkloadFacets']
 export type FacetCount = S['FacetCount']
 export type ConfidenceFactors = S['ConfidenceFactors']
 export type RecommendationPricing = S['RecommendationPricing']
+export type PricingRateSource = S['PricingRateSource']
+export type PricingPeriod = S['PricingPeriod']
 export type FacetsQuery = NonNullable<operations['getWorkloadFacets']['parameters']['query']>
 
 export type ListWorkloadsQuery = NonNullable<operations['listWorkloads']['parameters']['query']>
@@ -96,6 +98,8 @@ export type RecommenderSettingsDoc = S['RecommenderSettingsDoc']
 export type PricingSettings = S['PricingSettings']
 export type PricingSettingsDoc = S['PricingSettingsDoc']
 export type ClusterPricingAdjustment = S['ClusterPricingAdjustment']
+export type PricingRates = S['PricingRates']
+export type PricingCURStatus = S['PricingCURStatus']
 export type Settings = S['Settings']
 export type SettingsVersion = S['SettingsVersion']
 export type HubPolicyType = S['HubPolicyType']

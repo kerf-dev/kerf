@@ -29,6 +29,33 @@ aws:
   # Region for SDK defaults (spot price calls use each node's region).
   region: ""
 
+# Effective rates from the AWS Cost and Usage Report (CUR 2.0 through Data Exports, Parquet in S3),
+# with Savings Plans and Reserved Instances amortised (docs/pricing.md). Off by default: nodes are
+# priced at list (or static) prices. An instance type without usage in the report keeps its list
+# price; an unreadable report falls back to list prices after maxAge. IAM: docs/install/eks.md.
+cur:
+  # "" (off), athena (recommended), or s3 (reads the export's Parquet files directly; small accounts).
+  source: ""
+  # Region of the Athena workgroup or the export bucket; empty = aws.region or the SDK default.
+  region: ""
+  # How often the report is read, the usage window rates are computed over, and how long the last
+  # rates are kept while the report cannot be read.
+  interval: 24h
+  window: 720h
+  maxAge: 72h
+  athena:
+    database: ""             # Glue database of the CUR 2.0 table, e.g. kerf_cur
+    table: ""                # e.g. data
+    workgroup: primary
+    catalog: ""              # empty = AwsDataCatalog
+    outputLocation: ""       # s3://<bucket>/<prefix>/ for query results; empty = the workgroup's
+  s3:
+    bucket: ""
+    prefix: ""               # the export's data path: <S3 path prefix>/<export name>/data/
+    # Scratch space for one Parquet file at a time (emptyDir at /tmp); raise resources.limits.memory
+    # for large files too.
+    tmpSizeLimit: 1Gi
+
 # Prometheus-compatible query URL holding the spokes' kube-state-metrics node series.
 vmURL: http://victoria-metrics.monitoring.svc:8428
 # Node discovery / pricing interval, and how long a fetched price is reused.
@@ -79,8 +106,8 @@ externalSecrets:
   refreshInterval: 1h
   secretStoreRef: {}        # e.g. {kind: ClusterSecretStore, name: aws-secrets-manager}
 
-# AWS access for provider aws (D-028): one IAM policy with pricing:GetProducts and
-# ec2:DescribeSpotPriceHistory.
+# AWS access for provider aws: one IAM policy with pricing:GetProducts and
+# ec2:DescribeSpotPriceHistory; with cur.source also Athena/Glue/S3 read access (docs/install/eks.md).
 # - EKS Pod Identity (preferred): no annotation. Create the association for this ServiceAccount:
 #     aws eks create-pod-identity-association --cluster-name <cluster> --namespace <namespace> \
 #       --service-account <serviceAccount name, default the release name> --role-arn <role>

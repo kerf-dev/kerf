@@ -3,6 +3,8 @@ package recommender
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -319,6 +321,31 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	instantOn(s.Q, "pricingCPU", cpuAvg, func(r VectorSample) { cpuRate = r.Sample.V })
 	instantOn(s.Q, "pricingMemory", memAvg, func(r VectorSample) { memRate = r.Sample.V })
 	instantOn(s.Q, "pricingNodes", cpuCount, func(r VectorSample) { nodes = r.Sample.V })
+	// Rate sources are best effort: a failure leaves them out of the explanation.
+	var sources []hubapi.PricingRateSource
+	var curStart, curEnd float64
+	optional := func(name, query string, apply func(VectorSample)) {
+		g.Go(func() error {
+			res, err := s.Q.Instant(gctx, query, end)
+			if err != nil {
+				slog.DebugContext(gctx, "pricing source query failed", "query", name, "err", err)
+				return nil
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			for _, r := range res {
+				apply(r)
+			}
+			return nil
+		})
+	}
+	optional("pricingSources", q.PricingSources(), func(r VectorSample) {
+		if src := r.Labels["source"]; src != "" && r.Sample.V > 0 {
+			sources = append(sources, hubapi.PricingRateSource{Source: src, Nodes: int(r.Sample.V)})
+		}
+	})
+	optional("pricingCURStart", PricingCURPeriod("start"), func(r VectorSample) { curStart = r.Sample.V })
+	optional("pricingCUREnd", PricingCURPeriod("end"), func(r VectorSample) { curEnd = r.Sample.V })
 
 	if err := g.Wait(); err != nil {
 		return nil, err
@@ -348,8 +375,19 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	d.Pricing = Pricing{CPUCoreHour: cfg.DefaultCPUCoreHourUSD, MemoryGiBHour: cfg.DefaultMemoryGiBHourUSD, Source: PricingSourceDefault}
 	if cpuRate > 0 && memRate > 0 {
 		d.Pricing = Pricing{CPUCoreHour: cpuRate, MemoryGiBHour: memRate, Source: PricingSourceMetrics, Nodes: int(nodes)}
+		d.Pricing.Sources, d.Pricing.CURPeriod = pricingSources(sources, curStart, curEnd)
 	}
 	return d, nil
+}
+
+// pricingSources sorts the source counts and keeps the period only when a node uses a cur rate.
+func pricingSources(sources []hubapi.PricingRateSource, start, end float64) ([]hubapi.PricingRateSource, *hubapi.PricingPeriod) {
+	sort.Slice(sources, func(i, j int) bool { return sources[i].Source < sources[j].Source })
+	var period *hubapi.PricingPeriod
+	if start > 0 && end > start && slices.ContainsFunc(sources, func(s hubapi.PricingRateSource) bool { return s.Source == hubapi.RateSourceCUR }) {
+		period = &hubapi.PricingPeriod{Start: time.Unix(int64(start), 0).UTC(), End: time.Unix(int64(end), 0).UTC()}
+	}
+	return sources, period
 }
 
 // PricingAt returns the cluster's average pricing rates at t (lookback 1 h). ok is false when the

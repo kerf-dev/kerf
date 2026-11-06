@@ -10,7 +10,7 @@ import (
 func TestCached(t *testing.T) {
 	now := time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC)
 	m6i := Key{Region: "eu-west-1", Zone: "eu-west-1a", InstanceType: "m6i.xlarge", CapacityType: OnDemand}
-	f := &fakeProvider{prices: map[Key]Price{m6i.normalized(): {0.214, Shape{4, 16}}}, errs: map[Key]error{}}
+	f := &fakeProvider{prices: map[Key]Price{m6i.normalized(): {HourlyUSD: 0.214, Shape: Shape{4, 16}}}, errs: map[Key]error{}}
 	c := NewCached(f, 24*time.Hour, nil)
 	c.Now = func() time.Time { return now }
 	ctx := context.Background()
@@ -40,7 +40,7 @@ func TestCached(t *testing.T) {
 	}
 	// Once AWS answers again, the new price replaces it.
 	delete(f.errs, m6i.normalized())
-	f.prices[m6i.normalized()] = Price{0.22, Shape{4, 16}}
+	f.prices[m6i.normalized()] = Price{HourlyUSD: 0.22, Shape: Shape{4, 16}}
 	if p, _ := get(m6i); p.HourlyUSD != 0.22 {
 		t.Fatalf("refreshed price %v", p.HourlyUSD)
 	}

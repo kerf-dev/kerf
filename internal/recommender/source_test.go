@@ -97,6 +97,7 @@ type sourceQueries struct {
 	images                                   string
 	hpaMin, hpaMax, hpaPeak                  string
 	priceCPU, priceMem, priceNodes           string
+	priceSources, curStart, curEnd           string
 	// res[metric][init][lookback>0]
 	res map[string]map[bool]map[bool]string
 }
@@ -122,6 +123,7 @@ func buildSourceQueries(cfg Config) sourceQueries {
 		res:        map[string]map[bool]map[bool]string{},
 	}
 	sq.priceCPU, sq.priceNodes = q.Pricing("kerf_cpu_core_hourly_cost_usd", time.Hour)
+	sq.priceSources, sq.curStart, sq.curEnd = q.PricingSources(), PricingCURPeriod("start"), PricingCURPeriod("end")
 	sq.priceMem, _ = q.Pricing("kerf_memory_gib_hourly_cost_usd", time.Hour)
 	for _, m := range []string{"requests", "limits"} {
 		sq.res[m] = map[bool]map[bool]string{}
@@ -243,8 +245,16 @@ func sourceFixture(cfg Config) (*fakeQuerier, sourceQueries) {
 	f.instant[sq.priceCPU] = []VectorSample{vs(Labels{"cluster": "c1"}, 0.03)}
 	f.instant[sq.priceMem] = []VectorSample{vs(Labels{"cluster": "c1"}, 0.004)}
 	f.instant[sq.priceNodes] = []VectorSample{vs(Labels{"cluster": "c1"}, 5)}
+	f.instant[sq.priceSources] = []VectorSample{vs(Labels{"source": "list"}, 1), vs(Labels{"source": "cur"}, 4)}
+	f.instant[sq.curStart] = []VectorSample{vs(Labels{}, float64(curPeriodStart.Unix()))}
+	f.instant[sq.curEnd] = []VectorSample{vs(Labels{}, float64(curPeriodEnd.Unix()))}
 	return f, sq
 }
+
+var (
+	curPeriodStart = time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
+	curPeriodEnd   = time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
+)
 
 func TestSourceLoad(t *testing.T) {
 	cfg := DefaultConfig()
@@ -429,9 +439,33 @@ func TestSourceLoad(t *testing.T) {
 		{
 			name: "pricing from metrics",
 			check: func(t *testing.T, d *ClusterData) {
-				want := Pricing{CPUCoreHour: 0.03, MemoryGiBHour: 0.004, Source: PricingSourceMetrics, Nodes: 5}
-				if d.Pricing != want || d.Pricing.Fallback() {
+				want := Pricing{CPUCoreHour: 0.03, MemoryGiBHour: 0.004, Source: PricingSourceMetrics, Nodes: 5,
+					Sources:   []hubapi.PricingRateSource{{Source: "cur", Nodes: 4}, {Source: "list", Nodes: 1}},
+					CURPeriod: &hubapi.PricingPeriod{Start: curPeriodStart, End: curPeriodEnd}}
+				if !reflect.DeepEqual(d.Pricing, want) || d.Pricing.Fallback() {
 					t.Errorf("pricing = %+v, want %+v", d.Pricing, want)
+				}
+			},
+		},
+		{
+			name: "pricing without a cur node has no period",
+			mutate: func(f *fakeQuerier, sq sourceQueries) {
+				f.instant[sq.priceSources] = []VectorSample{vs(Labels{"source": "list"}, 5)}
+			},
+			check: func(t *testing.T, d *ClusterData) {
+				if d.Pricing.CURPeriod != nil || len(d.Pricing.Sources) != 1 {
+					t.Errorf("pricing = %+v, want list only and no period", d.Pricing)
+				}
+			},
+		},
+		{
+			name: "a failed source query leaves the sources out",
+			mutate: func(f *fakeQuerier, sq sourceQueries) {
+				f.fail[sq.priceSources] = errors.New("timeout")
+			},
+			check: func(t *testing.T, d *ClusterData) {
+				if d.Pricing.Source != PricingSourceMetrics || d.Pricing.Sources != nil || d.Pricing.CURPeriod != nil {
+					t.Errorf("pricing = %+v, want metrics without sources", d.Pricing)
 				}
 			},
 		},
@@ -442,7 +476,7 @@ func TestSourceLoad(t *testing.T) {
 			},
 			check: func(t *testing.T, d *ClusterData) {
 				want := Pricing{CPUCoreHour: cfg.DefaultCPUCoreHourUSD, MemoryGiBHour: cfg.DefaultMemoryGiBHourUSD, Source: PricingSourceDefault}
-				if d.Pricing != want || !d.Pricing.Fallback() {
+				if !reflect.DeepEqual(d.Pricing, want) || !d.Pricing.Fallback() {
 					t.Errorf("pricing = %+v, want %+v", d.Pricing, want)
 				}
 			},
@@ -533,8 +567,8 @@ func TestSourceLoadQueries(t *testing.T) {
 	for q := range f.instant {
 		instants = append(instants, q)
 	}
-	if len(instants) != 20 {
-		t.Errorf("fixture has %d instant queries, want 20", len(instants))
+	if len(instants) != 23 {
+		t.Errorf("fixture has %d instant queries, want 23", len(instants))
 	}
 	for _, q := range instants {
 		if got, ok := f.called[q]; !ok || !got.Equal(testEnd) {
@@ -742,7 +776,7 @@ func TestEngineRunCluster(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if res.Cluster != "c1" || !res.End.Equal(testEnd) || res.Pricing != pricing {
+			if res.Cluster != "c1" || !res.End.Equal(testEnd) || !reflect.DeepEqual(res.Pricing, pricing) {
 				t.Errorf("result header = %s %s %+v", res.Cluster, res.End, res.Pricing)
 			}
 			if settings != nil && len(asked) != 3 {
@@ -779,7 +813,7 @@ func TestEngineRunCluster(t *testing.T) {
 			got := map[string]hubapi.WorkloadRecommendation{}
 			for _, r := range res.Results {
 				got[r.Recommendation.Workload.Name] = r.Recommendation
-				if r.Pricing != pricing {
+				if !reflect.DeepEqual(r.Pricing, pricing) {
 					t.Errorf("%s pricing = %+v", r.Recommendation.Workload.Name, r.Pricing)
 				}
 			}

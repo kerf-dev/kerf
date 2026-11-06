@@ -54,7 +54,47 @@
       "$ref": "#/definitions/component"
     },
     "pricing": {
-      "$ref": "#/definitions/component"
+      "allOf": [
+        {
+          "$ref": "#/definitions/component"
+        },
+        {
+          "properties": {
+            "cur": {
+              "description": "Effective rates from the AWS Cost and Usage Report (docs/pricing.md).",
+              "type": "object",
+              "properties": {
+                "source": {
+                  "description": "Empty (off), athena or s3.",
+                  "type": "string",
+                  "enum": [
+                    "",
+                    "athena",
+                    "s3"
+                  ]
+                },
+                "athena": {
+                  "type": "object",
+                  "properties": {
+                    "database": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_]*$"
+                    },
+                    "table": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_]*$"
+                    },
+                    "outputLocation": {
+                      "type": "string",
+                      "pattern": "^(s3://.+)?$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "agent": {
       "$ref": "#/definitions/component"

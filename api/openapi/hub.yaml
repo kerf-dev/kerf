@@ -3200,6 +3200,40 @@ components:
         memoryGiBHourUSD:
           type: number
           minimum: 0
+        rateSources:
+          type: array
+          description: |
+            With `source: metrics`, the cluster's priced nodes by where the pricing service took their
+            rate from (the `source` label of the pricing series). Absent on older recommendations.
+          items:
+            $ref: '#/components/schemas/PricingRateSource'
+        curPeriod:
+          $ref: '#/components/schemas/PricingPeriod'
+    PricingRateSource:
+      type: object
+      description: |
+        Nodes priced from one rate source: `cur` (the effective rate paid, from the AWS Cost and Usage
+        Report, Savings Plans and Reserved Instances amortised), `list` (AWS on-demand list price),
+        `spot` (current spot price) or `static` (the static price file).
+      required: [source, nodes]
+      properties:
+        source:
+          type: string
+          enum: [cur, list, spot, static]
+        nodes:
+          type: integer
+          minimum: 0
+    PricingPeriod:
+      type: object
+      description: The usage the effective (`cur`) rates were computed from.
+      required: [start, end]
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
     RecommendationList:
       type: object
       required: [cluster, items]
@@ -4380,6 +4414,50 @@ components:
           type: string
         value:
           $ref: '#/components/schemas/PricingSettings'
+        rates:
+          $ref: '#/components/schemas/PricingRates'
+    PricingRates:
+      type: object
+      description: |
+        Read-only, on GET: where the pricing service's rates come from now, read from its series in the
+        hub's metrics store. Absent when the store cannot be queried.
+      required: [clusters]
+      properties:
+        cur:
+          $ref: '#/components/schemas/PricingCURStatus'
+        clusters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterPricingRates'
+    PricingCURStatus:
+      type: object
+      description: |
+        The AWS Cost and Usage Report reader of the pricing service; absent when it is off. While
+        `lastReadOK` is false the last effective rates are kept for a while (`pricing.cur.maxAge`), then
+        every node falls back to list prices.
+      required: [lastReadOK, rates]
+      properties:
+        lastReadOK:
+          type: boolean
+        lastSuccess:
+          type: string
+          format: date-time
+        rates:
+          type: integer
+          minimum: 0
+          description: Instance type, region and capacity type keys with an effective rate in use.
+        period:
+          $ref: '#/components/schemas/PricingPeriod'
+    ClusterPricingRates:
+      type: object
+      required: [cluster, sources]
+      properties:
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/PricingRateSource'
     PricingSettingsUpdate:
       type: object
       required: [value, reason]
