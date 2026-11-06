@@ -1,4 +1,4 @@
-# Shared k3d dev environment (ro-hub). Endpoints: docs/handover/WO-01-handover.md.
+# Shared k3d dev environment (ro-hub). Endpoints: dev/README.md.
 image:
   repository: k3d-ro-registry:5005/kerf/hub
   pullPolicy: Always

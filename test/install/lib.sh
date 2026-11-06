@@ -1,6 +1,6 @@
 # WO-18e staging: shared variables and the AWS stand-ins. Sourced by staging.sh.
 # Everything here replaces an AWS piece of docs/install/eks.md; staging.sh otherwise runs the guide's
-# commands as written (see docs/handover/WO-18e-handover.md for the list of substitutions).
+# commands as written.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)

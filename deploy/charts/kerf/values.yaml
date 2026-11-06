@@ -2,7 +2,7 @@
 # Install guide: docs/install/eks.md. Examples: deploy/examples/eks/values-{hub,spoke}.yaml.
 #
 # Each component's settings live under its name (hub, web, pricing, agent, webhook) and are the
-# component chart's values (deploy/charts/<name>/values.yaml, docs/handover/WO-18b-handover.md).
+# component chart's values (deploy/charts/<name>/values.yaml, shared names in deploy/charts/README.md).
 # Only what this chart changes from the component defaults is listed here.
 # values.schema.json rejects inline secrets unless dev: true.
 

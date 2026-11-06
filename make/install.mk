@@ -1,6 +1,6 @@
 # WO-18e: staging install that follows docs/install/eks.md on two fresh k3d clusters
-# (ro-stg-hub, ro-stg-spoke). AWS pieces are replaced by local stand-ins; see test/install/lib.sh and
-# docs/handover/WO-18e-handover.md. Uses about 3 GiB of memory next to the dev fleet.
+# (ro-stg-hub, ro-stg-spoke). AWS pieces are replaced by local stand-ins; see test/install/lib.sh.
+# Uses about 3 GiB of memory next to the dev fleet.
 
 STAGING_VERSION ?= 0.1.0-rc.2
 STAGING := VERSION=$(STAGING_VERSION) ./test/install/staging.sh

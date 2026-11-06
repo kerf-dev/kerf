@@ -1,5 +1,5 @@
 # Web UI (WO-14): React SPA in web/, nginx image, Helm chart deploy/charts/web.
-# Included by the root Makefile. Node 22+ must be on PATH (see CLAUDE.md "Toolchain").
+# Included by the root Makefile. Node 22+ must be on PATH (see CONTRIBUTING.md).
 
 WEB_DIR        := web
 WEB_IMAGE      ?= localhost:5005/kerf/web

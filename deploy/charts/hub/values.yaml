@@ -93,7 +93,7 @@ service:
   type: ClusterIP
   port: 8080
   nodePort: null        # e.g. 30080 with type NodePort
-  # Hub vmagent scrapes Services with these annotations (docs/handover/WO-01-handover.md).
+  # Hub vmagent scrapes Services with these annotations (dev/README.md).
   scrape: true
   annotations: {}
 

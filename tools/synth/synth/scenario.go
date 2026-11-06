@@ -43,7 +43,7 @@ type Scenario struct {
 
 // ClusterSpec describes one synthetic cluster.
 type ClusterSpec struct {
-	// Name is the `cluster` label value. Must start with "synth-" (CLAUDE.md: never ro-*).
+	// Name is the `cluster` label value. Must start with "synth-" (never ro-*, the real dev clusters).
 	Name   string `yaml:"name"`
 	Region string `yaml:"region"`
 	// NodePools; pools with Count 0 are sized automatically so requests fill RequestPacking of

@@ -1,6 +1,6 @@
 // Package v1alpha1 contains the API types of the kerf.getkerf.dev group.
 //
-// This package is a contract (WO-00). Changing it requires a decision in DECISIONS.md.
+// This package is a contract between components. Changing it needs a design note (CONTRIBUTING.md).
 // It depends only on k8s.io/api and k8s.io/apimachinery so that every component can import it.
 //
 // +kubebuilder:object:generate=true
