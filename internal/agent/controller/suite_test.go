@@ -36,7 +36,7 @@ var (
 	testCtx context.Context
 	// testReconciler is the reconciler under test.
 	testReconciler *Reconciler
-	// adminState is the hub config state of the reconciler under test (WO-21).
+	// adminState is the hub config state of the reconciler under test.
 	adminState *configsync.State
 	skipEnv    string
 )

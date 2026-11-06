@@ -117,7 +117,7 @@ func lockCluster(ctx context.Context, tx pgx.Tx, name string) (ClusterRow, error
 }
 
 // ensureDatasource makes sure a binding's datasource exists: 'local' is created from localURL
-// when missing (WO-25 upserts it at start-up); another id must exist and be live.
+// when missing (the hub upserts it at start-up); another id must exist and be live.
 func ensureDatasource(ctx context.Context, tx pgx.Tx, id, localURL string) error {
 	if id == hubapi.LocalDatasourceID {
 		_, err := tx.Exec(ctx, `INSERT INTO datasources (id, name, type, url, built_in) VALUES ('local', 'local', 'victoriametrics', $1, true)

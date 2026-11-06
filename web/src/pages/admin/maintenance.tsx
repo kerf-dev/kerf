@@ -32,7 +32,7 @@ import { formatDateTime, relativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { displayVersion, versionCompat } from '@/lib/version'
 
-/** The version of this UI bundle (build-time constant, WO-33). */
+/** The version of this UI bundle (build-time constant). */
 const WEB_VERSION: string = __KERF_VERSION__
 
 const STATE: Record<
@@ -629,7 +629,7 @@ function ClustersTable({ m }: { m: Maintenance }) {
 
 // ---------------------------------------------------------------- page
 
-/** Admin → Maintenance (WO-33): component versions and the check for a newer Kerf release. */
+/** Admin → Maintenance: component versions and the check for a newer Kerf release. */
 export default function MaintenancePage() {
   const q = useMaintenance()
   return (

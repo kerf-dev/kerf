@@ -7,13 +7,13 @@
 //  1. no auto-patch resource                    -> skipped ModeOff / ModeAudit
 //  2. hub not reachable / automation paused (D-022) / recommendation stale
 //     -> blocked HubUnreachable, blocked Paused, skipped RecommendationStale
-//  3. hpa-coupled without HPA coordination (D-011, WO-11), learning period, confidence, freeze window, maintenance window -> blocked
+//  3. hpa-coupled without HPA coordination (D-011), learning period, confidence, freeze window, maintenance window -> blocked
 //  4. per container and resource: clamp decreases to maxChangePercent, floors, never decrease a
 //     throttled / oom-killed resource (Throttled / OOMKilled), JVM/Python memory needs
 //     RestartContainer for in-place (RestartPolicyRequired); changes below the tolerance are dropped
 //  5. nothing left to change                    -> skipped NoSignificantChange (or the refusal)
 //  6. cooldown since the last change / rollback -> blocked Cooldown
-//  7. single replica without a disruption-free way to apply (WO-13) -> blocked SingleReplicaUnsafe
+//  7. single replica without a disruption-free way to apply -> blocked SingleReplicaUnsafe
 package guardrails
 
 import (
@@ -49,7 +49,7 @@ const (
 	// NoRecommendation: the hub has no recommendation for the workload.
 	NoRecommendation Outcome = "none"
 	// Deferred: strategy deferred, a change passes every guardrail, and no maintenance window is
-	// open; it is applied when the next one opens (reason OutsideMaintenanceWindow, WO-10).
+	// open; it is applied when the next one opens (reason OutsideMaintenanceWindow).
 	Deferred Outcome = "deferred"
 )
 
@@ -66,7 +66,7 @@ type Input struct {
 	// the running pods' values are compared by the in-place applier).
 	Containers []workload.Container
 	// HPACoupled is set when the agent itself found a CPU/memory-utilization HPA that blocks the
-	// change (WO-11: no coordination, or an HPA that cannot be coordinated); HPAMessage says why.
+	// change (no coordination, or an HPA that cannot be coordinated); HPAMessage says why.
 	HPACoupled bool
 	HPAMessage string
 	// HPAChecked: the caller looked at the live HPA, so the hub's hpa-coupled flag alone does not block.
@@ -78,7 +78,7 @@ type Input struct {
 	RolledBackResources []string
 	// Tolerance is the relative change below which a value is left alone (default 5%).
 	Tolerance float64
-	// Disruption describes single-replica protection (WO-13); nil skips the check.
+	// Disruption describes single-replica protection; nil skips the check.
 	Disruption *apply.Disruption
 	// Paused: automation is paused in the hub config (D-022); like a cluster-wide freeze, nothing
 	// new is applied. PauseMessage describes it.
@@ -367,7 +367,7 @@ func targets(in Input, scope map[string]bool) ([]v1alpha1.ContainerRecommendatio
 			reqChanged := hasNewReq && (!hasCurReq || newReq.Cmp(curReq) != 0)
 			limChanged := hasNewLim != hasCurLim || (hasNewLim && newLim.Cmp(curLim) != 0)
 
-			// WO-12: memory of a JVM with a fixed -Xmx is audit-only.
+			// Memory of a JVM with a fixed -Xmx is audit-only.
 			if res == corev1.ResourceMemory && (reqChanged || limChanged) {
 				if msg, ok := workload.JVMFixedHeapRefusal(live.Container, eff.JVMDetect, flagged(in.Rec, rc, v1alpha1.RiskJVMFixedHeap)); ok {
 					refusals = append(refusals, Refusal{Container: rc.Name, Resource: r, Reason: v1alpha1.ReasonJVMFixedHeap, Message: msg})

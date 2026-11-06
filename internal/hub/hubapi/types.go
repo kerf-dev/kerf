@@ -1,7 +1,7 @@
 // Package hubapi holds the Go types of the hub HTTP API (api/openapi/hub.yaml).
 //
 // The types are hand-written to mirror the OpenAPI schemas one to one; field names and JSON tags
-// must match the contract. Agents (WO-06) may import this package to talk to the hub.
+// must match the contract. Agents may import this package to talk to the hub.
 package hubapi
 
 import (
@@ -52,7 +52,7 @@ const (
 	FlagSidecar       = "sidecar"
 	FlagShortLived    = "short-lived"
 	FlagLowConfidence = "low-confidence"
-	// FlagJVMFixedHeap: JVM with a fixed -Xmx; memory is audit-only (WO-12).
+	// FlagJVMFixedHeap: JVM with a fixed -Xmx; memory is audit-only.
 	FlagJVMFixedHeap = "jvm-fixed-heap"
 )
 
@@ -146,7 +146,7 @@ type ResourceExplanation struct {
 	RoundedTo string     `json:"roundedTo,omitempty"`
 	LimitRule string     `json:"limitRule,omitempty"`
 	Notes     []string   `json:"notes,omitempty"`
-	// JVM is set on the memory explanation of JVM containers (WO-12).
+	// JVM is set on the memory explanation of JVM containers.
 	JVM *JVMExplanation `json:"jvm,omitempty"`
 }
 
@@ -210,7 +210,7 @@ type WorkloadRecommendation struct {
 	MonthlySavingsUSD Savings                   `json:"monthlySavingsUSD"`
 	DataCoverage      DataCoverage              `json:"dataCoverage"`
 	Pricing           *RecommendationPricing    `json:"pricing,omitempty"`
-	// HPA is the HPA coordination (WO-11) of hpa-coupled workloads.
+	// HPA is the HPA coordination of hpa-coupled workloads.
 	HPA *HPACoordination `json:"hpa,omitempty"`
 	// GPU is set for workloads whose pods request GPUs.
 	GPU *GPUUsage `json:"gpu,omitempty"`
@@ -301,7 +301,7 @@ type WorkloadStatus struct {
 	AppliedAt        *time.Time           `json:"appliedAt,omitempty"`
 	NextWindow       *time.Time           `json:"nextWindow,omitempty"`
 	ObservedAt       *time.Time           `json:"observedAt,omitempty"`
-	// JVM lists the JVM containers the agent detected (WO-12).
+	// JVM lists the JVM containers the agent detected.
 	JVM []JVMContainer `json:"jvm,omitempty"`
 	// Labels are the workload's labels and NamespaceLabels its namespace's (team ownership); nil =
 	// not reported (an older agent), the stored labels stay.
@@ -320,7 +320,7 @@ type WorkloadStatusBatch struct {
 	// Capabilities and Checks are the agent self-checks (D-025): nil = unchanged.
 	Capabilities []AgentCapability `json:"capabilities,omitempty"`
 	Checks       []ReadinessCheck  `json:"checks,omitempty"`
-	// Components are the Kerf components the agent found in its cluster (WO-33, webhook pods):
+	// Components are the Kerf components the agent found in its cluster (webhook pods):
 	// nil = unchanged, empty = none.
 	Components []AgentComponent `json:"components,omitzero"`
 	// Capacity is the node and node pool snapshot for the node estimate: nil = unchanged.
@@ -654,7 +654,7 @@ type RecomputeAccepted struct {
 	Coalesced   bool      `json:"coalesced"`
 }
 
-// HPACoordination is WorkloadRecommendation.hpa (WO-11).
+// HPACoordination is WorkloadRecommendation.hpa.
 type HPACoordination struct {
 	Name              string `json:"name"`
 	Metric            string `json:"metric"`

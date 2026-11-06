@@ -1,4 +1,4 @@
-# Static prices for the pricing service's `static` provider (WO-03). Used locally and in tests.
+# Static prices for the pricing service's `static` provider. Used locally and in tests.
 #
 # Values are USD per hour for Linux, shared tenancy, eu-west-1 (Ireland), approximating AWS list
 # prices in late 2026. They are dev data, not a source of truth: production uses `--provider aws`.

@@ -13,7 +13,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/health"
 )
 
-// HealthConfig configures the health watch (WO-08).
+// HealthConfig configures the health watch.
 type HealthConfig struct {
 	Enabled bool
 	// MetricsURL is the Prometheus-compatible endpoint for the throttling ratio (the hub's

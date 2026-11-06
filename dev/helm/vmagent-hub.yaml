@@ -1,4 +1,4 @@
-# vm/victoria-metrics-agent on ro-hub, namespace monitoring: scrapes hub components (pricing WO-03, hub WO-04)
+# vm/victoria-metrics-agent on ro-hub, namespace monitoring: scrapes hub components (pricing, hub)
 # into the hub's VictoriaMetrics. Discovery is by annotation, so components need no change here:
 #   Service annotations: prometheus.io/scrape: "true", prometheus.io/port: "<port>", prometheus.io/path: "/metrics"
 # honor_labels: true keeps the `cluster` label that pricing/hub series carry (docs/contracts/metrics.md).

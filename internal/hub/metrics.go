@@ -85,7 +85,7 @@ func NewMetrics() *Metrics {
 	return m
 }
 
-// SetLeaderFunc makes the database-state series leader-only (WO-18a): they are exported while f
+// SetLeaderFunc makes the database-state series leader-only: they are exported while f
 // returns true. Without it (one hub, tests) they are always exported.
 func (m *Metrics) SetLeaderFunc(f func() bool) { m.isLeader.Store(&f) }
 

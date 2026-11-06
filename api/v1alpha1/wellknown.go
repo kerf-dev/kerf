@@ -31,7 +31,7 @@ const (
 	AnnotationProfile = Prefix + "profile"
 	// AnnotationAllowDisruption set to "true" allows changes that leave a single-replica workload
 	// (one replica, or a PodDisruptionBudget that allows no disruption) without a Ready pod for a
-	// moment: an in-place resize that restarts the container, or a rollout without surge (WO-13).
+	// moment: an in-place resize that restarts the container, or a rollout without surge.
 	AnnotationAllowDisruption = Prefix + "allow-disruption"
 )
 
@@ -154,13 +154,13 @@ const (
 	// ReasonPaused: automation of the cluster (or the fleet) is paused in the hub config; like a
 	// cluster-wide freeze, rollbacks still run (D-022).
 	ReasonPaused = "Paused"
-	// ReasonJVMFixedHeap: memory change refused on a JVM with a fixed -Xmx (WO-12).
+	// ReasonJVMFixedHeap: memory change refused on a JVM with a fixed -Xmx.
 	ReasonJVMFixedHeap = "JVMFixedHeap"
 	// ReasonSingleReplicaUnsafe: single-replica workload and the change would leave it without a
-	// Ready pod; opt in with AnnotationAllowDisruption (WO-13).
+	// Ready pod; opt in with AnnotationAllowDisruption.
 	ReasonSingleReplicaUnsafe = "SingleReplicaUnsafe"
 	// ReasonPodDisruptionBudget: a PodDisruptionBudget refused the eviction of an OnDelete
-	// StatefulSet pod; the agent retries (WO-13).
+	// StatefulSet pod; the agent retries.
 	ReasonPodDisruptionBudget = "PodDisruptionBudget"
 
 	// fallback

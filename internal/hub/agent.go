@@ -87,7 +87,7 @@ func (s *Server) listRecommendations(w http.ResponseWriter, r *http.Request) {
 const pullMinGap = 10 * time.Second
 
 // pruneAbsent records a pull by the cluster's agent and soft-deletes the workloads missing from
-// the agent's last two full status batches that have no pods (WO-04e, Store.PruneAbsent). Errors
+// the agent's last two full status batches that have no pods (Store.PruneAbsent). Errors
 // are logged: they never fail the pull.
 func (s *Server) pruneAbsent(ctx context.Context, cluster string) {
 	now := s.now()
@@ -174,7 +174,7 @@ func (s *Server) reportWorkloadStatus(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, err)
 		return
 	}
-	// Components found by the agent, e.g. the webhook pods (WO-33); absent = unchanged.
+	// Components found by the agent, e.g. the webhook pods; absent = unchanged.
 	if err := s.recordAgentComponents(r.Context(), cluster, batch.Components); err != nil {
 		s.internal(w, r, err)
 		return

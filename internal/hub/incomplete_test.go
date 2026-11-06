@@ -19,7 +19,7 @@ func (e *testEnv) clusterRun(cluster string) (status, msg string, total float64)
 	return
 }
 
-// TestIncompleteMetrics (WO-04d): a regular run whose inventory or request series suddenly halve
+// TestIncompleteMetrics: a regular run whose inventory or request series suddenly halve
 // is not stored for the grace period; the summary and the savings trend keep the previous values.
 func TestIncompleteMetrics(t *testing.T) {
 	defer func(v int) { minGuardedInventory = v }(minGuardedInventory)
@@ -109,7 +109,7 @@ func clusterSummary(t *testing.T, s hubapi.FleetSummary, cluster string) hubapi.
 	return hubapi.ClusterSummary{}
 }
 
-// TestPricingFallback (WO-04d): without pricing series at a run's time, a regular run keeps the
+// TestPricingFallback: without pricing series at a run's time, a regular run keeps the
 // rates of the cluster's last run with series, a backfill uses today's series; both stay
 // "metrics". Backfills that used the default rates are recomputed by the backfill plan.
 func TestPricingFallback(t *testing.T) {

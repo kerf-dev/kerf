@@ -1,4 +1,4 @@
-// Package charts holds checks on the component Helm charts (WO-18b).
+// Package charts holds checks on the component Helm charts.
 package charts
 
 import (

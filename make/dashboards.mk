@@ -1,11 +1,11 @@
-# Grafana dashboards (WO-05). Source: dashboards/src/build.py; output: dashboards/*.json.
+# Grafana dashboards. Source: dashboards/src/build.py; output: dashboards/*.json.
 
 DASHBOARDS_SRC := $(ROOT)/dashboards/src
 PYTHON         ?= python3
 
 .PHONY: dashboards dashboards-check dashboards-verify dashboards-verify-vm dashboards-preview dashboards-preview-delete
 
-##@ Dashboards (WO-05)
+##@ Dashboards
 
 dashboards: ## Regenerate dashboards/*.json from dashboards/src/build.py
 	@$(PYTHON) $(DASHBOARDS_SRC)/build.py

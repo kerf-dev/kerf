@@ -69,9 +69,10 @@ pull request touches (Go, web, OpenAPI, charts, images), and the other jobs fini
 when their area is untouched. The five required checks therefore always report, so a docs-only pull request
 is green within a minute. Pull requests build the images for `linux/amd64`; `main` and release tags build
 `linux/amd64` and `linux/arm64`. A new push to a pull request cancels the run in progress. CI also fails
-if internal development documents (`CLAUDE.md`, `.claude/`, `DECISIONS.md`, `roadmap.md`, `docs/work-orders/`,
-`docs/handover/`, `docs/plans/`, `docs/STATUS.md`, `docs/open-source-checklist.md`) are committed.
+if internal development notes are committed.
 Run `make generate` after changing `api/` and commit the result.
+
+CI also fails if a tracked file contains an internal tracking label (`WO-` followed by a number): describe the change in words instead.
 
 ## Pull request titles
 

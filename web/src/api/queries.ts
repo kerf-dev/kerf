@@ -145,6 +145,6 @@ export const useFacets = (query: FacetsQuery) =>
     queryKey: ['facets', query],
     queryFn: () => unwrap(api.GET('/v1/workloads/facets', { params: { query } })),
     placeholderData: keepPreviousData,
-    // Older hubs (before WO-04b) have no facets endpoint; callers fall back to static options.
+    // Older hubs have no facets endpoint; callers fall back to static options.
     retry: false,
   })

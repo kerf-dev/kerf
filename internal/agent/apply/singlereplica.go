@@ -16,7 +16,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/agent/workload"
 )
 
-// Disruption describes how a workload tolerates its pods being restarted (WO-13, D-007).
+// Disruption describes how a workload tolerates its pods being restarted (D-007).
 type Disruption struct {
 	// SingleReplica: a Deployment or StatefulSet with one replica, or a workload whose
 	// PodDisruptionBudget allows no disruption. A change must then never leave it without a Ready pod.

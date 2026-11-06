@@ -134,7 +134,7 @@ func run(ctx context.Context, o options, log *slog.Logger) error {
 		if o.hubTokenFile == "" {
 			return errors.New("--hub-url needs --hub-token-file")
 		}
-		// The User-Agent tells the hub this service's version (Admin -> Maintenance, WO-33).
+		// The User-Agent tells the hub this service's version (Admin -> Maintenance).
 		hc := &http.Client{Timeout: 60 * time.Second, Transport: userAgent{ua: hubUserAgent()}}
 		disc.Targets = &pricing.HubTargets{HubURL: o.hubURL, Token: pricing.FileToken(o.hubTokenFile), HTTP: hc}
 	}

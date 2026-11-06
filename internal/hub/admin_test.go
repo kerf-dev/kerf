@@ -553,7 +553,7 @@ func strPtr(s string) *string { return &s }
 
 // ---- overrides, approvals, automation ----
 
-// TestApprovalSupersededBeforeEvent (WO-29, the TestApproveOnce e2e flake): the agent applies
+// TestApprovalSupersededBeforeEvent (the TestApproveOnce e2e flake): the agent applies
 // approval A, a recommender run supersedes A before the hub stores A's applied event, and the
 // operator approves the new recommendation B. A's late event consumes A only; B stays pending until
 // the agent's applied/ApprovedOnce event for B (B's values are live already) consumes it.
@@ -791,7 +791,7 @@ func TestClustersTokensUsers(t *testing.T) {
 	bad.Name, bad.Metrics = "other", &hubapi.MetricsBinding{DatasourceID: "0192f7c4-0000-7000-8000-000000000000"}
 	e.problem(e.sdo(admin, http.MethodPost, "/v1/admin/clusters", bad), 400, "unknown_datasource")
 
-	r = e.sdo(admin, http.MethodPatch, "/v1/admin/clusters/eks-prod-eu1", hubapi.ClusterUpdate{Owner: strPtr("payments"), Reason: "handover"}, ifMatchHdr(1)...)
+	r = e.sdo(admin, http.MethodPatch, "/v1/admin/clusters/eks-prod-eu1", hubapi.ClusterUpdate{Owner: strPtr("payments"), Reason: "ownership change"}, ifMatchHdr(1)...)
 	expectCode(t, "patch cluster", r, 200)
 	var ca hubapi.ClusterAdmin
 	mustJSON(t, r.body, &ca)

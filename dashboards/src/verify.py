@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the generated dashboards (WO-05).
+"""Verify the generated dashboards.
 
 Static checks (no network):
   * every dashboard file is valid JSON and matches what build.py generates;

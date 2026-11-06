@@ -1,6 +1,6 @@
 apiVersion: v2
 name: web
-description: Kerf web UI (WO-14) — static SPA on nginx, /v1/ proxied to the hub with the `ui` token
+description: Kerf web UI — static SPA on nginx, /v1/ proxied to the hub with the `ui` token
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

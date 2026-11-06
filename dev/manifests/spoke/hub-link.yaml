@@ -3,7 +3,7 @@
 # Spoke components reach hub services by stable in-cluster names, the way they would reach a real
 # hub endpoint in EKS:
 #   http://victoria-metrics.hub.svc:8428   -> hub VictoriaMetrics (NodePort 30428)
-#   http://hub-api.hub.svc:8080            -> hub API (WO-04, expected on hub NodePort 30080)
+#   http://hub-api.hub.svc:8080            -> hub API (expected on hub NodePort 30080)
 apiVersion: v1
 kind: Namespace
 metadata:

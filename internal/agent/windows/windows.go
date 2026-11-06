@@ -1,4 +1,4 @@
-// Package windows evaluates maintenance and freeze windows (WO-10).
+// Package windows evaluates maintenance and freeze windows.
 //
 // A window is recurring (5-field cron `schedule` + `duration`, evaluated in `timeZone`, default
 // UTC) or one-off (`start` + `end`). Maintenance windows are the only times the `deferred`

@@ -35,7 +35,7 @@ const (
 	DefaultRollbackOOMs    = 1
 	DefaultRollbackRestart = 3
 	DefaultThrottlingRatio = 0.25
-	// HPA target bounds (WO-11), percent.
+	// HPA target bounds, percent.
 	DefaultHPAMinTarget int32 = 40
 	DefaultHPAMaxTarget int32 = 90
 )
@@ -81,7 +81,7 @@ type Effective struct {
 	MinMemory        resource.Quantity
 	Cooldown         time.Duration
 
-	// Rollback (health watch, WO-08).
+	// Rollback (health watch).
 	WatchDuration    time.Duration
 	RollbackOOMKills int32
 	RollbackRestarts int32
@@ -89,7 +89,7 @@ type Effective struct {
 
 	JVMDetect bool
 
-	// HPA coordination (WO-11): change requests of an HPA's utilization resource only together
+	// HPA coordination: change requests of an HPA's utilization resource only together
 	// with its target, which must stay within [HPAMinTarget, HPAMaxTarget] percent.
 	HPACoordinate bool
 	HPAMinTarget  int32

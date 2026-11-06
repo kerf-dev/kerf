@@ -1,4 +1,4 @@
--- WO-19 (contract for WO-25, D-025): metrics datasources, per-cluster metrics bindings, and
+-- Onboarding and readiness (D-025): metrics datasources, per-cluster metrics bindings, and
 -- cluster readiness (current check results, state, history). docs/contracts/readiness.md.
 -- Idempotent: safe to re-run on a database that already has it.
 

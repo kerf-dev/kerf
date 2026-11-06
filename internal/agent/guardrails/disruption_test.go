@@ -16,7 +16,7 @@ func withResizePolicy(c workload.Container, res corev1.ResourceName, p corev1.Re
 	return c
 }
 
-// TestSingleReplica: WO-13 single-replica protection, one input changed per case.
+// TestSingleReplica: single-replica protection, one input changed per case.
 func TestSingleReplica(t *testing.T) {
 	single := &apply.Disruption{SingleReplica: true, Why: "replicas: 1", RolloutSafe: true}
 	unsafeRollout := &apply.Disruption{SingleReplica: true, Why: "replicas: 1", RolloutWhy: "Deployment strategy Recreate stops every pod"}

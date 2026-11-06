@@ -363,7 +363,7 @@ func TestInstallSnippetAPI(t *testing.T) {
 	e := newEnv(t)
 	e.initOnboarding()
 	e.problem(e.do(http.MethodGet, "/v1/admin/clusters/c1/install", tokAdmin, nil), 409, "install_not_configured")
-	// the pre-WO-18f component chart key still works: the umbrella chart next to it
+	// the older component chart key still works: the umbrella chart next to it
 	e.srv.Cfg.Onboarding.AgentChart = "oci://ghcr.io/x/charts/agent"
 	e.srv.Cfg.Onboarding.HubURL = "http://hub-api.hub.svc:8080"
 	e.srv.Cfg.Onboarding.HubVersion = "0.2.0"

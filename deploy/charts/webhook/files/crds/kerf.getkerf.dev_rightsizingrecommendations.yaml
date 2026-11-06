@@ -143,7 +143,7 @@ spec:
                 x-kubernetes-list-type: map
               hpa:
                 description: |-
-                  HPA is the HPA utilization target applied together with the containers (WO-11): set when
+                  HPA is the HPA utilization target applied together with the containers: set when
                   the workload's HPA scales on the utilization of a resource whose requests change.
                 properties:
                   averageUtilization:
@@ -190,7 +190,7 @@ spec:
                     description: RiskFlags as reported by the hub. Informational.
                     items:
                       description: RiskFlag is a property of a recommendation the
-                        hub computed (WO-04). Values match the hub API.
+                        hub computed. Values match the hub API.
                       type: string
                     maxItems: 16
                     type: array
@@ -443,7 +443,7 @@ spec:
                 x-kubernetes-list-type: map
               previousHPATarget:
                 description: |-
-                  PreviousHPATarget is the HPA target that was live before the most recent apply (WO-11),
+                  PreviousHPATarget is the HPA target that was live before the most recent apply,
                   restored by a rollback together with the containers.
                 format: int32
                 minimum: 1

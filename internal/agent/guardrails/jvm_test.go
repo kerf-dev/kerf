@@ -9,7 +9,7 @@ import (
 	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
-// TestJVMFixedHeap: memory of a JVM with a fixed -Xmx is audit-only (WO-12); CPU still applies.
+// TestJVMFixedHeap: memory of a JVM with a fixed -Xmx is audit-only; CPU still applies.
 func TestJVMFixedHeap(t *testing.T) {
 	restart := []corev1.ContainerResizePolicy{{ResourceName: corev1.ResourceMemory, RestartPolicy: corev1.RestartContainer}}
 	xmx := func(in *Input) {

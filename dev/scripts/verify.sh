@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The WO-01 verification checks, runnable at any time against the running fleet.
+# The fleet verification checks, runnable at any time against the running fleet.
 . "$(dirname "$0")/lib.sh"
 export LOG_PREFIX=verify
 fail=0

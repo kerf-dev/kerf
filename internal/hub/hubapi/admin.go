@@ -7,7 +7,7 @@ import (
 	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
-// Admin area (WO-19, D-022/D-023/D-024): types of the admin, auth and config endpoints.
+// Admin area (D-022/D-023/D-024): types of the admin, auth and config endpoints.
 // Flow and examples: docs/contracts/admin.md. Policy specs use the CRD types of api/v1alpha1
 // (their JSON is the RightsizingPolicySpec schema); validate them with api/v1alpha1/validate.
 

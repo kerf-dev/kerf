@@ -37,7 +37,7 @@ type Job struct {
 	baseline   map[string]clusterBaseline
 	incomplete map[string]time.Time
 
-	// The admin settings in effect for the current run (WO-20), guarded by mu.
+	// The admin settings in effect for the current run, guarded by mu.
 	cur            config.Recommender
 	pricing        hubapi.PricingSettings
 	pricingVersion int
@@ -115,7 +115,7 @@ func (j *Job) now() time.Time {
 // Loop runs until ctx is done. With a backfill configured, the backfill runs are spread between
 // the regular runs (one backfill run whenever no regular run is due), newest first.
 //
-// With several hub replicas only the leader runs Loop (WO-18a); it starts again on every replica
+// With several hub replicas only the leader runs Loop; it starts again on every replica
 // that becomes leader. The run at start is skipped when a regular run succeeded within the last
 // min(interval, 5m), so a rolling update that moves the leadership twice runs once; the next
 // run then comes one interval after that run.
@@ -293,7 +293,7 @@ func alignDown(t time.Time, d time.Duration) time.Time {
 }
 
 // Trigger queues a recommender run now (POST /v1/admin/recompute, D-019) for cluster, or for all
-// clusters when cluster is "". The request is stored in the database (WO-18a), so any replica
+// clusters when cluster is "". The request is stored in the database, so any replica
 // can take it; the leader's RecomputeLoop runs it once no other run is in progress, as of that
 // moment. A request whose scope already has a queued run that has not started gets that run
 // (coalesced).
@@ -407,7 +407,7 @@ func (j *Job) WaitTriggered() {
 	j.Log.Error("WaitTriggered: recompute requests still unfinished after 1m")
 }
 
-// Takeover prepares a new leader (WO-18a): the runs and recompute requests the previous leader
+// Takeover prepares a new leader: the runs and recompute requests the previous leader
 // left unfinished are marked failed (interrupted recompute requests are queued again), and the
 // per-cluster run gauges start from the database.
 func (j *Job) Takeover(ctx context.Context) error {
@@ -528,7 +528,7 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 		}
 		return names
 	}
-	// JVM heap settings the agent reported (WO-12); unreported workloads fall back to image detection.
+	// JVM heap settings the agent reported; unreported workloads fall back to image detection.
 	jvm, err := j.Store.ReportedJVM(ctx, cluster)
 	if err != nil {
 		return err
@@ -628,7 +628,7 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 }
 
 // pricingFallback supplies rates for a cluster without pricing series at the end of a run's
-// window (WO-04d): a backfill before the series existed uses today's series; otherwise (a gap in
+// window: a backfill before the series existed uses today's series; otherwise (a gap in
 // the series) the rates of the cluster's last run that had them, if not older than a day. Both
 // keep source "metrics".
 func (j *Job) pricingFallback(ctx context.Context, cluster string, end time.Time) (recommender.Pricing, bool) {

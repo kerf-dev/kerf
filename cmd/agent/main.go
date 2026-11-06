@@ -1,4 +1,4 @@
-// Command agent is the per-cluster Kerf agent (WO-06). It pulls recommendations
+// Command agent is the per-cluster Kerf agent. It pulls recommendations
 // from the hub, resolves the effective policy of every workload, enforces the guardrails and
 // applies changes in place (pods/resize) or by rollout (server-side apply on the pod template).
 //
@@ -182,7 +182,7 @@ func run(args []string) error {
 		hubURL         = fs.String("hub-url", "http://hub-api.hub.svc:8080", "hub base URL")
 		tokenFile      = fs.String("hub-token-file", "/var/run/secrets/kerf/hub/token", "file with the hub bearer token (re-read on every request)")
 		defaultsFile   = fs.String("cluster-defaults", "", "YAML file with the cluster default policy (a RightsizingPolicy spec)")
-		freezeFile     = fs.String("freeze-file", "", "YAML file with the cluster-wide freeze {now: bool, windows: [TimeWindow]} (WO-10)")
+		freezeFile     = fs.String("freeze-file", "", "YAML file with the cluster-wide freeze {now: bool, windows: [TimeWindow]}")
 		pullInterval   = fs.Duration("pull-interval", time.Minute, "how often recommendations are pulled")
 		staleAfter     = fs.Duration("hub-stale-after", 5*time.Minute, "after this long without a successful pull the hub counts as unreachable and nothing new is applied")
 		reportInterval = fs.Duration("report-interval", 10*time.Second, "how often changed statuses and events are sent")
@@ -190,7 +190,7 @@ func run(args []string) error {
 		readOnly       = fs.Bool("read-only", false, "cap every mode at audit; never write workloads or pods")
 		tolerance      = fs.Float64("tolerance", 0.05, "relative change below which values are left alone")
 		applyingCheck  = fs.Duration("applying-requeue", 5*time.Second, "how often in-progress in-place resizes are checked")
-		maxPodDeletes  = fs.Int("max-pod-deletes-per-run", controller.DefaultMaxPodDeletesPerRun, "pods of an OnDelete StatefulSet evicted at once, after all its pods are Ready (WO-13)")
+		maxPodDeletes  = fs.Int("max-pod-deletes-per-run", controller.DefaultMaxPodDeletesPerRun, "pods of an OnDelete StatefulSet evicted at once, after all its pods are Ready")
 		onDeleteSettle = fs.Duration("ondelete-settle", controller.DefaultOnDeleteSettle, "how long a replaced OnDelete StatefulSet pod must be Ready (health watch) before the next is evicted")
 		metricsAddr    = fs.String("metrics-bind-address", ":8080", "metrics endpoint")
 		probeAddr      = fs.String("health-probe-bind-address", ":8081", "health probe endpoint")
@@ -198,7 +198,7 @@ func run(args []string) error {
 		logLevel       = fs.String("log-level", "info", "debug, info, warn or error")
 		unsupported    labelSelectors
 
-		healthEnabled    = fs.Bool("health-watch", true, "watch workloads after each change and roll back on a breach (WO-08)")
+		healthEnabled    = fs.Bool("health-watch", true, "watch workloads after each change and roll back on a breach")
 		healthInterval   = fs.Duration("health-check-interval", 15*time.Second, "how often a watched workload is re-evaluated (pod events act immediately)")
 		metricsURL       = fs.String("metrics-url", "http://victoria-metrics.hub.svc:8428", "Prometheus-compatible endpoint for the CPU throttling ratio; empty disables it")
 		metricsTokenFile = fs.String("metrics-token-file", "", "optional bearer token file for --metrics-url")
@@ -221,7 +221,7 @@ func run(args []string) error {
 		caStatus         = fs.String("cluster-autoscaler-status", capacity.DefaultCAStatus.String(), "namespace/name of the Cluster Autoscaler status ConfigMap; empty disables it")
 		poolLabels       stringList
 
-		configSync    = fs.Bool("config-sync", true, "pull the hub config: hub-managed policies, pause and approve-once (D-022, WO-21)")
+		configSync    = fs.Bool("config-sync", true, "pull the hub config: hub-managed policies, pause and approve-once (D-022)")
 		configStateCM = fs.String("config-state-configmap", "kerf-agent-config-state", "ConfigMap in $POD_NAMESPACE that persists the last hub config; empty disables persistence")
 	)
 	fs.Var(&metricsExtra, "metrics-extra-matcher", "extra PromQL label matcher for --metrics-url, e.g. env=\"prod\"; repeatable")

@@ -1,6 +1,6 @@
 # CPU-utilization HPA: ~40m per pod against a 100m request (40%), target 60%, so it settles at
 # minReplicas. spec.replicas is deliberately absent so Argo CD does not fight the HPA.
-# Guardrail case: hpa-coupled, audit-only until WO-11 (D-011).
+# Guardrail case: hpa-coupled, audit-only without HPA coordination (D-011).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

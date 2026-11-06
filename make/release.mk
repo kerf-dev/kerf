@@ -1,4 +1,4 @@
-# Release (WO-18c, D-028): multi-arch images and OCI Helm charts for a registry such as ECR.
+# Release (D-028): multi-arch images and OCI Helm charts for a registry such as ECR.
 # Included by the root Makefile. Guide: docs/release.md.
 #
 #   make release       REGISTRY=<acct>.dkr.ecr.<region>.amazonaws.com/kerf VERSION=0.1.0
@@ -19,7 +19,7 @@ VERSION   ?= $(shell git describe --tags --match 'v[0-9]*' --always --dirty 2>/d
 VERSION   := $(VERSION)
 
 RELEASE_IMAGES    ?= hub pricing agent webhook web
-# The umbrella chart (WO-18d, what docs/install/eks.md and the hub's cluster wizard install) and the
+# The umbrella chart (what docs/install/eks.md and the hub's cluster wizard install) and the
 # component charts (installs from before the umbrella: docs/install/eks.md, "Moving from the component charts").
 RELEASE_CHARTS    ?= kerf hub pricing agent webhook web
 RELEASE_CHART_DIR ?= deploy/charts
@@ -39,7 +39,7 @@ RELEASE_BUILD_ARGS  ?=
 RELEASE_REVISION := $(shell git rev-parse HEAD 2>/dev/null)
 RELEASE_SOURCE   ?= https://github.com/kerf-dev/kerf
 
-# CI (WO-35): RELEASE_CACHE=<name> keeps each image's build cache in the GitHub Actions cache (scope
+# CI: RELEASE_CACHE=<name> keeps each image's build cache in the GitHub Actions cache (scope
 # <name>-<image>) for `make release-dry`; needs the Actions runtime env (crazy-max/ghaction-github-runtime).
 RELEASE_CACHE ?=
 comma := ,
@@ -51,7 +51,7 @@ RELEASE_BUILDX = docker buildx build --builder $(RELEASE_BUILDER) --platform $(P
   --label org.opencontainers.image.revision=$(RELEASE_REVISION) \
   --label org.opencontainers.image.source=$(RELEASE_SOURCE)
 
-##@ Release (WO-18c)
+##@ Release
 
 .PHONY: release release-images release-chart release-dry release-check release-builder release-builder-rm
 
@@ -115,7 +115,7 @@ release-chart-package:
 	@rm -rf $(RELEASE_DIR)/charts $(RELEASE_DIR)/_stage; mkdir -p $(RELEASE_DIR)/charts $(RELEASE_DIR)/_stage
 	@for c in $(RELEASE_CHARTS); do \
 	  dir=$(RELEASE_CHART_DIR)/$$c; test -f $$dir/Chart.yaml || { echo "no chart at $$dir"; exit 1; }; \
-	  : "Package a staged copy: links resolved (the umbrella's charts/ links the component charts, WO-18d)."; \
+	  : "Package a staged copy: links resolved (the umbrella's charts/ links the component charts)."; \
 	  : "_stage: go ./... skips _-prefixed dirs, so the copied *_test.go never joins make ci."; \
 	  stage=$(RELEASE_DIR)/_stage/$$c; cp -RL $$dir $$stage || exit 1; find $$stage -name "*_test.go" -delete; \
 	  deps=""; grep -q '^dependencies:' $$stage/Chart.yaml && deps=--dependency-update; \

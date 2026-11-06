@@ -1,6 +1,6 @@
--- Kerf hub schema (WO-00 contract).
+-- Kerf hub schema.
 -- Migration tool: pressly/goose (SQL migrations, one file per version, Up and Down sections).
--- Later migrations (0002+) are owned by WO-04. Enumerations are text + CHECK so they can be
+-- Later migrations (0002+) are owned by the hub. Enumerations are text + CHECK so they can be
 -- extended by a later migration without enum type gymnastics; values match api/openapi/hub.yaml.
 
 -- +goose Up
@@ -28,7 +28,7 @@ CREATE TABLE api_tokens (
     CHECK ((role = 'agent') = (cluster IS NOT NULL))
 );
 
--- Workloads discovered from metrics (inventory, WO-04).
+-- Workloads discovered from metrics (inventory).
 CREATE TABLE workloads (
     id             bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     cluster        text        NOT NULL REFERENCES clusters (name) ON DELETE CASCADE,

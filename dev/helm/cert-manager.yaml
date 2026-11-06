@@ -1,4 +1,4 @@
-# jetstack/cert-manager on every spoke, namespace cert-manager (used by the webhook chart, WO-07).
+# jetstack/cert-manager on every spoke, namespace cert-manager (used by the webhook chart).
 crds:
   enabled: true
   keep: false

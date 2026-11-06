@@ -7,13 +7,13 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// The JVM containers an agent reports (WO-12) are stored in workload_status.settings under the key
+// The JVM containers an agent reports are stored in workload_status.settings under the key
 // "jvm", next to the ValueSettings fields, so no schema migration is needed. ValueSettings decoding
 // ignores the extra key.
 type statusSettingsColumn struct {
 	hubapi.ValueSettings
 	JVM []hubapi.JVMContainer `json:"jvm,omitempty"`
-	// Override is WorkloadStatus.override (WO-20), stored the same way.
+	// Override is WorkloadStatus.override, stored the same way.
 	Override string `json:"override,omitempty"`
 }
 

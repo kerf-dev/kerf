@@ -28,7 +28,7 @@ crds:
 installCRDs: null
 
 hub:
-  # Hub base URL. Spokes reach the hub through a selector-less Service (WO-01).
+  # Hub base URL. Spokes reach the hub through a selector-less Service.
   url: http://hub-api.hub.svc:8080
   # Bearer token for the agent role of this cluster (D-012), read from a Secret key and
   # re-read on every request (rotation needs no restart). The Secret is optional: without it
@@ -81,7 +81,7 @@ clusterDefaults: {}
 #    maxChangePercent: 50
 #    cooldown: 24h
 
-# Cluster-wide freeze (WO-10), in addition to every policy's apply.freezeWindows and not
+# Cluster-wide freeze, in addition to every policy's apply.freezeWindows and not
 # overridable by a policy. Nothing is changed or released while frozen; health-watch rollbacks
 # still happen. `now: true` freezes until turned off; windows use the RightsizingPolicy TimeWindow
 # format (schedule + duration [+ timeZone], or start + end).
@@ -98,13 +98,13 @@ freeze:
 # ClusterRole. Use it for clusters where every policy is audit.
 readOnly: false
 
-# Hub-managed configuration (D-022, WO-21): on every pull the agent fetches the cluster config,
+# Hub-managed configuration (D-022): on every pull the agent fetches the cluster config,
 # makes the RightsizingPolicy CRs labelled kerf.getkerf.dev/managed-by=hub equal to the
 # hub's policies (never touching other CRs), applies the hub's pause flag like a cluster-wide
 # freeze and applies approve-once grants. The last config is kept in the ConfigMap
 # <fullname>-config-state, so a restart without the hub keeps the pause flag and approvals.
 # With readOnly the CRs are not written; the inventory is still reported.
-# Before downgrading the agent below WO-21, delete the hub CRs:
+# Before downgrading the agent below the release that added hub-managed configuration, delete the hub CRs:
 #   kubectl delete rsp -l kerf.getkerf.dev/managed-by=hub
 configSync:
   enabled: true
@@ -121,7 +121,7 @@ logLevel: info
 # Example: ["kerf.getkerf.dev/no-in-place=true", "node.kubernetes.io/cpu-manager-static"]
 unsupportedNodeSelectors: []
 
-# Health watch and rollback after every automatic change (WO-08). Thresholds and the watch
+# Health watch and rollback after every automatic change. Thresholds and the watch
 # duration come from guardrails.rollback of the effective policy.
 health:
   enabled: true
@@ -141,7 +141,7 @@ health:
   # off by default.
   cadvisorFallback: false
 
-# StatefulSets with updateStrategy OnDelete (WO-13): after the rollout strategy patched the pod
+# StatefulSets with updateStrategy OnDelete: after the rollout strategy patched the pod
 # template, the agent evicts the outdated pods (eviction API, so PodDisruptionBudgets apply),
 # highest ordinal first, at most maxPodDeletesPerRun at a time, and only once every pod has been
 # Ready for `settle` (or the StatefulSet's minReadySeconds) and the health watch reports no breach.
@@ -248,7 +248,7 @@ affinity: {}
 
 metrics:
   port: 8080
-  # Adds prometheus.io/* scrape annotations to the metrics Service (WO-01 vmagent convention).
+  # Adds prometheus.io/* scrape annotations to the metrics Service (vmagent convention).
   scrape: true
 
 # Prometheus Operator ServiceMonitor or VictoriaMetrics VMServiceScrape for the metrics Service.

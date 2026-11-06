@@ -61,12 +61,12 @@ type Config struct {
 	UnsupportedNodeSelectors []map[string]string
 	// ApplyingRequeue is how often an in-progress in-place resize is checked.
 	ApplyingRequeue time.Duration
-	// Freeze is the cluster-wide freeze (WO-10): added to every policy's freeze windows.
+	// Freeze is the cluster-wide freeze: added to every policy's freeze windows.
 	Freeze windows.Freeze
-	// MaxPodDeletesPerRun caps the pods of an OnDelete StatefulSet evicted at once (WO-13, default 1).
+	// MaxPodDeletesPerRun caps the pods of an OnDelete StatefulSet evicted at once (default 1).
 	MaxPodDeletesPerRun int
 	// OnDeleteSettle is how long a replaced pod must be Ready before the next one is evicted
-	// (WO-13, default 30s; the StatefulSet's minReadySeconds if longer).
+	// (default 30s; the StatefulSet's minReadySeconds if longer).
 	OnDeleteSettle time.Duration
 }
 
@@ -93,7 +93,7 @@ type Reconciler struct {
 type AdminState interface {
 	Flags() hubclient.ConfigFlags
 	Approval(w hubclient.WorkloadRef, recID string, now time.Time) *hubclient.ConfigApproval
-	// Hold keeps an approval whose change is in flight, also once the hub stops sending it (WO-29).
+	// Hold keeps an approval whose change is in flight, also once the hub stops sending it.
 	Hold(a hubclient.ConfigApproval)
 	Consume(id string, now time.Time)
 }
@@ -159,13 +159,13 @@ type run struct {
 	prevSpec v1alpha1.RightsizingRecommendationSpec
 	reason   string
 	message  string
-	hpa      *hpaState // WO-11
-	// frozen is true inside a freeze window: nothing is written except rollbacks (WO-10).
+	hpa      *hpaState // HPA coordination state
+	// frozen is true inside a freeze window: nothing is written except rollbacks.
 	frozen bool
 	// holdEffective keeps the stored effective policy while a release waits for a freeze to end,
 	// so the release (and its event) still happens afterwards.
 	holdEffective bool
-	// note is appended to the Applied condition message (OnDelete roll progress, WO-13).
+	// note is appended to the Applied condition message (OnDelete roll progress).
 	note string
 	// paused: automation is paused in the hub config (D-022); frozen is set too.
 	paused     bool
@@ -176,7 +176,7 @@ type run struct {
 	// approvedApply: this reconcile applied an approval (the Applied condition then says
 	// ApprovedOnce, which keeps the field ownership after it, D-027).
 	approvedApply bool
-	// adopted: this reconcile adopted a new recommendation id with the applied values (WO-21c).
+	// adopted: this reconcile adopted a new recommendation id with the applied values.
 	adopted bool
 }
 
@@ -439,7 +439,7 @@ func (w *run) decide() (ctrl.Result, error) {
 			return w.progressInPlace()
 		}
 	}
-	// An OnDelete StatefulSet roll in flight keeps going (WO-13).
+	// An OnDelete StatefulSet roll in flight keeps going.
 	if res, active, err := w.rollOnDelete(); err != nil || active {
 		return res, err
 	}
@@ -463,7 +463,7 @@ func (w *run) decide() (ctrl.Result, error) {
 	}
 	w.hpa = hpa
 	if w.hpa.coordinate && w.strategy == v1alpha1.StrategyInPlace {
-		w.strategy = v1alpha1.StrategyRollout // in-place is not used for HPA workloads (WO-11)
+		w.strategy = v1alpha1.StrategyRollout // in-place is not used for HPA workloads
 	}
 	in := guardrails.Input{
 		Now: w.now, Effective: w.eff, Strategy: w.strategy, Rec: w.rec, HubFresh: w.fresh,
@@ -483,7 +483,7 @@ func (w *run) decide() (ctrl.Result, error) {
 	// Values of the current recommendation are live: keep them live (drift repair, silently). The
 	// hub issues a new recommendation id on every run, also when the values stay the same: a new
 	// id whose guardrailed values are the applied ones is adopted as the applied recommendation,
-	// without an applied event, and drift repair goes on (WO-21c).
+	// without an applied event, and drift repair goes on.
 	if w.rsr != nil && w.rec != nil && len(auto) > 0 && w.prev.Phase == v1alpha1.PhaseApplied {
 		switch {
 		case w.rsr.Status.AppliedRecommendationID == w.rec.ID:
@@ -517,7 +517,7 @@ func (w *run) decide() (ctrl.Result, error) {
 			return w.keepLive()
 		}
 	}
-	// Rolled back by the health watch (WO-08): never re-apply the rolled-back values, also under a
+	// Rolled back by the health watch: never re-apply the rolled-back values, also under a
 	// new recommendation id.
 	if w.rsr != nil && w.rec != nil && w.prev.Phase == v1alpha1.PhaseRolledBack && w.rolledBackAgain(dec) {
 		w.reason, w.message = condReasonFromConditions(w.prev), "rolled back; waiting for a new recommendation"
@@ -565,7 +565,7 @@ func (w *run) decide() (ctrl.Result, error) {
 				w.rsr.Status.Phase = v1alpha1.PhasePending
 			}
 		}
-		// After a rollback (WO-08) the spec keeps the rolled-back values and id until a new change
+		// After a rollback the spec keeps the rolled-back values and id until a new change
 		// is applied: the previous values are live again, and RolledBack describes that.
 		w.emit(hubclient.Event{Type: evType, Reason: dec.Reason, Message: dec.Message,
 			RecommendationID: w.rec.ID, Resources: refusedResources(dec)}, slotDecision, recValues(w.rec))
@@ -642,7 +642,7 @@ func (w *run) keepLive() (ctrl.Result, error) {
 	if len(own) == 0 || r.Cfg.ReadOnly || w.frozen {
 		return ctrl.Result{}, nil
 	}
-	// The health watch (WO-08) may have rolled this change back a moment ago and the cached RSR
+	// The health watch may have rolled this change back a moment ago and the cached RSR
 	// not show it yet: confirm the phase uncached before re-asserting anything.
 	var fresh v1alpha1.RightsizingRecommendation
 	if err := r.Reader.Get(w.ctx, client.ObjectKeyFromObject(w.rsr), &fresh); err != nil {
@@ -759,7 +759,7 @@ func (w *run) adopt() error {
 }
 
 // rolledBackAgain reports whether applying the current recommendation would bring back what the
-// health watch rolled back (WO-08): the same id, or a new id whose guardrailed targets are the
+// health watch rolled back: the same id, or a new id whose guardrailed targets are the
 // rolled-back values (the RSR spec) for every resource it changes.
 func (w *run) rolledBackAgain(dec guardrails.Decision) bool {
 	if w.rsr.Spec.Source.RecommendationID == w.rec.ID {
@@ -796,7 +796,7 @@ func (w *run) ownedTargets() map[corev1.ResourceName]bool {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Deferred (WO-10)
+// Deferred
 
 // deferChange queues a change of a deferred workload: the RSR carries the guardrailed values,
 // phase Deferred and the next maintenance window; the reconcile is requeued for when it opens,
@@ -861,7 +861,7 @@ func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous 
 			Strategy: string(strategy), Message: err.Error(), Details: map[string]string{"error": err.Error()}}, "failed/"+v1alpha1.ReasonApplyError+"/"+recID, nil)
 		return fmt.Errorf("apply %s: %w", w.k, err)
 	}
-	// The HPA target follows in the same reconcile (WO-11). If it fails, the change is recorded as
+	// The HPA target follows in the same reconcile. If it fails, the change is recorded as
 	// applied anyway and keepLive re-asserts the target on the next reconcile.
 	if err := w.applyHPATarget(w.hpa); err != nil {
 		w.emit(hubclient.Event{Type: hubclient.EventFailed, Reason: v1alpha1.ReasonApplyError, RecommendationID: recID,
@@ -939,7 +939,7 @@ func (w *run) startInPlace(dec guardrails.Decision) (ctrl.Result, error) {
 	w.reason, w.message = condReasonApplying, "resizing running pods: "+guardrails.Summary(dec.Changes)
 	if w.approval != nil {
 		// The resize finishes under this approval, even if a recommender run supersedes it in the
-		// hub meanwhile (WO-29).
+		// hub meanwhile.
 		r.Admin.Hold(*w.approval)
 	}
 	if err := w.writeStatus(); err != nil {
@@ -1504,7 +1504,7 @@ func (r *Reconciler) record(rsr *v1alpha1.RightsizingRecommendation, obj client.
 	r.Recorder.Eventf(rsr, obj, typ, e.Reason, e.Type, "%s", note)
 }
 
-// Emit delivers an event raised outside a reconcile (the health watch, WO-08): to the hub
+// Emit delivers an event raised outside a reconcile (the health watch): to the hub
 // buffer (asynchronously) and as a Kubernetes Event on the RSR.
 func (r *Reconciler) Emit(rsr *v1alpha1.RightsizingRecommendation, obj client.Object, e hubclient.Event) {
 	if kind, ok := workload.KindOf(obj); ok {
@@ -1675,7 +1675,7 @@ func pauseMessage(f hubclient.ConfigFlags) string {
 // approve applies an approve-once grant for the workload's current recommendation: its audit
 // resources count as auto-patch for this one change, with every guardrail. The grant is
 // consumed by the applied event (emit). An in-place change in flight is carried by its own grant
-// only (held, WO-29), never by a grant for a newer recommendation: the applied event names the
+// only (held), never by a grant for a newer recommendation: the applied event names the
 // recommendation its grant approved. A grant whose recommendation advises the live values changes
 // nothing and is consumed (consumeLive).
 func (w *run) approve() {
@@ -1709,7 +1709,7 @@ func (w *run) approve() {
 // applied one, or one adopted with the applied values): nothing changes, and the
 // applied/ApprovedOnce event names the recommendation so the hub marks the approval consumed. The
 // Applied condition then says ApprovedOnce (D-027). Without it the approval stayed pending after
-// a recommender run had superseded the approval the agent applied (WO-29).
+// a recommender run had superseded the approval the agent applied.
 func (w *run) consumeLive() {
 	if w.approval == nil {
 		return

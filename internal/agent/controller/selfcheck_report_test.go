@@ -58,7 +58,7 @@ func TestReporterSelfChecks(t *testing.T) {
 	}
 }
 
-// TestReporterComponents: the components found by a self-check run (WO-33) go with the checks; an
+// TestReporterComponents: the components found by a self-check run go with the checks; an
 // empty list is sent (no webhook), nil (unknown) is not.
 func TestReporterComponents(t *testing.T) {
 	ctx := context.Background()

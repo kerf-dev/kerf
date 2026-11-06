@@ -486,7 +486,7 @@ func TestGeneratedCRDsCurrent(t *testing.T) {
 			t.Errorf("%s: generated CRD reported stale: %v", k.plural, m)
 		}
 		if k.plural == "rightsizingpolicies" {
-			// an older CRD without the WO-19 field selector.workloads is detected (nested)
+			// an older CRD without the field selector.workloads is detected (nested)
 			sel, _, _ := unstructured.NestedMap(props, "properties", "selector", "properties")
 			delete(sel, "workloads")
 			_ = unstructured.SetNestedMap(props, sel, "properties", "selector", "properties")
@@ -513,7 +513,7 @@ func TestImageVersion(t *testing.T) {
 	}
 }
 
-// The webhook pods behind the Service are reported with their image tags (WO-33).
+// The webhook pods behind the Service are reported with their image tags.
 func TestWebhookComponents(t *testing.T) {
 	e := healthyEnv(t)
 	es := e.objs[3].(*discoveryv1.EndpointSlice)

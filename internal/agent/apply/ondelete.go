@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// StatefulSets with updateStrategy OnDelete (WO-13): a template change only reaches a pod when
+// StatefulSets with updateStrategy OnDelete: a template change only reaches a pod when
 // the pod is deleted. After the rollout strategy patched the template, the agent replaces the
 // outdated pods itself, highest ordinal first (the order the StatefulSet controller uses), at most
 // maxDeletes at a time, and only while every pod is Ready and has been for the settle time. Pods

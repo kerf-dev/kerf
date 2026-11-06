@@ -103,7 +103,7 @@ type Config struct {
 
 	Profiles map[string]Profile `json:"profiles"`
 
-	// JVM configures JVM-aware memory recommendations (WO-12).
+	// JVM configures JVM-aware memory recommendations.
 	JVM JVMConfig `json:"jvm"`
 }
 

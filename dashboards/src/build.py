@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the Kerf Grafana dashboards (WO-05).
+"""Generate the Kerf Grafana dashboards.
 
 The JSON files in dashboards/ are build output: edit this file, then run `make dashboards`.
 `make dashboards-verify` fails when the JSON is out of date.
@@ -1152,7 +1152,7 @@ def automation():
         no_value="No events in range"))
     g.add(8, 9, timeseries(
         "Rollbacks by reason",
-        "Health-watch rollbacks (WO-08) per interval: OOMKills, Restarts or Throttling after a change.",
+        "Health-watch rollbacks per interval: OOMKills, Restarts or Throttling after a change.",
         targets(("sum by (reason) (increase(" + acts('type="rolled_back"') + "[$__interval]))", "{{reason}}")),
         bars=True, stack=True, decimals=0, min_=0, interval="5m", color={"mode": "palette-classic"},
         no_value="No rollbacks in range"))

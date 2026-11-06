@@ -109,7 +109,7 @@ export const EVENT_TYPES: EventType[] = [
   'failed',
 ]
 
-// ---- Admin area (WO-19 contract: docs/contracts/admin.md, readiness.md) ----
+// ---- Admin area (contract: docs/contracts/admin.md, readiness.md) ----
 export type UserRole = S['UserRole']
 export type TokenRole = S['TokenRole']
 export type Me = S['Me']

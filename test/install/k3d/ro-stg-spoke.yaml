@@ -1,4 +1,4 @@
-# WO-18e staging: one "workload cluster" of docs/install/eks.md.
+# Staging: one "workload cluster" of docs/install/eks.md.
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:

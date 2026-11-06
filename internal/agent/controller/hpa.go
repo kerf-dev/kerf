@@ -1,6 +1,6 @@
 package controller
 
-// HPA coordination (WO-11, lifts D-011): the reconciler side. The math and the writes are in
+// HPA coordination (lifts D-011): the reconciler side. The math and the writes are in
 // internal/agent/apply/hpa.go.
 //
 // For a workload whose HPA scales on the utilization of a resource in auto-patch:

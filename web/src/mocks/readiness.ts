@@ -714,7 +714,7 @@ export function toClusterReadiness(m: ReadinessModel): ClusterReadiness {
     }
   })
   const agentReported = m.results['agent.connected']?.status === 'pass'
-  // Like the hub (WO-25): agent checks that never reported have no row in `checks`; blocking ones
+  // Like the hub: agent checks that never reported have no row in `checks`; blocking ones
   // still appear in `blockedBy` and in `summary.unknown`.
   const reported = checks.filter((c) => !(c.source === 'agent' && c.status === 'unknown'))
   return {
@@ -761,7 +761,7 @@ export const ARGOCD_IGNORE = `resource.customizations.ignoreDifferences.all: |
 
 const MOCK_CHART = 'oci://ghcr.io/kerf-dev/kerf/charts/kerf'
 
-/** The values of the umbrella chart in mode spoke, as the hub renders them (WO-18f). */
+/** The values of the umbrella chart in mode spoke, as the hub renders them. */
 function spokeValues(cluster: string, webhook: boolean, indent = ''): string[] {
   return [
     'global:',

@@ -30,7 +30,7 @@ type RawContainer struct {
 	Current  Current
 	// Used24hCPU / Used24hMemory: mean over the last 24 h of the usage summed over pods.
 	Used24hCPU, Used24hMemory float64
-	// Images are the container's images within the inventory lookback (JVM detection, WO-12).
+	// Images are the container's images within the inventory lookback (JVM detection).
 	Images []string
 }
 
@@ -44,7 +44,7 @@ type RawWorkload struct {
 	// HasRequests is true when the workload was found by the inventory (KSM) queries.
 	HasRequests bool
 	// Live is true when the workload has request/limit series at the window end (default lookback):
-	// it has pods right now (WO-04e).
+	// it has pods right now.
 	Live bool
 	// GPU is set when the workload's pods request GPUs.
 	GPU *RawGPU

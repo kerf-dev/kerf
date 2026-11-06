@@ -62,7 +62,7 @@ The values of the `web` component chart. In the `kerf` chart they sit under `web
 | `extraVolumes` | array | `[]` |  |
 | `extraVolumeMounts` | array | `[]` |  |
 | `hub` | object | see the keys below |  |
-| `hub.upstream` | string | `hub.kerf.svc.cluster.local:8080` | host:port of the hub API Service (the chart names it after its release, `hub`). nginx resolves it per request with the cluster DNS, which does not apply search domains: use the full name. |
+| `hub.upstream` | string | `hub.kerf.svc.cluster.local:8080` | host:port of the hub API Service (the hub chart names it after its release, `hub`). nginx resolves it per request with the cluster DNS, which does not apply search domains: use the full name. |
 | `trustedProxies` | array | `[]` | Load balancers or ingress controllers in front of the UI (CIDRs or addresses, e.g. the VPC subnets of the ALB). nginx then takes the client address from the X-Forwarded-For entry they add, and the hub rate-limits failed sign-ins per real client. Empty: the client is the connecting address (the proxy's, when there is one). |
 | `service` | object | see the keys below |  |
 | `service.type` | string | `ClusterIP` |  |

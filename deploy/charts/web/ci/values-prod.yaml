@@ -1,5 +1,5 @@
 # Every production feature on, EKS-like (rendered by `make charts-lint`). Non-root on 8080 needs
-# the WO-18c image.
+# the unprivileged web image.
 global:
   imageRegistry: 123456789012.dkr.ecr.eu-west-1.amazonaws.com
   imagePullSecrets: [{name: ecr-pull}]

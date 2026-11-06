@@ -212,7 +212,7 @@ export const useInstallSnippet = (
     enabled: !!cluster,
   })
 
-/** Component versions and the update check (Admin → Maintenance, WO-33). */
+/** Component versions and the update check (Admin → Maintenance). */
 export const useMaintenance = () =>
   useQuery({
     queryKey: ['admin', 'maintenance'],

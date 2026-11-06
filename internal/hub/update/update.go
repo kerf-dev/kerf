@@ -1,4 +1,4 @@
-// Package update finds the latest Kerf release for the hub's update check (WO-33). It reads the
+// Package update finds the latest Kerf release for the hub's update check. It reads the
 // public GitHub releases API of kerf-dev/kerf with a plain unauthenticated GET; nothing about the
 // installation is sent besides a generic User-Agent kerf-hub/<version>.
 package update

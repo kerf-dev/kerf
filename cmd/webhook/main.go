@@ -1,4 +1,4 @@
-// Command webhook is the Kerf mutating admission webhook (WO-07, D-007). On pod
+// Command webhook is the Kerf mutating admission webhook (D-007). On pod
 // CREATE it sets the recommended requests/limits of Applied in-place RightsizingRecommendations, so
 // new pods (scale-out, eviction, redeploy) start with the values the agent resized running pods to,
 // without touching the pod template.

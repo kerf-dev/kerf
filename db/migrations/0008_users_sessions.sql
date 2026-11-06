@@ -1,4 +1,4 @@
--- WO-19 (admin area, D-023): local users, browser sessions, and API token bookkeeping.
+-- Admin area (D-023): local users, browser sessions, and API token bookkeeping.
 -- Idempotent: safe to re-run on a database that already has it.
 
 -- +goose Up

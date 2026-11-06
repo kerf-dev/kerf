@@ -40,7 +40,7 @@ func (s *Server) InitOnboarding(ctx context.Context, cipher *datasource.Cipher) 
 	hc := &http.Client{Timeout: 30 * time.Second}
 	gauges := readiness.NewGauges()
 	if s.Metrics != nil && s.Metrics.Registry != nil {
-		// Database state: exported by the leader only (WO-18a).
+		// Database state: exported by the leader only.
 		if err := gauges.Register(s.Metrics.LeaderOnly()); err != nil {
 			return err
 		}
@@ -71,7 +71,7 @@ const RecheckTimeout = 15 * time.Minute
 // RunReadiness runs the hourly metrics checks and, every minute, the cheap hub checks
 // (agent.connected, metrics.recommendations), the re-check expiry and the readiness gauges (from
 // the database: other replicas store agent self-checks too). It blocks until ctx is done and
-// the runner stopped. Leader only (WO-18a).
+// the runner stopped. Leader only.
 func (s *Server) RunReadiness(ctx context.Context) {
 	if s.Onb == nil {
 		return
@@ -288,7 +288,7 @@ func (s *Server) triggerChecks(clusters ...string) {
 	}
 	for _, c := range clusters {
 		if s.Coord != nil && !s.Coord.IsLeader() {
-			// The leader runs the checks (WO-18a).
+			// The leader runs the checks.
 			if err := s.Store.Notify(context.Background(), store.NotifyReadinessPrefix+c); err != nil {
 				s.Log.Warn("notify readiness trigger", "cluster", c, "err", err)
 			}

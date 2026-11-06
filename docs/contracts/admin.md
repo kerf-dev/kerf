@@ -428,7 +428,7 @@ or disabling the last enabled admin gives `409 last_admin`.
 ```
 `GET /v1/audit` (workload events) is unchanged and never returns `config_changed`.
 
-### Maintenance (WO-33)
+### Maintenance
 
 `GET /v1/admin/maintenance` (viewer) → `Maintenance`: `hubVersion`, `chartVersion`, `components` (each hub
 replica with `leader`, pricing, per cluster its `agent` and `webhook` pods, each with `compat`

@@ -11,7 +11,7 @@ import (
 )
 
 // TestInstallConfigFromCharts: the hub config the charts render (EKS example, dev values) loads
-// strictly and yields the umbrella chart for the wizard's install snippets (WO-18f). Needs helm.
+// strictly and yields the umbrella chart for the wizard's install snippets. Needs helm.
 func TestInstallConfigFromCharts(t *testing.T) {
 	helm, err := exec.LookPath("helm")
 	if err != nil {

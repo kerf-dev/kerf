@@ -61,7 +61,7 @@ type ContainerData struct {
 	Current  Current
 	// Used24h is the 24 h average usage summed over all pods (cores, bytes).
 	Used24hCPU, Used24hMemory float64
-	// JVM is set for JVM containers (WO-12).
+	// JVM is set for JVM containers.
 	JVM *JVMInfo
 }
 
@@ -125,7 +125,7 @@ type Pricing struct {
 	Sources []hubapi.PricingRateSource `json:"sources,omitempty"`
 	// CURPeriod is the usage the effective (cur) rates were computed from; nil without cur nodes.
 	CURPeriod *hubapi.PricingPeriod `json:"curPeriod,omitempty"`
-	// Adjustment records the hub's pricing settings applied to the rates (WO-20); nil = none.
+	// Adjustment records the hub's pricing settings applied to the rates; nil = none.
 	// CPUCoreHour and MemoryGiBHour are then the adjusted rates.
 	Adjustment *PricingAdjustment `json:"adjustment,omitempty"`
 }

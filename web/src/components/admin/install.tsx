@@ -18,7 +18,7 @@ import { WriteDialog } from './write-dialog'
 
 /**
  * Install instructions in three flavours (D-025): the umbrella chart kerf in mode spoke
- * (agent, webhook and CRDs; WO-18f). They reference the token Secret, never the token.
+ * (agent, webhook and CRDs). They reference the token Secret, never the token.
  */
 export function InstallSnippets({ cluster, compact }: { cluster: string; compact?: boolean }) {
   const [format, setFormat] = useState<InstallFormat>('helm')
@@ -122,7 +122,7 @@ const HUB_VALUES: { key: string; what: string; match: RegExp; example: string }[
 ]
 
 /**
- * `409 install_not_configured` (WO-25): the hub cannot render install snippets until its chart sets
+ * `409 install_not_configured`: the hub cannot render install snippets until its chart sets
  * the onboarding values. Names the missing ones (from the hub's message) and shows how to set them.
  */
 function InstallNotConfigured({ detail }: { detail?: string }) {

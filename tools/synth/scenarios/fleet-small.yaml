@@ -1,8 +1,8 @@
 # Small scenario: one workload per signal pattern (named synth-<pattern>-0, with the ground truth a
 # correct recommender must reach) plus a few generated workloads, in both synthetic clusters.
-# Used by WO-04's verification and to generate testdata/series fixtures.
+# Used by the recommender's verification and to generate testdata/series fixtures.
 #
-# workloadLabel: true adds a convenience `workload` label to cAdvisor series so the WO-02
+# workloadLabel: true adds a convenience `workload` label to cAdvisor series so the
 # verification query works directly. Real cAdvisor has no such label: never depend on it.
 name: fleet-small
 seed: 42

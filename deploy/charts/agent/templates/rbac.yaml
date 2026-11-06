@@ -44,12 +44,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods/resize"]
     verbs: ["patch"]
-  # OnDelete StatefulSets: outdated pods are evicted (never deleted), so PDBs apply (WO-13).
+  # OnDelete StatefulSets: outdated pods are evicted (never deleted), so PDBs apply.
   - apiGroups: [""]
     resources: ["pods/eviction"]
     verbs: ["create"]
   {{- end }}
-  # PodDisruptionBudgets: single-replica protection (WO-13).
+  # PodDisruptionBudgets: single-replica protection.
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch"]
@@ -68,7 +68,7 @@ rules:
     verbs: ["get"]
   {{- end }}
   # HPA detection (D-011); patched (server-side apply of the utilization target) for HPA
-  # coordination (WO-11).
+  # coordination.
   - apiGroups: ["autoscaling"]
     resources: ["horizontalpodautoscalers"]
     verbs: ["get", "list", "watch"{{ if not .Values.readOnly }}, "patch"{{ end }}]
@@ -126,7 +126,7 @@ subjects:
     namespace: {{ .Release.Namespace }}
 {{- if .Values.configSync.enabled }}
 ---
-# The last hub config (pause flag, approvals) persisted across restarts (WO-21).
+# The last hub config (pause flag, approvals) persisted across restarts.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

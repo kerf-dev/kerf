@@ -554,7 +554,7 @@
     {
       "type": "timeseries",
       "title": "Rollbacks by reason",
-      "description": "Health-watch rollbacks (WO-08) per interval: OOMKills, Restarts or Throttling after a change.",
+      "description": "Health-watch rollbacks per interval: OOMKills, Restarts or Throttling after a change.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"

@@ -2,7 +2,7 @@
 
 package e2e
 
-// WO-24: admin-area scenarios (D-022..D-027). They drive the hub API as logged-in dev users
+// Admin-area scenarios (D-022..D-027). They drive the hub API as logged-in dev users
 // (admin_client_test.go) and check the effect on the spokes. Hub objects they create (policies,
 // clusters, pause state) are removed at the end of each test and swept at the start of a run
 // (sweepHub) in case a run was killed.
@@ -41,7 +41,7 @@ const (
 )
 
 // smallCPU is the CPU request of the admin scenarios' workloads on ro-spoke-1, which burn ~20m:
-// smaller than overCPU because the WO-09 scenarios already fill most of that 8-core node.
+// smaller than overCPU because the base scenarios already fill most of that 8-core node.
 const smallCPU = "100m"
 
 // small: requests smallCPU, burns ~2% of a core.
@@ -262,7 +262,7 @@ func TestAdminPause(t *testing.T) {
 	webPods := snapshot(t, cl, ns, "web")
 	ev := waitEvent(t, cl, ns, "web", "blocked", func(e auditEvent) bool { return e.Reason == v1alpha1.ReasonPaused })
 	t.Logf("blocked event: %s", ev.Message)
-	// At least two agent pulls (45 s at the 30 s pull before WO-30).
+	// At least two agent pulls (45 s at the default 30 s pull).
 	consistently(t, max(2*agentFlag(t, cl, "pull-interval", time.Minute), 30*time.Second), 5*time.Second, "nothing applied while paused", func() (bool, string) {
 		if got := snapshot(t, cl, ns, "web"); fmt.Sprint(got) != fmt.Sprint(webPods) {
 			return false, fmt.Sprintf("web changed while paused: %v -> %v", webPods, got)
@@ -354,8 +354,8 @@ func TestApproveOnce(t *testing.T) {
 		hubapi.Actor{Type: hubapi.ActorUser, Name: operator, Role: operator})
 
 	// The next recommendation stays in audit. When a recommender run superseded an approval the
-	// agent had applied, a second applied/ApprovedOnce event (no change) consumed the re-approval
-	// (WO-29): one applied event changed values, and none follows.
+	// agent had applied, a second applied/ApprovedOnce event (no change) consumed the re-approval.
+	// Here one applied event changed values, and none follows.
 	pods := snapshot(t, cl, ns, "web")
 	applied, err := env.Hub.audit(ctx(t), cl.Name, ns, deployment, "web", "applied")
 	must(t, err)

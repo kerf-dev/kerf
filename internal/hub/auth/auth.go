@@ -23,7 +23,7 @@ import (
 const (
 	MinPasswordLen   = 8
 	MaxPasswordBytes = 72
-	// DefaultCost is the bcrypt cost of new hashes (the work-order requires ≥ 12).
+	// DefaultCost is the bcrypt cost of new hashes (at least 12).
 	DefaultCost = 12
 )
 

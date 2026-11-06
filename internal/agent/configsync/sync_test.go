@@ -60,7 +60,7 @@ func TestStateApprovals(t *testing.T) {
 	}
 }
 
-// TestStateHeld (WO-29): an approval held for a change in flight is still returned after the hub
+// TestStateHeld: an approval held for a change in flight is still returned after the hub
 // stops sending it (a recommender run superseded it), until it is consumed or expires; it survives
 // a restart.
 func TestStateHeld(t *testing.T) {

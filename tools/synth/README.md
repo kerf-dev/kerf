@@ -1,4 +1,4 @@
-# tools/synth — synthetic Kubernetes usage history (WO-02)
+# tools/synth — synthetic Kubernetes usage history
 
 `synth` generates realistic cAdvisor and kube-state-metrics history for fake clusters, so the hub,
 recommender, dashboards and UI can be built and demoed against weeks of data that would otherwise

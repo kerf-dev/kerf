@@ -11,7 +11,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
-// WO-29: approve once when a recommender run supersedes the approval around the agent's apply.
+// Approve once when a recommender run supersedes the approval around the agent's apply.
 // The stub hub removes an approval when it stores its applied/ApprovedOnce event, as the hub
 // marks it consumed; a superseded approval is one the stub stops sending.
 

@@ -101,7 +101,7 @@ type Checker struct {
 type Result struct {
 	Checks       []hubclient.ReadinessCheck
 	Capabilities []hubclient.AgentCapability
-	// Components are the Kerf components found (the webhook pods and their versions, WO-33): nil
+	// Components are the Kerf components found (the webhook pods and their versions): nil
 	// = unknown (the webhook could not be inspected), empty = none.
 	Components []hubclient.AgentComponent
 	At         time.Time
@@ -498,7 +498,7 @@ func (c *Checker) readyEndpoints(ctx context.Context, ns, svc string) (int, []st
 }
 
 // webhookVersions returns the version of each webhook pod: the tag of its webhook container's
-// image (Admin -> Maintenance, WO-33). A pod that cannot be read is listed with version "".
+// image (Admin -> Maintenance). A pod that cannot be read is listed with version "".
 func (c *Checker) webhookVersions(ctx context.Context, ns string, pods []string) []hubclient.AgentComponent {
 	out := []hubclient.AgentComponent{}
 	for _, name := range pods {

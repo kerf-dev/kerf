@@ -1,5 +1,5 @@
 /**
- * Contract and behaviour tests of the admin-area mocks (WO-22): every response validates against
+ * Contract and behaviour tests of the admin-area mocks: every response validates against
  * api/openapi/hub.yaml, and the mock enforces the contract's auth, CSRF, If-Match, role and D-025
  * gating rules, so the UI built on it handles the real hub's answers.
  */
@@ -806,7 +806,7 @@ describe('clusters, automation, readiness', () => {
       400,
       'invalid_cluster',
     )
-    // Hub codes for bindings (WO-25): unknown datasource vs. an invalid binding.
+    // Hub codes for bindings: unknown datasource vs. an invalid binding.
     expectProblem(
       await call('POST', '/v1/admin/clusters', {
         body: { ...body, metrics: { ...body.metrics, datasourceId: 'nope' } },
@@ -1088,7 +1088,7 @@ describe('tokens, users, audit, datasources', () => {
   })
 })
 
-describe('maintenance (WO-33)', () => {
+describe('maintenance', () => {
   it('lists every component with its compat against the hub', async () => {
     const r = await call('GET', '/v1/admin/maintenance')
     expect(r.status).toBe(200)

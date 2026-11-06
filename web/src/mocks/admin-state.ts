@@ -90,7 +90,7 @@ export interface ApprovalRec extends Approval {
   autoConsume: boolean
 }
 
-/** Component versions and the update check (Admin → Maintenance, WO-33). */
+/** Component versions and the update check (Admin → Maintenance). */
 export interface MaintenanceModel {
   hubVersion: string
   chartVersion: string

@@ -2,7 +2,7 @@
 # Build, push and helm-deploy one component to one or more k3d clusters. Called by the Tiltfile.
 # Usage: tilt-deploy.sh <component> <cluster>...
 #
-# Conventions for component owners (WO-03/04/06/07):
+# Conventions for component owners:
 #   chart       deploy/charts/<component>/ (required; the component is skipped without it)
 #   values      deploy/charts/<component>/values-dev.yaml and values-<cluster>.yaml, if present
 #   image       first existing of cmd/<component>/Dockerfile, build/<component>/Dockerfile,

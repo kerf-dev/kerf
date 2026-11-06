@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// The in-cluster git server (WO-01) holds the repo Argo CD syncs. The main Application
+// The in-cluster git server holds the repo Argo CD syncs. The main Application
 // (argocd/workloads) syncs only the repo root (non-recursive), so scenarios own e2e/<namespace>/.
 
 var gitMu sync.Mutex // serialize pushes from parallel scenarios

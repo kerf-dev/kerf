@@ -2,7 +2,7 @@ package hubapi
 
 import "time"
 
-// Cluster onboarding, metrics sources and readiness (WO-19 contract for WO-25, D-025).
+// Cluster onboarding, metrics sources and readiness (D-025).
 // docs/contracts/readiness.md; check catalog and state computation: api/v1alpha1/readiness.
 
 // LocalDatasourceID is the id of the built-in hub VictoriaMetrics datasource.

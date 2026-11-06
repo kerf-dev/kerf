@@ -15,7 +15,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
-// Elector elects the hub leader on Postgres (WO-18a, D-028) and delivers the replicas'
+// Elector elects the hub leader on Postgres (D-028) and delivers the replicas'
 // notifications. Every replica runs one on a dedicated connection that
 //   - LISTENs on store.NotifyChannel (token revocations, recompute and readiness triggers, settings);
 //   - tries pg_try_advisory_lock(Key) every Retry while following. The replica holding the lock is

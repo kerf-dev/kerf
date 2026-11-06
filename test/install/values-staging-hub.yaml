@@ -1,4 +1,4 @@
-# WO-18e: the only differences from docs/install/eks.md step 4.1 on the staging hub cluster.
+# The only differences from docs/install/eks.md step 4.1 on the staging hub cluster.
 # Stand-ins: traefik for the ALB (with the staging CA's certificate instead of ACM), the static price
 # file for the AWS Pricing API (no Pod Identity). The ALB annotations stay and are ignored.
 hub:

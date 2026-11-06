@@ -23,7 +23,7 @@ devSeed:
     admin: ro-dev-admin-1b71e51dc42ec5deb56e7f06
     # Pricing service: metrics bindings and the datasource query proxy (D-026).
     pricing: ro-dev-pricing-5f0c3b7e9a1d24c86e13a0b2
-  # Local users for the admin area (WO-20). Development only — the passwords are in Git.
+  # Local users for the admin area. Development only — the passwords are in Git.
   users:
     - {username: viewer, displayName: Viewer, role: viewer, password: ro-dev-viewer-pass}
     - {username: operator, displayName: Operator, role: operator, password: ro-dev-operator-pass}
@@ -64,7 +64,7 @@ config:
     interval: 5m
     # Runs (and POST /v1/admin/recompute, which the e2e suite calls per cluster) use usage up to
     # the last 30 s instead of the last full 5-minute step, so a new workload gets a
-    # recommendation a minute after it starts (WO-30). Production default: the step.
+    # recommendation a minute after it starts. Production default: the step.
     endAlignment: 30s
     # History before the first regular run, computed from the stored metrics: one run as of each
     # UTC midnight of the 29 days before it (the synthetic data covers 30 days). Missing days are

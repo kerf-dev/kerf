@@ -47,7 +47,7 @@ var schemaTypes = map[string]any{
 	"CapacityPDB":              CapacityPDB{},
 	"CapacityPod":              CapacityPod{},
 
-	// Admin area (WO-19, D-022/D-024).
+	// Admin area (D-022/D-024).
 	"ClusterConfig":       ClusterConfig{},
 	"ConfigPolicy":        ConfigPolicy{},
 	"ConfigFlags":         ConfigFlags{},
@@ -154,13 +154,13 @@ type WorkloadRecommendation struct {
 	DataCoverage      DataCoverage              `json:"dataCoverage"`
 	// Pricing are the rates behind MonthlySavingsUSD (D-016); informational, unused by the agent.
 	Pricing *RecommendationPricing `json:"pricing,omitempty"`
-	// HPA is the HPA coordination of hpa-coupled workloads (WO-11).
+	// HPA is the HPA coordination of hpa-coupled workloads.
 	HPA *HPACoordination `json:"hpa,omitempty"`
 	// GPU is the hub's GPU visibility data (utilisation, cost, suggestions); the agent does not use it.
 	GPU json.RawMessage `json:"gpu,omitempty"`
 }
 
-// HPACoordination is the hub's HPA target recommendation (WO-11). Without RecommendedTarget
+// HPACoordination is the hub's HPA target recommendation. Without RecommendedTarget
 // (SkipReason set) the requests of Metric must not change.
 type HPACoordination struct {
 	Name              string `json:"name"`
@@ -226,14 +226,14 @@ type WorkloadStatus struct {
 	AppliedAt        *time.Time           `json:"appliedAt,omitempty"`
 	NextWindow       *time.Time           `json:"nextWindow,omitempty"`
 	ObservedAt       *time.Time           `json:"observedAt,omitempty"`
-	// JVM lists the detected JVM containers and their heap settings (WO-12).
+	// JVM lists the detected JVM containers and their heap settings.
 	JVM []JVMContainer `json:"jvm,omitempty"`
 	// Labels of the workload and of its namespace (the hub resolves the owning team from them).
 	Labels          map[string]string `json:"labels,omitempty"`
 	NamespaceLabels map[string]string `json:"namespaceLabels,omitempty"`
 }
 
-// JVMContainer are the heap settings of one JVM container (WO-12). Empty means "not set".
+// JVMContainer are the heap settings of one JVM container. Empty means "not set".
 type JVMContainer struct {
 	Name             string   `json:"name"`
 	DetectedBy       []string `json:"detectedBy"`
@@ -257,7 +257,7 @@ type WorkloadStatusBatch struct {
 	// the complete set. Send them at start, every 10 minutes and after a recheck.
 	Capabilities []AgentCapability `json:"capabilities,omitempty"`
 	Checks       []ReadinessCheck  `json:"checks,omitempty"`
-	// Components are the Kerf components found in the cluster (WO-33: the webhook pods), sent
+	// Components are the Kerf components found in the cluster (the webhook pods), sent
 	// with the self-checks: nil = unchanged (omitted); non-nil, even empty = all of them.
 	Components []AgentComponent `json:"components,omitzero"`
 	// Capacity is the node and node pool snapshot (sent every 5 minutes when it changed): nil =
@@ -265,7 +265,7 @@ type WorkloadStatusBatch struct {
 	Capacity *CapacityReport `json:"capacity,omitempty"`
 }
 
-// AgentComponent is a Kerf component running in the cluster (Admin -> Maintenance, WO-33).
+// AgentComponent is a Kerf component running in the cluster (Admin -> Maintenance).
 type AgentComponent struct {
 	// Component is "webhook".
 	Component string `json:"component"`
@@ -332,7 +332,7 @@ const (
 // MaxBatch is the maximum number of items per batch request.
 const MaxBatch = 1000
 
-// Admin area (WO-19, docs/contracts/admin.md).
+// Admin area (docs/contracts/admin.md).
 
 // ClusterConfig is the response of GET /v1/clusters/{cluster}/config. Policies is the complete set
 // of hub-managed policies: the agent makes the CRs labelled LabelManagedBy=ManagedByHub equal to

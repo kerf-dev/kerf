@@ -1,4 +1,4 @@
-// Package webhook is the Kerf mutating admission webhook (WO-07, D-007).
+// Package webhook is the Kerf mutating admission webhook (D-007).
 //
 // On pod CREATE it resolves the owning workload from ownerReferences, looks up the workload's
 // RightsizingRecommendation in an informer cache and, when the recommendation is Applied with

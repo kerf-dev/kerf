@@ -1,6 +1,6 @@
 package apply
 
-// HPA coordination (WO-11, lifts D-011).
+// HPA coordination (lifts D-011).
 //
 // An HPA on a resource's utilization divides the pods' usage by the sum of their requests and
 // scales so that the ratio stays at its target: desired = ceil(replicas x utilization / target).

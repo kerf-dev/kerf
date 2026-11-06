@@ -1525,7 +1525,7 @@ export interface paths {
     }
     /**
      * Component versions and the update check
-     * @description The versions of every Kerf component the hub knows of (WO-33): each hub replica (seen in the
+     * @description The versions of every Kerf component the hub knows of: each hub replica (seen in the
      *     last 10 minutes), the pricing service (reported with its requests to the hub, seen in the last
      *     hour), and per registered cluster the agent (status batch) and webhook pods (agent self-check).
      *     `compat` compares each with the hub version of the replica that answered. `update` is the
@@ -1789,7 +1789,7 @@ export interface components {
      *     a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only
      *     (D-011). `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
      *     container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`); its memory is audit-only,
-     *     the agent never changes it (WO-12).
+     *     the agent never changes it.
      * @enum {string}
      */
     RiskFlag:
@@ -1977,7 +1977,7 @@ export interface components {
       gpu?: components['schemas']['GPUUsage']
     }
     /**
-     * @description HPA coordination (WO-11, lifts D-011). Present when the workload has a CPU- or
+     * @description HPA coordination (lifts D-011). Present when the workload has a CPU- or
      *     memory-utilization HPA (risk flag `hpa-coupled`). The HPA's utilization is the pod's usage
      *     over the sum of its containers' requests of `metric`, so changing those requests changes
      *     when it scales. With `recommendedTarget`, the recommended requests of `metric` and that
@@ -2080,13 +2080,13 @@ export interface components {
       appliedAt?: string
       /**
        * Format: date-time
-       * @description When the next maintenance window opens; set while the phase is `Deferred` (WO-10).
+       * @description When the next maintenance window opens; set while the phase is `Deferred`.
        */
       nextWindow?: string
       /** Format: date-time */
       observedAt?: string
       /**
-       * @description JVM containers detected by the agent with their heap settings (WO-12). Absent when JVM
+       * @description JVM containers detected by the agent with their heap settings. Absent when JVM
        *     detection is off (`RightsizingPolicy.spec.jvm.detect: false`) or no container is a JVM.
        */
       jvm?: components['schemas']['JVMContainer'][]
@@ -2147,7 +2147,7 @@ export interface components {
        */
       checks?: components['schemas']['ReadinessCheck'][]
       /**
-       * @description Kerf components the agent found in its cluster (WO-33, today the webhook pods). Sent with
+       * @description Kerf components the agent found in its cluster (today the webhook pods). Sent with
        *     the self-checks; absent = unchanged, an empty array = none running.
        */
       components?: components['schemas']['AgentComponent'][]
@@ -2230,7 +2230,7 @@ export interface components {
       jvm?: components['schemas']['JVMExplanation']
     }
     /**
-     * @description How the JVM heap shaped the memory recommendation (WO-12), only on `memory` of JVM
+     * @description How the JVM heap shaped the memory recommendation, only on `memory` of JVM
      *     containers. `heapSizing`: `fixed` (`-Xmx`; memory audit-only, flag `jvm-fixed-heap`),
      *     `percentage` (`-XX:MaxRAMPercentage`, max heap follows the memory limit), `default` (no heap
      *     flags: the JVM default of 25 % of the limit). `heapNeed` is the observed peak working set
@@ -2911,7 +2911,7 @@ export interface components {
     }
     /** @enum {string} */
     SettingsSection: 'recommender' | 'pricing'
-    /** @description One recommender profile (WO-04). Fractions are 0.15 for +15 %. */
+    /** @description One recommender profile. Fractions are 0.15 for +15 %. */
     RecommenderProfileSettings: {
       name: components['schemas']['Profile']
       window: components['schemas']['Duration']
@@ -3983,7 +3983,7 @@ export interface components {
       notes?: string[]
     }
     /**
-     * @description A Kerf component the agent found running in its cluster (WO-33). Today: the pods behind the
+     * @description A Kerf component the agent found running in its cluster. Today: the pods behind the
      *     webhook Service (`component: webhook`), with the tag of their `webhook` container image as
      *     `version` (`sha256:<12 hex>` for an image pinned only by digest).
      */

@@ -21,7 +21,7 @@ import (
 	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
-// Images already on the k3d nodes (sample workloads, WO-01), so scenarios don't pull.
+// Images already on the k3d nodes (sample workloads), so scenarios don't pull.
 const (
 	stressImage = "docker.io/colinianking/stress-ng:77b17fb95ec2f00e1c2ac2a8a20fe799150d8bd5"
 	jvmImage    = "docker.io/library/eclipse-temurin:21.0.13_9-jdk-alpine-3.23"
@@ -37,7 +37,7 @@ type app struct {
 	Resize    corev1.ResourceResizeRestartPolicy // memory resize policy; cpu is always NotRequired
 	Labels    map[string]string
 	JVM       bool              // run a small JVM program instead of stress-ng
-	FixedHeap bool              // JVM with -Xmx (memory is audit-only, WO-12) instead of MaxRAMPercentage
+	FixedHeap bool              // JVM with -Xmx (memory is audit-only) instead of MaxRAMPercentage
 	Container *corev1.Container // replaces the stress-ng container
 	Volumes   []corev1.Volume   // pod volumes for Container
 }
@@ -82,7 +82,7 @@ func (a app) deployment(ns string) *appsv1.Deployment {
 		c.Image = jvmImage
 		c.Args = nil
 		// The heap follows the container memory limit, so a memory resize with RestartContainer
-		// takes effect. A fixed -Xmx makes memory audit-only (WO-12, JVMFixedHeap).
+		// takes effect. A fixed -Xmx makes memory audit-only (JVMFixedHeap).
 		heap := "-XX:MaxRAMPercentage=50"
 		if a.FixedHeap {
 			heap = "-Xmx64m"

@@ -27,9 +27,9 @@ ports:
     nodeFilters: [server:0:direct]
   - port: 127.0.0.1:15432:30432 # Postgres
     nodeFilters: [server:0:direct]
-  - port: 127.0.0.1:18080:30080 # reserved: hub API (WO-04)
+  - port: 127.0.0.1:18080:30080 # reserved: hub API
     nodeFilters: [server:0:direct]
-  - port: 127.0.0.1:19090:30090 # web UI (WO-14); pricing is ClusterIP only
+  - port: 127.0.0.1:19090:30090 # web UI; pricing is ClusterIP only
     nodeFilters: [server:0:direct]
   - port: 127.0.0.1:15556:30556 # Dex (OIDC issuer http://localhost:15556/dex)
     nodeFilters: [server:0:direct]

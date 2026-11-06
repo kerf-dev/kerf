@@ -53,7 +53,7 @@ func recID(r hubclient.WorkloadRecommendation) string {
 	return hubstub.Normalize([]hubclient.WorkloadRecommendation{r}, time.Now())[0].ID
 }
 
-// TestHubPolicyMaterialised (WO-21 DoD): a policy from the hub appears as a CR within one pull,
+// TestHubPolicyMaterialised: a policy from the hub appears as a CR within one pull,
 // governs its workloads, and is reported in the inventory; a workload override layers on top.
 func TestHubPolicyMaterialised(t *testing.T) {
 	needEnv(t)

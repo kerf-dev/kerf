@@ -19,7 +19,7 @@ if [ "$cur" = "e2e-hub-unreachable-invalid-token" ]; then
   echo "restored the $cluster agent hub token"
 fi
 
-# Scenario 11 annotates the agent pods to make the kubelet refresh the token at once (WO-30).
+# Scenario 11 annotates the agent pods to make the kubelet refresh the token at once.
 for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
   for pod in $(kubectl --context "$ctx" -n "$ns" get pods -l app.kubernetes.io/name=kerf-agent \
     -o jsonpath='{range .items[?(@.metadata.annotations.e2e\.kerf\.getkerf\.dev/token-nudge)]}{.metadata.name}{" "}{end}' 2>/dev/null || true); do
@@ -40,7 +40,7 @@ for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
   fi
 done
 
-# WO-24 scenario 10 removes the agent's pods/resize rule on spoke-2 for a few minutes.
+# Scenario 10 removes the agent's pods/resize rule on spoke-2 for a few minutes.
 role=${E2E_AGENT_CLUSTERROLE:-kerf-agent}
 for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
   res=$(kubectl --context "$ctx" get clusterrole "$role" -o jsonpath='{.rules[*].resources}' 2>/dev/null || true)
@@ -51,7 +51,7 @@ for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
   fi
 done
 
-# WO-24 scenario 11 (KERF_E2E_DISRUPTIVE=1) scales kube-state-metrics on spoke-2 to 0.
+# Scenario 11 (KERF_E2E_DISRUPTIVE=1) scales kube-state-metrics on spoke-2 to 0.
 ksm_ns=${E2E_KSM_NAMESPACE:-monitoring}
 ksm=${E2E_KSM_DEPLOYMENT:-kube-state-metrics}
 was=$(kubectl --context "$spoke_ctx" -n "$ksm_ns" get deploy "$ksm" \
@@ -63,7 +63,7 @@ if [ -n "$was" ]; then
 fi
 
 # The suite's field-manager entries on Helm-owned objects make the next `helm upgrade` fail with a
-# conflict: drop them (the values stay). e2e.test is the manager of suite versions before WO-24.
+# conflict: drop them (the values stay). e2e.test is the manager of suite versions in older runs.
 release_fields() { # context, kubectl get args...
   local ctx=$1; shift
   local patch

@@ -1,10 +1,10 @@
 // Package hubstub is an in-process stand-in for the hub's agent endpoints
 // (api/openapi/hub.yaml, tag "agent"). It is used by the agent's tests and by `agent stub-hub`
-// on the local k3d clusters until the real hub (WO-04) is deployed.
+// on the local k3d clusters until the real hub is deployed.
 //
 // Implemented: bearer-token auth bound to one cluster, ETag / If-None-Match on recommendations,
 // limit/continue pagination, workload-status upserts and idempotent event storage by id, and the
-// cluster config of the admin area (D-022, WO-21): GET config with ETag, approvals consumed on an
+// cluster config of the admin area (D-022): GET config with ETag, approvals consumed on an
 // applied/ApprovedOnce event, configVersion and policyInventory recorded from status batches.
 //
 // With an upstream (SetUpstream) it serves only the config itself and forwards recommendations,

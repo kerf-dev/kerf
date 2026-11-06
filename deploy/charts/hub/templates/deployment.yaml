@@ -10,7 +10,7 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ include "hub.c.replicas" . }}
   {{- end }}
-  # Recreate by default: without leader election (WO-18a) two hub pods side by side would both run
+  # Recreate by default: without leader election two hub pods side by side would both run
   # the recommender.
   strategy: {{- toYaml .Values.updateStrategy | nindent 4 }}
   selector:

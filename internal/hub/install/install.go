@@ -178,7 +178,7 @@ func RegistryOf(ref string) string {
 }
 
 // UmbrellaFromComponent derives the umbrella chart reference from a component chart reference
-// (the pre-WO-18f onboarding.agentChart): make release publishes it next to the components, e.g.
+// (the older onboarding.agentChart): make release publishes it next to the components, e.g.
 // oci://<registry>/charts/agent -> oci://<registry>/charts/kerf,
 // <repo>|agent -> <repo>|kerf, deploy/charts/agent -> deploy/charts/kerf.
 func UmbrellaFromComponent(ref string) string {

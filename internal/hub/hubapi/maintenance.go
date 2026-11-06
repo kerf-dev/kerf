@@ -2,7 +2,7 @@ package hubapi
 
 import "time"
 
-// Admin -> Maintenance (WO-33): component versions and the check for a newer Kerf release.
+// Admin -> Maintenance: component versions and the check for a newer Kerf release.
 
 // Component names (ComponentVersion.component, AgentComponent.component).
 const (

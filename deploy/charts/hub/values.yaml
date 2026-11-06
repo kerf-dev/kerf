@@ -26,7 +26,7 @@ imagePullSecrets: []
 # Set by Tilt (unused by the hub, which serves every cluster).
 clusterName: ""
 
-# The hub elects a leader on Postgres (WO-18a, D-028): only the leader runs the recommender,
+# The hub elects a leader on Postgres (D-028): only the leader runs the recommender,
 # readiness checks and sweeps; every replica serves the API. The database URL must reach Postgres
 # directly or through a session-mode pooler (the leader lock and LISTEN need a real session).
 replicaCount: 2
@@ -51,7 +51,7 @@ podDisruptionBudget:
   minAvailable: 1
   maxUnavailable: null
 
-# CPU-based HPA. Needs leader election (WO-18a); replicaCount is then ignored.
+# CPU-based HPA. Needs leader election; replicaCount is then ignored.
 autoscaling:
   enabled: false
   minReplicas: 2
@@ -172,7 +172,7 @@ devSeed:
   # hub-dev-users. Development only.
   users: []
 
-# Local users and browser sessions (D-023, WO-20).
+# Local users and browser sessions (D-023).
 auth:
   # Secure attribute of the session cookie; false only for plain-HTTP development.
   cookieSecure: true
@@ -267,7 +267,7 @@ config:
     checkInterval: 1h
     agentPullInterval: 1m
     minAgentVersion: ""
-    # Install snippets of the cluster wizard (WO-18f): the hub URL as agents reach it and the
+    # Install snippets of the cluster wizard: the hub URL as agents reach it and the
     # umbrella chart kerf, installed with global.mode spoke
     # (oci://registry/path/kerf, <repo URL>|kerf, or a local chart path).
     hubURL: ""
@@ -285,7 +285,7 @@ config:
     # agentChart: ""
     # webhookChart: ""
 
-# Check for a newer stable Kerf release (Admin -> Maintenance, WO-33). The leader reads the public
+# Check for a newer stable Kerf release (Admin -> Maintenance). The leader reads the public
 # GitHub releases of kerf-dev/kerf once per interval: a plain unauthenticated GET with User-Agent
 # kerf-hub/<version>; nothing about this installation is sent. Set enabled: false for air-gapped
 # sites (or no egress to api.github.com). Behind a proxy, set HTTPS_PROXY / NO_PROXY in extraEnv.
@@ -411,7 +411,7 @@ prometheusRule:
     # No successful recommender run for a cluster for 2 intervals. staleAfter: a Go duration;
     # empty = 2 x config.recommender.interval (an interval set in the admin UI is not seen here).
     recommenderStale: {enabled: true, for: 15m, severity: warning, staleAfter: ""}
-    # No hub replica holds the leader lock (kerf_hub_leader, WO-18a).
+    # No hub replica holds the leader lock (kerf_hub_leader).
     noLeader: {enabled: true, for: 5m, severity: critical}
     # Webhook admissions ending in error, as a share of all admissions of a cluster.
     webhookErrors: {enabled: true, for: 15m, severity: warning, ratio: 0.05}
@@ -423,7 +423,7 @@ prometheusRule:
     notificationFailing: {enabled: true, for: 0m, severity: warning}
   additionalRules: []
 
-# Grafana dashboards (dashboards/*.json, WO-05) as ConfigMaps for the Grafana sidecar. They
+# Grafana dashboards (dashboards/*.json) as ConfigMaps for the Grafana sidecar. They
 # query the datasource uid `victoriametrics` by default (dashboard variable `datasource`).
 dashboards:
   enabled: false

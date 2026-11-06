@@ -165,7 +165,7 @@ type Reporter struct {
 	checks       []hubclient.ReadinessCheck
 	checksSet    bool
 	checksDirty  bool
-	// components found by the self-checks (WO-33), sent with them; nil = unknown (omitted).
+	// components found by the self-checks, sent with them; nil = unknown (omitted).
 	components []hubclient.AgentComponent
 	// capacity is the latest capacity report, sent once with the next batch.
 	capacity *hubclient.CapacityReport

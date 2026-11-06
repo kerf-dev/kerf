@@ -44,12 +44,12 @@ type RightsizingPolicySpec struct {
 	// +optional
 	Guardrails *Guardrails `json:"guardrails,omitempty"`
 
-	// HPA configures coordination with HorizontalPodAutoscalers (WO-11; until then, workloads with
-	// a CPU/memory-utilization HPA stay audit-only regardless of this field, D-011).
+	// HPA configures coordination with HorizontalPodAutoscalers. Without coordination, workloads with
+	// a CPU/memory-utilization HPA stay audit-only (D-011).
 	// +optional
 	HPA *HPAPolicy `json:"hpa,omitempty"`
 
-	// JVM configures JVM detection (WO-12).
+	// JVM configures JVM detection.
 	// +optional
 	JVM *JVMPolicy `json:"jvm,omitempty"`
 }
@@ -144,7 +144,7 @@ type ApplyPolicy struct {
 	// to rollout. Infeasible resizes fall back immediately. Global default: 10m.
 	// +optional
 	FallbackAfter *metav1.Duration `json:"fallbackAfter,omitempty"`
-	// MaintenanceWindows are the only times the deferred strategy may apply changes (WO-10).
+	// MaintenanceWindows are the only times the deferred strategy may apply changes.
 	// +optional
 	// +kubebuilder:validation:MaxItems=16
 	// +listType=atomic
@@ -206,7 +206,7 @@ type Guardrails struct {
 	// further decreases of the rolled-back resource are blocked. Global default: 24h.
 	// +optional
 	Cooldown *metav1.Duration `json:"cooldown,omitempty"`
-	// Rollback configures the health watch after each change (WO-08).
+	// Rollback configures the health watch after each change.
 	// +optional
 	Rollback *RollbackPolicy `json:"rollback,omitempty"`
 }
@@ -232,7 +232,7 @@ type RollbackPolicy struct {
 	ThrottlingRatio string `json:"throttlingRatio,omitempty"`
 }
 
-// HPAPolicy configures coordination with HorizontalPodAutoscalers (WO-11).
+// HPAPolicy configures coordination with HorizontalPodAutoscalers.
 type HPAPolicy struct {
 	// Coordinate changes requests and the HPA utilization target in one step. Global default: false.
 	// +optional
@@ -255,7 +255,7 @@ type HPATargetBounds struct {
 	MaxUtilization *int32 `json:"maxUtilization,omitempty"`
 }
 
-// JVMPolicy configures JVM detection (WO-12).
+// JVMPolicy configures JVM detection.
 type JVMPolicy struct {
 	// Detect JVM containers and treat their memory as heap-bound (memory changes need
 	// RestartContainer or rollout, D-007). Global default: true.

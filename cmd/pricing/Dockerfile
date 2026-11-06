@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # Build context: repository root (see dev/scripts/tilt-deploy.sh and make/pricing.mk).
-# Multi-arch (D-028, WO-18c): the Go stage runs on the build host and cross-compiles for the target
+# Multi-arch (D-028): the Go stage runs on the build host and cross-compiles for the target
 # platform, so `docker buildx build --platform linux/amd64,linux/arm64` needs no emulation.
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 WORKDIR /src

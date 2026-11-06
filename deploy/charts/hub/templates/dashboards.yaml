@@ -3,7 +3,7 @@
 {{- range $path, $_ := .Files.Glob "files/dashboards/*.json" }}
 {{- $name := base $path | trimSuffix ".json" }}
 ---
-# Grafana dashboard (dashboards/{{ base $path }}, WO-05) for the Grafana sidecar.
+# Grafana dashboard (dashboards/{{ base $path }}) for the Grafana sidecar.
 apiVersion: v1
 kind: ConfigMap
 metadata:
