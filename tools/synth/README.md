@@ -43,6 +43,34 @@ and restarted at any time and fills the gap. Each tick re-simulates the fleet (~
 minute). If it is not running (e.g. after a reboot), run `make synth-live`; after VictoriaMetrics
 data loss, run `make synth-backfill`.
 
+## The GPU scenario
+
+`scenarios/fleet-gpu.yaml` is a small separate cluster, `synth-gpu`, with GPU workloads in every state
+the hub reports next to a few ordinary workloads (30 days at 60s, like the default fleet):
+
+| Workload (namespace `ml`) | GPUs | Utilisation / memory | DCGM labels | Expected |
+|---|---|---|---|---|
+| `trainer-idle` | 1 x A10G | idle (~0-2 %, rare blips), 5 % memory | pod | `idle`, `scale-to-zero` |
+| `inference-light` (2 pods) | 1 each | light (p95 25 %), 20 % memory | exported | `under-used`, `time-slicing` |
+| `inference-busy` (2 pods) | 1 each | busy (p95 80 %), 70 % memory | pod | `ok` |
+| `batch-4gpu-light` | 4 on a g5.12xlarge | light (p95 25 %), 25 % memory | pod | `under-used`, `time-slicing` |
+| `notebook-nodata` | 1 | no DCGM series (`dcgm: false`) | none | `no-data` |
+| `model-gateway`, `feature-cache`, `embedding-export` | none | ordinary CPU-only workloads | | |
+
+Nodes: 2 x m6i.xlarge for the ordinary workloads, 6 x g5.xlarge (1 GPU) and 1 x g5.12xlarge (4 GPUs)
+for the GPU pods. GPU nodes only run GPU pods (one pod per node), and GPU pods only run on GPU nodes.
+
+```bash
+make synth-backfill-gpu     # replace synth-gpu, backfill 30 days up to now, start its own live mode
+make synth-verify-gpu       # PromQL checks: node GPUs, requests, DCGM series, utilisation p95
+make synth-live-stop-gpu    # stop its live mode (synth-a/synth-b keep theirs)
+go run ./tools/synth delete --cluster synth-gpu   # remove its series
+```
+
+`synth-backfill-gpu` leaves `synth-a`/`synth-b` and their live mode alone (the GPU scenario's live mode
+has its own directory, `~/.cache/kerf/synth-live-gpu/`). Register `synth-gpu` in the hub like any
+other cluster (datasource `local`, cluster name `synth-gpu`); `test/e2e/gpu_test.go` runs against it.
+
 Profiles in the default mix (weights): over-provisioned 50, right-sized 14, throttled 8,
 oom-prone 5, hpa-coupled 8, jvm 8, batch 7, plus modifiers: 4% created in the last 3 days
 (low-confidence), 20% with an `envoy` sidecar, 6% with a usage step change at a release,
@@ -102,6 +130,33 @@ through vmagent today (checked against the live stack, k3s 1.35, KSM, kubelet cA
 | `kube_node_labels` | node, label_node_kubernetes_io_instance_type (`m6i.xlarge`/`c6a.2xlarge`), label_karpenter_sh_capacity_type (`on-demand`/`spot`), label_topology_kubernetes_io_region (`eu-west-1`), label_topology_kubernetes_io_zone |
 | `kube_node_status_allocatable` / `_capacity` | node, resource (`cpu`/`memory`/`pods`), unit (`core`/`byte`/`integer`) |
 | `kube_node_info` | node, internal_ip, provider_id, kubelet_version, os_image, ... |
+
+### GPUs (only for workloads and nodes of a GPU scenario)
+
+| Series | Labels | Notes |
+|---|---|---|
+| `kube_pod_container_resource_requests` / `_limits` with `resource="nvidia_com_gpu"` | namespace, pod, uid, container, node, unit=`integer` | GPUs per pod, same labels as the cpu/memory series |
+| `kube_node_status_allocatable` / `_capacity` with `resource="nvidia_com_gpu"` | node, unit=`integer` | GPU nodes only (`g5.xlarge` 1, `g5.12xlarge` 4); `kube_node_labels` carries the instance type |
+| `DCGM_FI_DEV_GPU_UTIL` | see below | percent 0-100 (integer) |
+| `DCGM_FI_DEV_FB_USED` / `DCGM_FI_DEV_FB_FREE` | same | MiB (integer); used + free = the GPU's memory (24576 for an A10G) |
+| `synth_gpu_workload_info` | namespace, workload_kind, workload, container, gpus_per_pod, model, label_style, dcgm, gpu_status, gpu_suggestions | ground truth, 1 per GPU workload (not part of the contract) |
+
+DCGM exporter series (`job="nvidia-dcgm-exporter"`, `instance`=`<exporter pod ip>:9400`) exist once per GPU
+of every pod, so a pod with N GPUs has N series per metric (`gpu`=`0`..`N-1`, `device`=`nvidia0`..), and
+carry `cluster`, `gpu`, `UUID` (`GPU-<8-4-4-4-12 hex>`, stable per node and GPU), `device`, `pci_bus_id`,
+`modelName`, `Hostname` (the node), `DCGM_FI_DRIVER_VERSION` and the pod's labels. Two label styles
+(`labelStyle`, per workload):
+
+- `pod` (default): `namespace`, `pod`, `container` are the workload pod's (honor_labels, or the
+  exporter's own pod mapping).
+- `exported`: what a Prometheus scrape without `honor_labels` produces. `namespace`/`pod`/`container`
+  are the exporter pod's (`gpu-operator`, `nvidia-dcgm-exporter-xxxxx`, `nvidia-dcgm-exporter`) and the
+  workload's are `exported_namespace`, `exported_pod`, `exported_container`.
+
+A workload with `dcgm: false` has the GPU requests but no DCGM series. Utilisation is the
+workload-level pattern times per-pod and per-GPU variation: `idle` ~0-2 % with a rare blip of a few
+percent (about once in 2-3 days), `light` a daily cycle with p95 ~25 %, `busy` a daily cycle with
+p95 ~85 %; `p95` scales a pattern. Memory used is a level (`memoryUsed: {fraction: 0.2}` or `{mib: 4915}`).
 
 Node names look like EKS: `ip-10-33-144-31.eu-west-1.compute.internal`. Pod names follow Kubernetes
 (`<deploy>-<rs hash>-<5>`, `<sts>-<ordinal>`, `<ds>-<5>`, `<job>-<5>`). JVM workloads have image tags
@@ -195,6 +250,36 @@ clusters:
         expect: {cpu: decrease, memory: increase, riskFlags: [oom-killed]}
 ```
 
+GPU workloads add `gpu` to a container (and need a node pool with GPU instance types, `g5.xlarge` /
+`g5.12xlarge`; a pool without `count` grows as the workloads need nodes):
+
+```yaml
+nodePools:
+  - {instanceType: m6i.xlarge, capacityType: on-demand, count: 2}
+  - {instanceType: g5.xlarge, capacityType: on-demand}      # 1 GPU per node
+  - {instanceType: g5.12xlarge, capacityType: on-demand}    # 4 GPUs per node
+workloads:
+  - name: inference-light
+    namespace: ml
+    fixture: gpu-light-0      # optional: written to testdata/series by `synth fixtures`
+    replicas: 2
+    containers:
+      - name: server
+        requests: {cpu: "2", memory: 6Gi}
+        gpu:
+          perPod: 1                 # nvidia.com/gpu per pod (default 1, at most 4)
+          model: NVIDIA A10G        # DCGM modelName (default)
+          memoryMiB: 24576          # framebuffer of one GPU (default)
+          utilization: {pattern: light, p95: 25}   # idle | light | busy (default light); p95 in percent
+          memoryUsed: {fraction: 0.2}              # or {mib: 4915}; default 0.04 / 0.2 / 0.75 by pattern
+          labelStyle: exported      # pod (default) | exported
+          dcgm: true                # false: GPU requests but no DCGM series
+          expect: {status: under-used, suggestions: [time-slicing]}   # ground truth
+```
+
+GPUs are not supported on DaemonSets or init containers. A GPU pod runs alone on a GPU node (the pool
+with the fewest GPUs per node that fits it); workloads without GPUs never run on GPU nodes.
+
 Signal fields (CPU in cores, memory in bytes, Kubernetes quantities accepted): `pattern`, `base`,
 `diurnal` (relative amplitude), `peakHour` (UTC), `weekend` (multiplier), `noise` (relative),
 `spikesPerDay`/`spikeMult`/`spikeMinutes`, `stepAt`/`stepFactor`, `leakPerHour` (relative to base, per
@@ -210,7 +295,8 @@ stabilization window) and split the load across pods. Memory-metric HPAs also sc
 ## Fixtures
 
 `testdata/series/*.json` are pre-aggregated 5-minute fixtures of `fleet-small.yaml`'s pattern workloads
-for unit tests. See `testdata/series/README.md`.
+for unit tests, plus the four `synth-gpu-*` ones from the `fixture:` workloads of `fleet-gpu.yaml`
+(`synth fixtures --gpu-scenario ''` skips them). See `testdata/series/README.md`.
 
 ## Volume, speed and VictoriaMetrics memory
 

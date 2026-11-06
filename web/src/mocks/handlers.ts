@@ -4,6 +4,7 @@ import type {
   ClusterList,
   EventType,
   FleetSummary,
+  GPUFilter,
   Mode,
   RiskFlag,
   SavingsTrend,
@@ -79,6 +80,7 @@ interface Filters {
   modes: Mode[]
   riskFlags: RiskFlag[]
   teams: string[]
+  gpus: GPUFilter[]
   minSavings?: number
   q?: string
 }
@@ -94,6 +96,7 @@ function parseFilters(sp: URLSearchParams): Filters | Response {
     modes: sp.getAll('mode') as Mode[],
     riskFlags: sp.getAll('riskFlag') as RiskFlag[],
     teams: sp.getAll('team'),
+    gpus: sp.getAll('gpu') as GPUFilter[],
     minSavings,
     q: sp.get('q')?.toLowerCase() || undefined,
   }
@@ -108,6 +111,8 @@ function filterWorkloads(g: Ctx, f: Filters): WorkloadModel[] {
       (!f.kinds.length || f.kinds.includes(w.kind)) &&
       (!f.modes.length || f.modes.includes(w.modes.cpu) || f.modes.includes(w.modes.memory)) &&
       (!f.riskFlags.length || f.riskFlags.some((x) => w.riskFlags.includes(x))) &&
+      // `any`: every workload that requests GPUs; otherwise the GPU status.
+      (!f.gpus.length || (!!w.gpu && (f.gpus.includes('any') || f.gpus.includes(w.gpu.status)))) &&
       (f.minSavings == null || (w.hasRecommendation && w.savings.total >= f.minSavings)) &&
       (!f.q || w.namespace.toLowerCase().includes(f.q) || w.name.toLowerCase().includes(f.q)),
   )
@@ -218,6 +223,8 @@ export const handlers = [
       modes: count('modes', (w) => [w.modes.cpu, w.modes.memory]),
       riskFlags: count('riskFlags', (w) => w.riskFlags),
       ...(g.st.teams.length ? { teams: count('teams', (w) => [teamOf(g.st, w)]) } : {}),
+      // Workloads without GPUs are not counted.
+      gpu: count('gpus', (w) => (w.gpu ? [w.gpu.status] : [])),
     }
     return HttpResponse.json(body)
   }),

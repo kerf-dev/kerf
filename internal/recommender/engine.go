@@ -30,6 +30,8 @@ type Engine struct {
 	// AdjustPricing applies the hub's pricing settings (discounts, fixed rates) to the cluster's
 	// rates before savings are computed (WO-20); nil leaves them unchanged.
 	AdjustPricing func(cluster string, p Pricing) Pricing
+	// GPU holds the thresholds of the GPU view; the zero value means DefaultGPUConfig.
+	GPU GPUConfig
 }
 
 // ClusterResult is the outcome of one cluster in a run.
@@ -117,6 +119,11 @@ func (e *Engine) RunCluster(ctx context.Context, cluster string, end time.Time, 
 		}
 		r, ok := Recommend(Request{Workload: data, Settings: s, Profile: p, Pricing: d.Pricing, End: d.End}, e.Strategy, e.Cfg)
 		if ok {
+			discount := 0.0
+			if d.Pricing.Adjustment != nil {
+				discount = d.Pricing.Adjustment.DiscountPercent
+			}
+			r.Recommendation.GPU = raw.AnalyzeGPU(p, d.End, d.GPUPrices, discount, e.GPU)
 			res.Results = append(res.Results, r)
 		}
 	}

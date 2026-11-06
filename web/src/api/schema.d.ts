@@ -180,7 +180,7 @@ export interface paths {
      *     applied except its own (so a multi-select keeps showing the other values of that facet);
      *     `total` applies all filters and equals `WorkloadList.total`. A workload counts once per
      *     distinct value: in `modes` under both its CPU and its memory mode, in `riskFlags` under each
-     *     of its flags. Values with zero workloads are omitted. Items are sorted by value.
+     *     of its flags, in `gpu` under its GPU status. Values with zero workloads are omitted. Items are sorted by value.
      */
     get: operations['getWorkloadFacets']
     put?: never
@@ -1801,6 +1801,70 @@ export interface components {
       | 'short-lived'
       | 'low-confidence'
       | 'jvm-fixed-heap'
+    /**
+     * @description Value of the `gpu` filter: `any` (every workload that requests GPUs) or a `GPUUsage.status`.
+     * @enum {string}
+     */
+    GPUFilter: 'any' | 'idle' | 'under-used' | 'ok' | 'no-data'
+    /**
+     * @description `idle`: the 95th percentile of the GPU utilisation over the window is below 5 %.
+     *     `under-used`: it is below 40 %, or the 95th percentile of the framebuffer used is below 30 %
+     *     of the GPU's memory. `ok`: neither. `no-data`: the workload requests GPUs but the NVIDIA
+     *     DCGM exporter has no series for its pods (see the `metrics.dcgm` readiness check).
+     * @enum {string}
+     */
+    GPUStatus: 'idle' | 'under-used' | 'ok' | 'no-data'
+    /** @enum {string} */
+    GPUSuggestionKind: 'time-slicing' | 'mig' | 'smaller-gpu' | 'scale-to-zero'
+    /** @description A direction for an idle or under-used GPU workload. Nothing is applied automatically. */
+    GPUSuggestion: {
+      kind: components['schemas']['GPUSuggestionKind']
+      message: string
+      /** @description On `smaller-gpu`, a GPU type whose memory fits the workload. */
+      targetModel?: string
+      /** @description Set when known; `scale-to-zero` saves the whole monthly cost. */
+      monthlySavingsUSD?: number
+    }
+    /**
+     * @description GPUs of a workload (pods that request `nvidia.com/gpu`): utilisation and framebuffer memory
+     *     from the NVIDIA DCGM exporter (`DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`,
+     *     `DCGM_FI_DEV_FB_FREE`) over the recommender window, the cost of the GPUs and suggestions.
+     *     Absent for workloads without GPU requests. Visibility only: it never changes a request.
+     */
+    GPUUsage: {
+      status: components['schemas']['GPUStatus']
+      /** @description `nvidia.com/gpu` requested by one pod (the largest over the workload's pods). */
+      gpusPerPod: number
+      /** @description GPUs held by the workload now (all pods). */
+      gpus: number
+      pods: number
+      /** @description GPU model from the DCGM `modelName` label, e.g. `NVIDIA A10G`. */
+      model?: string
+      /** @description Period the statistics cover (Go duration). */
+      window?: string
+      /** @description Steps with utilisation data in the window. */
+      samples: number
+      /** @description 95th percentile of the GPU utilisation, percent, averaged over the workload's GPUs at each step. */
+      utilizationP95?: number
+      utilizationAvg?: number
+      /** @description 95th percentile of the framebuffer used on the busiest GPU of a pod. */
+      memoryUsedP95Bytes?: number
+      /** @description Framebuffer size of one GPU. */
+      memoryTotalBytes?: number
+      /** @description `memoryUsedP95Bytes` as a percentage of `memoryTotalBytes`. */
+      memoryUtilizationP95?: number
+      /** @description False when no node of the workload's pods has a GPU price; the costs are then 0. */
+      priced: boolean
+      /**
+       * @description Cost of the GPUs held now: the price of each GPU node times the workload's share of the
+       *     node's GPUs, over a 730-hour month.
+       */
+      monthlyCostUSD: number
+      perPodMonthlyCostUSD: number
+      /** @description `monthlyCostUSD` times the share of the GPU time not used (100 % minus the average utilisation). */
+      unusedMonthlyCostUSD: number
+      suggestions: components['schemas']['GPUSuggestion'][]
+    }
     /** @enum {string} */
     EventType: 'applied' | 'skipped' | 'blocked' | 'fallback' | 'rolled_back' | 'released' | 'failed'
     /** @enum {string} */
@@ -1910,6 +1974,7 @@ export interface components {
       dataCoverage: components['schemas']['DataCoverage']
       pricing?: components['schemas']['RecommendationPricing']
       hpa?: components['schemas']['HPACoordination']
+      gpu?: components['schemas']['GPUUsage']
     }
     /**
      * @description HPA coordination (WO-11, lifts D-011). Present when the workload has a CPU- or
@@ -2322,6 +2387,7 @@ export interface components {
       confidence?: components['schemas']['Decimal']
       riskFlags?: components['schemas']['RiskFlag'][]
       monthlySavingsUSD?: components['schemas']['Savings']
+      gpu?: components['schemas']['GPUUsage']
     }
     WorkloadList: {
       items: components['schemas']['WorkloadRow'][]
@@ -2343,6 +2409,8 @@ export interface components {
       kinds: components['schemas']['FacetCount'][]
       modes: components['schemas']['FacetCount'][]
       riskFlags: components['schemas']['FacetCount'][]
+      /** @description Workloads per GPU status (`GPUStatus`); workloads without GPUs are not counted. */
+      gpu?: components['schemas']['FacetCount'][]
       /** @description Team ids, `unassigned` for workloads in no team. */
       teams?: components['schemas']['FacetCount'][]
     }
@@ -4829,6 +4897,11 @@ export interface operations {
         mode?: components['schemas']['Mode'][]
         /** @description Matches if the workload has any of the flags. */
         riskFlag?: components['schemas']['RiskFlag'][]
+        /**
+         * @description GPU workloads. `any` matches every workload that requests `nvidia.com/gpu`; the other
+         *     values match `GPUUsage.status`. Matches if any of the values matches.
+         */
+        gpu?: components['schemas']['GPUFilter'][]
         /** @description Team ids (`unassigned` = workloads in no team); matches any of them. */
         team?: components['schemas']['TeamFilterValue'][]
         /** @description Minimum total estimated monthly savings in USD. */
@@ -4872,6 +4945,11 @@ export interface operations {
         mode?: components['schemas']['Mode'][]
         /** @description Matches if the workload has any of the flags. */
         riskFlag?: components['schemas']['RiskFlag'][]
+        /**
+         * @description GPU workloads. `any` matches every workload that requests `nvidia.com/gpu`; the other
+         *     values match `GPUUsage.status`. Matches if any of the values matches.
+         */
+        gpu?: components['schemas']['GPUFilter'][]
         /** @description Team ids (`unassigned` = workloads in no team); matches any of them. */
         team?: components['schemas']['TeamFilterValue'][]
         /** @description Minimum total estimated monthly savings in USD. */

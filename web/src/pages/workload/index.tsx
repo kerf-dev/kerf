@@ -49,6 +49,7 @@ import type { WorkloadKind } from '@/api/types'
 import { ReadinessReason } from '@/components/admin/readiness-reason'
 import { TeamChip } from '@/components/team'
 import { AutomationActions } from './automation-actions'
+import { GpuPanel } from './gpu-panel'
 import { HistoryCard } from './history'
 import { UsageChartCard } from './usage-chart'
 import { ConfidenceCard, WhyPanel } from './why-panel'
@@ -130,6 +131,7 @@ export default function WorkloadPage() {
         <div className="grid gap-4 xl:grid-cols-3">
           <div className="min-w-0 space-y-4 xl:col-span-2">
             <ContainersCard w={w} />
+            {w.recommendation.gpu ? <GpuPanel gpu={w.recommendation.gpu} cluster={w.cluster} /> : null}
             <UsageChartCard id={id} containers={w.recommendation.containers} />
             <HistoryCard id={id} />
           </div>

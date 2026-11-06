@@ -75,7 +75,8 @@ uses the recommender's default rates (`coverage.defaultPricing`). A later change
 not reprice past hours.
 
 **When it is computed.** The hub leader materialises the hours in Postgres (`realized_savings_hourly`) every
-10 minutes, up to the last complete hour. On the first run after an upgrade it backfills from the earliest
+10 minutes, up to the last complete hour, and computes each hour 10 minutes after it ends (metrics arrive
+late), so `computedThrough` trails the clock by at most 70 minutes. On the first run after an upgrade it backfills from the earliest
 stored change, so **changes applied before the upgrade are counted**, from the audit events and the stored
 rates and recommendations, and from the metrics wherever their retention still covers it. Events the agent
 buffered while the hub was unreachable arrive late; the next run recomputes from the hour they happened in.

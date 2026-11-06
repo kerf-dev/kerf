@@ -72,31 +72,32 @@ func nodeSample(node string, full bool) recommender.VectorSample {
 // healthy is a datasource where every check passes.
 func healthy() *fakeQ {
 	f := &fakeQ{}
-	f.on(1, "vector(1)").
-		on(1500, `__name__=~`).
-		on(float64(now.Add(-30*time.Second).Unix()), "timestamp(container_memory_working_set_bytes").
-		on(float64(now.Add(-20*time.Second).Unix()), "timestamp(kube_pod_owner").
-		on(60, "quantile(0.5, count_over_time(").
-		on(200, " and on (namespace, pod) ").
-		on(200, "count(count by (namespace, pod) (last_over_time(container_memory_working_set_bytes").
-		on(180, "count(count by (namespace, pod) (last_over_time(kube_pod_owner").
-		on(5, "kube_pod_owner", `owner_kind="ReplicaSet"`).
-		on(2, "kube_pod_owner", `owner_kind="Job"`).
-		on(4, "count(last_over_time(kube_replicaset_owner").
-		on(2, "count(last_over_time(kube_job_owner").
-		on(400, "container_cpu_usage_seconds_total").
-		on(400, "count(last_over_time(container_memory_working_set_bytes").
-		on(300, "kube_pod_container_resource_requests").
-		on(100, "kube_pod_container_resource_limits").
-		on(50, "container_cpu_cfs_periods_total").
-		on(50, "container_cpu_cfs_throttled_periods_total").
-		on(400, "kube_pod_container_status_restarts_total").
-		on(0, "kube_pod_container_status_last_terminated_reason").
-		on(400, "container_oom_events_total").
-		on(3, "kube_horizontalpodautoscaler_info").
-		on(3, "kube_horizontalpodautoscaler_spec_target_metric").
-		onSamples([]recommender.VectorSample{nodeSample("n1", true), nodeSample("n2", true)}, "kube_node_labels").
-		on(2, "kube_node_status_allocatable")
+	f.on(0, "nvidia_com_gpu"). // no GPUs in the cluster
+					on(1, "vector(1)").
+					on(1500, `__name__=~`).
+					on(float64(now.Add(-30*time.Second).Unix()), "timestamp(container_memory_working_set_bytes").
+					on(float64(now.Add(-20*time.Second).Unix()), "timestamp(kube_pod_owner").
+					on(60, "quantile(0.5, count_over_time(").
+					on(200, " and on (namespace, pod) ").
+					on(200, "count(count by (namespace, pod) (last_over_time(container_memory_working_set_bytes").
+					on(180, "count(count by (namespace, pod) (last_over_time(kube_pod_owner").
+					on(5, "kube_pod_owner", `owner_kind="ReplicaSet"`).
+					on(2, "kube_pod_owner", `owner_kind="Job"`).
+					on(4, "count(last_over_time(kube_replicaset_owner").
+					on(2, "count(last_over_time(kube_job_owner").
+					on(400, "container_cpu_usage_seconds_total").
+					on(400, "count(last_over_time(container_memory_working_set_bytes").
+					on(300, "kube_pod_container_resource_requests").
+					on(100, "kube_pod_container_resource_limits").
+					on(50, "container_cpu_cfs_periods_total").
+					on(50, "container_cpu_cfs_throttled_periods_total").
+					on(400, "kube_pod_container_status_restarts_total").
+					on(0, "kube_pod_container_status_last_terminated_reason").
+					on(400, "container_oom_events_total").
+					on(3, "kube_horizontalpodautoscaler_info").
+					on(3, "kube_horizontalpodautoscaler_spec_target_metric").
+					onSamples([]recommender.VectorSample{nodeSample("n1", true), nodeSample("n2", true)}, "kube_node_labels").
+					on(2, "kube_node_status_allocatable")
 	return f
 }
 
@@ -356,4 +357,70 @@ func (f *failAfter) Instant(ctx context.Context, q string, t time.Time) ([]recom
 		return nil, errors.New("boom")
 	}
 	return f.fakeQ.Instant(ctx, q, t)
+}
+
+// gpuQ is a healthy cluster with GPU nodes (2) and pods that request GPUs (3); series lists the DCGM
+// series present and covered the number of pods that DCGM series map to.
+func gpuQ(series []string, covered float64) *fakeQ {
+	q := healthy()
+	rules := []rule{
+		{has: []string{"kube_node_status_allocatable", "nvidia_com_gpu"}, res: []recommender.VectorSample{{Sample: recommender.Sample{V: 2}}}},
+		{has: []string{" and on (namespace, pod) ", "exported_pod", "nvidia_com_gpu"}, res: []recommender.VectorSample{{Sample: recommender.Sample{V: covered}}}},
+		{has: []string{"kube_pod_container_resource_requests", "nvidia_com_gpu"}, res: []recommender.VectorSample{{Sample: recommender.Sample{V: 3}}}},
+	}
+	for _, m := range recommender.DCGMSeries {
+		v := 0.0
+		if slicesContains(series, m) {
+			v = 4
+		}
+		rules = append(rules, rule{has: []string{"count(last_over_time(" + m}, res: []recommender.VectorSample{{Sample: recommender.Sample{V: v}}}})
+	}
+	q.rules = append(rules, q.rules...)
+	return q
+}
+
+func slicesContains(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+func TestMetricsCheckerDCGM(t *testing.T) {
+	tests := []struct {
+		name    string
+		q       *fakeQ
+		status  string
+		missing string
+		msg     string
+	}{
+		{"no GPUs in the cluster", healthy(), "pass", "", "nothing to measure"},
+		{"no DCGM series at all", gpuQ(nil, 0), "warn", "DCGM_FI_DEV_GPU_UTIL,DCGM_FI_DEV_FB_USED,DCGM_FI_DEV_FB_FREE", "series are missing: DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED, DCGM_FI_DEV_FB_FREE"},
+		{"memory series missing", gpuQ([]string{recommender.DCGMUtilization}, 3), "warn", "DCGM_FI_DEV_FB_USED,DCGM_FI_DEV_FB_FREE", "series are missing: DCGM_FI_DEV_FB_USED, DCGM_FI_DEV_FB_FREE"},
+		{"free memory series missing", gpuQ([]string{recommender.DCGMUtilization, recommender.DCGMFramebufUse}, 3), "warn", "DCGM_FI_DEV_FB_FREE", "series are missing: DCGM_FI_DEV_FB_FREE"},
+		{"series without pod mapping", gpuQ(recommender.DCGMSeries, 0), "warn", "", "pod mapping is off"},
+		{"complete", gpuQ(recommender.DCGMSeries, 3), "pass", "", "DCGM series for 3 of 3 pods"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rep := (&MetricsChecker{Q: tc.q, M: datasource.DefaultMatcher("gpu"), DocsBase: "https://docs/", Now: func() time.Time { return now }}).Run(context.Background())
+			c := byID(rep)[rd.CheckDCGM]
+			if c.Status != tc.status || !strings.Contains(c.Message, tc.msg) || c.Details["missing"] != tc.missing {
+				t.Fatalf("%+v", c)
+			}
+			if c.Severity != "warning" || c.Gates != "" {
+				t.Errorf("a DCGM check must not gate: %+v", c)
+			}
+			if tc.status == "warn" {
+				if !strings.Contains(c.Remediation, "https://docs/gpu") || c.RemediationType != hubapi.RemediationText || c.DocsURL != "https://docs/readiness#metrics.dcgm" {
+					t.Errorf("remediation/docs: %+v", c)
+				}
+			}
+			if !rep.OK() {
+				t.Error("a warning must not fail the report")
+			}
+		})
+	}
 }

@@ -16,8 +16,10 @@ import (
 
 // TestNodeCapacity: the agent reports nodes and consolidation blockers (read only); the hub's
 // capacity endpoint shows totals, a labelled node estimate, and blockers naming their objects:
-// a PodDisruptionBudget that allows no disruption and a karpenter.sh/do-not-disrupt pod. The dev
-// fleet runs neither Karpenter nor the Cluster Autoscaler; those are covered by the unit tests
+// a PodDisruptionBudget that allows no disruption blocks under any autoscaler. A
+// karpenter.sh/do-not-disrupt pod blocks only where Karpenter runs (docs/node-savings.md): the dev
+// fleet runs neither Karpenter nor the Cluster Autoscaler, so there the hub must not list it; on
+// a cluster with Karpenter it must. The autoscaler-specific blockers are covered by the unit tests
 // and by the KWOK clusters described in docs/node-savings.md.
 func TestNodeCapacity(t *testing.T) {
 	t.Parallel()
@@ -33,6 +35,9 @@ func TestNodeCapacity(t *testing.T) {
 	}))
 	pinned := app{Name: "pinned", CPULoad: 5, Requests: rl("50m", "32Mi")}.deployment(ns)
 	pinned.Spec.Template.Annotations = map[string]string{"karpenter.sh/do-not-disrupt": "true"}
+	// A report observed from this second on was built after the pinned pod was created (the agent
+	// sends a report again only when it changes, so this is the earliest safe bound).
+	pinnedAt := time.Now().Truncate(time.Second)
 	must(t, cl.C.Create(ctx(t), pinned))
 	waitReady(t, cl, ns, "pinned", 3*time.Minute)
 
@@ -40,8 +45,12 @@ func TestNodeCapacity(t *testing.T) {
 	eventually(t, 4*time.Minute, 5*time.Second, "capacity report with the test's blockers", func() (bool, string) {
 		got = hubapi.ClusterCapacity{}
 		as(t, hubapi.UserRoleViewer).get(t, "/v1/clusters/"+cl.Name+"/capacity", &got)
-		if got.ReportedAt == nil || got.ObservedAt == nil || got.ObservedAt.Before(start) {
+		if got.ReportedAt == nil || got.ObservedAt == nil || got.ObservedAt.Before(start) || got.ObservedAt.Before(pinnedAt) {
 			return false, fmt.Sprintf("observedAt %v", got.ObservedAt)
+		}
+		karpenter := false
+		for _, a := range got.Autoscalers {
+			karpenter = karpenter || a.Kind == hubapi.AutoscalerKarpenter
 		}
 		pdb, pod := false, false
 		for _, b := range got.Blockers {
@@ -55,7 +64,8 @@ func TestNodeCapacity(t *testing.T) {
 				pod = true
 			}
 		}
-		return pdb && pod, fmt.Sprintf("pdb blocker %v, do-not-disrupt blocker %v (%d blockers)", pdb, pod, len(got.Blockers))
+		return pdb && pod == karpenter, fmt.Sprintf("pdb blocker %v, do-not-disrupt blocker %v, karpenter %v (%d blockers)",
+			pdb, pod, karpenter, len(got.Blockers))
 	})
 	for _, b := range got.Blockers {
 		if b.Object.Namespace == ns && (b.Message == "" || b.Fix == "") {

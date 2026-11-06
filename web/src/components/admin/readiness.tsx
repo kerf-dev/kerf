@@ -58,6 +58,7 @@ export const CHECK_TITLES: Record<string, string> = {
   'metrics.hpa': 'HPA series',
   'metrics.node-labels': 'Node labels allowlisted in kube-state-metrics',
   'metrics.node-allocatable': 'Node allocatable series',
+  'metrics.dcgm': 'NVIDIA DCGM GPU series',
   'pricing.coverage': 'Nodes priced',
   'metrics.recommendations': 'Recommendations produced',
   'rbac.read': 'RBAC: read workloads, pods, HPAs, nodes',

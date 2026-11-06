@@ -114,6 +114,7 @@ func verify(args []string) error {
 		for _, w := range cm.Spec.Workloads {
 			verifyWorkload(cl, &w, days, val, check)
 		}
+		verifyGPU(cm, days, val, check)
 	}
 	fmt.Printf("\n%d checks failed\n", failed)
 	if failed > 0 {
@@ -175,6 +176,61 @@ func verifyWorkload(cl string, w *synth.WorkloadSpec, days float64, val func(str
 		case "low-confidence":
 			age := val(fmt.Sprintf(`time() - min(min_over_time(timestamp(kube_pod_owner{cluster=%q, namespace=%q, pod=~%q})[%s:10m]))`, cl, w.Namespace, w.Name+"-.*", win))
 			check(name("first sample recent"), age < 4*86400, fmt.Sprintf("%.1fh", age/3600))
+		}
+	}
+}
+
+// verifyGPU checks the GPU series of clusters that have GPU nodes or workloads: node resources,
+// kube-state-metrics requests, and the DCGM series against the scenario's ground truth. Clusters
+// without GPUs get no output.
+func verifyGPU(cm *synth.ClusterModel, days float64, val func(string) float64, check func(string, bool, string)) {
+	cl := cm.Spec.Name
+	gpus := 0
+	for _, n := range cm.Nodes {
+		gpus += n.Type.GPUs
+	}
+	if gpus > 0 {
+		n := val(fmt.Sprintf(`sum(kube_node_status_allocatable{cluster=%q, resource="nvidia_com_gpu", unit="integer"})`, cl))
+		check("GPUs allocatable on the nodes (nvidia_com_gpu)", n == float64(gpus), fmt.Sprintf("%v, want %d", n, gpus))
+		n = val(fmt.Sprintf(`sum(kube_node_status_capacity{cluster=%q, resource="nvidia_com_gpu", unit="integer"})`, cl))
+		check("GPUs capacity on the nodes (nvidia_com_gpu)", n == float64(gpus), fmt.Sprintf("%v, want %d", n, gpus))
+	}
+	win := fmt.Sprintf("%dd", int(days))
+	for i := range cm.Spec.Workloads {
+		w := &cm.Spec.Workloads[i]
+		for _, c := range w.Containers {
+			gs := c.GPU
+			if gs == nil {
+				continue
+			}
+			name := func(s string) string { return fmt.Sprintf("%s/%s: %s", w.Namespace, w.Name, s) }
+			pods := w.Name + "-.*"
+			n := val(fmt.Sprintf(`max(kube_pod_container_resource_requests{cluster=%q, namespace=%q, pod=~%q, container=%q, resource="nvidia_com_gpu", unit="integer"})`,
+				cl, w.Namespace, pods, c.Name))
+			check(name("GPU requests (kube_pod_container_resource_requests)"), n == float64(gs.PerPod), fmt.Sprintf("%v, want %d", n, gs.PerPod))
+			// The workload's labels are namespace/pod/container, or exported_* behind a scrape without honor_labels.
+			sel := fmt.Sprintf(`cluster=%q, namespace=%q, pod=~%q, container=%q`, cl, w.Namespace, pods, c.Name)
+			if gs.LabelStyle == synth.GPULabelExported {
+				sel = fmt.Sprintf(`cluster=%q, exported_namespace=%q, exported_pod=~%q, exported_container=%q`, cl, w.Namespace, pods, c.Name)
+			}
+			series := val(fmt.Sprintf(`count(DCGM_FI_DEV_GPU_UTIL{%s})`, sel))
+			if !gs.DCGMEnabled() {
+				check(name("no DCGM series (dcgm: false)"), math.IsNaN(series), fmt.Sprintf("%v", nanZero(series)))
+				continue
+			}
+			if w.HPA == nil && w.Kind != synth.KindCronJob {
+				want := float64(w.Replicas * gs.PerPod)
+				check(name("DCGM series per GPU and pod"), series == want, fmt.Sprintf("%v, want %v", series, want))
+			}
+			n = val(fmt.Sprintf(`count(DCGM_FI_DEV_FB_USED{%[1]s} + DCGM_FI_DEV_FB_FREE{%[1]s} != %[2]v)`, sel, gs.MemoryMiB))
+			check(name("framebuffer used + free = memoryMiB"), math.IsNaN(n), fmt.Sprintf("%v mismatches", nanZero(n)))
+			p95 := val(fmt.Sprintf(`max(quantile_over_time(0.95, avg(DCGM_FI_DEV_GPU_UTIL{%s})[%s:5m]))`, sel, win))
+			if gs.Utilization.Pattern == synth.GPUIdle {
+				check(name("GPU utilisation p95 below 5 % (idle)"), p95 < 5, fmt.Sprintf("p95 %.1f", p95))
+			} else {
+				want := gs.Utilization.P95
+				check(name("GPU utilisation p95 near the scenario's"), math.Abs(p95-want) < 0.2*want, fmt.Sprintf("p95 %.1f, want ~%.0f", p95, want))
+			}
 		}
 	}
 }

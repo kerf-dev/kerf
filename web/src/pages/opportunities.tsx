@@ -15,6 +15,7 @@ import {
   ChevronRightIcon,
   Columns3Icon,
   DownloadIcon,
+  GpuIcon,
   Loader2Icon,
   SearchIcon,
   SearchXIcon,
@@ -27,9 +28,12 @@ import { api, unwrap } from '@/api/client'
 import { useTeams } from '@/api/admin'
 import { useClusters, useFacets, useWorkloads } from '@/api/queries'
 import {
+  GPU_FILTERS,
+  GPU_STATUSES,
   MODES,
   RISK_FLAGS,
   WORKLOAD_KINDS,
+  type GPUFilter,
   type ListWorkloadsQuery,
   type Mode,
   type RiskFlag,
@@ -39,6 +43,9 @@ import {
 import {
   Change,
   Confidence,
+  GPU_FILTER_LABEL,
+  GPU_STATUS_INFO,
+  GPUCell,
   KindBadge,
   MODE_INFO,
   ModePair,
@@ -107,6 +114,7 @@ const COLUMN_LABELS: Record<string, string> = {
   memoryLimit: 'Memory limit',
   confidence: 'Confidence',
   riskFlags: 'Risk',
+  gpu: 'GPU',
   generatedAt: 'Updated',
   savings: 'Savings / mo',
 }
@@ -116,6 +124,10 @@ const DEFAULT_HIDDEN: VisibilityState = {
   memoryLimit: false,
   generatedAt: false,
 }
+/**
+ * The GPU column is not in DEFAULT_HIDDEN: until the reader picks it in the Columns menu it follows the
+ * data (shown while a GPU filter is active or the filtered workloads include GPU workloads).
+ */
 const VIS_KEY = 'ro-opportunities-columns-v1'
 
 /**
@@ -164,6 +176,7 @@ function useUrlState() {
     riskFlag: sp.getAll('riskFlag') as RiskFlag[],
     team: sp.getAll('team'),
     group: sp.get('group') === 'team' ? 'team' : '',
+    gpu: sp.getAll('gpu') as GPUFilter[],
     minSavings: sp.get('minSavings') ?? '',
     q: sp.get('q') ?? '',
     sort: (sp.get('sort') as SortKey | null) ?? 'savings',
@@ -190,7 +203,10 @@ function useUrlState() {
       { replace: true },
     )
   }
-  const toggle = (key: 'cluster' | 'namespace' | 'kind' | 'mode' | 'riskFlag' | 'team', value: string) =>
+  const toggle = (
+    key: 'cluster' | 'namespace' | 'kind' | 'mode' | 'riskFlag' | 'team' | 'gpu',
+    value: string,
+  ) =>
     setSp(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -235,6 +251,7 @@ export default function OpportunitiesPage() {
       ...(s.mode.length ? { mode: s.mode } : {}),
       ...(s.riskFlag.length ? { riskFlag: s.riskFlag } : {}),
       ...(s.team.length ? { team: s.team } : {}),
+      ...(s.gpu.length ? { gpu: s.gpu } : {}),
       ...(s.minSavings !== '' && !Number.isNaN(Number(s.minSavings))
         ? { minSavings: Number(s.minSavings) }
         : {}),
@@ -276,6 +293,7 @@ export default function OpportunitiesPage() {
       const kinds = count(f.kinds)
       const modes = count(f.modes)
       const flags = count(f.riskFlags)
+      const gpus = count(f.gpu ?? [])
       return {
         clusters: withSelected(f.clusters, s.cluster),
         namespaces: withSelected(f.namespaces, s.namespace),
@@ -283,6 +301,12 @@ export default function OpportunitiesPage() {
         modes: MODES.map((m) => ({ value: m, count: modes.get(m) ?? 0 })),
         riskFlags: RISK_FLAGS.map((r) => ({ value: r, count: flags.get(r) ?? 0 })),
         teams: withSelected(f.teams ?? [], s.team),
+        // `any` counts every workload with GPUs; a workload has one status, so the sum is exact.
+        gpus: GPU_FILTERS.map((g) => ({
+          value: g,
+          count:
+            g === 'any' ? GPU_STATUSES.reduce((n, st) => n + (gpus.get(st) ?? 0), 0) : (gpus.get(g) ?? 0),
+        })),
       }
     }
     const ns = new Map<string, number>()
@@ -307,6 +331,7 @@ export default function OpportunitiesPage() {
         ),
         s.team,
       ),
+      gpus: GPU_FILTERS.map((g) => ({ value: g, count: undefined as number | undefined })),
     }
   }, [facets.data, fallback.data, clusters.data, teams.data, s.cluster, s.namespace, s.team])
   const teamOptions = useMemo(
@@ -447,6 +472,11 @@ export default function OpportunitiesPage() {
         enableSorting: false,
         cell: (c) => <RiskFlags flags={c.getValue()?.filter((f) => f !== 'sidecar')} max={3} compact />,
       }),
+      col.accessor('gpu', {
+        header: 'GPU',
+        enableSorting: false,
+        cell: (c) => <GPUCell gpu={c.getValue()} />,
+      }),
       col.accessor('generatedAt', {
         header: 'Updated',
         enableSorting: false,
@@ -467,11 +497,28 @@ export default function OpportunitiesPage() {
     [],
   )
 
+  // The GPU column follows the data until the reader decides: shown while a GPU filter is active or the
+  // filtered workloads include GPU workloads (from the facets, so paging does not make it flicker).
+  const gpuAuto =
+    s.gpu.length > 0 ||
+    (facets.data ? (facets.data.gpu ?? []).length > 0 : (list.data?.items ?? []).some((w) => w.gpu))
+  const columnVisibility = useMemo(() => ({ ...vis, gpu: vis.gpu ?? gpuAuto }), [vis, gpuAuto])
+  const onColumnVisibilityChange = useCallback(
+    (u: VisibilityState | ((prev: VisibilityState) => VisibilityState)) =>
+      setVis((prev) => {
+        const next = typeof u === 'function' ? u({ ...prev, gpu: prev.gpu ?? gpuAuto }) : u
+        // Only an explicit choice for the GPU column is stored.
+        const { gpu, ...rest } = next
+        return gpu !== undefined && (prev.gpu !== undefined || gpu !== gpuAuto) ? { ...rest, gpu } : rest
+      }),
+    [setVis, gpuAuto],
+  )
+
   const table = useReactTable({
     data: list.data?.items ?? [],
     columns,
-    state: { sorting, columnVisibility: showTeams ? vis : { ...vis, team: false } },
-    onColumnVisibilityChange: setVis,
+    state: { sorting, columnVisibility: showTeams ? columnVisibility : { ...columnVisibility, team: false } },
+    onColumnVisibilityChange,
     manualSorting: true,
     manualPagination: true,
     manualFiltering: true,
@@ -511,6 +558,7 @@ export default function OpportunitiesPage() {
     s.mode.length +
     s.riskFlag.length +
     s.team.length +
+    s.gpu.length +
     (s.minSavings ? 1 : 0) +
     (s.q ? 1 : 0)
   const clearAll = () => {
@@ -523,6 +571,7 @@ export default function OpportunitiesPage() {
       mode: [],
       riskFlag: [],
       team: [],
+      gpu: [],
       minSavings: undefined,
       q: undefined,
     })
@@ -701,6 +750,17 @@ export default function OpportunitiesPage() {
           selected={s.riskFlag}
           onToggle={(v) => toggle('riskFlag', v)}
           onClear={() => update({ riskFlag: [] })}
+        />
+        <FacetFilter
+          title="GPU"
+          options={options.gpus.map((g) => ({
+            ...g,
+            label: GPU_FILTER_LABEL[g.value],
+            icon: g.value === 'any' ? GpuIcon : GPU_STATUS_INFO[g.value].icon,
+          }))}
+          selected={s.gpu}
+          onToggle={(v) => toggle('gpu', v)}
+          onClear={() => update({ gpu: [] })}
         />
         <div className="relative">
           <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground">

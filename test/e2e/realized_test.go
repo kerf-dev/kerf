@@ -40,7 +40,9 @@ type nodeCostTrend struct {
 // Realized savings (docs/realized-savings.md): the hub leader materialises, per complete hour,
 // the requests released by applied changes x replicas x rates of the time.
 //
-//   - The leader keeps the cluster's computation current (computedThrough within the last ~70 min).
+//   - The leader keeps the cluster's computation current: it computes each hour 10 minutes after
+//     the hour ends, so computedThrough trails the clock by at most 70 minutes plus the run's own
+//     time (75 minutes allowed here; the 3-minute wait covers a run in progress).
 //   - Changes applied by earlier runs of the suite (stored history, more than two hours old) have
 //     a realized saving, also though their namespaces are gone.
 //   - The node cost trend has hourly points with node cost and requested/allocatable ratio.
@@ -71,7 +73,7 @@ func TestRealizedSavings(t *testing.T) {
 		if fleet.ComputedThrough == nil {
 			return false, "no computedThrough"
 		}
-		return time.Since(*fleet.ComputedThrough) < 70*time.Minute, "computedThrough " + fleet.ComputedThrough.String()
+		return time.Since(*fleet.ComputedThrough) < 75*time.Minute, "computedThrough " + fleet.ComputedThrough.String()
 	})
 
 	// Earlier applied changes have a realized saving; each answers by id although deleted since.

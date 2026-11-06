@@ -290,7 +290,7 @@ func TestMapAccess(t *testing.T) {
 		t.Error("no mapped group and no default: allowed")
 	}
 	bad := auth.OIDCConfig{Enabled: true, Issuer: "https://idp.example", ClientID: "kerf",
-		RedirectURL: "https://kerf.example/v1/auth/oidc/callback",
+		RedirectURL:  "https://kerf.example/v1/auth/oidc/callback",
 		RoleMappings: []auth.RoleMapping{{Group: "a", Role: "admin", Teams: []string{"payments"}}, {Group: "b", Role: "viewer", Teams: []string{"Bad"}}}}
 	err := bad.Validate()
 	if err == nil || !strings.Contains(err.Error(), "admin is fleet-wide") || !strings.Contains(err.Error(), `invalid team id "Bad"`) {

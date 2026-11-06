@@ -62,6 +62,11 @@ export type CapacityAutoscaler = S['CapacityAutoscaler']
 export type NodeAutoscalerKind = S['NodeAutoscalerKind']
 export type PricingRateSource = S['PricingRateSource']
 export type PricingPeriod = S['PricingPeriod']
+export type GPUUsage = S['GPUUsage']
+export type GPUStatus = S['GPUStatus']
+export type GPUFilter = S['GPUFilter']
+export type GPUSuggestion = S['GPUSuggestion']
+export type GPUSuggestionKind = S['GPUSuggestionKind']
 export type FacetsQuery = NonNullable<operations['getWorkloadFacets']['parameters']['query']>
 
 export type ListWorkloadsQuery = NonNullable<operations['listWorkloads']['parameters']['query']>
@@ -90,6 +95,10 @@ export const RISK_FLAGS: RiskFlag[] = [
   'low-confidence',
   'jvm-fixed-heap',
 ]
+/** Statuses of `GPUUsage.status`, worst first. */
+export const GPU_STATUSES: GPUStatus[] = ['idle', 'under-used', 'ok', 'no-data']
+/** Values of the `gpu` filter: `any` first, then one per status. */
+export const GPU_FILTERS: GPUFilter[] = ['any', ...GPU_STATUSES]
 export const EVENT_TYPES: EventType[] = [
   'applied',
   'skipped',

@@ -85,6 +85,8 @@ type Price struct {
 	// PeriodStart and PeriodEnd bound the usage a SourceCUR rate was computed from; zero for
 	// current prices.
 	PeriodStart, PeriodEnd time.Time
+	// GPUs is the number of GPUs of the instance type; 0 for instances without GPUs.
+	GPUs float64
 }
 
 // ErrNotFound means the provider has no price for the key. It is not a transient error.

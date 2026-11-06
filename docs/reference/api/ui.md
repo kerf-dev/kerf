@@ -80,6 +80,7 @@ match any of their values. A team-scoped caller sees only the workloads of its t
 | `kind` | query | array of WorkloadKind (enum) |  |
 | `mode` | query | array of Mode (enum) | Matches if the CPU or the memory mode is one of the values. |
 | `riskFlag` | query | array of RiskFlag (enum) | Matches if the workload has any of the flags. |
+| `gpu` | query | array of GPUFilter (enum) | GPU workloads. `any` matches every workload that requests `nvidia.com/gpu`; the other values match `GPUUsage.status`. Matches if any of the values matches. |
 | `team` | query | array of string | Team ids (`unassigned` = workloads in no team); matches any of them. |
 | `minSavings` | query | number | Minimum total estimated monthly savings in USD. |
 | `q` | query | string | Case-insensitive substring match on namespace and workload name. max length 253 |
@@ -109,7 +110,7 @@ Takes the same filters as `GET /v1/workloads`. Each facet is counted with every 
 applied except its own (so a multi-select keeps showing the other values of that facet);
 `total` applies all filters and equals `WorkloadList.total`. A workload counts once per
 distinct value: in `modes` under both its CPU and its memory mode, in `riskFlags` under each
-of its flags. Values with zero workloads are omitted. Items are sorted by value.
+of its flags, in `gpu` under its GPU status. Values with zero workloads are omitted. Items are sorted by value.
 
 **Parameters**
 
@@ -120,6 +121,7 @@ of its flags. Values with zero workloads are omitted. Items are sorted by value.
 | `kind` | query | array of WorkloadKind (enum) |  |
 | `mode` | query | array of Mode (enum) | Matches if the CPU or the memory mode is one of the values. |
 | `riskFlag` | query | array of RiskFlag (enum) | Matches if the workload has any of the flags. |
+| `gpu` | query | array of GPUFilter (enum) | GPU workloads. `any` matches every workload that requests `nvidia.com/gpu`; the other values match `GPUUsage.status`. Matches if any of the values matches. |
 | `team` | query | array of string | Team ids (`unassigned` = workloads in no team); matches any of them. |
 | `minSavings` | query | number | Minimum total estimated monthly savings in USD. |
 | `q` | query | string | Case-insensitive substring match on namespace and workload name. max length 253 |

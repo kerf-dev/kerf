@@ -48,6 +48,11 @@ func allQueries(q Queries) string {
 	add("Pricing/count", count)
 	add("PricingSources", q.PricingSources())
 	add("PricingCURPeriod/start", PricingCURPeriod("start"))
+	add("GPUPods", q.GPUPods())
+	add("GPUUtilization", q.GPUUtilization())
+	add("GPUMemoryUsed", q.GPUMemoryUsed())
+	add("GPUMemoryTotal", q.GPUMemoryTotal(day))
+	add("GPUPrice", q.GPUPrice(time.Hour))
 	return b.String()
 }
 
@@ -170,14 +175,14 @@ func unrelabel(t *testing.T, s, cluster string) string {
 func restoreBare(s string) string {
 	for _, m := range []string{"kube_pod_container_status_restarts_total", "kube_pod_init_container_info", "kube_pod_container_info",
 		"kube_horizontalpodautoscaler_info", "kube_horizontalpodautoscaler_spec_target_metric", "kube_horizontalpodautoscaler_spec_min_replicas",
-		"kube_horizontalpodautoscaler_status_current_replicas"} {
+		"kube_horizontalpodautoscaler_status_current_replicas", DCGMUtilization, DCGMFramebufUse, DCGMFramebufFre} {
 		s = regexpBare(m).ReplaceAllString(s, m+`{cluster="ro-spoke-1"}$1`)
 	}
 	return s
 }
 
 func regexpBare(metric string) *regexp.Regexp {
-	return regexp.MustCompile(regexp.QuoteMeta(metric) + `([\[)])`)
+	return regexp.MustCompile(regexp.QuoteMeta(metric) + `([\[),])`)
 }
 
 func TestQueriesBindingGolden(t *testing.T) {

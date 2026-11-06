@@ -28,6 +28,9 @@ func TestDevPricesFile(t *testing.T) {
 			if p.Spot >= p.OnDemand {
 				t.Errorf("%s/%s: spot %v >= on-demand %v", region, it, p.Spot, p.OnDemand)
 			}
+			if s.file.InstanceTypes[it].GPUs > 0 {
+				continue // GPU families have no c/m/r siblings: the fallback weight applies
+			}
 			if w, src := sp.Weight(context.Background(), region, it); src != WeightDerived || w < 4 || w > 20 {
 				t.Errorf("%s/%s: weight %v (%s)", region, it, w, src)
 			}
@@ -117,5 +120,21 @@ func TestParseCapacityType(t *testing.T) {
 	}
 	if got := (Key{"r", "z", "t", Spot}).String(); got != "r/t/spot/z" {
 		t.Errorf("Key.String() = %q", got)
+	}
+}
+
+func TestStaticGPUs(t *testing.T) {
+	s, err := LoadStatic("../../dev/prices.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for it, gpus := range map[string]float64{"g5.xlarge": 1, "g5.12xlarge": 4, "p4d.24xlarge": 8, "m6i.xlarge": 0} {
+		p, err := s.Price(context.Background(), Key{Region: "eu-west-1", InstanceType: it, CapacityType: OnDemand})
+		if err != nil || p.GPUs != gpus {
+			t.Errorf("%s: GPUs %v (%v), want %v", it, p.GPUs, err, gpus)
+		}
+	}
+	if _, err := ParseStatic([]byte("instanceTypes:\n  x.large: {vcpu: 1, memoryGiB: 1, gpus: -1}\n")); err == nil {
+		t.Error("negative gpus accepted")
 	}
 }

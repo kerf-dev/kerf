@@ -64,6 +64,12 @@ instanceTypes:
   r7i.large:    {vcpu: 2, memoryGiB: 16}
   r7i.xlarge:   {vcpu: 4, memoryGiB: 32}
   r7i.2xlarge:  {vcpu: 8, memoryGiB: 64}
+  # accelerated computing (gpus: NVIDIA GPUs of the instance type)
+  g4dn.xlarge:   {vcpu: 4, memoryGiB: 16, gpus: 1}
+  g5.xlarge:     {vcpu: 4, memoryGiB: 16, gpus: 1}
+  g5.12xlarge:   {vcpu: 48, memoryGiB: 192, gpus: 4}
+  g6.xlarge:     {vcpu: 4, memoryGiB: 16, gpus: 1}
+  p4d.24xlarge:  {vcpu: 96, memoryGiB: 1152, gpus: 8}
 
 regions:
   eu-west-1:
@@ -124,3 +130,8 @@ regions:
     r7i.large:   {onDemand: 0.1481, spot: 0.0538}
     r7i.xlarge:  {onDemand: 0.2961, spot: 0.1075}
     r7i.2xlarge: {onDemand: 0.5922, spot: 0.2150}
+    g4dn.xlarge:  {onDemand: 0.587,  spot: 0.2210}
+    g5.xlarge:    {onDemand: 1.123,  spot: 0.4415}
+    g5.12xlarge:  {onDemand: 6.240,  spot: 2.4310}
+    g6.xlarge:    {onDemand: 0.9776, spot: 0.3780}
+    p4d.24xlarge: {onDemand: 25.470, spot: 9.5200}

@@ -214,3 +214,37 @@ func TestHoursSkipsEmptyHours(t *testing.T) {
 		t.Fatalf("hours %+v", hs)
 	}
 }
+
+// The next run comes as soon as an hour is complete (its end plus Settle), else after Interval:
+// computedThrough never trails the clock by more than an hour plus Settle between runs.
+func TestNextDelay(t *testing.T) {
+	at := func(hh, mm, ss int) time.Time { return time.Date(2026, 11, 6, hh, mm, ss, 0, time.UTC) }
+	tests := []struct {
+		name string
+		w    Worker
+		now  time.Time
+		want time.Duration
+	}{
+		// A leader that took over at 13:07:37 runs first at 13:08:07 (hours through 12:00); the
+		// hour 12:00-13:00 completes at 13:10, not at the next interval (13:18:07).
+		{"first run after a takeover", Worker{}, at(13, 8, 7), 1*time.Minute + 53*time.Second},
+		{"just after an hour completed", Worker{}, at(13, 10, 0), 10 * time.Minute},
+		{"mid-hour", Worker{}, at(13, 30, 0), 10 * time.Minute},
+		{"before the settle point", Worker{}, at(14, 5, 0), 5 * time.Minute},
+		{"interval shorter than the wait", Worker{Interval: 2 * time.Minute}, at(13, 8, 7), 1*time.Minute + 53*time.Second},
+		{"custom settle", Worker{Settle: 30 * time.Minute, Interval: time.Hour}, at(13, 0, 0), 30 * time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.w.nextDelay(tt.now); got != tt.want {
+				t.Errorf("nextDelay(%s) = %v, want %v", tt.now.Format("15:04:05"), got, tt.want)
+			}
+			// Whatever the wait, the run after it computes every hour complete by then.
+			next := tt.now.Add(tt.w.nextDelay(tt.now))
+			settle := or(tt.w.Settle, 10*time.Minute)
+			if lag := next.Sub(next.Add(-settle).Truncate(time.Hour)); lag > time.Hour+settle {
+				t.Errorf("at the next run computedThrough trails by %v", lag)
+			}
+		})
+	}
+}

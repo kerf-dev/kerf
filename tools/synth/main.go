@@ -282,6 +282,7 @@ func fixtures(args []string) error {
 	bucket := fs.Duration("bucket", synth.FixtureBucket, "fixture resolution")
 	all := fs.Bool("all", false, "include generated fleet workloads (default: only workloads listed explicitly)")
 	clean := fs.Bool("clean", false, "remove existing *.json fixtures in --out first")
+	gpuScenario := fs.String("gpu-scenario", synth.FixtureGPUScenario, "scenario whose workloads with a `fixture:` name are written as GPU fixtures (empty: none)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -299,6 +300,7 @@ func fixtures(args []string) error {
 	if c.days == 0 {
 		c.days = synth.FixtureDays
 	}
+	gpu := c // the GPU scenario shares end, days and seed handling
 	if len(c.clusters) == 0 {
 		c.clusters = stringList{synth.FixtureCluster}
 	}
@@ -324,10 +326,45 @@ func fixtures(args []string) error {
 	if err := os.MkdirAll(*out, 0o755); err != nil {
 		return err
 	}
+	written, err := writeFixtures(g, *bucket, *out, func(wt *synth.WorkloadTrace) string {
+		if len(g.Clusters) > 1 {
+			return fmt.Sprintf("%s_%s.json", wt.Cluster.Spec.Name, wt.Spec.Name)
+		}
+		return wt.Spec.Name + ".json"
+	})
+	if err == nil && *gpuScenario != "" && !c.filtered() {
+		gpu.scenario, gpu.clusters = *gpuScenario, stringList{synth.FixtureGPUCluster}
+		var gg *synth.Generator
+		if gg, err = gpu.generator(); err != nil {
+			return err
+		}
+		for _, cm := range gg.Clusters {
+			var keep []*synth.WorkloadSpec
+			for _, w := range cm.Workloads {
+				if w.Fixture != "" {
+					keep = append(keep, w)
+				}
+			}
+			cm.Workloads = keep
+		}
+		var more []string
+		more, err = writeFixtures(gg, *bucket, *out, func(wt *synth.WorkloadTrace) string { return wt.Spec.Fixture + ".json" })
+		written = append(written, more...)
+	}
+	sort.Strings(written)
+	for _, p := range written {
+		fmt.Println(p)
+	}
+	return err
+}
+
+// writeFixtures simulates the generator's workloads and writes one fixture file each, named by
+// file. It returns the paths written.
+func writeFixtures(g *synth.Generator, bucket time.Duration, out string, file func(*synth.WorkloadTrace) string) ([]string, error) {
 	var mu sync.Mutex
 	var written []string
-	err = g.Each(4, func(wt *synth.WorkloadTrace) error {
-		f, err := g.BuildFixture(wt, *bucket)
+	err := g.Each(4, func(wt *synth.WorkloadTrace) error {
+		f, err := g.BuildFixture(wt, bucket)
 		if err != nil {
 			return err
 		}
@@ -335,11 +372,7 @@ func fixtures(args []string) error {
 		if err != nil {
 			return err
 		}
-		name := fmt.Sprintf("%s.json", wt.Spec.Name)
-		if len(g.Clusters) > 1 {
-			name = fmt.Sprintf("%s_%s.json", wt.Cluster.Spec.Name, wt.Spec.Name)
-		}
-		p := filepath.Join(*out, name)
+		p := filepath.Join(out, file(wt))
 		if err := os.WriteFile(p, append(b, '\n'), 0o644); err != nil {
 			return err
 		}
@@ -348,11 +381,7 @@ func fixtures(args []string) error {
 		mu.Unlock()
 		return nil
 	})
-	sort.Strings(written)
-	for _, p := range written {
-		fmt.Println(p)
-	}
-	return err
+	return written, err
 }
 
 func describe(args []string) error {

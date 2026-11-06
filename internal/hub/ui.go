@@ -345,15 +345,16 @@ func (s *Server) listWorkloads(w http.ResponseWriter, r *http.Request) {
 // workloadFilters are the filters of GET /v1/workloads and /v1/workloads/facets.
 type workloadFilters struct {
 	clusters, namespaces, kinds, modes, riskFlags, teams []string
-	minSavings                                    float64 // -Inf when unset
-	search                                        string  // lower case
+	gpu                                                  []string // hubapi.GPUFilterValues
+	minSavings                                           float64  // -Inf when unset
+	search                                               string   // lower case
 }
 
 // parseWorkloadFilters validates the filters; on error it writes the 400 response.
 func parseWorkloadFilters(w http.ResponseWriter, r *http.Request) (workloadFilters, bool) {
 	q := r.URL.Query()
 	f := workloadFilters{
-		clusters: q["cluster"], namespaces: q["namespace"], kinds: q["kind"], modes: q["mode"], riskFlags: q["riskFlag"],
+		clusters: q["cluster"], namespaces: q["namespace"], kinds: q["kind"], modes: q["mode"], riskFlags: q["riskFlag"], gpu: q["gpu"],
 		teams: q["team"], minSavings: math.Inf(-1), search: strings.ToLower(q.Get("q")),
 	}
 	if !validTeamFilter(w, r, f.teams) {
@@ -383,6 +384,12 @@ func parseWorkloadFilters(w http.ResponseWriter, r *http.Request) (workloadFilte
 			return f, false
 		}
 	}
+	for _, g := range f.gpu {
+		if !hubapi.ValidGPUFilter(g) {
+			badRequest(w, r, "invalid_gpu", "Invalid gpu filter "+g+".")
+			return f, false
+		}
+	}
 	if v := q.Get("minSavings"); v != "" {
 		x, err := strconv.ParseFloat(v, 64)
 		if err != nil || math.IsNaN(x) {
@@ -406,6 +413,7 @@ const (
 	facetMode      = "mode"
 	facetRiskFlag  = "riskFlag"
 	facetTeam      = "team"
+	facetGPU       = "gpu"
 )
 
 // match applies all filters except the one named by skip ("" applies all).
@@ -432,6 +440,9 @@ func (f workloadFilters) match(v *store.WorkloadView, skip string) bool {
 	if skip != facetTeam && len(f.teams) > 0 && !slices.Contains(f.teams, teamOf(v)) {
 		return false
 	}
+	if skip != facetGPU && len(f.gpu) > 0 && !f.matchGPU(v) {
+		return false
+	}
 	if !math.IsInf(f.minSavings, -1) && (v.Rec == nil || v.Rec.MonthlySavingsUSD.Total < f.minSavings) {
 		return false
 	}
@@ -439,6 +450,15 @@ func (f workloadFilters) match(v *store.WorkloadView, skip string) bool {
 		return false
 	}
 	return true
+}
+
+// matchGPU reports whether the workload requests GPUs and its GPU status is one of the filter values
+// (`any` matches every GPU workload).
+func (f workloadFilters) matchGPU(v *store.WorkloadView) bool {
+	if v.Rec == nil || v.Rec.GPU == nil {
+		return false
+	}
+	return slices.Contains(f.gpu, hubapi.GPUAny) || slices.Contains(f.gpu, v.Rec.GPU.Status)
 }
 
 // getWorkloadFacets serves GET /v1/workloads/facets (D-016).
@@ -489,6 +509,9 @@ func (s *Server) getWorkloadFacets(w http.ResponseWriter, r *http.Request) {
 		if wf.match(v, facetTeam) {
 			inc(facetTeam, teamOf(v))
 		}
+		if wf.match(v, facetGPU) && v.Rec != nil && v.Rec.GPU != nil {
+			inc(facetGPU, v.Rec.GPU.Status)
+		}
 	}
 	list := func(facet string) []hubapi.FacetCount {
 		items := []hubapi.FacetCount{}
@@ -500,6 +523,9 @@ func (s *Server) getWorkloadFacets(w http.ResponseWriter, r *http.Request) {
 	}
 	out.Clusters, out.Namespaces, out.Kinds = list(facetCluster), list(facetNamespace), list(facetKind)
 	out.Modes, out.RiskFlags, out.Teams = list(facetMode), list(facetRiskFlag), list(facetTeam)
+	if g := list(facetGPU); len(g) > 0 {
+		out.GPU = g
+	}
 	writeJSON(w, out)
 }
 
@@ -516,6 +542,7 @@ func workloadRow(v *store.WorkloadView) hubapi.WorkloadRow {
 		row.Confidence = &rec.Confidence
 		row.RiskFlags = rec.RiskFlags
 		row.MonthlySavingsUSD = &rec.MonthlySavingsUSD
+		row.GPU = rec.GPU
 	}
 	return row
 }
