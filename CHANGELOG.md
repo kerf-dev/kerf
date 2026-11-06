@@ -58,6 +58,13 @@ First public version.
   Helm values snippet, for one workload or a selection, so teams that keep their manifests in Git can make the
   change through their own pull request. Viewers can select rows and copy too. See
   [Copy a recommendation as a patch](docs/copy-as-patch.md).
+- **Documentation site.** The documentation is published at [getkerf.dev/docs](https://getkerf.dev/docs/), built from
+  `docs/` with search, a version switch (`dev`, and one version per minor release) and light and dark themes that
+  match the site. New pages cover the concepts (modes, policies, apply strategies, guardrails, rollback, HPA, JVM,
+  approve once, GitOps), operating Kerf (upgrade, backup, alerts and dashboards, readiness, troubleshooting),
+  installing on any cluster, a comparison and an FAQ. The chart values, custom resources and hub API reference pages
+  are generated from `values.schema.json` and the chart values, `api/v1alpha1` and `api/openapi/hub.yaml`
+  (`make docs-generate`); CI fails when they are out of date.
 
 ### Changed
 
