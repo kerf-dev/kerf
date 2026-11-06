@@ -45,6 +45,10 @@ func facetOracle(t *testing.T, e *testEnv, q url.Values) hubapi.WorkloadFacets {
 		sort.Slice(out, func(i, j int) bool { return out[i].Value < out[j].Value })
 		return out
 	}
+	teams := count("team", func(r hubapi.WorkloadRow) []string { return []string{r.Team} })
+	if len(teams) == 0 {
+		teams = nil // omitted when empty
+	}
 	var all hubapi.WorkloadList
 	qq := url.Values{}
 	for k, v := range q {
@@ -58,6 +62,7 @@ func facetOracle(t *testing.T, e *testEnv, q url.Values) hubapi.WorkloadFacets {
 		Kinds:      count("kind", func(r hubapi.WorkloadRow) []string { return []string{r.Kind} }),
 		Modes:      count("mode", func(r hubapi.WorkloadRow) []string { return []string{r.Modes.CPU, r.Modes.Memory} }),
 		RiskFlags:  count("riskFlag", func(r hubapi.WorkloadRow) []string { return r.RiskFlags }),
+		Teams:      teams,
 	}
 }
 

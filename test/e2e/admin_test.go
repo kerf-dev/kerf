@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 	"testing"
@@ -95,7 +96,7 @@ func waitHubCR(t *testing.T, cl cluster, p hubapi.AdminPolicy, version int) *v1a
 
 func requireActor(t *testing.T, c hubapi.ConfigChange, want hubapi.Actor) {
 	t.Helper()
-	if c.Actor != want {
+	if !reflect.DeepEqual(c.Actor, want) {
 		t.Errorf("config change %s: actor %+v, want %+v", c.Action, c.Actor, want)
 	}
 }

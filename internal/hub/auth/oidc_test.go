@@ -252,3 +252,48 @@ func TestOIDCConnectAddress(t *testing.T) {
 		t.Errorf("refresh through connectAddress: %v", err)
 	}
 }
+
+func TestMapAccess(t *testing.T) {
+	cfg := auth.OIDCConfig{RoleMappings: []auth.RoleMapping{
+		{Group: "engineering", Role: "viewer"},
+		{Group: "payments-devs", Role: "operator", Teams: []string{"payments"}},
+		{Group: "payments-readers", Role: "viewer", Teams: []string{"payments", "ledger"}},
+	}, DefaultRole: "viewer"}
+	tests := []struct {
+		name   string
+		groups []string
+		fleet  string
+		teams  map[string]string
+		ok     bool
+	}{
+		{"fleet viewer and team operator", []string{"engineering", "payments-devs"}, "viewer", map[string]string{"payments": "operator"}, true},
+		{"team only: no fleet role, no default", []string{"payments-devs"}, "", map[string]string{"payments": "operator"}, true},
+		{"highest per team", []string{"payments-devs", "payments-readers"}, "", map[string]string{"payments": "operator", "ledger": "viewer"}, true},
+		{"no match: default role", []string{"sales"}, "viewer", nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, ok := cfg.MapAccess(tt.groups)
+			if a.FleetRole != tt.fleet || ok != tt.ok || len(a.TeamRoles) != len(tt.teams) {
+				t.Fatalf("MapAccess(%v) = %+v, %v", tt.groups, a, ok)
+			}
+			for k, v := range tt.teams {
+				if a.TeamRoles[k] != v {
+					t.Errorf("team %s: %q, want %q", k, a.TeamRoles[k], v)
+				}
+			}
+		})
+	}
+	noDefault := cfg
+	noDefault.DefaultRole = ""
+	if _, ok := noDefault.MapAccess([]string{"sales"}); ok {
+		t.Error("no mapped group and no default: allowed")
+	}
+	bad := auth.OIDCConfig{Enabled: true, Issuer: "https://idp.example", ClientID: "kerf",
+		RedirectURL: "https://kerf.example/v1/auth/oidc/callback",
+		RoleMappings: []auth.RoleMapping{{Group: "a", Role: "admin", Teams: []string{"payments"}}, {Group: "b", Role: "viewer", Teams: []string{"Bad"}}}}
+	err := bad.Validate()
+	if err == nil || !strings.Contains(err.Error(), "admin is fleet-wide") || !strings.Contains(err.Error(), `invalid team id "Bad"`) {
+		t.Errorf("Validate: %v", err)
+	}
+}

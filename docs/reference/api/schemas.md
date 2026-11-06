@@ -252,6 +252,8 @@ The usage the effective (`cur`) rates were computed from.
 | `nextWindow` | string (date-time) |  | When the next maintenance window opens; set while the phase is `Deferred`. |
 | `observedAt` | string (date-time) |  |  |
 | `jvm` | array of [JVMContainer](schemas.md#jvmcontainer) |  | JVM containers detected by the agent with their heap settings. Absent when JVM detection is off (`RightsizingPolicy.spec.jvm.detect: false`) or no container is a JVM. |
+| `labels` | map of string |  | The workload's labels (at most 64). The hub resolves the owning team from them and from `namespaceLabels` (docs/teams.md). Absent: not reported, the hub keeps what it has. |
+| `namespaceLabels` | map of string |  | The labels of the workload's namespace (at most 64); absent when not reported. |
 
 ## JVMContainer { #jvmcontainer }
 
@@ -491,6 +493,7 @@ the last 24 h. Cores for CPU, bytes for memory.
 | `generatedAt` | string (date-time), required |  |  |
 | `fleet` | [Summary](schemas.md#summary), required |  |  |
 | `clusters` | array of [ClusterSummary](schemas.md#clustersummary), required |  |  |
+| `teams` | array of [TeamSummary](schemas.md#teamsummary) |  | The same totals per team: every team the caller sees (also without workloads), then `unassigned` when workloads are in no team. Absent while no team is defined. |
 
 ## ClusterInfo { #clusterinfo }
 
@@ -534,6 +537,7 @@ Recommendation fields are absent when the workload has no recommendation yet.
 | `name` | string, required |  |  |
 | `modes` | [EffectiveModes](schemas.md#effectivemodes), required |  |  |
 | `phase` | Phase (enum), required | one of `Pending`, `Applying`, `Applied`, `Blocked`, `RolledBack`, `Released`, `Deferred` |  |
+| `team` | string | pattern `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; example `payments`, `unassigned` | A team id, or `unassigned` for workloads in no team. |
 | `recommendationID` | string (uuid) |  |  |
 | `generatedAt` | string (date-time) |  |  |
 | `containers` | array of [ContainerRecommendation](schemas.md#containerrecommendation) |  |  |
@@ -566,6 +570,7 @@ Recommendation fields are absent when the workload has no recommendation yet.
 | `kinds` | array of [FacetCount](schemas.md#facetcount), required |  |  |
 | `modes` | array of [FacetCount](schemas.md#facetcount), required |  |  |
 | `riskFlags` | array of [FacetCount](schemas.md#facetcount), required |  |  |
+| `teams` | array of [FacetCount](schemas.md#facetcount) |  | Team ids, `unassigned` for workloads in no team. |
 
 ## WorkloadDetail { #workloaddetail }
 
@@ -578,6 +583,7 @@ Recommendation fields are absent when the workload has no recommendation yet.
 | `name` | string, required |  |  |
 | `modes` | [EffectiveModes](schemas.md#effectivemodes), required |  |  |
 | `phase` | Phase (enum), required | one of `Pending`, `Applying`, `Applied`, `Blocked`, `RolledBack`, `Released`, `Deferred` |  |
+| `team` | string | pattern `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; example `payments`, `unassigned` | A team id, or `unassigned` for workloads in no team. |
 | `firstSeenAt` | string (date-time) |  |  |
 | `lastSeenAt` | string (date-time) |  |  |
 | `recommendation` | [WorkloadRecommendation](schemas.md#workloadrecommendation) |  | Latest recommendation; containers include `explanation`. Absent if none yet. |
@@ -640,7 +646,8 @@ Type: array of object. min items 2; max items 2.
 | `to` | string (date-time), required |  |  |
 | `step` | string, required |  |  |
 | `series` | array of object, required |  |  |
-| `series[].cluster` | string |  | Absent for the fleet series (`groupBy=none`). |
+| `series[].cluster` | string |  | Only with `groupBy=cluster`. |
+| `series[].team` | string |  | Only with `groupBy=team`. |
 | `series[].points` | array of [SavingsPoint](schemas.md#savingspoint), required |  |  |
 
 ## RealizedStep { #realizedstep }
@@ -751,6 +758,105 @@ One bucket (hourly averages); a field is absent when the metrics had no data.
 | `requestedAt` | string (date-time), required |  | When the run was first requested (for a coalesced request, the earlier one). |
 | `coalesced` | boolean, required |  | True when an already queued run for the same scope was returned. |
 
+## UserScope { #userscope }
+
+`fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some
+teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role`
+is the highest of them. Admins are always `fleet` (docs/teams.md).
+
+Type: string. one of `fleet`, `teams`.
+
+## TeamID { #teamid }
+
+A team id, a DNS label chosen when the team is created; `unassigned` is reserved.
+
+Type: string. pattern `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; example `payments`.
+
+## TeamFilterValue { #teamfiltervalue }
+
+A team id, or `unassigned` for workloads in no team.
+
+Type: string. pattern `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; example `payments`, `unassigned`.
+
+## TeamRole { #teamrole }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `team` | string, required | pattern `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; example `payments` | A team id, a DNS label chosen when the team is created; `unassigned` is reserved. |
+| `role` | string, required | one of `viewer`, `operator` |  |
+
+## TeamInput { #teaminput }
+
+A team's definition (docs/teams.md). A workload belongs to the team its owner label names
+(the hub's `teams.ownerLabel`, default `team`; the workload's own label wins over its
+namespace's; the value is the team id or one of `ownerValues`), else to the first team (by
+id) whose namespace selector matches, else to no team (`unassigned`). The namespace
+selector matches when the namespace name matches one of `namespaces` (globs) and the
+namespace has every label of `namespaceLabels`, in a cluster matching `clusters` (globs;
+empty = all). A team with neither `namespaces` nor `namespaceLabels` is chosen only by the
+owner label.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | string |  | Required on create; on update it must equal the path's id when present. |
+| `displayName` | string | max length 128 |  |
+| `description` | string | max length 1024 |  |
+| `namespaces` | array of string | max items 100 |  |
+| `namespaceLabels` | map of string |  |  |
+| `clusters` | array of string | max items 100 |  |
+| `ownerValues` | array of string | max items 50 | Owner label values that mean this team besides its id. |
+| `reason` | string, required | min length 1; max length 1024 | Why the change is made; stored in the audit log. |
+
+## Team { #team }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | string, required | pattern `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; example `payments` | A team id, a DNS label chosen when the team is created; `unassigned` is reserved. |
+| `displayName` | string, required |  | The id when none was given. |
+| `description` | string |  |  |
+| `namespaces` | array of string, required |  |  |
+| `namespaceLabels` | map of string, required |  |  |
+| `clusters` | array of string, required |  |  |
+| `ownerValues` | array of string, required |  |  |
+| `version` | integer, required | min 1 |  |
+| `createdAt` | string (date-time), required |  |  |
+| `createdBy` | string |  |  |
+| `updatedAt` | string (date-time) |  |  |
+| `workloads` | integer, required | min 0 | The team's live workloads now. |
+| `monthlySavingsUSD` | [Savings](schemas.md#savings), required |  | Their estimated monthly savings now (as `GET /v1/summary`). |
+
+## TeamCounts { #teamcounts }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `workloads` | integer, required | min 0 |  |
+| `monthlySavingsUSD` | [Savings](schemas.md#savings), required |  | Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized amounts (`RealizedAmount`). |
+
+## TeamList { #teamlist }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `items` | array of [Team](schemas.md#team), required |  |  |
+| `ownerLabel` | string, required | example `team` | The label key on workloads and namespaces that names their team. |
+| `unassigned` | [TeamCounts](schemas.md#teamcounts) |  | The workloads in no team; absent for team-scoped callers. |
+
+## TeamSummary { #teamsummary }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `workloads` | integer, required | min 0 |  |
+| `workloadsByMode` | object, required |  |  |
+| `workloadsByMode.cpu` | [ModeCounts](schemas.md#modecounts), required |  |  |
+| `workloadsByMode.memory` | [ModeCounts](schemas.md#modecounts), required |  |  |
+| `workloadsByRiskFlag` | map of integer, required |  | Number of workloads per risk flag; flags with zero workloads may be omitted. |
+| `workloadsByPhase` | map of integer |  |  |
+| `cpu` | [ResourceTotals](schemas.md#resourcetotals), required |  | Sums over workloads (per-pod value x average replicas). `used` is the average usage over the last 24 h. Cores for CPU, bytes for memory. |
+| `memory` | [ResourceTotals](schemas.md#resourcetotals), required |  | Sums over workloads (per-pod value x average replicas). `used` is the average usage over the last 24 h. Cores for CPU, bytes for memory. |
+| `monthlySavingsUSD` | [Savings](schemas.md#savings), required |  | Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized amounts (`RealizedAmount`). |
+| `lastRecommenderRunAt` | string (date-time) |  | End of the last recommender run that covered these workloads. |
+| `team` | string, required | pattern `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; example `payments`, `unassigned` | A team id, or `unassigned` for workloads in no team. |
+| `displayName` | string, required |  |  |
+
 ## UserRole { #userrole }
 
 Role of a local user. `viewer`: everything the read-only UI shows. `operator`:
@@ -805,6 +911,7 @@ for the users the identity provider creates and the roles it changes).
 | `role` | string |  | The user role or token role at the time of the change. |
 | `subject` | string |  | A user signed in with the identity provider - its subject (`sub`) there. |
 | `email` | string |  | A user signed in with the identity provider - its e-mail there. |
+| `teams` | array of string |  | The scope used: the team whose binding allowed the action (docs/teams.md). Absent when a fleet-wide role allowed it. |
 
 ## ChangeReason { #changereason }
 
@@ -843,6 +950,8 @@ for the users the identity provider creates and the roles it changes).
 | `tokenId` | string |  | Only with `authMethod = token`. |
 | `csrfToken` | string |  | Send as `X-CSRF-Token` on writes; only with `authMethod = session`. |
 | `sessionExpiresAt` | string (date-time) |  |  |
+| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role` is the highest of them. Admins are always `fleet` (docs/teams.md). |
+| `teamRoles` | array of [TeamRole](schemas.md#teamrole) |  | The caller's roles on teams (docs/teams.md). `role` is the highest role anywhere. |
 
 ## PasswordChange { #passwordchange }
 
@@ -869,6 +978,8 @@ for the users the identity provider creates and the roles it changes).
 | `version` | integer, required | min 1 |  |
 | `source` | string | one of `local`, `oidc` | `local`: signs in with a password. `oidc`: signs in with the identity provider, which created the user at its first sign-in; its role comes from its groups there (`auth.oidc.roleMappings`), so it has no password and its role is not edited here (`409` `idp_managed`). |
 | `email` | string |  | The e-mail at the identity provider (`oidc` users). |
+| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role` is the highest of them. Admins are always `fleet` (docs/teams.md). |
+| `teamRoles` | array of [TeamRole](schemas.md#teamrole) |  | Roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the fleet-wide `role` on those teams; with `scope: teams` they are all the user has. |
 
 ## UserList { #userlist }
 
@@ -885,6 +996,8 @@ for the users the identity provider creates and the roles it changes).
 | `role` | UserRole (enum), required | one of `viewer`, `operator`, `admin` | Role of a local user. `viewer`: everything the read-only UI shows. `operator`: additionally workload actions (override, exclude, approve-once) and pausing automation. `admin`: additionally defaults, policies, settings, clusters, tokens and users. Each role includes the ones before it. |
 | `password` | string, required | min length 8; max length 72 | At least 8 characters; at most 72 bytes (bcrypt). |
 | `mustChangePassword` | boolean | default `True` |  |
+| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role` is the highest of them. Admins are always `fleet` (docs/teams.md). |
+| `teamRoles` | array of [TeamRole](schemas.md#teamrole) |  | Roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the fleet-wide `role` on those teams; with `scope: teams` they are all the user has. |
 | `reason` | string, required | min length 1; max length 1024 | Why the change is made; stored in the audit log. |
 
 ## UserUpdate { #userupdate }
@@ -894,6 +1007,8 @@ for the users the identity provider creates and the roles it changes).
 | `displayName` | string | max length 128 |  |
 | `role` | UserRole (enum) | one of `viewer`, `operator`, `admin` | Role of a local user. `viewer`: everything the read-only UI shows. `operator`: additionally workload actions (override, exclude, approve-once) and pausing automation. `admin`: additionally defaults, policies, settings, clusters, tokens and users. Each role includes the ones before it. |
 | `disabled` | boolean |  |  |
+| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role` is the highest of them. Admins are always `fleet` (docs/teams.md). |
+| `teamRoles` | array of [TeamRole](schemas.md#teamrole) |  | Replaces the roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the fleet-wide `role` on those teams; with `scope: teams` they are all the user has. |
 | `reason` | string, required | min length 1; max length 1024 | Why the change is made; stored in the audit log. |
 
 ## PasswordReset { #passwordreset }
@@ -1628,19 +1743,19 @@ Type: string. one of `built-in`, `global-default`, `cluster-default-chart`, `clu
 
 ## ConfigTargetType { #configtargettype }
 
-Type: string. one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness`, `notification`.
+Type: string. one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness`, `notification`, `team`.
 
 ## ConfigAction { #configaction }
 
 CamelCase action of a configuration change (`docs/contracts/events.md`).
 
-Type: string. one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`, `NotificationChannelCreated`, `NotificationChannelUpdated`, `NotificationChannelDeleted`, `NotificationRuleCreated`, `NotificationRuleUpdated`, `NotificationRuleDeleted`, `NotificationDigestUpdated`.
+Type: string. one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`, `NotificationChannelCreated`, `NotificationChannelUpdated`, `NotificationChannelDeleted`, `NotificationRuleCreated`, `NotificationRuleUpdated`, `NotificationRuleDeleted`, `NotificationDigestUpdated`, `TeamCreated`, `TeamUpdated`, `TeamDeleted`.
 
 ## ConfigTarget { #configtarget }
 
 | Field | Type | Constraints | Description |
 |---|---|---|---|
-| `type` | ConfigTargetType (enum), required | one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness`, `notification` |  |
+| `type` | ConfigTargetType (enum), required | one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness`, `notification`, `team` |  |
 | `id` | string, required |  | Policy or approval id, settings section, cluster name (`*` for the fleet automation), token id or username. |
 | `name` | string |  | Display name, e.g. the policy name. |
 | `cluster` | string | pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`; example `ro-spoke-1` |  |
@@ -1658,7 +1773,7 @@ never including password hashes or token values.
 | `type` | string, required | one of `config_changed` |  |
 | `time` | string (date-time), required |  |  |
 | `actor` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
-| `action` | ConfigAction (enum), required | one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`, `NotificationChannelCreated`, `NotificationChannelUpdated`, `NotificationChannelDeleted`, `NotificationRuleCreated`, `NotificationRuleUpdated`, `NotificationRuleDeleted`, `NotificationDigestUpdated` | CamelCase action of a configuration change (`docs/contracts/events.md`). |
+| `action` | ConfigAction (enum), required | one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`, `NotificationChannelCreated`, `NotificationChannelUpdated`, `NotificationChannelDeleted`, `NotificationRuleCreated`, `NotificationRuleUpdated`, `NotificationRuleDeleted`, `NotificationDigestUpdated`, `TeamCreated`, `TeamUpdated`, `TeamDeleted` | CamelCase action of a configuration change (`docs/contracts/events.md`). |
 | `target` | [ConfigTarget](schemas.md#configtarget), required |  |  |
 | `reason` | string, required |  | The reason given with the change. |
 | `version` | integer |  | Version of the target after the change, if it is versioned. |

@@ -449,3 +449,32 @@ func TestRenderRealizedSince(t *testing.T) {
 		t.Errorf("webhook digest: %v %s", err, req.Body)
 	}
 }
+
+func TestRenderDigestTeams(t *testing.T) {
+	links := Links{Base: "https://kerf.example.com"}
+	d := &DigestMessage{TopOpportunities: []Opportunity{}, Attention: []Attention{}, Teams: []TeamSavings{
+		{Team: "payments", DisplayName: "Payments", Workloads: 4, MonthlySavingsUSD: 120, Link: links.Team("payments")},
+		{Team: "unassigned", DisplayName: "Unassigned", Workloads: 2, MonthlySavingsUSD: 10},
+	}}
+	m := Message{ID: "m1", Kind: KindDigest, Time: time.Date(2026, 11, 9, 8, 0, 0, 0, time.UTC), Digest: d}
+	for _, typ := range []string{hubapi.NotificationSlack, hubapi.NotificationTeams, hubapi.NotificationWebhook} {
+		req, err := Render(typ, m, "", m.Time)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := string(req.Body)
+		want := "Savings by team"
+		if typ == hubapi.NotificationWebhook {
+			want = `"teams":[{"team":"payments","displayName":"Payments","workloads":4,"monthlySavingsUSD":120,"link":"https://kerf.example.com/opportunities?team=payments"}`
+		}
+		if !strings.Contains(body, want) || !strings.Contains(body, "Unassigned") {
+			t.Errorf("%s: %s", typ, body)
+		}
+	}
+	// No teams: no section.
+	d.Teams = nil
+	req, _ := Render(hubapi.NotificationSlack, m, "", m.Time)
+	if strings.Contains(string(req.Body), "by team") {
+		t.Errorf("section without teams: %s", req.Body)
+	}
+}

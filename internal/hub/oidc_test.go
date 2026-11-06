@@ -412,3 +412,45 @@ func TestSafeNextPath(t *testing.T) {
 		}
 	}
 }
+
+// TestOIDCTeamMappings: group mappings with teams give team-scoped access, re-read at refresh.
+func TestOIDCTeamMappings(t *testing.T) {
+	e := newOIDCEnv(t, func(c *auth.OIDCConfig) {
+		c.RefreshInterval = "5m"
+		c.RoleMappings = append(c.RoleMappings, auth.RoleMapping{Group: "payments-devs", Role: "operator", Teams: []string{"pay"}})
+	})
+	expectCode(t, "team", e.do(http.MethodPost, "/v1/admin/teams", tokAdmin, hubapi.TeamInput{ID: "pay", Namespaces: []string{"payments"}, Reason: "x"}), 201)
+	e.idp.AddUser(oidctest.User{Subject: "sub-carol", Email: "carol@example.com", Groups: []string{"payments-devs"}})
+	b := newBrowser(t)
+	e.oidcSignIn(b, "sub-carol", "/")
+	s := b.session()
+	_, me := e.me(s)
+	if me.Role != hubapi.UserRoleOperator || me.Scope != hubapi.ScopeTeams || !reflect.DeepEqual(me.TeamRoles, []hubapi.TeamRole{{Team: "pay", Role: "operator"}}) {
+		t.Fatalf("me: %+v", me)
+	}
+	var l hubapi.WorkloadList
+	mustJSON(t, e.sdo(s, http.MethodGet, "/v1/workloads", nil).body, &l)
+	for _, w := range l.Items {
+		if w.Team != "pay" {
+			t.Errorf("team-scoped IdP user sees %s of team %q", w.ID, w.Team)
+		}
+	}
+	if l.Total != 3 { // payments on c1 and c2
+		t.Errorf("workloads: %d", l.Total)
+	}
+	// Also in engineering: fleet viewer, still operator on pay.
+	e.idp.SetGroups("sub-carol", "payments-devs", "engineering")
+	e.advance(6 * time.Minute)
+	if _, me := e.me(s); me.Scope != hubapi.ScopeFleet || me.Role != hubapi.UserRoleOperator || len(me.TeamRoles) != 1 {
+		t.Errorf("after the refresh: %+v", me)
+	}
+	mustJSON(t, e.sdo(s, http.MethodGet, "/v1/workloads", nil).body, &l)
+	if l.Total != 6 {
+		t.Errorf("fleet viewer sees %d workloads", l.Total)
+	}
+	// The IdP manages the bindings.
+	var u hubapi.User
+	e.getJSON("/v1/admin/users/carol@example.com", tokAdmin, &u)
+	e.problem(e.do(http.MethodPatch, "/v1/admin/users/carol@example.com", tokAdmin, hubapi.UserUpdate{Scope: strPtr(hubapi.ScopeFleet), Reason: "x"},
+		ifMatchHdr(u.Version)...), 409, hubapi.CodeIdPManaged)
+}

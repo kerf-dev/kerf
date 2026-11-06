@@ -40,7 +40,7 @@ Without `limit` all items are returned in one page.
 | `304` | Not modified since the given ETag. |  |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### Report the status of a batch of workloads { #reportWorkloadStatus }
@@ -69,7 +69,7 @@ recommendation pull, and a partial batch on every phase change. The hub uses
 | `200` | Batch accepted. | [BatchResult](schemas.md#batchresult) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 | `413` | Batch too large (more than 1000 items or 8 MiB). | [Problem](schemas.md#problem) |
 
@@ -98,7 +98,7 @@ the agent can retry a whole batch after a timeout.
 | `200` | Batch accepted. | [BatchResult](schemas.md#batchresult) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 | `413` | Batch too large (more than 1000 items or 8 MiB). | [Problem](schemas.md#problem) |
 
@@ -136,5 +136,5 @@ changed. If the hub is unreachable the agent keeps the CRs and the last flags it
 | `200` | Cluster configuration. | [ClusterConfig](schemas.md#clusterconfig) |
 | `304` | Not modified since the given ETag. |  |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |

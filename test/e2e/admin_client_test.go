@@ -585,6 +585,16 @@ func sweepHub(logf func(string, ...any)) error {
 			logf("sweep: deleted cluster %s", cl.Name)
 		}
 	}
+	var teams hubapi.TeamList
+	if err := getJSON("/v1/admin/teams", &teams); err != nil {
+		return err
+	}
+	for _, tm := range teams.Items {
+		if strings.HasPrefix(tm.ID, "e2e-") {
+			deleteTeamQuiet(tm.ID, "e2e sweep: left by an interrupted run")
+			logf("sweep: deleted team %s", tm.ID)
+		}
+	}
 	var auto hubapi.FleetAutomation
 	if err := getJSON("/v1/admin/automation", &auto); err != nil {
 		return err

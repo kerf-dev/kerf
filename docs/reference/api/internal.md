@@ -28,7 +28,7 @@ cluster without a stored binding: its metrics are in datasource `local` with lab
 |---|---|---|
 | `200` | Bindings by cluster. | [MetricsBindingList](schemas.md#metricsbindinglist) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Instant PromQL query against a datasource (pricing service) { #proxyInstantQuery }
 
@@ -57,7 +57,7 @@ HTTP API `/api/v1/query` format, including its errors and status code). Only `qu
 | `200` | The datasource's Prometheus HTTP API response, unchanged (also for its own errors). | [PromQueryResponse](schemas.md#promqueryresponse) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown datasource id. | [Problem](schemas.md#problem) |
 | `502` | The datasource could not be reached. | [Problem](schemas.md#problem) |
 
@@ -82,7 +82,7 @@ Accepts: bearer token with role `pricing`.
 | `200` | The datasource's Prometheus HTTP API response, unchanged (also for its own errors). | [PromQueryResponse](schemas.md#promqueryresponse) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown datasource id. | [Problem](schemas.md#problem) |
 | `502` | The datasource could not be reached. | [Problem](schemas.md#problem) |
 
@@ -113,7 +113,7 @@ As the instant query, for `/api/v1/query_range`: `query`, `start`, `end`, `step`
 | `200` | The datasource's Prometheus HTTP API response, unchanged (also for its own errors). | [PromQueryResponse](schemas.md#promqueryresponse) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown datasource id. | [Problem](schemas.md#problem) |
 | `502` | The datasource could not be reached. | [Problem](schemas.md#problem) |
 
@@ -138,6 +138,6 @@ Accepts: bearer token with role `pricing`.
 | `200` | The datasource's Prometheus HTTP API response, unchanged (also for its own errors). | [PromQueryResponse](schemas.md#promqueryresponse) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown datasource id. | [Problem](schemas.md#problem) |
 | `502` | The datasource could not be reached. | [Problem](schemas.md#problem) |

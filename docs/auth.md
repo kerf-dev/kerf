@@ -74,7 +74,8 @@ password form.
   lists these users as IdP users: they have no password, and their role is not edited in Kerf.
 - **Roles from groups.** `roleMappings` map the groups claim (default `groups`) to roles; the highest
   matching role wins. With no match the user gets `defaultRole`, or, if it is empty, the sign-in is denied
-  ("No access to Kerf").
+  ("No access to Kerf"). A mapping with `teams: [...]` gives its role on those teams only
+  ([Teams](teams.md#sign-in-with-an-identity-provider)).
 - **Removing access.** The hub re-reads the groups with the refresh token every `refreshInterval` (default
   `5m`), during the user's next request. Removed from a mapped group: the role drops at that refresh.
   Removed from every mapped group, deactivated at the IdP, or the refresh token revoked: the session ends

@@ -64,7 +64,7 @@ only clears the cookie. Always `204` otherwise; returns no data.
 | Status | Description | Body |
 |---|---|---|
 | `204` | Logged out. |  |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### How the sign-in page offers to sign in { #getAuthProviders }
 
@@ -152,7 +152,7 @@ token (bearer requests need none). The UI uses it to decide what to show.
 |---|---|---|
 | `200` | Identity. | [Me](schemas.md#me) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Change the caller's own password { #changeOwnPassword }
 
@@ -178,6 +178,6 @@ revoked; the current one stays.
 | `204` | Password changed. |  |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `429` | Too many attempts (code `rate_limited`). | [Problem](schemas.md#problem) |

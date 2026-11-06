@@ -130,6 +130,11 @@ are unchanged.
   (re-read every `refreshInterval`), so role edits and password resets answer `409` `idp_managed`.
   Their audit actor carries `subject` and `email`. With `auth.local.enabled: false` only the break-glass
   admin may use a password.
+- **Teams** ([teams.md](../teams.md)): a user's `scope` is `fleet` (its `role` everywhere; `teamRoles` may raise
+  it on some teams) or `teams` (only the workloads of its `teamRoles`). Operations a team-scoped user may call
+  filter their data by its teams in the store; workload operations need the role on the workload's team. Every
+  other operation needs the role fleet-wide: `403` `scope_forbidden`. The audit actor of an action a team role
+  allowed carries `teams`.
 - **Bootstrap:** the initial admin comes from a Secret. Dev seeds the users `viewer`,
   `operator` and `admin` with passwords from the chart's dev values.
 
