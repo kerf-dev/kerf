@@ -85,11 +85,22 @@ const usdCompact = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 1,
 })
 
+/** Formats `v`; an amount that rounds to zero is formatted as plain zero, never "-$0.00". */
+function money(nf: Intl.NumberFormat, v: number): string {
+  const s = nf.format(v)
+  return /[1-9]/.test(s) ? s : nf.format(0)
+}
+
 export function formatUSD(v: number | undefined, opts: { compact?: boolean; cents?: boolean } = {}): string {
   if (v == null || Number.isNaN(v)) return '—'
-  if (opts.compact && Math.abs(v) >= 10_000) return usdCompact.format(v)
-  if (opts.cents || (Math.abs(v) < 10 && v !== 0)) return usd2.format(v)
-  return usd0.format(v)
+  if (opts.compact && Math.abs(v) >= 10_000) return money(usdCompact, v)
+  if (opts.cents || (Math.abs(v) < 10 && v !== 0)) return money(usd2, v)
+  return money(usd0, v)
+}
+
+/** True when `v` shows as $0.00 at cent precision: nothing worth a line of its own. */
+export function roundsToZeroUSD(v: number | undefined): boolean {
+  return v == null || Number.isNaN(v) || !/[1-9]/.test(usd2.format(v))
 }
 
 /**

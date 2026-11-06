@@ -161,6 +161,61 @@ describe('Overview: realized savings', () => {
     expect(within(card).queryByTestId('realized-total')).toBeNull()
   })
 
+  describe('breakdown lines', () => {
+    function useRealized(total: { cpu: number; memory: number }) {
+      server.use(
+        http.get('*/v1/savings/realized', ({ request }) => {
+          const u = new URL(request.url)
+          const t = { ...total, total: total.cpu + total.memory }
+          const body: RealizedSavings = {
+            from: u.searchParams.get('from')!,
+            to: u.searchParams.get('to')!,
+            step: 'month',
+            since: '2026-10-27T00:00:00Z',
+            total: t,
+            inRange: t,
+            releasedNow: { cpuCores: 1, memoryBytes: 1024 ** 3 },
+            points: [],
+            coverage: {
+              workloadHours: 1,
+              replicasFromRecommendations: 0,
+              withoutReplicas: 0,
+              defaultPricing: 0,
+            },
+          }
+          return HttpResponse.json(body)
+        }),
+      )
+    }
+
+    it('leaves out a memory line that rounds to zero, without a sign', async () => {
+      useRealized({ cpu: 12.34, memory: -0.001 })
+      renderAt('/')
+      const card = await screen.findByTestId('realized-card')
+      const lines = await within(card).findByTestId('realized-breakdown', {}, { timeout: 8000 })
+      expect(lines.textContent).toContain('CPU $12')
+      expect(lines.textContent).not.toContain('Memory')
+      expect(card.textContent).not.toContain('-$0')
+    })
+
+    it('keeps a real negative value with its sign', async () => {
+      useRealized({ cpu: 12.34, memory: -1.5 })
+      renderAt('/')
+      const card = await screen.findByTestId('realized-card')
+      const lines = await within(card).findByTestId('realized-breakdown', {}, { timeout: 8000 })
+      expect(lines.textContent).toContain('CPU $12')
+      expect(lines.textContent).toContain('Memory -$1.50')
+    })
+
+    it('shows the empty state when every line is zero', async () => {
+      useRealized({ cpu: 0, memory: -0.001 })
+      renderAt('/')
+      const card = await screen.findByTestId('realized-card')
+      expect(await within(card).findByText('Nothing realized yet', {}, { timeout: 8000 })).toBeInTheDocument()
+      expect(card.textContent).not.toContain('-$0')
+    })
+  })
+
   it('labels the node cost trend as correlated, not caused', async () => {
     renderAt('/')
     const card = await screen.findByTestId('node-cost-card')

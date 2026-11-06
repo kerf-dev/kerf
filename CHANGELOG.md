@@ -149,6 +149,8 @@ First public version.
 
 ### Fixed
 
+- The realized savings card showed "Memory -$0.00" when a resource saved less than a cent: amounts that round to
+  zero no longer carry a minus sign, and a CPU or memory line that rounds to zero is left out.
 - After signing in, the browser tab kept the title "Sign in · Kerf" on every page.
 - Signing in through the web UI kept users read-only: the web proxy looked for the old session cookie name
   and never forwarded `kerf_session`, so every request still went out with the read-only UI token.

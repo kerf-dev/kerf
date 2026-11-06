@@ -8,6 +8,7 @@ import {
   formatPercent,
   formatQuantity,
   formatUSD,
+  roundsToZeroUSD,
   humanDuration,
   parseGoDuration,
   parseQuantity,
@@ -67,6 +68,22 @@ describe('formatting', () => {
     expect(formatUSD(1234.5)).toBe('$1,235')
     expect(formatUSD(48213, { compact: true })).toBe('$48.2K')
     expect(formatUSD(3.456)).toBe('$3.46')
+  })
+  it('never shows a sign on an amount that rounds to zero', () => {
+    expect(formatUSD(-0.001)).toBe('$0.00')
+    expect(formatUSD(-0.001, { compact: true })).toBe('$0.00')
+    expect(formatUSD(-0.001, { cents: true })).toBe('$0.00')
+    expect(formatUSD(-0.4, { cents: true })).toBe('-$0.40')
+    expect(formatUSD(-0.004)).toBe('$0.00')
+    expect(formatUSD(-0)).toBe('$0')
+    expect(formatUSD(0.001)).toBe('$0.00')
+    // A real negative amount keeps its sign.
+    expect(formatUSD(-0.42)).toBe('-$0.42')
+    expect(formatUSD(-12.5)).toBe('-$13')
+  })
+  it('knows which amounts round to zero', () => {
+    for (const v of [0, -0, 0.004, -0.001, undefined, NaN]) expect(roundsToZeroUSD(v)).toBe(true)
+    for (const v of [0.005, -0.42, 12]) expect(roundsToZeroUSD(v)).toBe(false)
   })
   it('formats deltas', () => {
     expect(formatDelta(delta(1, 0.5))).toBe('−50%')
