@@ -1032,7 +1032,10 @@ export const adminHandlers = [
   http.get('*/v1/admin/settings', async ({ request }) => {
     const g = await gate(request)
     if (g instanceof Response) return g
-    const body: S['Settings'] = { recommender: g.st.recommender, pricing: g.st.pricing }
+    const body: S['Settings'] = {
+      recommender: g.st.recommender,
+      pricing: { ...g.st.pricing, rates: g.st.pricingRates },
+    }
     return json(body)
   }),
   http.get('*/v1/admin/settings/:section/versions', async ({ request, params }) => {
@@ -1054,7 +1057,9 @@ export const adminHandlers = [
       const g = await gate(request)
       if (g instanceof Response) return g
       const doc = settingsSection(g.st, section)!
-      return json(doc, { version: doc.version })
+      return json(section === 'pricing' ? { ...doc, rates: g.st.pricingRates } : doc, {
+        version: doc.version,
+      })
     }),
     http.put(`*/v1/admin/settings/${section}`, async ({ request }) => {
       const g = await gate(request, 'admin')

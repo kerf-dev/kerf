@@ -83,6 +83,7 @@ func Recommend(req Request, strategy Strategy, cfg Config) (Result, bool) {
 	rec.DataCoverage = cov.result()
 	rec.Pricing = &hubapi.RecommendationPricing{
 		Source: req.Pricing.Source, CPUCoreHourUSD: req.Pricing.CPUCoreHour, MemoryGiBHourUSD: req.Pricing.MemoryGiBHour,
+		RateSources: req.Pricing.Sources, CURPeriod: req.Pricing.CURPeriod,
 	}
 	if rec.Pricing.Source == "" {
 		rec.Pricing.Source = PricingSourceDefault

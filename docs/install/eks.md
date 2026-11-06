@@ -486,6 +486,39 @@ association (3.4) is missing or was created after the pod started. The NetworkPo
 Pod Identity Agent (`169.254.170.23:80`, in `values-hub.yaml`). Fix it and run
 `kubectl --context $HUB_CTX -n $NS rollout restart deploy/pricing`.
 
+### 4.6 Effective rates from the Cost and Usage Report (optional)
+
+With Savings Plans, Reserved Instances or both, price nodes at the rate you actually pay instead of the list price.
+[Pricing](../pricing.md) has the formula and the details; the steps are:
+
+1. Create a CUR 2.0 export in **Data Exports** (Parquet, hourly or daily, overwrite) from the management
+   account, for example to `s3://<cur-bucket>/cur` with the name `kerf`
+   ([settings](../pricing.md#1-create-the-cur-20-export)).
+2. For the Athena reader, create a Glue table over `s3://<cur-bucket>/cur/kerf/data/` and an Athena workgroup with
+   a query result location. For a small account, the S3 reader needs neither.
+3. Add the Athena or S3 statements of [the IAM policy](../pricing.md#3-iam) to the `kerf-pricing` role:
+   ```bash
+   aws iam put-role-policy --role-name kerf-pricing --policy-name kerf-pricing-cur --policy-document file://$WORK/pricing-cur-policy.json
+   ```
+4. Turn it on in `values-hub.yaml` and upgrade the hub release ([4.3](#43-install)):
+   ```yaml
+   pricing:
+     cur:
+       source: athena
+       region: us-east-1
+       athena: {database: kerf_cur, table: data, workgroup: kerf}
+   ```
+
+**Check:**
+```bash
+kubectl --context $HUB_CTX -n $NS logs deploy/pricing | grep -i "cost and usage report"
+kubectl --context $HUB_CTX get --raw "/api/v1/namespaces/$NS/services/pricing:9090/proxy/metrics" | grep -E '^kerf_pricing_cur_last_read_ok'
+```
+Expected: `cost and usage report read` with `rates` above 0, and `kerf_pricing_cur_last_read_ok{…} 1`. **Admin →
+Pricing** then shows the period and each cluster's nodes by rate source. On an error, nodes keep their list prices
+and the `pricing.coverage` readiness check warns; the log line names the cause (usually IAM, the table, or the
+bucket prefix).
+
 ## 5. Each workload cluster
 
 Repeat this section for every workload cluster. Set its variables first:
