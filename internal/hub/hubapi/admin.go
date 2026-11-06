@@ -67,10 +67,12 @@ const (
 
 // Problem codes of the admin area (Problem.code).
 const (
-	CodeInvalidCredentials   = "invalid_credentials"
-	CodeAccountLocked        = "account_locked"
-	CodeRateLimited          = "rate_limited"
-	CodeIdPManaged           = "idp_managed"
+	CodeInvalidCredentials = "invalid_credentials"
+	CodeAccountLocked      = "account_locked"
+	CodeRateLimited        = "rate_limited"
+	CodeIdPManaged         = "idp_managed"
+	// CodeScopeForbidden: the caller's team bindings do not cover the endpoint or the workload.
+	CodeScopeForbidden       = "scope_forbidden"
 	CodeCSRFInvalid          = "csrf_invalid"
 	CodeAdminRequired        = "admin_required"
 	CodePreconditionRequired = "precondition_required"
@@ -163,10 +165,11 @@ const (
 	TargetAutomation       = "automation"
 	TargetToken            = "token"
 	TargetUser             = "user"
+	TargetTeam             = "team"
 )
 
 // ConfigTargetTypes lists the ConfigTargetType enum.
-var ConfigTargetTypes = []string{TargetSettings, TargetPolicy, TargetWorkloadOverride, TargetApproval, TargetCluster, TargetAutomation, TargetToken, TargetUser, TargetDatasource, TargetReadiness, TargetNotification}
+var ConfigTargetTypes = []string{TargetSettings, TargetPolicy, TargetWorkloadOverride, TargetApproval, TargetCluster, TargetAutomation, TargetToken, TargetUser, TargetDatasource, TargetReadiness, TargetNotification, TargetTeam}
 
 // Config actions (ConfigAction, docs/contracts/events.md).
 const (
@@ -189,6 +192,9 @@ const (
 	ActionUserUpdated       = "UserUpdated"
 	ActionUserDeleted       = "UserDeleted"
 	ActionPasswordReset     = "PasswordReset"
+	ActionTeamCreated       = "TeamCreated"
+	ActionTeamUpdated       = "TeamUpdated"
+	ActionTeamDeleted       = "TeamDeleted"
 )
 
 // ConfigActions lists the ConfigAction enum in contract order.
@@ -200,6 +206,7 @@ var ConfigActions = []string{
 	ActionDatasourceCreated, ActionDatasourceUpdated, ActionDatasourceDeleted, ActionReadinessChanged,
 	ActionNotificationChannelCreated, ActionNotificationChannelUpdated, ActionNotificationChannelDeleted,
 	ActionNotificationRuleCreated, ActionNotificationRuleUpdated, ActionNotificationRuleDeleted, ActionNotificationDigestUpdated,
+	ActionTeamCreated, ActionTeamUpdated, ActionTeamDeleted,
 }
 
 // Actor is who made a change.
@@ -210,6 +217,8 @@ type Actor struct {
 	// Subject and Email identify a user signed in with the identity provider (source oidc).
 	Subject string `json:"subject,omitempty"`
 	Email   string `json:"email,omitempty"`
+	// Teams is the scope used: the teams whose binding allowed the action. Absent: a fleet-wide role.
+	Teams []string `json:"teams,omitempty"`
 }
 
 // ChangeReason is the body of the DELETE endpoints.
@@ -231,6 +240,10 @@ type Me struct {
 	TokenID          string     `json:"tokenId,omitempty"`
 	CSRFToken        string     `json:"csrfToken,omitempty"`
 	SessionExpiresAt *time.Time `json:"sessionExpiresAt,omitempty"`
+	// Scope and TeamRoles: what the caller may see and do (fleet: role everywhere, teams raise it;
+	// teams: only the bound teams). Role is the highest role anywhere.
+	Scope     string     `json:"scope,omitempty"`
+	TeamRoles []TeamRole `json:"teamRoles,omitempty"`
 }
 
 // PasswordChange is the body of POST /v1/me/password.
@@ -257,6 +270,10 @@ type User struct {
 	// role comes from its groups). Email is set for IdP users.
 	Source string `json:"source,omitempty"`
 	Email  string `json:"email,omitempty"`
+	// Scope: fleet (Role everywhere; TeamRoles may raise it on some teams) or teams (only the teams
+	// of TeamRoles; Role is the highest of them).
+	Scope     string     `json:"scope,omitempty"`
+	TeamRoles []TeamRole `json:"teamRoles,omitempty"`
 }
 
 // User sources.
@@ -291,8 +308,11 @@ type UserCreate struct {
 	Role        string `json:"role"`
 	Password    string `json:"password"`
 	// MustChangePassword defaults to true when absent.
-	MustChangePassword *bool  `json:"mustChangePassword,omitempty"`
-	Reason             string `json:"reason"`
+	MustChangePassword *bool `json:"mustChangePassword,omitempty"`
+	// Scope (default fleet) and TeamRoles: see User. With scope teams, Role is derived.
+	Scope     string     `json:"scope,omitempty"`
+	TeamRoles []TeamRole `json:"teamRoles,omitempty"`
+	Reason    string     `json:"reason"`
 }
 
 // UserUpdate is the body of PATCH /v1/admin/users/{username}; nil fields are unchanged.
@@ -300,7 +320,10 @@ type UserUpdate struct {
 	DisplayName *string `json:"displayName,omitempty"`
 	Role        *string `json:"role,omitempty"`
 	Disabled    *bool   `json:"disabled,omitempty"`
-	Reason      string  `json:"reason"`
+	// Scope and TeamRoles replace the user's bindings (nil: unchanged).
+	Scope     *string     `json:"scope,omitempty"`
+	TeamRoles *[]TeamRole `json:"teamRoles,omitempty"`
+	Reason    string      `json:"reason"`
 }
 
 // PasswordReset is the body of POST /v1/admin/users/{username}/reset-password.

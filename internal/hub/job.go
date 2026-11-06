@@ -572,20 +572,43 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 			j.Log.InfoContext(ctx, "approvals superseded by new recommendations", "cluster", cluster, "approvals", n)
 		}
 	}
+	// Live workloads of the cluster with their team.
+	views, err := j.Store.LoadWorkloads(ctx, store.WorkloadFilter{Cluster: cluster})
+	if err != nil {
+		return err
+	}
+	perTeam := map[string]hubapi.Savings{}
 	if !backfill {
 		// The stored total is what GET /v1/summary shows for the cluster from now on (live
 		// workloads, latest recommendation each, including ones this run had no data for), so the
 		// savings trend ends exactly at the summary.
-		views, err := j.Store.LoadWorkloads(ctx, store.WorkloadFilter{Cluster: cluster})
-		if err != nil {
-			return err
-		}
 		savings = clusterSavings(views)
+		byTeam := map[string][]*store.WorkloadView{}
+		for _, v := range views {
+			byTeam[v.Team] = append(byTeam[v.Team], v)
+		}
+		for t, vs := range byTeam {
+			perTeam[t] = clusterSavings(vs)
+		}
+	} else {
+		teamOfKey := map[hubapi.WorkloadKey]string{}
+		for _, v := range views {
+			teamOfKey[v.Key] = v.Team
+		}
+		for _, r := range res.Results {
+			w := r.Recommendation.Workload
+			t := teamOfKey[hubapi.WorkloadKey{Cluster: cluster, Namespace: w.Namespace, Kind: w.Kind, Name: w.Name}]
+			perTeam[t] = perTeam[t].Add(r.Recommendation.MonthlySavingsUSD)
+		}
 	}
 	if err := j.Store.RecordRunCluster(ctx, store.RunCluster{
 		RunID: runID, Cluster: cluster, AsOf: res.End, Status: "succeeded", Workloads: len(res.Inventory),
 		Recommendations: len(res.Results), Savings: savings, Pricing: res.Pricing, FinishedAt: j.now(),
 	}); err != nil {
+		return err
+	}
+	// Per team: the source of the trend by team and of team-scoped callers.
+	if err := j.Store.RecordRunTeams(ctx, runID, cluster, perTeam); err != nil {
 		return err
 	}
 	if !backfill {

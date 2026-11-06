@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net/http"
@@ -469,8 +470,14 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, r, "invalid_username", "Invalid username (lowercase letters, digits, . _ -; 2-63 characters).")
 		return
 	}
-	if !validEnum(w, r, "role", in.Role, hubapi.UserRoles...) {
+	if in.Scope == hubapi.ScopeTeams && in.Role == "" {
+		in.Role = hubapi.UserRoleViewer // derived below
+	}
+	if !validEnum(w, r, "role", in.Role, hubapi.UserRoles...) || !s.validBindings(w, r, in.Role, &in.Scope, in.TeamRoles) {
 		return
+	}
+	if in.Scope == hubapi.ScopeTeams {
+		in.Role = highestTeamRole(in.TeamRoles)
 	}
 	hash, err := auth.HashPassword(in.Password, s.Cfg.Auth.BcryptCost)
 	if err != nil {
@@ -512,8 +519,33 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	if in.Role != nil && !validEnum(w, r, "role", *in.Role, hubapi.UserRoles...) {
 		return
 	}
-	if in.Role != nil && !s.localUser(w, r, "The role of an identity-provider user comes from its groups (auth.oidc.roleMappings).") {
+	if (in.Role != nil || in.Scope != nil || in.TeamRoles != nil) &&
+		!s.localUser(w, r, "The role of an identity-provider user comes from its groups (auth.oidc.roleMappings).") {
 		return
+	}
+	if in.Scope != nil || in.TeamRoles != nil || in.Role != nil {
+		// Validate the bindings the user will have after the update.
+		cur, err := s.Store.GetUser(r.Context(), r.PathValue("username"))
+		if err != nil {
+			s.storeError(w, r, err, "user")
+			return
+		}
+		role, scope, roles := cur.Role, cmp.Or(cur.Scope, hubapi.ScopeFleet), cur.TeamRoles
+		if in.Role != nil {
+			role = *in.Role
+		}
+		if in.Scope != nil {
+			scope = *in.Scope
+		}
+		if in.TeamRoles != nil {
+			roles = *in.TeamRoles
+		}
+		if scope == hubapi.ScopeTeams {
+			role = highestTeamRole(roles)
+		}
+		if !s.validBindings(w, r, role, &scope, roles) {
+			return
+		}
 	}
 	u, err := s.Store.UpdateUser(r.Context(), r.PathValue("username"), ver, in, s.change(r, hubapi.ActionUserUpdated, in.Reason))
 	if err != nil {
@@ -661,4 +693,15 @@ func (s *Server) queryConfigAudit(w http.ResponseWriter, r *http.Request) {
 func (s *Server) workloadConfigChanges(r *http.Request, k hubapi.WorkloadKey, from, to time.Time, limit int) ([]hubapi.ConfigChange, error) {
 	items, _, err := s.Store.QueryConfigChanges(r.Context(), store.ConfigQuery{Workload: &k, From: &from, To: &to, Desc: true, Limit: limit})
 	return items, err
+}
+
+// highestTeamRole is the role of a team-scoped user: the highest of its team roles.
+func highestTeamRole(roles []hubapi.TeamRole) string {
+	r := hubapi.UserRoleViewer
+	for _, b := range roles {
+		if b.Role == hubapi.UserRoleOperator {
+			r = hubapi.UserRoleOperator
+		}
+	}
+	return r
 }

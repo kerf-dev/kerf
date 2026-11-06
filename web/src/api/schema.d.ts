@@ -112,7 +112,9 @@ export interface paths {
     /**
      * Fleet and per-cluster totals
      * @description Totals over the latest recommendation of every live workload. Workloads the agent never
-     *     reported count as `audit` / `Pending` (global default, D-005).
+     *     reported count as `audit` / `Pending` (global default, D-005). A team-scoped caller gets the
+     *     totals of its teams' workloads only, and only the clusters where it has workloads; `teams`
+     *     groups the same totals by team (docs/teams.md).
      */
     get: operations['getSummary']
     put?: never
@@ -151,7 +153,8 @@ export interface paths {
      * Workloads with their latest recommendation
      * @description One row per live workload, including workloads that have no recommendation yet (their
      *     recommendation fields are absent). All filters are combined with AND; repeatable filters
-     *     match any of their values.
+     *     match any of their values. A team-scoped caller sees only the workloads of its teams, and
+     *     `total` counts only those (docs/teams.md).
      */
     get: operations['listWorkloads']
     put?: never
@@ -172,6 +175,7 @@ export interface paths {
     /**
      * Filter values with workload counts (D-016)
      * @description Counts of live workloads per filter value, for building the filters of the workload list.
+     *     Like every read, only the workloads of the caller's teams are counted (docs/teams.md).
      *     Takes the same filters as `GET /v1/workloads`. Each facet is counted with every filter
      *     applied except its own (so a multi-select keeps showing the other values of that facet);
      *     `total` applies all filters and equals `WorkloadList.total`. A workload counts once per
@@ -1073,6 +1077,64 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/admin/teams': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Teams with their workloads and estimated savings
+     * @description Teams own workloads (docs/teams.md). A team-scoped caller gets only its teams and no
+     *     `unassigned` counts. Counts are the caller's live workloads now.
+     */
+    get: operations['listTeams']
+    put?: never
+    /**
+     * Create a team
+     * @description The workloads are reassigned at once: the owner label on a workload, then on its namespace,
+     *     then the first team (by id) whose namespace selector matches. Records `TeamCreated`.
+     */
+    post: operations['createTeam']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/teams/{teamId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        teamId: components['schemas']['TeamID']
+      }
+      cookie?: never
+    }
+    /**
+     * One team
+     * @description A team outside a team-scoped caller's teams is not found.
+     */
+    get: operations['getTeam']
+    /**
+     * Replace a team's definition
+     * @description The id never changes (bindings and IdP group mappings refer to it). The workloads are
+     *     reassigned at once. Records `TeamUpdated`.
+     */
+    put: operations['updateTeam']
+    post?: never
+    /**
+     * Delete a team
+     * @description Its workloads go to another matching team or to Unassigned, and the users' bindings to it
+     *     are removed. Records `TeamDeleted`.
+     */
+    delete: operations['deleteTeam']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/admin/users': {
     parameters: {
       query?: never
@@ -1963,6 +2025,17 @@ export interface components {
        *     detection is off (`RightsizingPolicy.spec.jvm.detect: false`) or no container is a JVM.
        */
       jvm?: components['schemas']['JVMContainer'][]
+      /**
+       * @description The workload's labels (at most 64). The hub resolves the owning team from them and from
+       *     `namespaceLabels` (docs/teams.md). Absent: not reported, the hub keeps what it has.
+       */
+      labels?: {
+        [key: string]: string
+      }
+      /** @description The labels of the workload's namespace (at most 64); absent when not reported. */
+      namespaceLabels?: {
+        [key: string]: string
+      }
     }
     /**
      * @description Heap settings of one JVM container, parsed from `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`,
@@ -2189,6 +2262,11 @@ export interface components {
       generatedAt: string
       fleet: components['schemas']['Summary']
       clusters: components['schemas']['ClusterSummary'][]
+      /**
+       * @description The same totals per team: every team the caller sees (also without workloads), then
+       *     `unassigned` when workloads are in no team. Absent while no team is defined.
+       */
+      teams?: components['schemas']['TeamSummary'][]
     }
     ClusterInfo: {
       name: components['schemas']['ClusterName']
@@ -2235,6 +2313,7 @@ export interface components {
       name: string
       modes: components['schemas']['EffectiveModes']
       phase: components['schemas']['Phase']
+      team?: components['schemas']['TeamFilterValue']
       /** Format: uuid */
       recommendationID?: string
       /** Format: date-time */
@@ -2264,6 +2343,8 @@ export interface components {
       kinds: components['schemas']['FacetCount'][]
       modes: components['schemas']['FacetCount'][]
       riskFlags: components['schemas']['FacetCount'][]
+      /** @description Team ids, `unassigned` for workloads in no team. */
+      teams?: components['schemas']['FacetCount'][]
     }
     WorkloadDetail: {
       id: components['schemas']['WorkloadID']
@@ -2273,6 +2354,7 @@ export interface components {
       name: string
       modes: components['schemas']['EffectiveModes']
       phase: components['schemas']['Phase']
+      team?: components['schemas']['TeamFilterValue']
       /** Format: date-time */
       firstSeenAt?: string
       /** Format: date-time */
@@ -2333,8 +2415,10 @@ export interface components {
       to: string
       step: string
       series: {
-        /** @description Absent for the fleet series (`groupBy=none`). */
+        /** @description Only with `groupBy=cluster`. */
         cluster?: components['schemas']['ClusterName']
+        /** @description Only with `groupBy=team`. */
+        team?: components['schemas']['TeamFilterValue']
         points: components['schemas']['SavingsPoint'][]
       }[]
     }
@@ -2456,6 +2540,93 @@ export interface components {
       coalesced: boolean
     }
     /**
+     * @description `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some
+     *     teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role`
+     *     is the highest of them. Admins are always `fleet` (docs/teams.md).
+     * @enum {string}
+     */
+    UserScope: 'fleet' | 'teams'
+    /**
+     * @description A team id, a DNS label chosen when the team is created; `unassigned` is reserved.
+     * @example payments
+     */
+    TeamID: string
+    /**
+     * @description A team id, or `unassigned` for workloads in no team.
+     * @example payments
+     * @example unassigned
+     */
+    TeamFilterValue: string
+    TeamRole: {
+      team: components['schemas']['TeamID']
+      /** @enum {string} */
+      role: 'viewer' | 'operator'
+    }
+    /**
+     * @description A team's definition (docs/teams.md). A workload belongs to the team its owner label names
+     *     (the hub's `teams.ownerLabel`, default `team`; the workload's own label wins over its
+     *     namespace's; the value is the team id or one of `ownerValues`), else to the first team (by
+     *     id) whose namespace selector matches, else to no team (`unassigned`). The namespace
+     *     selector matches when the namespace name matches one of `namespaces` (globs) and the
+     *     namespace has every label of `namespaceLabels`, in a cluster matching `clusters` (globs;
+     *     empty = all). A team with neither `namespaces` nor `namespaceLabels` is chosen only by the
+     *     owner label.
+     */
+    TeamInput: {
+      /** @description Required on create; on update it must equal the path's id when present. */
+      id?: components['schemas']['TeamID']
+      displayName?: string
+      description?: string
+      namespaces?: string[]
+      namespaceLabels?: {
+        [key: string]: string
+      }
+      clusters?: string[]
+      /** @description Owner label values that mean this team besides its id. */
+      ownerValues?: string[]
+      reason: components['schemas']['ReasonText']
+    }
+    Team: {
+      id: components['schemas']['TeamID']
+      /** @description The id when none was given. */
+      displayName: string
+      description?: string
+      namespaces: string[]
+      namespaceLabels: {
+        [key: string]: string
+      }
+      clusters: string[]
+      ownerValues: string[]
+      version: number
+      /** Format: date-time */
+      createdAt: string
+      createdBy?: string
+      /** Format: date-time */
+      updatedAt?: string
+      /** @description The team's live workloads now. */
+      workloads: number
+      /** @description Their estimated monthly savings now (as `GET /v1/summary`). */
+      monthlySavingsUSD: components['schemas']['Savings']
+    }
+    TeamCounts: {
+      workloads: number
+      monthlySavingsUSD: components['schemas']['Savings']
+    }
+    TeamList: {
+      items: components['schemas']['Team'][]
+      /**
+       * @description The label key on workloads and namespaces that names their team.
+       * @example team
+       */
+      ownerLabel: string
+      /** @description The workloads in no team; absent for team-scoped callers. */
+      unassigned?: components['schemas']['TeamCounts']
+    }
+    TeamSummary: components['schemas']['Summary'] & {
+      team: components['schemas']['TeamFilterValue']
+      displayName: string
+    }
+    /**
      * @description Role of a local user (D-023). `viewer`: everything the read-only UI shows. `operator`:
      *     additionally workload actions (override, exclude, approve-once) and pausing automation.
      *     `admin`: additionally defaults, policies, settings, clusters, tokens and users. Each role
@@ -2501,6 +2672,11 @@ export interface components {
       subject?: string
       /** @description A user signed in with the identity provider - its e-mail there. */
       email?: string
+      /**
+       * @description The scope used: the team whose binding allowed the action (docs/teams.md). Absent when a
+       *     fleet-wide role allowed it.
+       */
+      teams?: components['schemas']['TeamID'][]
     }
     ChangeReason: {
       reason: components['schemas']['ReasonText']
@@ -2538,6 +2714,9 @@ export interface components {
       csrfToken?: string
       /** Format: date-time */
       sessionExpiresAt?: string
+      scope?: components['schemas']['UserScope']
+      /** @description The caller's roles on teams (docs/teams.md). `role` is the highest role anywhere. */
+      teamRoles?: components['schemas']['TeamRole'][]
     }
     PasswordChange: {
       currentPassword: string
@@ -2575,6 +2754,12 @@ export interface components {
       source?: 'local' | 'oidc'
       /** @description The e-mail at the identity provider (`oidc` users). */
       email?: string
+      scope?: components['schemas']['UserScope']
+      /**
+       * @description Roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the
+       *     fleet-wide `role` on those teams; with `scope: teams` they are all the user has.
+       */
+      teamRoles?: components['schemas']['TeamRole'][]
     }
     UserList: {
       items: components['schemas']['User'][]
@@ -2586,12 +2771,24 @@ export interface components {
       password: components['schemas']['Password']
       /** @default true */
       mustChangePassword: boolean
+      scope?: components['schemas']['UserScope']
+      /**
+       * @description Roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the
+       *     fleet-wide `role` on those teams; with `scope: teams` they are all the user has.
+       */
+      teamRoles?: components['schemas']['TeamRole'][]
       reason: components['schemas']['ReasonText']
     }
     UserUpdate: {
       displayName?: string
       role?: components['schemas']['UserRole']
       disabled?: boolean
+      scope?: components['schemas']['UserScope']
+      /**
+       * @description Replaces the roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the
+       *     fleet-wide `role` on those teams; with `scope: teams` they are all the user has.
+       */
+      teamRoles?: components['schemas']['TeamRole'][]
       reason: components['schemas']['ReasonText']
     }
     PasswordReset: {
@@ -3344,6 +3541,7 @@ export interface components {
       | 'datasource'
       | 'readiness'
       | 'notification'
+      | 'team'
     /**
      * @description CamelCase action of a configuration change (`docs/contracts/events.md`).
      * @enum {string}
@@ -3379,6 +3577,9 @@ export interface components {
       | 'NotificationRuleUpdated'
       | 'NotificationRuleDeleted'
       | 'NotificationDigestUpdated'
+      | 'TeamCreated'
+      | 'TeamUpdated'
+      | 'TeamDeleted'
     ConfigTarget: {
       type: components['schemas']['ConfigTargetType']
       /**
@@ -4268,7 +4469,11 @@ export interface components {
         'application/problem+json': components['schemas']['Problem']
       }
     }
-    /** @description The token is not allowed to access this cluster. */
+    /**
+     * @description The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or
+     *     the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`,
+     *     docs/teams.md).
+     */
     Forbidden: {
       headers: {
         [name: string]: unknown
@@ -4353,6 +4558,15 @@ export interface components {
     }
     /** @description Unknown datasource id. */
     DatasourceNotFound: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/problem+json': components['schemas']['Problem']
+      }
+    }
+    /** @description Unknown team, or a team outside the caller's teams. */
+    TeamNotFound: {
       headers: {
         [name: string]: unknown
       }
@@ -4615,6 +4829,8 @@ export interface operations {
         mode?: components['schemas']['Mode'][]
         /** @description Matches if the workload has any of the flags. */
         riskFlag?: components['schemas']['RiskFlag'][]
+        /** @description Team ids (`unassigned` = workloads in no team); matches any of them. */
+        team?: components['schemas']['TeamFilterValue'][]
         /** @description Minimum total estimated monthly savings in USD. */
         minSavings?: number
         /** @description Case-insensitive substring match on namespace and workload name. */
@@ -4656,6 +4872,8 @@ export interface operations {
         mode?: components['schemas']['Mode'][]
         /** @description Matches if the workload has any of the flags. */
         riskFlag?: components['schemas']['RiskFlag'][]
+        /** @description Team ids (`unassigned` = workloads in no team); matches any of them. */
+        team?: components['schemas']['TeamFilterValue'][]
         /** @description Minimum total estimated monthly savings in USD. */
         minSavings?: number
         /** @description Case-insensitive substring match on namespace and workload name. */
@@ -4782,8 +5000,15 @@ export interface operations {
     parameters: {
       query?: {
         cluster?: components['schemas']['ClusterName'][]
-        /** @description `none` returns one fleet series; `cluster` one series per cluster. */
-        groupBy?: 'none' | 'cluster'
+        /** @description Team ids (`unassigned` = workloads in no team); matches any of them. */
+        team?: components['schemas']['TeamFilterValue'][]
+        /**
+         * @description `none` returns one fleet series; `cluster` one series per cluster; `team` one series per
+         *     team (`unassigned` for workloads in no team). Team totals are recorded by the recommender
+         *     runs since teams exist; with a `team` filter, `groupBy=team` or a team-scoped caller the
+         *     series start there.
+         */
+        groupBy?: 'none' | 'cluster' | 'team'
         /** @description Inclusive start. Default `to` minus 7 days. */
         from?: components['parameters']['From']
         /** @description Exclusive end. Default now. */
@@ -4816,6 +5041,8 @@ export interface operations {
       query?: {
         cluster?: components['schemas']['ClusterName'][]
         namespace?: string[]
+        /** @description Team ids (`unassigned` = workloads in no team); matches any of them. */
+        team?: components['schemas']['TeamFilterValue'][]
         /** @description Inclusive start. Default 12 months before `to` (`step=month`) or 30 days (`step=day`). */
         from?: string
         /** @description Exclusive end. Default now. */
@@ -6089,6 +6316,159 @@ export interface operations {
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
       404: components['responses']['NotFound']
+    }
+  }
+  listTeams: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Teams, ordered by id. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TeamList']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  createTeam: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TeamInput']
+      }
+    }
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Team']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
+    }
+  }
+  getTeam: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        teamId: components['schemas']['TeamID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Team. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Team']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['TeamNotFound']
+    }
+  }
+  updateTeam: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        teamId: components['schemas']['TeamID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TeamInput']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Team']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['TeamNotFound']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  deleteTeam: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        teamId: components['schemas']['TeamID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeReason']
+      }
+    }
+    responses: {
+      /** @description Deleted. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['TeamNotFound']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
     }
   }
   listUsers: {

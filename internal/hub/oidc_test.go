@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -208,8 +209,8 @@ func TestOIDCSignIn(t *testing.T) {
 		case hubapi.ActionUserCreated:
 			created = c.Target.ID == "alice@example.com" && c.Actor.Type == hubapi.ActorSystem && c.Actor.Name == "oidc"
 		case hubapi.ActionAutomationPaused:
-			paused = c.Actor == hubapi.Actor{Type: hubapi.ActorUser, Name: "alice@example.com", Role: "operator",
-				Subject: "sub-alice", Email: "Alice@Example.com"}
+			paused = reflect.DeepEqual(c.Actor, hubapi.Actor{Type: hubapi.ActorUser, Name: "alice@example.com", Role: "operator",
+				Subject: "sub-alice", Email: "Alice@Example.com"})
 		}
 	}
 	if !created || !paused {

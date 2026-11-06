@@ -107,7 +107,10 @@ func (s *Server) getRealizedSavings(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, r, code, msg)
 		return
 	}
-	sum, err := s.realizedDB().Summary(r.Context(), realized.Scope{Clusters: q["cluster"], Namespaces: q["namespace"]}, from, to, step)
+	if !validTeamFilter(w, r, q["team"]) {
+		return
+	}
+	sum, err := s.realizedDB().Summary(r.Context(), realized.Scope{Clusters: q["cluster"], Namespaces: q["namespace"], Teams: q["team"]}, from, to, step)
 	if err != nil {
 		s.internal(w, r, err)
 		return

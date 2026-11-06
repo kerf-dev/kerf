@@ -476,6 +476,32 @@ func (d *digestSource) TopOpportunities(ctx context.Context, n int) ([]notify.Op
 	return out, nil
 }
 
+func (d *digestSource) TeamSavings(ctx context.Context) ([]notify.TeamSavings, error) {
+	list, err := d.s.Store.ListTeams(ctx)
+	if err != nil || len(list) == 0 {
+		return nil, err
+	}
+	views, err := d.s.Store.LoadWorkloads(ctx, store.WorkloadFilter{})
+	if err != nil {
+		return nil, err
+	}
+	byTeam := map[string][]*store.WorkloadView{}
+	for _, v := range views {
+		byTeam[teamOf(v)] = append(byTeam[teamOf(v)], v)
+	}
+	var out []notify.TeamSavings
+	for _, t := range list {
+		out = append(out, notify.TeamSavings{Team: t.ID, DisplayName: t.DisplayName, Workloads: len(byTeam[t.ID]),
+			MonthlySavingsUSD: clusterSavings(byTeam[t.ID]).Total})
+	}
+	if vs := byTeam[hubapi.TeamUnassigned]; len(vs) > 0 {
+		out = append(out, notify.TeamSavings{Team: hubapi.TeamUnassigned, DisplayName: "Unassigned", Workloads: len(vs),
+			MonthlySavingsUSD: clusterSavings(vs).Total})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].MonthlySavingsUSD > out[j].MonthlySavingsUSD })
+	return out, nil
+}
+
 func (d *digestSource) Attention(ctx context.Context) ([]notify.Attention, error) {
 	clusters, err := d.s.Store.ClusterRows(ctx, false)
 	if err != nil {

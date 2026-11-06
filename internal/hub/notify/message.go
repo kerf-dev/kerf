@@ -103,7 +103,18 @@ type DigestMessage struct {
 	Changes          ChangeCounts     `json:"changes"`
 	// Attention lists clusters that need a look; empty when all is well.
 	Attention []Attention `json:"attention"`
-	Link      string      `json:"link,omitempty"`
+	// Teams are the estimated savings per team, largest first; absent while no team is defined.
+	Teams []TeamSavings `json:"teams,omitempty"`
+	Link  string        `json:"link,omitempty"`
+}
+
+// TeamSavings is a team's line of the digest (team "unassigned": workloads in no team).
+type TeamSavings struct {
+	Team              string  `json:"team"`
+	DisplayName       string  `json:"displayName"`
+	Workloads         int     `json:"workloads"`
+	MonthlySavingsUSD float64 `json:"monthlySavingsUSD"`
+	Link              string  `json:"link,omitempty"`
 }
 
 // EstimatedSavings are USD per month.
@@ -177,6 +188,14 @@ func (l Links) Overview() string {
 
 // Opportunities links to the opportunities page.
 func (l Links) Opportunities() string { return l.join("opportunities") }
+
+// Team links to the opportunities page filtered to a team.
+func (l Links) Team(team string) string {
+	if l.Base == "" {
+		return ""
+	}
+	return l.Opportunities() + "?team=" + url.QueryEscape(team)
+}
 
 // Title is the one-line summary of an event message ("Rolled back payments/checkout (OOMKills)").
 func (e EventMessage) Title() string {

@@ -3,8 +3,10 @@ package hub
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/auth"
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 	"github.com/kerf-dev/kerf/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/hub/teams"
 )
 
 // Sign-in with OpenID Connect (docs/auth.md): authorization code flow with PKCE. The browser goes
@@ -130,14 +133,16 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		s.oidcFail(w, r, oidcErrFailed, login.Next)
 		return
 	}
-	role, ok := s.OIDC.Cfg.MapRole(id.Groups)
+	access, ok := s.OIDC.Cfg.MapAccess(id.Groups)
 	if !ok {
 		s.Log.InfoContext(ctx, "oidc sign-in denied: no mapped group", "user", id.Username, "subject", id.Subject, "groups", len(id.Groups))
 		s.oidcFail(w, r, oidcErrDenied, login.Next)
 		return
 	}
-	u, err := s.Store.UpsertOIDCUser(ctx, store.OIDCUser{Issuer: id.Issuer, Subject: id.Subject, Username: id.Username, Email: id.Email,
-		DisplayName: id.Name, Groups: id.Groups, Role: role, Provider: s.OIDC.Cfg.DisplayName()}, now)
+	ou := oidcAccess(access)
+	ou.Issuer, ou.Subject, ou.Username, ou.Email = id.Issuer, id.Subject, id.Username, id.Email
+	ou.DisplayName, ou.Groups, ou.Provider = id.Name, id.Groups, s.OIDC.Cfg.DisplayName()
+	u, err := s.Store.UpsertOIDCUser(ctx, ou, now)
 	if errors.Is(err, store.ErrUsernameTaken) {
 		s.Log.WarnContext(ctx, "oidc sign-in refused: the username belongs to another user", "user", id.Username, "subject", id.Subject)
 		s.oidcFail(w, r, oidcErrConflict, login.Next)
@@ -241,11 +246,11 @@ func (s *Server) refreshOIDC(ctx context.Context, sess *store.Session) (ended bo
 	case id.Subject != sess.OIDCSubject:
 		return end("the provider returned another subject")
 	}
-	role, ok := s.OIDC.Cfg.MapRole(id.Groups)
+	access, ok := s.OIDC.Cfg.MapAccess(id.Groups)
 	if !ok {
 		return end("no mapped group", "groups", len(id.Groups))
 	}
-	u, err := s.Store.SetOIDCRole(ctx, sess.OIDCIssuer, sess.OIDCSubject, role, id.Groups, s.OIDC.Cfg.DisplayName(), now)
+	u, err := s.Store.SetOIDCRole(ctx, sess.OIDCIssuer, sess.OIDCSubject, oidcAccess(access), id.Groups, s.OIDC.Cfg.DisplayName(), now)
 	if errors.Is(err, store.ErrNotFound) {
 		return end("identity removed")
 	}
@@ -290,4 +295,26 @@ func truncate(s string, n int) string {
 		return s[:n]
 	}
 	return s
+}
+
+// oidcAccess turns what the group mappings give into the user's role and bindings: with a fleet role
+// the user is fleet-wide (team roles may raise it on some teams); without one it is team-scoped and
+// its role is the highest team role.
+func oidcAccess(a auth.Access) store.OIDCUser {
+	u := store.OIDCUser{Role: a.FleetRole, Scope: hubapi.ScopeFleet}
+	for _, t := range slices.Sorted(maps.Keys(a.TeamRoles)) {
+		u.TeamRoles = append(u.TeamRoles, hubapi.TeamRole{Team: t, Role: a.TeamRoles[t]})
+	}
+	if a.FleetRole == "" {
+		u.Scope, u.Role = hubapi.ScopeTeams, teams.Max(teams.RoleViewer, maxRole(a.TeamRoles))
+	}
+	return u
+}
+
+func maxRole(m map[string]string) string {
+	r := ""
+	for _, v := range m {
+		r = teams.Max(r, v)
+	}
+	return r
 }

@@ -301,6 +301,10 @@ type WorkloadStatus struct {
 	ObservedAt       *time.Time           `json:"observedAt,omitempty"`
 	// JVM lists the JVM containers the agent detected (WO-12).
 	JVM []JVMContainer `json:"jvm,omitempty"`
+	// Labels are the workload's labels and NamespaceLabels its namespace's (team ownership); nil =
+	// not reported (an older agent), the stored labels stay.
+	Labels          map[string]string `json:"labels,omitempty"`
+	NamespaceLabels map[string]string `json:"namespaceLabels,omitempty"`
 }
 
 // WorkloadStatusBatch is the body of POST .../workload-status.
@@ -423,6 +427,8 @@ type FleetSummary struct {
 	GeneratedAt time.Time        `json:"generatedAt"`
 	Fleet       Summary          `json:"fleet"`
 	Clusters    []ClusterSummary `json:"clusters"`
+	// Teams groups the workloads by team (absent while no team is defined).
+	Teams []TeamSummary `json:"teams,omitempty"`
 }
 
 // ClusterCounts are per-cluster workload counts.
@@ -467,6 +473,7 @@ type WorkloadRow struct {
 	Name              string                    `json:"name"`
 	Modes             EffectiveModes            `json:"modes"`
 	Phase             string                    `json:"phase"`
+	Team              string                    `json:"team,omitempty"`
 	RecommendationID  string                    `json:"recommendationID,omitempty"`
 	GeneratedAt       *time.Time                `json:"generatedAt,omitempty"`
 	Containers        []ContainerRecommendation `json:"containers,omitempty"`
@@ -496,6 +503,7 @@ type WorkloadFacets struct {
 	Kinds      []FacetCount `json:"kinds"`
 	Modes      []FacetCount `json:"modes"`
 	RiskFlags  []FacetCount `json:"riskFlags"`
+	Teams      []FacetCount `json:"teams,omitempty"`
 }
 
 // WorkloadDetail is the response of GET /v1/workloads/{id}.
@@ -507,6 +515,7 @@ type WorkloadDetail struct {
 	Name           string                  `json:"name"`
 	Modes          EffectiveModes          `json:"modes"`
 	Phase          string                  `json:"phase"`
+	Team           string                  `json:"team,omitempty"`
 	FirstSeenAt    *time.Time              `json:"firstSeenAt,omitempty"`
 	LastSeenAt     *time.Time              `json:"lastSeenAt,omitempty"`
 	Recommendation *WorkloadRecommendation `json:"recommendation,omitempty"`
@@ -561,6 +570,7 @@ type SavingsPoint struct {
 // SavingsSeries is one series of the savings trend.
 type SavingsSeries struct {
 	Cluster string         `json:"cluster,omitempty"`
+	Team    string         `json:"team,omitempty"`
 	Points  []SavingsPoint `json:"points"`
 }
 

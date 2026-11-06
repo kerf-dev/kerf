@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
@@ -19,16 +20,19 @@ type UserRow struct {
 }
 
 const userColumns = `username, display_name, role, password_hash, disabled, must_change_password, failed_logins, locked_until,
-	last_login_at, created_at, coalesce(created_by, ''), updated_at, version, deleted_at, source, coalesce(email, '')`
+	last_login_at, created_at, coalesce(created_by, ''), updated_at, version, deleted_at, source, coalesce(email, ''), scope, team_roles`
 
 func scanUser(r pgx.Row) (UserRow, error) {
 	var u UserRow
 	var updated time.Time
+	var roles []byte
 	err := r.Scan(&u.Username, &u.DisplayName, &u.Role, &u.PasswordHash, &u.Disabled, &u.MustChangePassword, &u.FailedLogins,
-		&u.LockedUntil, &u.LastLoginAt, &u.CreatedAt, &u.CreatedBy, &updated, &u.Version, &u.DeletedAt, &u.Source, &u.Email)
+		&u.LockedUntil, &u.LastLoginAt, &u.CreatedAt, &u.CreatedBy, &updated, &u.Version, &u.DeletedAt, &u.Source, &u.Email,
+		&u.Scope, &roles)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
+	u.TeamRoles = parseTeamRoles(roles)
 	u.CreatedAt = u.CreatedAt.UTC()
 	updated = updated.UTC()
 	u.UpdatedAt = &updated
@@ -81,16 +85,18 @@ func (s *Store) CreateUser(ctx context.Context, u hubapi.UserCreate, hash string
 	var out UserRow
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		var err error
+		scope, roles := userBindings(u.Scope, u.TeamRoles)
 		out, err = scanUser(tx.QueryRow(ctx, `INSERT INTO users (username, display_name, role, password_hash, must_change_password,
-				password_changed_at, created_at, created_by, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $6)
+				password_changed_at, created_at, created_by, updated_at, scope, team_roles)
+			VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $6, $8, $9)
 			ON CONFLICT (username) DO UPDATE SET display_name = excluded.display_name, role = excluded.role,
+				scope = excluded.scope, team_roles = excluded.team_roles,
 				password_hash = excluded.password_hash, must_change_password = excluded.must_change_password,
 				password_changed_at = excluded.password_changed_at, created_at = excluded.created_at, created_by = excluded.created_by,
 				updated_at = excluded.updated_at, disabled = false, failed_logins = 0, locked_until = NULL, last_login_at = NULL,
 				deleted_at = NULL, source = 'local', email = NULL, version = users.version + 1
 			WHERE users.deleted_at IS NOT NULL
-			RETURNING `+userColumns, u.Username, u.DisplayName, u.Role, hash, mustChange, c.Time, c.Actor.Name))
+			RETURNING `+userColumns, u.Username, u.DisplayName, u.Role, hash, mustChange, c.Time, c.Actor.Name, scope, roles))
 		if errors.Is(err, ErrNotFound) {
 			return ErrAlreadyExists
 		}
@@ -148,6 +154,16 @@ func (s *Store) UpdateUser(ctx context.Context, username string, ifVersion int, 
 		if upd.Disabled != nil {
 			next.Disabled = *upd.Disabled
 		}
+		if upd.Scope != nil {
+			next.Scope = *upd.Scope
+		}
+		if upd.TeamRoles != nil {
+			next.TeamRoles = *upd.TeamRoles
+		}
+		if next.Scope == hubapi.ScopeTeams {
+			// The role of a team-scoped user is the highest of its team roles.
+			next.Role = maxTeamRole(next.TeamRoles, next.Role)
+		}
 		if cur.Role == hubapi.UserRoleAdmin && !cur.Disabled && (next.Role != hubapi.UserRoleAdmin || next.Disabled) {
 			n, err := otherAdmins(ctx, tx, username)
 			if err != nil {
@@ -157,8 +173,10 @@ func (s *Store) UpdateUser(ctx context.Context, username string, ifVersion int, 
 				return ErrLastAdmin
 			}
 		}
+		scope, roles := userBindings(next.Scope, next.TeamRoles)
 		out, err = scanUser(tx.QueryRow(ctx, `UPDATE users SET display_name = $2, role = $3, disabled = $4, updated_at = $5,
-				version = version + 1 WHERE username = $1 RETURNING `+userColumns, username, next.DisplayName, next.Role, next.Disabled, c.Time))
+				scope = $6, team_roles = $7, version = version + 1 WHERE username = $1 RETURNING `+userColumns,
+			username, next.DisplayName, next.Role, next.Disabled, c.Time, scope, roles))
 		if err != nil {
 			return err
 		}
@@ -288,14 +306,17 @@ func (s *Store) LookupSession(ctx context.Context, idHash []byte, now time.Time)
 	var lastSeen time.Time
 	row := s.Pool.QueryRow(ctx, `SELECT s.csrf_token, s.expires_at, s.last_seen_at, u.username, u.display_name, u.role, u.password_hash, u.disabled, u.must_change_password,
 			u.failed_logins, u.locked_until, u.last_login_at, u.created_at, coalesce(u.created_by, ''), u.updated_at, u.version, u.deleted_at,
-			u.source, coalesce(u.email, ''), coalesce(s.oidc_issuer, ''), coalesce(s.oidc_subject, ''), s.oidc_refresh_token, s.oidc_refreshed_at
+			u.source, coalesce(u.email, ''), coalesce(s.oidc_issuer, ''), coalesce(s.oidc_subject, ''), s.oidc_refresh_token, s.oidc_refreshed_at,
+			u.scope, u.team_roles
 		FROM sessions s JOIN users u ON u.username = s.username
 		WHERE s.id_sha256 = $1 AND s.revoked_at IS NULL AND s.expires_at > $2 AND u.deleted_at IS NULL AND NOT u.disabled`, idHash, now)
 	var u UserRow
 	var updated time.Time
+	var roles []byte
 	err := row.Scan(&sess.CSRFToken, &sess.ExpiresAt, &lastSeen, &u.Username, &u.DisplayName, &u.Role, &u.PasswordHash, &u.Disabled,
 		&u.MustChangePassword, &u.FailedLogins, &u.LockedUntil, &u.LastLoginAt, &u.CreatedAt, &u.CreatedBy, &updated, &u.Version, &u.DeletedAt,
-		&u.Source, &u.Email, &sess.OIDCIssuer, &sess.OIDCSubject, &sess.OIDCRefreshToken, &sess.OIDCRefreshedAt)
+		&u.Source, &u.Email, &sess.OIDCIssuer, &sess.OIDCSubject, &sess.OIDCRefreshToken, &sess.OIDCRefreshedAt, &u.Scope, &roles)
+	u.TeamRoles = parseTeamRoles(roles)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sess, ErrNotFound
 	}
@@ -407,4 +428,39 @@ func (s *Store) RevokeToken(ctx context.Context, id int64, c Change) (hubapi.Tok
 func (s *Store) TouchToken(ctx context.Context, id int64, now time.Time) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE api_tokens SET last_used_at = $2::timestamptz WHERE id = $1 AND (last_used_at IS NULL OR last_used_at <= $2::timestamptz - interval '1 minute')`, id, now)
 	return err
+}
+
+// parseTeamRoles reads users.team_roles; nil when empty (omitted in the API).
+func parseTeamRoles(b []byte) []hubapi.TeamRole {
+	var out []hubapi.TeamRole
+	if json.Unmarshal(b, &out) != nil || len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// userBindings returns the stored scope and team_roles of a user.
+func userBindings(scope string, roles []hubapi.TeamRole) (string, []byte) {
+	if scope == "" {
+		scope = hubapi.ScopeFleet
+	}
+	if roles == nil {
+		roles = []hubapi.TeamRole{}
+	}
+	b, _ := json.Marshal(roles)
+	return scope, b
+}
+
+// maxTeamRole is the highest role of roles, or def when there are none.
+func maxTeamRole(roles []hubapi.TeamRole, def string) string {
+	if len(roles) == 0 {
+		return def
+	}
+	r := hubapi.UserRoleViewer
+	for _, tr := range roles {
+		if tr.Role == hubapi.UserRoleOperator {
+			r = hubapi.UserRoleOperator
+		}
+	}
+	return r
 }

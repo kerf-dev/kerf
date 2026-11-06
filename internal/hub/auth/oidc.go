@@ -49,7 +49,8 @@ type OIDCConfig struct {
 	GroupsClaim string `json:"groupsClaim"`
 	// UsernameClaim names the Kerf user (default "email"; lowercased, must be a valid username).
 	UsernameClaim string `json:"usernameClaim"`
-	// RoleMappings map groups to roles; the highest matching role wins.
+	// RoleMappings map groups to roles; the highest matching role wins. A mapping with teams gives
+	// the role on those teams only (docs/teams.md).
 	RoleMappings []RoleMapping `json:"roleMappings"`
 	// DefaultRole is given when no group matches; empty denies the sign-in.
 	DefaultRole string `json:"defaultRole"`
@@ -61,11 +62,16 @@ type OIDCConfig struct {
 	ConnectAddress string `json:"connectAddress"`
 }
 
-// RoleMapping gives members of Group the Role.
+// RoleMapping gives members of Group the Role: fleet-wide, or on Teams (team ids) when set. Team
+// mappings give viewer or operator; admin is always fleet-wide.
 type RoleMapping struct {
-	Group string `json:"group"`
-	Role  string `json:"role"`
+	Group string   `json:"group"`
+	Role  string   `json:"role"`
+	Teams []string `json:"teams,omitempty"`
 }
+
+// teamIDRE is the form of a team id (a DNS label; hubapi.TeamIDRE).
+var teamIDRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // DefaultOIDCScopes are requested when Scopes is empty.
 var DefaultOIDCScopes = []string{oidc.ScopeOpenID, "profile", "email", oidc.ScopeOfflineAccess}
@@ -91,6 +97,14 @@ func (c OIDCConfig) Validate() error {
 	for _, m := range c.RoleMappings {
 		if m.Group == "" || roleRank[m.Role] == 0 {
 			errs = append(errs, fmt.Errorf("auth.oidc.roleMappings: {group: %q, role: %q}: want a group and viewer, operator or admin", m.Group, m.Role))
+		}
+		if len(m.Teams) > 0 && m.Role == "admin" {
+			errs = append(errs, fmt.Errorf("auth.oidc.roleMappings: {group: %q}: admin is fleet-wide, it cannot have teams", m.Group))
+		}
+		for _, t := range m.Teams {
+			if !teamIDRE.MatchString(t) || t == "unassigned" {
+				errs = append(errs, fmt.Errorf("auth.oidc.roleMappings: {group: %q}: invalid team id %q", m.Group, t))
+			}
 		}
 	}
 	if c.DefaultRole != "" && roleRank[c.DefaultRole] == 0 {
@@ -128,18 +142,48 @@ func (c OIDCConfig) DisplayName() string {
 	return c.Name
 }
 
-// MapRole returns the highest role of the mapped groups, else DefaultRole; ok is false when the user
-// gets no role (deny).
+// MapRole returns the highest fleet-wide role of the mapped groups (mappings without teams), else
+// DefaultRole when no mapping matches at all; ok is false when the user gets no fleet role.
 func (c OIDCConfig) MapRole(groups []string) (role string, ok bool) {
+	a, _ := c.MapAccess(groups)
+	return a.FleetRole, a.FleetRole != ""
+}
+
+// Access is what the group mappings give a user: a fleet-wide role and/or roles on teams.
+type Access struct {
+	FleetRole string            // "" = none: the user sees only its teams
+	TeamRoles map[string]string // team id -> viewer or operator
+}
+
+// MapAccess maps groups to a fleet role (the highest of the matching mappings without teams) and
+// team roles (the highest per team of the matching mappings with teams). DefaultRole applies when no
+// mapping matches. ok is false when the user gets nothing (deny).
+func (c OIDCConfig) MapAccess(groups []string) (a Access, ok bool) {
+	matched := false
 	for _, m := range c.RoleMappings {
-		if slices.Contains(groups, m.Group) && roleRank[m.Role] > roleRank[role] {
-			role = m.Role
+		if !slices.Contains(groups, m.Group) {
+			continue
+		}
+		matched = true
+		if len(m.Teams) == 0 {
+			if roleRank[m.Role] > roleRank[a.FleetRole] {
+				a.FleetRole = m.Role
+			}
+			continue
+		}
+		for _, t := range m.Teams {
+			if a.TeamRoles == nil {
+				a.TeamRoles = map[string]string{}
+			}
+			if roleRank[m.Role] > roleRank[a.TeamRoles[t]] {
+				a.TeamRoles[t] = m.Role
+			}
 		}
 	}
-	if role == "" {
-		role = c.DefaultRole
+	if !matched {
+		a.FleetRole = c.DefaultRole
 	}
-	return role, role != ""
+	return a, a.FleetRole != "" || len(a.TeamRoles) > 0
 }
 
 // ---- secrets at rest ----

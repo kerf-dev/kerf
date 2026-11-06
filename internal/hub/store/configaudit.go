@@ -161,6 +161,8 @@ func (s *Store) QueryConfigChanges(ctx context.Context, q ConfigQuery) ([]hubapi
 	if len(q.Actions) > 0 {
 		add("e.reason = ANY($%d)", q.Actions)
 	}
+	// A team-scoped caller sees only the changes to its teams' workloads (overrides, approvals).
+	conds = append(conds, workloadIDsInScope(ctx, "e.workload_id", &args))
 	if q.From != nil {
 		add("e.time >= $%d", *q.From)
 	}

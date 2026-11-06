@@ -1574,6 +1574,16 @@ func (w *run) report() {
 	if st.Reason == condReasonPending {
 		st.Reason = ""
 	}
+	// Labels of the workload and its namespace: the hub resolves the owning team from them.
+	if w.obj != nil {
+		st.Labels = copyLabels(w.obj.GetLabels())
+	}
+	var ns corev1.Namespace
+	if err := w.r.Client.Get(w.ctx, client.ObjectKey{Name: w.k.Namespace}, &ns); err == nil {
+		st.NamespaceLabels = copyLabels(ns.Labels)
+	} else {
+		w.log.Debug("namespace labels", "namespace", w.k.Namespace, "err", err)
+	}
 	if len(st.Message) > 1024 {
 		st.Message = st.Message[:1021] + "..."
 	}
@@ -1604,6 +1614,19 @@ func (w *run) report() {
 		st.RecommendationID = w.rec.ID
 	}
 	w.r.Reporter.SetStatus(w.k, st)
+}
+
+// copyLabels returns labels for the hub: never nil (an empty map means "no labels", nil "not
+// reported"), at most 64 of them.
+func copyLabels(l map[string]string) map[string]string {
+	out := make(map[string]string, min(len(l), 64))
+	for k, v := range l {
+		if len(out) == 64 {
+			break
+		}
+		out[k] = v
+	}
+	return out
 }
 
 func toHubResources(c v1alpha1.ContainerResources) hubclient.ContainerResources {
