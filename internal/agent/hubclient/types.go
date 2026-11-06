@@ -163,6 +163,21 @@ type RecommendationPricing struct {
 	Source           string  `json:"source"`
 	CPUCoreHourUSD   float64 `json:"cpuCoreHourUSD"`
 	MemoryGiBHourUSD float64 `json:"memoryGiBHourUSD"`
+	// RateSources and CURPeriod say where the rates came from; the agent does not use them.
+	RateSources []PricingRateSource `json:"rateSources,omitempty"`
+	CURPeriod   *PricingPeriod      `json:"curPeriod,omitempty"`
+}
+
+// PricingRateSource is the number of a cluster's nodes priced from one rate source.
+type PricingRateSource struct {
+	Source string `json:"source"`
+	Nodes  int    `json:"nodes"`
+}
+
+// PricingPeriod bounds the usage effective rates were computed from.
+type PricingPeriod struct {
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
 }
 
 // RecommendationList is one page of recommendations.

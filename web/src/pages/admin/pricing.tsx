@@ -2,7 +2,7 @@ import { PlusIcon, Trash2Icon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useSettings, useSettingsVersions, useWrite, writes } from '@/api/admin'
 import { useClusters } from '@/api/queries'
-import type { ClusterPricingAdjustment, PricingSettings } from '@/api/types'
+import type { ClusterPricingAdjustment, PricingRates, PricingSettings } from '@/api/types'
 import { ActorChip } from '@/components/admin/common'
 import { SaveBar } from '@/components/admin/save-bar'
 import { WriteDialog } from '@/components/admin/write-dialog'
@@ -12,6 +12,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Callout, Field, NativeSelect } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { RateSourceChips } from '@/components/rate-source'
+import { formatNumber, relativeTime } from '@/lib/format'
+import { formatPeriod } from '@/lib/rate-source'
 import { cn } from '@/lib/utils'
 
 function num(s: string): number | undefined {
@@ -73,10 +76,7 @@ export default function PricingPage() {
               Version {doc.version} · changed by <ActorChip actor={doc.updatedBy} time={doc.updatedAt} />
             </div>
           ) : null}
-          <Callout tone="info" title="Until the AWS Cost and Usage Report arrives (WO-16)">
-            Rates come from the pricing service (on-demand list prices per instance type) or its default
-            rates. Use discounts for Savings Plans and EDP, and fixed rates where you have negotiated prices.
-          </Callout>
+          <RateSources rates={doc.rates} />
           <Card>
             <CardContent className="grid gap-4 py-5 sm:grid-cols-[1fr_12rem] sm:items-end">
               <div>
@@ -251,6 +251,83 @@ export default function PricingPage() {
         successMessage="Pricing saved"
       />
     </div>
+  )
+}
+
+const DOCS = 'https://github.com/kerf-dev/kerf/blob/main/docs/pricing.md'
+
+/** Where the pricing service's rates come from: the Cost and Usage Report status and each cluster's sources. */
+function RateSources({ rates }: { rates?: PricingRates }) {
+  const cur = rates?.cur
+  const period = formatPeriod(cur?.period)
+  return (
+    <Card data-testid="rate-sources-card">
+      <CardHeader>
+        <div>
+          <CardTitle>Rate sources</CardTitle>
+          <CardDescription>Where the pricing service took each node's hourly rate from.</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-0">
+        {!cur ? (
+          <Callout tone="info" title="List prices">
+            Nodes are priced at AWS on-demand list prices, spot prices or the static price file. Turn on the
+            AWS Cost and Usage Report in the pricing service to use the rates you actually pay, with Savings
+            Plans and Reserved Instances amortised (
+            <a className="underline underline-offset-2" href={DOCS} target="_blank" rel="noreferrer">
+              docs
+            </a>
+            ). Until then, enter Savings Plans and negotiated discounts below.
+          </Callout>
+        ) : cur.lastReadOK ? (
+          <Callout tone="success" title="Effective rates from the AWS Cost and Usage Report">
+            {formatNumber(cur.rates)} instance type{cur.rates === 1 ? '' : 's'} at the rate paid
+            {period ? ` for usage ${period}` : ''}, read {relativeTime(cur.lastSuccess)}. Savings Plans and
+            Reserved Instances are already in these rates: don't enter them as a discount below. EDP and other
+            negotiated discounts are not, so they still apply.
+          </Callout>
+        ) : (
+          <Callout tone="warning" title="The AWS Cost and Usage Report cannot be read">
+            {cur.rates > 0
+              ? `The last effective rates (usage ${period || 'unknown'}, read ${relativeTime(cur.lastSuccess)}) are kept for a while; then nodes fall back to list prices.`
+              : cur.lastSuccess
+                ? `Nodes are priced at list prices again; the last successful read was ${relativeTime(cur.lastSuccess)}.`
+                : 'Nodes are priced at list prices: no read has succeeded yet.'}{' '}
+            See the pricing service log and the IAM policy in the{' '}
+            <a className="underline underline-offset-2" href={DOCS} target="_blank" rel="noreferrer">
+              docs
+            </a>
+            .
+          </Callout>
+        )}
+        {rates?.clusters.length ? (
+          <table className="w-full text-[13px]" data-testid="rate-sources-table">
+            <thead className="text-xs text-muted-foreground">
+              <tr>
+                <th className="py-2 text-left font-medium">Cluster</th>
+                <th className="px-2 py-2 text-left font-medium">Nodes by rate source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rates.clusters.map((c) => (
+                <tr key={c.cluster} className="border-t">
+                  <td className="py-2 font-mono text-xs">{c.cluster}</td>
+                  <td className="px-2 py-2">
+                    <RateSourceChips sources={c.sources} period={cur?.period} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="rounded-lg border border-dashed py-6 text-center text-[13px] text-muted-foreground">
+            {rates
+              ? 'No priced nodes yet.'
+              : 'Rate sources are unavailable: the hub cannot read the pricing series.'}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

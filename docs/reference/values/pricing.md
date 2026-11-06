@@ -24,6 +24,22 @@ The values of the `pricing` component chart. In the `kerf` chart they sit under 
 | `aws` | object | see the keys below |  |
 | `aws.pricingRegion` | string | `us-east-1` | AWS Pricing API endpoint region (us-east-1, eu-central-1 or ap-south-1). |
 | `aws.region` | string | `""` | Region for SDK defaults (spot price calls use each node's region). |
+| `cur` | object | see the keys below | Effective rates from the AWS Cost and Usage Report (CUR 2.0 through Data Exports, Parquet in S3), with Savings Plans and Reserved Instances amortised (docs/pricing.md). Off by default: nodes are priced at list (or static) prices. An instance type without usage in the report keeps its list price; an unreadable report falls back to list prices after maxAge. IAM: docs/install/eks.md. |
+| `cur.source` | string | `""` | "" (off), athena (recommended), or s3 (reads the export's Parquet files directly; small accounts). |
+| `cur.region` | string | `""` | Region of the Athena workgroup or the export bucket; empty = aws.region or the SDK default. |
+| `cur.interval` | string | `24h` | How often the report is read. |
+| `cur.window` | string | `720h` | The usage window rates are computed over. |
+| `cur.maxAge` | string | `72h` | How long the last rates are kept while the report cannot be read; then list prices again. |
+| `cur.athena` | object | see the keys below |  |
+| `cur.athena.database` | string | `""` | Glue database of the CUR 2.0 table (for example kerf_cur). |
+| `cur.athena.table` | string | `""` | e.g. data |
+| `cur.athena.workgroup` | string | `primary` |  |
+| `cur.athena.catalog` | string | `""` | empty = AwsDataCatalog |
+| `cur.athena.outputLocation` | string | `""` | s3://<bucket>/<prefix>/ for query results; empty = the workgroup's |
+| `cur.s3` | object | see the keys below |  |
+| `cur.s3.bucket` | string | `""` |  |
+| `cur.s3.prefix` | string | `""` | the export's data path: <S3 path prefix>/<export name>/data/ |
+| `cur.s3.tmpSizeLimit` | string | `1Gi` | Scratch space for one Parquet file at a time (emptyDir at /tmp); raise resources.limits.memory for large files too. |
 | `vmURL` | string | `http://victoria-metrics.monitoring.svc:8428` | Prometheus-compatible query URL holding the spokes' kube-state-metrics node series. |
 | `interval` | string | `5m` | Node discovery / pricing interval, and how long a fetched price is reused. |
 | `priceTTL` | string | `24h` |  |
@@ -56,7 +72,7 @@ The values of the `pricing` component chart. In the `kerf` chart they sit under 
 | `externalSecrets.apiVersion` | string | `external-secrets.io/v1` |  |
 | `externalSecrets.refreshInterval` | string | `1h` |  |
 | `externalSecrets.secretStoreRef` | object | `{}` | e.g. {kind: ClusterSecretStore, name: aws-secrets-manager} |
-| `serviceAccount` | object | see the keys below | AWS access for provider aws: one IAM policy with pricing:GetProducts and ec2:DescribeSpotPriceHistory. - EKS Pod Identity (preferred): no annotation. Create the association for this ServiceAccount:<br>`aws eks create-pod-identity-association --cluster-name <cluster> --namespace <namespace> \`<br>`--service-account <serviceAccount name, default the release name> --role-arn <role>`<br>`(needs the eks-pod-identity-agent add-on).`<br>- IRSA (fallback): annotations: {eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role>} |
+| `serviceAccount` | object | see the keys below | AWS access for provider aws: one IAM policy with pricing:GetProducts and ec2:DescribeSpotPriceHistory; with cur.source also Athena/Glue/S3 read access (docs/install/eks.md). - EKS Pod Identity (preferred): no annotation. Create the association for this ServiceAccount:<br>`aws eks create-pod-identity-association --cluster-name <cluster> --namespace <namespace> \`<br>`--service-account <serviceAccount name, default the release name> --role-arn <role>`<br>`(needs the eks-pod-identity-agent add-on).`<br>- IRSA (fallback): annotations: {eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role>} |
 | `serviceAccount.create` | boolean | `true` |  |
 | `serviceAccount.name` | string | `""` |  |
 | `serviceAccount.annotations` | object | `{}` |  |

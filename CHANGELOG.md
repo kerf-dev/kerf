@@ -44,6 +44,13 @@ First public version.
   and shows the release notes and `helm upgrade` commands; "Check now" runs it at once. It is on by default and
   sends nothing about the installation; turn it off with `hub.updateCheck.enabled: false`. Metric
   `kerf_update_available{current,latest}` and the alert `KerfUpdateAvailable` (severity `info`).
+- **Effective AWS prices from the Cost and Usage Report.** The pricing service can read your CUR 2.0 export
+  (AWS Data Exports, Parquet in S3), through Athena or directly from S3, and price nodes at the rate you paid
+  over the last 30 days, with Savings Plans and Reserved Instances amortised. Instance types without usage keep
+  the list price; an unreadable report falls back to list prices with a `pricing.coverage` readiness warning.
+  The workload's savings estimate and Admin → Pricing show where each rate comes from (`cur`, `list`, `spot`,
+  `static`) and the period it covers. Off by default (`pricing.cur.source`); see docs/pricing.md for the IAM
+  policy and the Data Exports settings. The cost series gain a `source` label.
 - **Realized savings.** What the applied changes actually saved since they were applied: the requests released
   by every applied change (rollbacks and later increases subtract) × the replicas that ran × the node rates of
   the time, computed hourly by the hub leader, including changes applied before the upgrade. Shown as

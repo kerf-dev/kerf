@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -120,8 +121,14 @@ func TestAdjustPricing(t *testing.T) {
 		a.Adjustment.SettingsVersion != 3 || a.Source != recommender.PricingSourceMetrics || a.Nodes != 3 {
 		t.Errorf("a = %+v %+v", a, a.Adjustment)
 	}
-	if a.Base() != metrics {
+	if !reflect.DeepEqual(a.Base(), metrics) {
 		t.Errorf("Base() = %+v", a.Base())
+	}
+	// The rate sources survive an adjustment and a re-adjustment.
+	withSources := metrics
+	withSources.Sources = []hubapi.PricingRateSource{{Source: hubapi.RateSourceCUR, Nodes: 3}}
+	if again := AdjustPricing(v, 3, "a", AdjustPricing(v, 3, "a", withSources)); !reflect.DeepEqual(again.Sources, withSources.Sources) {
+		t.Errorf("sources after re-adjustment: %+v", again.Sources)
 	}
 	// Adjusting adjusted rates starts from the base again.
 	if again := AdjustPricing(v, 3, "a", a); !near(again.CPUCoreHour, 0.03) {
@@ -131,10 +138,10 @@ func TestAdjustPricing(t *testing.T) {
 	if !near(b.CPUCoreHour, 0.027) || !near(b.MemoryGiBHour, 0.0045) || !b.Adjustment.FixedCPU || b.Adjustment.FixedMemory {
 		t.Errorf("b = %+v %+v", b, b.Adjustment)
 	}
-	if c := AdjustPricing(v, 3, "c", metrics); c.Adjustment != nil || c != metrics {
+	if c := AdjustPricing(v, 3, "c", metrics); c.Adjustment != nil || !reflect.DeepEqual(c, metrics) {
 		t.Errorf("zero discount must not adjust: %+v", c)
 	}
-	if d := AdjustPricing(hubapi.PricingSettings{}, 0, "d", metrics); d != metrics {
+	if d := AdjustPricing(hubapi.PricingSettings{}, 0, "d", metrics); !reflect.DeepEqual(d, metrics) {
 		t.Errorf("no settings: %+v", d)
 	}
 	mem := AdjustPricing(hubapi.PricingSettings{Clusters: []hubapi.ClusterPricingAdjustment{{Cluster: "m", MemoryGiBHourUSD: f(0.001)}}}, 1, "m", metrics)

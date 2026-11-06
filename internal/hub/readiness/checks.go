@@ -629,9 +629,33 @@ func (r *run) pricingCoverage() {
 		return
 	}
 	d := map[string]string{"priced": strconv.Itoa(int(priced)), "nodes": strconv.Itoa(total)}
+	// Rate sources (best effort): details source.cur, source.list, source.spot, source.static.
+	if res, err := r.c.Local.Instant(r.ctx, fmt.Sprintf("count by (source) (max by (node, source) (last_over_time(kerf_node_hourly_cost_usd%s[10m])))", datasource.DefaultMatcher(r.c.M.Cluster).Sel()), r.now); err == nil {
+		for _, s := range res {
+			if src := s.Labels["source"]; src != "" {
+				d["source."+src] = strconv.Itoa(int(s.Sample.V))
+			}
+		}
+	}
+	// The Cost and Usage Report reader exists when its series do; a failed last read is a warning.
+	curFailed := false
+	if ok, found, err := r.value(r.c.Local, "max(last_over_time(kerf_pricing_cur_last_read_ok[10m]))"); err == nil && found {
+		d["curLastReadOK"] = strconv.FormatBool(ok == 1)
+		curFailed = ok != 1
+	}
+	const curRemediation = "The pricing service cannot read the AWS Cost and Usage Report: see its log (kubectl logs deploy/pricing) for the error, usually IAM (Athena, Glue or S3 access) or a wrong table, bucket or prefix. It keeps the last effective rates for pricing.cur.maxAge, then uses list prices. docs/pricing.md."
 	if int(priced) < total {
-		r.add(rd.CheckPricingCoverage, rd.StatusWarn, fmt.Sprintf("%d of %d nodes priced: the others use the default rates", int(priced), total),
+		msg := fmt.Sprintf("%d of %d nodes priced: the others use the default rates", int(priced), total)
+		if curFailed {
+			msg += "; the AWS Cost and Usage Report cannot be read"
+		}
+		r.add(rd.CheckPricingCoverage, rd.StatusWarn, msg,
 			"See kerf_pricing_nodes{status=\"skipped\"} and the pricing service log for the skip reason (usually missing node labels, see metrics.node-labels).", hubapi.RemediationText, d)
+		return
+	}
+	if curFailed {
+		r.add(rd.CheckPricingCoverage, rd.StatusWarn, fmt.Sprintf("all %d nodes priced, but the AWS Cost and Usage Report cannot be read: effective rates are stale or replaced by list prices", total),
+			curRemediation, hubapi.RemediationText, d)
 		return
 	}
 	r.add(rd.CheckPricingCoverage, rd.StatusPass, fmt.Sprintf("all %d nodes priced", total), "", "", d)
