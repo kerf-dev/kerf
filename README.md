@@ -252,7 +252,7 @@ with metrics and sample workloads. Look for issues labelled
 ## Security
 
 Report vulnerabilities privately through [GitHub security advisories](https://github.com/kerf-dev/kerf/security/advisories/new);
-see [SECURITY.md](SECURITY.md).
+see [SECURITY.md](SECURITY.md). Everything else: <admin@getkerf.dev>.
 
 ## License
 

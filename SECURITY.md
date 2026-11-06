@@ -6,6 +6,8 @@ Please **do not open a public issue** for a security problem. Report it privatel
 **Security → Report a vulnerability** on this repository
 ([private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability)).
 
+If you cannot use GitHub, email **admin@getkerf.dev** instead. GitHub private reporting is preferred.
+
 Include what you found, how to reproduce it, the version (image tag or chart version) and the impact you
 expect. We aim to acknowledge a report within 5 working days and to agree on a disclosure date with you.
 

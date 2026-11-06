@@ -19,3 +19,4 @@ Kerf installs with one Helm chart (`oci://ghcr.io/kerf-dev/kerf/charts/kerf`): `
 - [Changelog](https://github.com/kerf-dev/kerf/blob/main/CHANGELOG.md)
 - [Security policy](https://github.com/kerf-dev/kerf/blob/main/SECURITY.md)
 - [License: Apache-2.0](https://github.com/kerf-dev/kerf/blob/main/LICENSE)
+- Contact: admin@getkerf.dev

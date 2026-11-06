@@ -6,6 +6,5 @@ In short: be respectful and constructive, assume good intent, and keep discussio
 Harassment, personal attacks and discriminatory language are not accepted in issues, pull requests,
 discussions or any other project space.
 
-To report a problem, contact the maintainers privately through the repository's
-**Security → Report a vulnerability** form (choose it even for conduct reports) or a maintainer's GitHub profile.
-Reports are handled confidentially. Maintainers may remove content and block participants who break this code.
+To report a problem, email **admin@getkerf.dev**. Reports go to the maintainers only and are handled confidentially.
+Maintainers may remove content and block participants who break this code.

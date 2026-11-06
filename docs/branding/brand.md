@@ -172,6 +172,9 @@ decoration.
 published to GitHub Pages by `.github/workflows/pages.yaml` on every push to `main` that touches `site/`.
 How to preview, check and regenerate it: [site/README.md](../../site/README.md).
 
+The project contact is **admin@getkerf.dev** (website footer and JSON-LD, `SECURITY.md` as the alternative to
+GitHub private reporting, `CODE_OF_CONDUCT.md`, `site/llms.txt`). Use only this address in public copy.
+
 - **Copy** comes from this guide and the README: the tagline is the `h1`, the one-line promise is the lede,
   the differentiators are the "What Kerf does" cards in the order above, the objections are in the FAQ, and
   the comparison table repeats the README's (keep them in step with [comparison.md](comparison.md)).
