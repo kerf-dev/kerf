@@ -15,12 +15,6 @@ import MaintenancePage from './maintenance'
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
-beforeEach(() => {
-  localStorage.clear()
-  resetDb()
-})
-afterEach(cleanup)
-
 async function signIn(username: string) {
   const r = await fetch(`${window.location.origin}/v1/auth/login`, {
     method: 'POST',
@@ -29,6 +23,14 @@ async function signIn(username: string) {
   })
   expect(r.status).toBe(200)
 }
+
+beforeEach(async () => {
+  localStorage.clear()
+  resetDb()
+  // Sign-in is required: read as a viewer unless a test signs in as someone else.
+  await signIn('viewer')
+})
+afterEach(cleanup)
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })

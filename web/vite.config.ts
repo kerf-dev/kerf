@@ -7,13 +7,11 @@ import { defineConfig, loadEnv } from 'vite'
 // Modes:
 //   mock  (`npm run dev`, `make web-dev`)       – MSW serves the API in the browser, no hub needed.
 //   live  (`npm run dev:live`, `make web-dev-live`) – /v1 is proxied to a real hub (default
-//         http://localhost:18080, the WO-04 NodePort). Like nginx in production: requests with the
-//         `kerf_session` cookie go through as the logged-in user; without it, KERF_HUB_TOKEN (if set) is
-//         added as the read-only bearer token. The token never reaches the browser.
+//         http://localhost:18080, the dev NodePort). Like nginx in production: only the `kerf_session`
+//         cookie goes through, never a bearer token, so every page needs a sign-in.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const hub = env.KERF_HUB_URL || 'http://localhost:18080'
-  const token = env.KERF_HUB_TOKEN
   return {
     plugins: [react(), tailwindcss()],
     resolve: { alias: { '@': path.resolve(__dirname, './src') } },
@@ -33,11 +31,7 @@ export default defineConfig(({ mode }) => {
                 target: hub,
                 changeOrigin: true,
                 configure: (proxy) => {
-                  proxy.on('proxyReq', (req, incoming) => {
-                    req.removeHeader('authorization')
-                    const session = /(?:^|;\s*)kerf_session=/.test(incoming.headers.cookie ?? '')
-                    if (!session && token) req.setHeader('Authorization', `Bearer ${token}`)
-                  })
+                  proxy.on('proxyReq', (req) => req.removeHeader('authorization'))
                 },
               },
             }
