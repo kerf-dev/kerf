@@ -37,7 +37,6 @@ Component sections are the component charts' values; this schema checks what the
 | `web` | object | see the keys below | web: the UI (nginx, non-root on 8080) (mode hub, all) |
 | `web.hub` | object | see the keys below |  |
 | `web.image` | object | see the keys below |  |
-| `web.token` | object | see the keys below | Read-only `ui` token for visitors without a session (auth.anonymousRead). Production:<br>`token.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/ui-token, property: token}}` |
 | `webhook` | object | see the keys below | webhook: mutating admission webhook (mode spoke, all). Needs cert-manager. The control plane must reach the nodes on containerPort (9443): docs/install/eks.md, security groups. |
 | `webhook.clusterName` | string | `""` | empty: global.clusterName |
 | `webhook.image` | object | see the keys below |  |

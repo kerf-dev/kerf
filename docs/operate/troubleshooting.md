@@ -73,7 +73,7 @@ Stale data and the cluster label are in the [EKS guide](../install/eks.md#10-tro
   | `provider-error` | The provider call failed | Read the pricing log |
 
 - **The pricing pod does not start.** On a new hub it waits in `ContainerCreating` for its token Secret
-  ([EKS guide, step 4.5](../install/eks.md#45-first-sign-in-the-ui-and-pricing-tokens)). With a custom
+  ([EKS guide, step 4.5](../install/eks.md#45-first-sign-in-and-the-pricing-token)). With a custom
   `pricing.prices`, an invalid file ends the process: the log says which instance type or region is wrong.
 
 ## Webhook and cert-manager

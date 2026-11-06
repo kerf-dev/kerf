@@ -9,7 +9,7 @@ Registered → Agent connected → Metrics OK → Ready for audit → Automation
 A cluster's state is the highest one for which every blocking check that gates it, and every check of the earlier
 states, has the status `pass`. Warning and info checks never gate. A blocking check that is `fail`, `warn` or
 `unknown`, or has no result yet, holds the cluster back. Open the cluster in the UI, or run the following after
-the sign-in of [the EKS guide](../install/eks.md#45-first-sign-in-the-ui-and-pricing-tokens):
+the sign-in of [the EKS guide](../install/eks.md#45-first-sign-in-and-the-pricing-token):
 
 ```bash
 curl -sS -b cookies https://<ui-host>/v1/clusters/<cluster>/readiness \

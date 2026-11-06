@@ -63,24 +63,7 @@ The values of the `web` component chart. In the `kerf` chart they sit under `web
 | `extraVolumeMounts` | array | `[]` |  |
 | `hub` | object | see the keys below |  |
 | `hub.upstream` | string | `hub.kerf.svc.cluster.local:8080` | host:port of the hub API Service (the chart names it after its release, `hub`). nginx resolves it per request with the cluster DNS, which does not apply search domains: use the full name. |
-| `auth` | object | see the keys below | Sign-in: users log in against the hub, which sets an HttpOnly session cookie; nginx forwards only that cookie and sends no bearer token for those requests. |
-| `auth.anonymousRead` | boolean | `true` | Without a session, add the read-only `ui` token below so the dashboards work without a login (anonymous viewer, docs/contracts/admin.md §3). false: every page needs a login. |
-| `token` | object | see the keys below | Bearer token with role `ui`, mounted into nginx and added to requests without a session (when auth.anonymousRead). It never reaches the browser. Reference an existing Secret or let the chart create one. |
-| `token.existingSecret` | string | `""` |  |
-| `token.existingSecretKey` | string | `token` |  |
-| `token.value` | string | `""` | Only for development; prefer existingSecret or externalSecret. |
-| `token.externalSecret` | object | see the keys below | External Secrets Operator: Secret <release>-hub-token (key `token`) from Secrets Manager. |
-| `token.externalSecret.enabled` | boolean | `false` |  |
-| `token.externalSecret.remoteRef` | object | see the keys below |  |
-| `token.externalSecret.remoteRef.key` | string | `""` | e.g. kerf/web/hub-token |
-| `token.externalSecret.remoteRef.property` | string | `""` | e.g. token (JSON secret); empty = the whole secret string |
-| `token.externalSecret.remoteRef.version` | string | `""` |  |
-| `token.externalSecret.refreshInterval` | string | `""` |  |
-| `token.externalSecret.secretStoreRef` | object | `{}` |  |
-| `externalSecrets` | object | see the keys below | External Secrets Operator settings shared by every externalSecret of this chart. |
-| `externalSecrets.apiVersion` | string | `external-secrets.io/v1` |  |
-| `externalSecrets.refreshInterval` | string | `1h` |  |
-| `externalSecrets.secretStoreRef` | object | `{}` | e.g. {kind: ClusterSecretStore, name: aws-secrets-manager} |
+| `trustedProxies` | array | `[]` | Load balancers or ingress controllers in front of the UI (CIDRs or addresses, e.g. the VPC subnets of the ALB). nginx then takes the client address from the X-Forwarded-For entry they add, and the hub rate-limits failed sign-ins per real client. Empty: the client is the connecting address (the proxy's, when there is one). |
 | `service` | object | see the keys below |  |
 | `service.type` | string | `ClusterIP` |  |
 | `service.port` | integer | `80` |  |

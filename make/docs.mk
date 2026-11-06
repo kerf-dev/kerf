@@ -31,7 +31,7 @@ docs-test: docs-venv ## Unit tests of the docs tooling.
 
 .PHONY: docs-build
 docs-build: docs-venv ## Build the dev docs into _docs-site/ (strict: warnings fail).
-	KERF_DOCS_STRICT=true $(DOCS_PY) -m mkdocs build --quiet
+	KERF_DOCS_STRICT=true $(DOCS_PY) -m mkdocs build
 
 .PHONY: docs-serve
 docs-serve: docs-venv ## Serve the docs on http://127.0.0.1:8000 with live reload.
