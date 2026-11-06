@@ -1,0 +1,158 @@
+# The documentation site, getkerf.dev/docs. Source: docs/ (the files keep working on GitHub).
+# Build: `make docs-build` (one version) or `make docs-site` (all versions, as the Pages workflow does).
+# Generators, hooks and the version build: tools/docs/README.md.
+site_name: Kerf documentation
+# mike appends the version to this URL (https://getkerf.dev/docs/<version>/).
+site_url: https://getkerf.dev/docs/
+site_description: Documentation of Kerf, self-hosted Kubernetes rightsizing, recommendations from usage priced in dollars and applied with guardrails and automatic rollback.
+site_author: Kerf contributors
+repo_url: https://github.com/kerf-dev/kerf
+repo_name: kerf-dev/kerf
+copyright: Kerf is open source under the Apache-2.0 license.
+
+# The version builds (tools/docs/build_site.py) point these at another checkout of docs/.
+strict: !ENV [KERF_DOCS_STRICT, false]
+docs_dir: !ENV [KERF_DOCS_DIR, docs]
+site_dir: !ENV [KERF_SITE_DIR, _docs-site]
+
+hooks:
+  - tools/docs/hooks.py
+
+theme:
+  name: material
+  custom_dir: docs-site/overrides
+  language: en
+  font: false # Geist is served from the site's own files (see docs-site/overrides/assets/kerf/kerf.css)
+  logo: branding/kerf-mark-on-light.svg
+  favicon: assets/kerf/favicon.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.footer
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+# Not documentation: brand build tools and large image sets that no page embeds.
+exclude_docs: |
+  branding/render.mjs
+  branding/social-preview.html
+  branding/hero-*.png
+  screenshots/*
+  !screenshots/overview-*.png
+
+extra:
+  homepage: https://getkerf.dev/
+  noindex: !ENV [KERF_DOCS_NOINDEX, false]
+  version:
+    provider: mike
+    default: latest
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kerf-dev/kerf
+      name: Kerf on GitHub
+
+validation:
+  omitted_files: info
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+# Files that do not exist in a version's docs/ (an older release, a page still in a branch) are dropped from the
+# navigation by tools/docs/hooks.py; pages that are not listed here are added under "More".
+nav:
+  - Home: README.md
+  - Get started:
+      - quickstart.md
+      - install/eks.md
+      - install/any-cluster.md
+  - Concepts:
+      - concepts/README.md
+      - concepts/modes.md
+      - concepts/policies.md
+      - concepts/apply-strategies.md
+      - concepts/guardrails.md
+      - concepts/rollback.md
+      - concepts/hpa.md
+      - concepts/jvm.md
+      - concepts/approve-once.md
+      - concepts/gitops.md
+  - Operate:
+      - operate/README.md
+      - operate/upgrade.md
+      - operate/backup.md
+      - operate/alerts-dashboards.md
+      - operate/readiness.md
+      - operate/troubleshooting.md
+      - maintenance.md
+      - auth.md
+      - notifications.md
+      - pricing.md
+      - realized-savings.md
+      - cli.md
+      - copy-as-patch.md
+  - Reference:
+      - reference/README.md
+      - Chart values:
+          - Umbrella chart: reference/values/README.md
+          - hub: reference/values/hub.md
+          - web: reference/values/web.md
+          - pricing: reference/values/pricing.md
+          - agent: reference/values/agent.md
+          - webhook: reference/values/webhook.md
+      - Custom resources: reference/crds.md
+      - Hub API:
+          - Overview: reference/api/README.md
+          - Agent endpoints: reference/api/agent.md
+          - Web UI endpoints: reference/api/ui.md
+          - Audit endpoints: reference/api/audit.md
+          - Admin endpoints: reference/api/admin.md
+          - Authentication endpoints: reference/api/auth.md
+          - Internal endpoints: reference/api/internal.md
+          - Schemas: reference/api/schemas.md
+      - Metrics: contracts/metrics.md
+      - Events: contracts/events.md
+      - Admin area: contracts/admin.md
+      - Readiness: contracts/readiness.md
+      - Notifications: contracts/notifications.md
+  - Comparison and FAQ:
+      - comparison.md
+      - faq.md
+  - Project:
+      - architecture.md
+      - release.md
+      - branding/brand.md
+      - branding/comparison.md
