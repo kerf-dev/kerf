@@ -1,0 +1,154 @@
+/* Kerf documentation theme: the colours and type of getkerf.dev (site/styles.css, docs/branding/brand.md)
+   on top of Material for MkDocs. Light and dark follow the reader's system, with a toggle. */
+
+@font-face {
+  font-family: "Geist";
+  src: url("fonts/geist-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("fonts/geist-mono-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --md-text-font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --md-code-font: "Geist Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* Light: same tokens as site/styles.css */
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #f9fafb;
+  --md-default-fg-color: #141822;
+  --md-default-fg-color--light: #5d6470;
+  --md-default-fg-color--lighter: #8a919c;
+  --md-default-fg-color--lightest: #e2e5ea;
+  --md-primary-fg-color: #f9fafb;
+  --md-primary-fg-color--light: #ffffff;
+  --md-primary-fg-color--dark: #f1f3f5;
+  --md-primary-bg-color: #141822;
+  --md-primary-bg-color--light: #5d6470;
+  --md-accent-fg-color: #00776a;
+  --md-accent-fg-color--transparent: #00776a1a;
+  --md-accent-bg-color: #ffffff;
+  --md-typeset-color: #141822;
+  --md-typeset-a-color: #00776a;
+  --md-code-bg-color: #eef1f4;
+  --md-code-fg-color: #141822;
+  --md-footer-bg-color: #f1f3f5;
+  --md-footer-fg-color: #141822;
+  --md-footer-fg-color--light: #5d6470;
+  --md-footer-bg-color--dark: #e2e5ea;
+  --md-shadow-z1: 0 1px 2px rgb(20 24 34 / 6%);
+}
+
+/* Dark */
+[data-md-color-scheme="slate"] {
+  --md-hue: 225;
+  --md-default-bg-color: #0c0e14;
+  --md-default-bg-color--light: #141720cc;
+  --md-default-bg-color--lighter: #14172066;
+  --md-default-bg-color--lightest: #1417201a;
+  --md-default-fg-color: #eceff2;
+  --md-default-fg-color--light: #9aa2ae;
+  --md-default-fg-color--lighter: #6b7380;
+  --md-default-fg-color--lightest: #272c37;
+  --md-primary-fg-color: #0c0e14;
+  --md-primary-fg-color--light: #141720;
+  --md-primary-fg-color--dark: #0c0e14;
+  --md-primary-bg-color: #eceff2;
+  --md-primary-bg-color--light: #9aa2ae;
+  --md-accent-fg-color: #2fbda7;
+  --md-accent-fg-color--transparent: #2fbda71a;
+  --md-accent-bg-color: #0c0e14;
+  --md-typeset-color: #eceff2;
+  --md-typeset-a-color: #2fbda7;
+  --md-code-bg-color: #10131a;
+  --md-code-fg-color: #eceff2;
+  --md-footer-bg-color: #0c0e14;
+  --md-footer-fg-color: #eceff2;
+  --md-footer-fg-color--light: #9aa2ae;
+  --md-footer-bg-color--dark: #090b10;
+  --md-shadow-z1: 0 1px 2px rgb(0 0 0 / 40%);
+}
+
+/* Syntax colours that pass contrast on both code backgrounds */
+[data-md-color-scheme="default"] {
+  --md-code-hl-keyword-color: #00776a;
+  --md-code-hl-string-color: #8a4b08;
+  --md-code-hl-number-color: #7a3e9d;
+  --md-code-hl-comment-color: #5d6470;
+  --md-code-hl-name-color: #141822;
+  --md-code-hl-function-color: #1d5fb4;
+  --md-code-hl-constant-color: #7a3e9d;
+  --md-code-hl-operator-color: #5d6470;
+  --md-code-hl-punctuation-color: #5d6470;
+  --md-code-hl-special-color: #b4264b;
+  --md-code-hl-generic-color: #5d6470;
+  --md-code-hl-variable-color: #141822;
+}
+[data-md-color-scheme="slate"] {
+  --md-code-hl-keyword-color: #5cc8b6;
+  --md-code-hl-string-color: #e6b673;
+  --md-code-hl-number-color: #c9a7e8;
+  --md-code-hl-comment-color: #9aa2ae;
+  --md-code-hl-name-color: #eceff2;
+  --md-code-hl-function-color: #8fb8f0;
+  --md-code-hl-constant-color: #c9a7e8;
+  --md-code-hl-operator-color: #9aa2ae;
+  --md-code-hl-punctuation-color: #9aa2ae;
+  --md-code-hl-special-color: #f0899f;
+  --md-code-hl-generic-color: #9aa2ae;
+  --md-code-hl-variable-color: #eceff2;
+}
+
+body { -webkit-font-smoothing: antialiased; }
+
+/* Header: flat, with a hairline, like the site's */
+.md-header { box-shadow: none; border-bottom: 1px solid var(--md-default-fg-color--lightest); }
+.md-tabs { border-bottom: 1px solid var(--md-default-fg-color--lightest); }
+.md-header__button.md-logo img { height: 1.6rem; width: auto; }
+/* The logo partial renders both marks; the colour scheme shows one. */
+[data-md-color-scheme="default"] .kerf-mark--dark,
+[data-md-color-scheme="slate"] .kerf-mark--light { display: none; }
+.md-tabs__link { opacity: 0.75; }
+.md-tabs__link--active, .md-tabs__link:hover { opacity: 1; }
+.md-tabs__link--active { color: var(--md-accent-fg-color); }
+
+/* Headings: the site's tight tracking */
+.md-typeset h1, .md-typeset h2, .md-typeset h3 { letter-spacing: -0.02em; font-weight: 600; }
+.md-typeset h1 { color: var(--md-default-fg-color); letter-spacing: -0.03em; }
+.md-typeset :not(pre) > code { border: 1px solid var(--md-default-fg-color--lightest); border-radius: 5px; padding: 0.05em 0.35em; }
+.md-typeset a { text-underline-offset: 3px; }
+.md-typeset .headerlink { color: var(--md-default-fg-color--lighter); }
+
+/* Tables: the reference pages are wide, so keep them readable and scrollable */
+.md-typeset table:not([class]) { font-size: 0.74rem; border-radius: 8px; border: 1px solid var(--md-default-fg-color--lightest); box-shadow: none; }
+.md-typeset table:not([class]) th { background: var(--md-code-bg-color); font-weight: 600; }
+.md-typeset table:not([class]) td code { word-break: break-word; }
+
+/* Admonitions, quieter than Material's default */
+.md-typeset .admonition, .md-typeset details { border-radius: 8px; box-shadow: none; }
+
+/* The banner shown on versions other than the latest: calm, in the page's own colours */
+.md-banner--warning { background: var(--md-code-bg-color); color: var(--md-default-fg-color); border-bottom: 1px solid var(--md-default-fg-color--lightest); }
+.md-banner--warning a { color: var(--md-accent-fg-color); }
+
+/* Version selector next to the title */
+.md-version__current { color: var(--md-accent-fg-color); }
+
+/* Search */
+.md-search__form { border-radius: 8px; }
+[data-md-color-scheme="default"] .md-search__form { background-color: #ffffff; border: 1px solid #e2e5ea; }
+[data-md-color-scheme="slate"] .md-search__form { background-color: #141720; border: 1px solid #272c37; }
+
+:focus-visible { outline: 3px solid var(--md-accent-fg-color); outline-offset: 2px; border-radius: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; transition: none !important; }
+}
