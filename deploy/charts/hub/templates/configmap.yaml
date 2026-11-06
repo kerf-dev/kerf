@@ -31,6 +31,18 @@ data:
     {{- end }}
     {{- $_ := set $cfg "onboarding" $onb }}
     {{- $_ := set $cfg "updateCheck" (dict "enabled" .Values.updateCheck.enabled "interval" .Values.updateCheck.interval "url" .Values.updateCheck.url) }}
+    {{- $n := .Values.notifications }}
+    {{- $nch := list }}
+    {{- range $i, $c := $n.channels }}
+    {{- if not (has $c.type (list "slack" "teams" "webhook")) }}{{ fail (printf "notifications.channels[%d].type must be slack, teams or webhook" $i) }}{{ end }}
+    {{- if not $c.existingSecret }}{{ fail (printf "notifications.channels[%d].existingSecret is required" $i) }}{{ end }}
+    {{- if and $c.secretKey (ne $c.type "webhook") }}{{ fail (printf "notifications.channels[%d].secretKey: only webhook channels are signed" $i) }}{{ end }}
+    {{- $ch := dict "name" $c.name "type" $c.type "urlFile" (printf "/etc/hub/notifications/%d/url" $i) }}
+    {{- if $c.secretKey }}{{ $_ := set $ch "secretFile" (printf "/etc/hub/notifications/%d/secret" $i) }}{{ end }}
+    {{- if hasKey $c "enabled" }}{{ $_ := set $ch "enabled" $c.enabled }}{{ end }}
+    {{- $nch = append $nch $ch }}
+    {{- end }}
+    {{- $_ := set $cfg "notifications" (dict "baseURL" $n.baseURL "rateLimitPerMinute" $n.rateLimitPerMinute "allowInsecureHTTP" $n.allowInsecureHTTP "channels" $nch) }}
     {{- $_ := set $cfg "maintenance" (dict "chartVersion" .Chart.Version "releaseName" .Release.Name "releaseNamespace" .Release.Namespace) }}
     {{- toYaml $cfg | nindent 4 }}
 {{ end -}}

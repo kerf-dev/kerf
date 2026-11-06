@@ -54,6 +54,7 @@ import {
   installUnconfigured,
 } from './core'
 import { versionCompat } from '@/lib/version'
+import { notificationHandlers } from './notifications'
 import { mulberry32, uuid } from './random'
 import {
   buildReadiness,
@@ -2157,6 +2158,8 @@ export const adminHandlers = [
       )
     return json<S['UpdateStatus']>(runUpdateCheck(g.st))
   }),
+
+  ...notificationHandlers,
 
   // Datasources ------------------------------------------------------------------------------
   http.get('*/v1/admin/datasources', async ({ request }) => {

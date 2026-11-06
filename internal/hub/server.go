@@ -18,6 +18,7 @@ import (
 
 	"github.com/kerf-dev/kerf/internal/hub/auth"
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/notify"
 	"github.com/kerf-dev/kerf/internal/hub/store"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
@@ -48,6 +49,9 @@ type Server struct {
 	Updates *UpdateChecker
 	// OIDC is sign-in with an OpenID Connect provider; nil = not configured.
 	OIDC *auth.OIDC
+	// Notify manages notification channels, rules and the digest; its Run is the leader's
+	// notification work. nil answers 501 (InitNotifications).
+	Notify *notify.Service
 
 	mu         sync.Mutex
 	tokens     map[string]tokenEntry
@@ -115,6 +119,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET /v1/savings/realized", &accessViewer, s.getRealizedSavings},
 		{"GET /v1/savings/realized/node-cost", &accessViewer, s.getNodeCostTrend},
 		{"GET /v1/workloads/{id}/savings/realized", &accessViewer, s.getWorkloadRealizedSavings},
+		{"GET /v1/clusters/{cluster}/capacity", &accessViewer, s.getClusterCapacity},
 		{"POST /v1/admin/recompute", &accessAdmin, s.recompute},
 		// Auth.
 		{"POST /v1/auth/login", nil, s.login},
@@ -179,6 +184,22 @@ func (s *Server) apiRoutes() []apiRoute {
 		// Maintenance.
 		{"GET /v1/admin/maintenance", &accessViewer, s.getMaintenance},
 		{"POST /v1/admin/maintenance/update-check", &accessAdmin, s.checkForUpdate},
+		// Notifications.
+		{"GET /v1/admin/notifications/status", &accessViewer, s.getNotificationStatus},
+		{"GET /v1/admin/notifications/channels", &accessViewer, s.listNotificationChannels},
+		{"POST /v1/admin/notifications/channels", &accessAdmin, s.createNotificationChannel},
+		{"GET /v1/admin/notifications/channels/{channelId}", &accessViewer, s.getNotificationChannel},
+		{"PUT /v1/admin/notifications/channels/{channelId}", &accessAdmin, s.updateNotificationChannel},
+		{"DELETE /v1/admin/notifications/channels/{channelId}", &accessAdmin, s.deleteNotificationChannel},
+		{"POST /v1/admin/notifications/channels/{channelId}/test", &accessAdmin, s.testNotificationChannel},
+		{"GET /v1/admin/notifications/rules", &accessViewer, s.listNotificationRules},
+		{"POST /v1/admin/notifications/rules", &accessAdmin, s.createNotificationRule},
+		{"PUT /v1/admin/notifications/rules/{ruleId}", &accessAdmin, s.updateNotificationRule},
+		{"DELETE /v1/admin/notifications/rules/{ruleId}", &accessAdmin, s.deleteNotificationRule},
+		{"GET /v1/admin/notifications/digest", &accessViewer, s.getNotificationDigest},
+		{"PUT /v1/admin/notifications/digest", &accessAdmin, s.updateNotificationDigest},
+		{"POST /v1/admin/notifications/digest/send", &accessAdmin, s.sendNotificationDigest},
+		{"GET /v1/admin/notifications/deliveries", &accessViewer, s.listNotificationDeliveries},
 		// Pricing service.
 		{"GET /v1/internal/metrics-bindings", &accessPricing, s.listMetricsBindings},
 		{"GET /v1/internal/datasources/{datasourceId}/api/v1/query", &accessPricing, s.proxyQuery},

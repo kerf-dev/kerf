@@ -47,6 +47,21 @@ Administration (admin area). Roles per operation.
 | [`GET /v1/admin/clusters/{cluster}/install`](#getClusterInstall) | Agent install instructions for a cluster |
 | [`GET /v1/admin/maintenance`](#getMaintenance) | Component versions and the update check |
 | [`POST /v1/admin/maintenance/update-check`](#checkForUpdate) | Check for a newer Kerf release now |
+| [`GET /v1/admin/notifications/status`](#getNotificationStatus) | Notification settings the page needs |
+| [`GET /v1/admin/notifications/channels`](#listNotificationChannels) | Notification channels |
+| [`POST /v1/admin/notifications/channels`](#createNotificationChannel) | Add a notification channel |
+| [`GET /v1/admin/notifications/channels/{channelId}`](#getNotificationChannel) | One notification channel |
+| [`PUT /v1/admin/notifications/channels/{channelId}`](#updateNotificationChannel) | Replace a notification channel |
+| [`DELETE /v1/admin/notifications/channels/{channelId}`](#deleteNotificationChannel) | Delete a notification channel |
+| [`POST /v1/admin/notifications/channels/{channelId}/test`](#testNotificationChannel) | Send a test message |
+| [`GET /v1/admin/notifications/rules`](#listNotificationRules) | Notification rules |
+| [`POST /v1/admin/notifications/rules`](#createNotificationRule) | Add a notification rule |
+| [`PUT /v1/admin/notifications/rules/{ruleId}`](#updateNotificationRule) | Replace a notification rule |
+| [`DELETE /v1/admin/notifications/rules/{ruleId}`](#deleteNotificationRule) | Delete a notification rule |
+| [`GET /v1/admin/notifications/digest`](#getNotificationDigest) | Weekly digest settings |
+| [`PUT /v1/admin/notifications/digest`](#updateNotificationDigest) | Change the weekly digest |
+| [`POST /v1/admin/notifications/digest/send`](#sendNotificationDigest) | Send the digest now |
+| [`GET /v1/admin/notifications/deliveries`](#listNotificationDeliveries) | Delivery history |
 
 ### Run the recommender now { #recompute }
 
@@ -1131,3 +1146,361 @@ a request when the last check is less than 30 seconds old. `200` also when the c
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
 | `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
+
+### Notification settings the page needs { #getNotificationStatus }
+
+`GET /v1/admin/notifications/status`
+
+Accepts: session of a user with role `viewer` or higher or bearer token with role `ui`.
+
+Whether webhook URLs can be stored (the secrets encryption key), whether messages link to the UI, and the delivery limits.
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Status. | [NotificationStatus](schemas.md#notificationstatus) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+
+### Notification channels { #listNotificationChannels }
+
+`GET /v1/admin/notifications/channels`
+
+Accepts: session of a user with role `viewer` or higher or bearer token with role `ui`.
+
+Slack, Microsoft Teams and generic webhook channels, ordered by name, with the outcome of the last delivery. Webhook URLs are masked and secrets are never returned.
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Channels. | [NotificationChannelList](schemas.md#notificationchannellist) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+
+### Add a notification channel { #createNotificationChannel }
+
+`POST /v1/admin/notifications/channels`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+A Slack incoming webhook, a Microsoft Teams Workflows webhook or a generic webhook (optionally signed with an HMAC secret, `docs/contracts/notifications.md`). The URL and the secret are write-only: stored encrypted, never returned. `https` only (`http` when the hub allows it, `notifications.allowInsecureHTTP`). `409 secrets_key_missing` when the hub has no secrets encryption key, `409 already_exists` for a taken name. Records `NotificationChannelCreated` (without the URL or secret).
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Request body** (`application/json`, required): [NotificationChannelInput](schemas.md#notificationchannelinput)
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `201` | Created. | [NotificationChannel](schemas.md#notificationchannel) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
+
+### One notification channel { #getNotificationChannel }
+
+`GET /v1/admin/notifications/channels/{channelId}`
+
+Accepts: session of a user with role `viewer` or higher or bearer token with role `ui`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `channelId` | path | string (uuid), required |  |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Channel. | [NotificationChannel](schemas.md#notificationchannel) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+
+### Replace a notification channel { #updateNotificationChannel }
+
+`PUT /v1/admin/notifications/channels/{channelId}`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+Omitted `url` and `secret` keep their stored values; `clearSecret: true` removes the signing secret. The `type` cannot change (`400`). Channels defined in the chart values (`source: config`) are read-only (`409 channel_read_only`). Records `NotificationChannelUpdated`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `channelId` | path | string (uuid), required |  |
+| `If-Match` | header | string, required | ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). |
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Request body** (`application/json`, required): [NotificationChannelInput](schemas.md#notificationchannelinput)
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Saved. | [NotificationChannel](schemas.md#notificationchannel) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+| `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
+| `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
+| `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
+
+### Delete a notification channel { #deleteNotificationChannel }
+
+`DELETE /v1/admin/notifications/channels/{channelId}`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+Soft delete; queued deliveries of the channel are dropped. `409 channel_in_use` while a rule or the enabled digest sends to it, `channel_read_only` for chart-defined channels. Records `NotificationChannelDeleted`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `channelId` | path | string (uuid), required |  |
+| `If-Match` | header | string, required | ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). |
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Request body** (`application/json`, required): [ChangeReason](schemas.md#changereason)
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `204` | Done. |  |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+| `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
+| `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
+| `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
+
+### Send a test message { #testNotificationChannel }
+
+`POST /v1/admin/notifications/channels/{channelId}/test`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+Sends a test message to the channel now, from the replica that answers (not queued, not retried), and returns the outcome. `200` also when the destination refused it (`ok: false`, `error`; the error never contains the URL). Test messages appear in the delivery history.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `channelId` | path | string (uuid), required |  |
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | The outcome. | [NotificationTestResult](schemas.md#notificationtestresult) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+
+### Notification rules { #listNotificationRules }
+
+`GET /v1/admin/notifications/rules`
+
+Accepts: session of a user with role `viewer` or higher or bearer token with role `ui`.
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Rules, ordered by name. | [NotificationRuleList](schemas.md#notificationrulelist) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+
+### Add a notification rule { #createNotificationRule }
+
+`POST /v1/admin/notifications/rules`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+A rule sends the listed event types to the listed channels. `clusters` and `namespaces` are glob patterns (`prod-*`); empty matches everything. An event without a namespace (readiness, automation) never matches a rule that lists namespaces. Rule names are unique (`409 already_exists`); every channel must exist. Records `NotificationRuleCreated`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Request body** (`application/json`, required): [NotificationRuleInput](schemas.md#notificationruleinput)
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `201` | Created. | [NotificationRule](schemas.md#notificationrule) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
+
+### Replace a notification rule { #updateNotificationRule }
+
+`PUT /v1/admin/notifications/rules/{ruleId}`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+Records `NotificationRuleUpdated`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `ruleId` | path | string (uuid), required |  |
+| `If-Match` | header | string, required | ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). |
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Request body** (`application/json`, required): [NotificationRuleInput](schemas.md#notificationruleinput)
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Saved. | [NotificationRule](schemas.md#notificationrule) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+| `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
+| `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
+| `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
+
+### Delete a notification rule { #deleteNotificationRule }
+
+`DELETE /v1/admin/notifications/rules/{ruleId}`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+Soft delete. Records `NotificationRuleDeleted`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `ruleId` | path | string (uuid), required |  |
+| `If-Match` | header | string, required | ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). |
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Request body** (`application/json`, required): [ChangeReason](schemas.md#changereason)
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `204` | Done. |  |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+| `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
+| `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
+| `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
+
+### Weekly digest settings { #getNotificationDigest }
+
+`GET /v1/admin/notifications/digest`
+
+Accepts: session of a user with role `viewer` or higher or bearer token with role `ui`.
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Settings. | [NotificationDigest](schemas.md#notificationdigest) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+
+### Change the weekly digest { #updateNotificationDigest }
+
+`PUT /v1/admin/notifications/digest`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+Day (0 = Sunday), time of day and IANA time zone of the digest and the channels it goes to; enabling it needs at least one channel (`400`). Records `NotificationDigestUpdated`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `If-Match` | header | string, required | ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). |
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Request body** (`application/json`, required): [NotificationDigestInput](schemas.md#notificationdigestinput)
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Saved. | [NotificationDigest](schemas.md#notificationdigest) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
+| `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
+
+### Send the digest now { #sendNotificationDigest }
+
+`POST /v1/admin/notifications/digest/send`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+Queues the digest for the configured, enabled channels now (the leader sends it). `409 no_channels` when there is none.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `202` | Queued. | [NotificationDigestQueued](schemas.md#notificationdigestqueued) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
+
+### Delivery history { #listNotificationDeliveries }
+
+`GET /v1/admin/notifications/deliveries`
+
+Accepts: session of a user with role `viewer` or higher or bearer token with role `ui`.
+
+Queued, sent and failed deliveries, newest first. Deliveries are kept for 30 days. A failing delivery is retried with exponential backoff for one hour, then marked `failed` (also exported as `kerf_notification_deliveries_total{result="failed"}`).
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `channelId` | query | string (uuid) |  |
+| `status` | query | NotificationDeliveryStatus (enum) | one of `pending`, `sent`, `failed` |
+| `limit` | query | integer | Maximum number of items in this page. min 1; max 5000 |
+| `continue` | query | string | Token from a previous page's `continue` field. |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Deliveries. | [NotificationDeliveryList](schemas.md#notificationdeliverylist) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |

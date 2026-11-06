@@ -279,6 +279,7 @@ JVM). A missing value means "not set" (JVM default).
 | `capabilities` | array of [AgentCapability](schemas.md#agentcapability) |  | Agent self-check of its RBAC per capability. Absent = unchanged; present = all capabilities. |
 | `checks` | array of [ReadinessCheck](schemas.md#readinesscheck) |  | Agent self-check results (source `agent`, docs/contracts/readiness.md). Absent = unchanged; present = every agent check. Sent at start, every 10 minutes and after a recheck. |
 | `components` | array of [AgentComponent](schemas.md#agentcomponent) |  | Kerf components the agent found in its cluster (today the webhook pods). Sent with the self-checks; absent = unchanged, an empty array = none running. |
+| `capacity` | [CapacityReport](schemas.md#capacityreport) |  | Read-only snapshot of the cluster's nodes, node pools and what may block consolidation, for the node estimate (`GET /v1/clusters/{cluster}/capacity`). Sent every 5 minutes and when it changes; absent = unchanged. Each list is complete (not a delta); `truncated` is true when a list hit its limit. |
 | `items` | array of [WorkloadStatus](schemas.md#workloadstatus), required | max items 1000 |  |
 
 ## ContainerChange { #containerchange }
@@ -1627,19 +1628,19 @@ Type: string. one of `built-in`, `global-default`, `cluster-default-chart`, `clu
 
 ## ConfigTargetType { #configtargettype }
 
-Type: string. one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness`.
+Type: string. one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness`, `notification`.
 
 ## ConfigAction { #configaction }
 
 CamelCase action of a configuration change (`docs/contracts/events.md`).
 
-Type: string. one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`.
+Type: string. one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`, `NotificationChannelCreated`, `NotificationChannelUpdated`, `NotificationChannelDeleted`, `NotificationRuleCreated`, `NotificationRuleUpdated`, `NotificationRuleDeleted`, `NotificationDigestUpdated`.
 
 ## ConfigTarget { #configtarget }
 
 | Field | Type | Constraints | Description |
 |---|---|---|---|
-| `type` | ConfigTargetType (enum), required | one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness` |  |
+| `type` | ConfigTargetType (enum), required | one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness`, `notification` |  |
 | `id` | string, required |  | Policy or approval id, settings section, cluster name (`*` for the fleet automation), token id or username. |
 | `name` | string |  | Display name, e.g. the policy name. |
 | `cluster` | string | pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`; example `ro-spoke-1` |  |
@@ -1657,7 +1658,7 @@ never including password hashes or token values.
 | `type` | string, required | one of `config_changed` |  |
 | `time` | string (date-time), required |  |  |
 | `actor` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
-| `action` | ConfigAction (enum), required | one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged` | CamelCase action of a configuration change (`docs/contracts/events.md`). |
+| `action` | ConfigAction (enum), required | one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`, `NotificationChannelCreated`, `NotificationChannelUpdated`, `NotificationChannelDeleted`, `NotificationRuleCreated`, `NotificationRuleUpdated`, `NotificationRuleDeleted`, `NotificationDigestUpdated` | CamelCase action of a configuration change (`docs/contracts/events.md`). |
 | `target` | [ConfigTarget](schemas.md#configtarget), required |  |  |
 | `reason` | string, required |  | The reason given with the change. |
 | `version` | integer |  | Version of the target after the change, if it is versioned. |
@@ -2054,6 +2055,230 @@ then each workload cluster. `<...>` marks what to fill in.
 | `update` | [UpdateStatus](schemas.md#updatestatus), required |  |  |
 | `upgrade` | [UpgradeCommands](schemas.md#upgradecommands) |  | `helm upgrade` commands to the latest version (docs/install/eks.md §8): the hub cluster first, then each workload cluster. `<...>` marks what to fill in. |
 
+## CapacityReport { #capacityreport }
+
+Read-only snapshot of the cluster's nodes, node pools and what may block consolidation, for
+the node estimate (`GET /v1/clusters/{cluster}/capacity`). Sent every 5 minutes and when
+it changes; absent = unchanged. Each list is complete (not a delta); `truncated` is true
+when a list hit its limit.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `observedAt` | string (date-time), required |  |  |
+| `autoscalers` | array of [CapacityAutoscaler](schemas.md#capacityautoscaler) | max items 10 | Node autoscalers found. Empty = none found. |
+| `nodePools` | array of [CapacityNodePool](schemas.md#capacitynodepool), required | max items 1000 |  |
+| `nodes` | array of [CapacityNode](schemas.md#capacitynode), required | max items 10000 |  |
+| `podGroups` | array of [CapacityPodGroup](schemas.md#capacitypodgroup), required | max items 50000 | Scheduled, non-terminal pods grouped by owner, node pool and requests (one entry per distinct shape). |
+| `pdbs` | array of [CapacityPDB](schemas.md#capacitypdb) | max items 500 | PodDisruptionBudgets that allow no disruption now (`disruptionsAllowed` 0). |
+| `pods` | array of [CapacityPod](schemas.md#capacitypod) | max items 500 | Pods that block the removal of their node (do-not-disrupt, safe-to-evict false, local storage). |
+| `truncated` | boolean |  |  |
+
+## CapacityObjectRef { #capacityobjectref }
+
+A Kubernetes object. `namespace` is absent for cluster-scoped objects.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `apiVersion` | string |  |  |
+| `kind` | string, required |  |  |
+| `namespace` | string |  |  |
+| `name` | string, required |  |  |
+
+## CapacityAutoscaler { #capacityautoscaler }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `kind` | NodeAutoscalerKind (enum), required | one of `karpenter`, `cluster-autoscaler`, `none` |  |
+| `object` | [CapacityObjectRef](schemas.md#capacityobjectref) |  | A Kubernetes object. `namespace` is absent for cluster-scoped objects. |
+| `status` | string |  | Cluster Autoscaler health from its status ConfigMap (e.g. `Healthy`). |
+| `scaleDown` | string |  | Cluster Autoscaler cluster-wide scale-down status (e.g. `CandidatesPresent`, `NoCandidates`). |
+| `lastProbeTime` | string (date-time) |  |  |
+
+## NodeAutoscalerKind { #nodeautoscalerkind }
+
+Type: string. one of `karpenter`, `cluster-autoscaler`, `none`.
+
+## CapacityNodePool { #capacitynodepool }
+
+A Karpenter NodePool, a Cluster Autoscaler node group, or nodes sharing a node pool label
+(`autoscaler` `none`).
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `name` | string, required |  |  |
+| `autoscaler` | NodeAutoscalerKind (enum), required | one of `karpenter`, `cluster-autoscaler`, `none` |  |
+| `object` | [CapacityObjectRef](schemas.md#capacityobjectref) |  | A Kubernetes object. `namespace` is absent for cluster-scoped objects. |
+| `minNodes` | integer | min 0 | Cluster Autoscaler `minSize`, or the replicas of a static Karpenter NodePool. |
+| `maxNodes` | integer | min 0 |  |
+| `instanceTypes` | array of string |  | Instance types the pool allows (`node.kubernetes.io/instance-type` In). Absent = not restricted or unknown. |
+| `capacityTypes` | array of string |  |  |
+| `consolidationPolicy` | string |  | Karpenter `disruption.consolidationPolicy` (`WhenEmptyOrUnderutilized`, `WhenEmpty`). |
+| `consolidateAfter` | string |  |  |
+| `budgets` | array of [CapacityDisruptionBudget](schemas.md#capacitydisruptionbudget) |  |  |
+
+## CapacityDisruptionBudget { #capacitydisruptionbudget }
+
+A Karpenter disruption budget.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `nodes` | string, required |  | Count or percentage (`10%`, `0`). |
+| `schedule` | string |  |  |
+| `duration` | string |  |  |
+| `reasons` | array of string |  |  |
+
+## CapacityNode { #capacitynode }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `name` | string, required |  |  |
+| `nodePool` | string |  | Empty = no node pool found. |
+| `instanceType` | string |  |  |
+| `capacityType` | string |  |  |
+| `zone` | string |  |  |
+| `allocatable` | [ResourceValues](schemas.md#resourcevalues), required |  | Values per resource. A missing key means "not set". |
+| `unschedulable` | boolean |  |  |
+| `doNotDisrupt` | boolean |  | The node has `karpenter.sh/do-not-disrupt=true`. |
+| `scaleDownDisabled` | boolean |  | The node has `cluster-autoscaler.kubernetes.io/scale-down-disabled=true`. |
+
+## CapacityPodGroup { #capacitypodgroup }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `owner` | [CapacityObjectRef](schemas.md#capacityobjectref) |  | A Kubernetes object. `namespace` is absent for cluster-scoped objects. |
+| `workload` | [WorkloadRef](schemas.md#workloadref) |  |  |
+| `nodePool` | string, required |  |  |
+| `daemonSet` | boolean |  |  |
+| `count` | integer, required | min 1 |  |
+| `containers` | array of [ContainerResources](schemas.md#containerresources), required |  | Requests of the regular containers and the sidecars (restartable init containers). |
+| `initRequests` | [ResourceValues](schemas.md#resourcevalues) |  | Values per resource. A missing key means "not set". |
+| `overhead` | [ResourceValues](schemas.md#resourcevalues) |  | Values per resource. A missing key means "not set". |
+
+## CapacityPDB { #capacitypdb }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `namespace` | string, required |  |  |
+| `name` | string, required |  |  |
+| `disruptionsAllowed` | integer, required |  |  |
+| `currentHealthy` | integer |  |  |
+| `desiredHealthy` | integer |  |  |
+| `expectedPods` | integer |  |  |
+| `workload` | [WorkloadRef](schemas.md#workloadref) |  |  |
+
+## CapacityPod { #capacitypod }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `namespace` | string, required |  |  |
+| `name` | string, required |  |  |
+| `node` | string |  |  |
+| `nodePool` | string |  |  |
+| `workload` | [WorkloadRef](schemas.md#workloadref) |  |  |
+| `reasons` | array of CapacityPodReason (enum), required |  |  |
+
+## CapacityPodReason { #capacitypodreason }
+
+Type: string. one of `do-not-disrupt`, `safe-to-evict-false`, `local-storage`.
+
+## ClusterCapacity { #clustercapacity }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cluster` | string, required |  |  |
+| `reportedAt` | string (date-time) |  | When the hub received the capacity report. Absent = never. |
+| `observedAt` | string (date-time) |  |  |
+| `autoscalers` | array of [CapacityAutoscaler](schemas.md#capacityautoscaler), required |  |  |
+| `totals` | [CapacityTotals](schemas.md#capacitytotals), required |  | Totals over every node and pod (daemonset pods included). |
+| `estimate` | [NodeEstimate](schemas.md#nodeestimate) |  | Estimate, not a forecast of what the autoscaler will do (`docs/node-savings.md`). Hourly prices: the pricing series per instance type (`priceSource` `metrics`), else the cluster's per-core and per-GiB rates times the instance's allocatable (`rates`). |
+| `pools` | array of [CapacityPoolEstimate](schemas.md#capacitypoolestimate), required |  |  |
+| `blockers` | array of [ConsolidationBlocker](schemas.md#consolidationblocker), required |  |  |
+| `blockersOmitted` | integer |  | Blockers not listed (the list is capped at 200). |
+| `truncated` | boolean |  | The agent's report hit a list limit; numbers may be incomplete. |
+
+## CapacityAmounts { #capacityamounts }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cpuCores` | number, required |  |  |
+| `memoryBytes` | number, required |  |  |
+
+## CapacityTotals { #capacitytotals }
+
+Totals over every node and pod (daemonset pods included).
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `nodes` | integer, required |  |  |
+| `allocatable` | [CapacityAmounts](schemas.md#capacityamounts), required |  |  |
+| `requested` | [CapacityAmounts](schemas.md#capacityamounts), required |  |  |
+| `requestedAfter` | [CapacityAmounts](schemas.md#capacityamounts), required |  | Requests after the open recommendations. |
+
+## NodeEstimate { #nodeestimate }
+
+Estimate, not a forecast of what the autoscaler will do (`docs/node-savings.md`).
+Hourly prices: the pricing series per instance type (`priceSource` `metrics`), else the
+cluster's per-core and per-GiB rates times the instance's allocatable (`rates`).
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `method` | string, required | one of `first-fit-decreasing` |  |
+| `methodURL` | string, required |  |  |
+| `currentNodes` | integer, required |  |  |
+| `estimatedNodes` | integer, required |  |  |
+| `currentMonthlyUSD` | number, required |  |  |
+| `estimatedMonthlyUSD` | number, required |  |  |
+| `savingsMonthlyUSD` | number, required |  | currentMonthlyUSD - estimatedMonthlyUSD; negative when more nodes are needed. |
+| `recommendations` | integer, required |  | Open recommendations applied to the pods before packing. |
+| `priceSource` | string | one of `metrics`, `rates`, `mixed`, `none` |  |
+
+## CapacityPoolEstimate { #capacitypoolestimate }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `name` | string, required |  | Empty = nodes without a node pool. |
+| `autoscaler` | NodeAutoscalerKind (enum), required | one of `karpenter`, `cluster-autoscaler`, `none` |  |
+| `object` | [CapacityObjectRef](schemas.md#capacityobjectref) |  | A Kubernetes object. `namespace` is absent for cluster-scoped objects. |
+| `nodes` | integer, required |  |  |
+| `estimatedNodes` | integer, required |  |  |
+| `minNodes` | integer |  |  |
+| `allocatable` | [CapacityAmounts](schemas.md#capacityamounts), required |  |  |
+| `requested` | [CapacityAmounts](schemas.md#capacityamounts), required |  |  |
+| `requestedAfter` | [CapacityAmounts](schemas.md#capacityamounts), required |  |  |
+| `daemonSetOverhead` | [CapacityAmounts](schemas.md#capacityamounts) |  | Requests of the daemonset pods on each node of the pool (the largest). |
+| `currentMonthlyUSD` | number |  |  |
+| `estimatedMonthlyUSD` | number |  |  |
+| `instanceTypes` | array of [CapacityInstanceType](schemas.md#capacityinstancetype), required |  |  |
+| `unplaced` | integer |  | Pods that fit no known instance type of the pool; counted as one node each. |
+| `consolidationPolicy` | string |  |  |
+
+## CapacityInstanceType { #capacityinstancetype }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `instanceType` | string, required |  |  |
+| `capacityType` | string |  |  |
+| `nodes` | integer, required |  |  |
+| `estimatedNodes` | integer, required |  |  |
+| `allocatable` | [CapacityAmounts](schemas.md#capacityamounts), required |  |  |
+| `hourlyUSD` | number |  |  |
+| `priceSource` | string | one of `metrics`, `rates`, `none` |  |
+
+## ConsolidationBlocker { #consolidationblocker }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `type` | BlockerType (enum), required | one of `pdb-zero-disruptions`, `do-not-disrupt-pod`, `do-not-disrupt-node`, `safe-to-evict-false`, `local-storage`, `node-pool-minimum`, `consolidation-policy`, `disruption-budget-zero`, `scale-down-disabled` |  |
+| `object` | [CapacityObjectRef](schemas.md#capacityobjectref), required |  | A Kubernetes object. `namespace` is absent for cluster-scoped objects. |
+| `nodePool` | string |  |  |
+| `workloadId` | string |  | The Kerf workload the object belongs to, when known. |
+| `message` | string, required |  |  |
+| `fix` | string, required |  | Short hint on how to unblock. |
+
+## BlockerType { #blockertype }
+
+Type: string. one of `pdb-zero-disruptions`, `do-not-disrupt-pod`, `do-not-disrupt-node`, `safe-to-evict-false`, `local-storage`, `node-pool-minimum`, `consolidation-policy`, `disruption-budget-zero`, `scale-down-disabled`.
+
 ## Problem { #problem }
 
 RFC 9457 problem details; the single error schema for every endpoint. `code` is a stable
@@ -2067,3 +2292,180 @@ machine-readable identifier (e.g. `cluster_forbidden`, `invalid_workload_id`).
 | `detail` | string |  |  |
 | `instance` | string |  |  |
 | `code` | string |  |  |
+
+## NotificationChannelType { #notificationchanneltype }
+
+Type: string. one of `slack`, `teams`, `webhook`.
+
+## NotificationEventType { #notificationeventtype }
+
+`applied`, `rolled_back`, `failed` and `blocked` are the workload events of `docs/contracts/events.md`;
+`readiness_degraded` (a cluster's readiness state went down), `automation_paused` and
+`automation_resumed` come from the configuration audit.
+
+Type: string. one of `applied`, `rolled_back`, `failed`, `blocked`, `readiness_degraded`, `automation_paused`, `automation_resumed`.
+
+## NotificationDeliveryKind { #notificationdeliverykind }
+
+Type: string. one of `event`, `digest`, `test`.
+
+## NotificationDeliveryStatus { #notificationdeliverystatus }
+
+Type: string. one of `pending`, `sent`, `failed`.
+
+## NotificationChannelInput { #notificationchannelinput }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `name` | string, required |  | A DNS-style label (lower case letters, digits, `-`; at most 63). |
+| `type` | NotificationChannelType (enum), required | one of `slack`, `teams`, `webhook` |  |
+| `url` | string (uri) | write-only | The incoming webhook URL. Required on create. `https` only, unless the hub allows `http` (`notifications.allowInsecureHTTP`, for tests). |
+| `secret` | string | write-only | Webhook channels only, the HMAC-SHA256 signing secret (at least 16 characters). |
+| `clearSecret` | boolean |  | Remove the stored signing secret (webhook channels). |
+| `enabled` | boolean |  | Default true. |
+| `reason` | string, required | min length 1; max length 1024 |  |
+
+## NotificationLastDelivery { #notificationlastdelivery }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `status` | string, required | one of `sent`, `failed`, `retrying` |  |
+| `at` | string (date-time), required |  |  |
+| `error` | string |  | Why the last attempt failed (never contains the URL). |
+
+## NotificationChannel { #notificationchannel }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | string (uuid), required |  |  |
+| `name` | string, required |  |  |
+| `type` | NotificationChannelType (enum), required | one of `slack`, `teams`, `webhook` |  |
+| `source` | string, required | one of `api`, `config` | `config`: defined in the chart values, read-only here. |
+| `enabled` | boolean, required |  |  |
+| `url` | string, required |  | The URL masked to its scheme and host. |
+| `secretSet` | boolean, required |  | A signing secret is stored (webhook channels). |
+| `pending` | integer, required |  | Deliveries queued for this channel. |
+| `lastDelivery` | [NotificationLastDelivery](schemas.md#notificationlastdelivery) |  |  |
+| `lastSuccessAt` | string (date-time) |  |  |
+| `version` | integer, required |  |  |
+| `createdAt` | string (date-time), required |  |  |
+| `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `updatedAt` | string (date-time), required |  |  |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+
+## NotificationChannelList { #notificationchannellist }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `items` | array of [NotificationChannel](schemas.md#notificationchannel), required |  |  |
+
+## NotificationTestResult { #notificationtestresult }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `ok` | boolean, required |  |  |
+| `httpStatus` | integer |  | The destination's HTTP status, when it answered. |
+| `latencyMs` | integer, required |  |  |
+| `error` | string |  |  |
+
+## NotificationRuleInput { #notificationruleinput }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `name` | string, required | min length 1; max length 100 |  |
+| `enabled` | boolean |  | Default true. |
+| `eventTypes` | array of NotificationEventType (enum), required | min items 1 |  |
+| `clusters` | array of string |  | Glob patterns of cluster names; empty = every cluster. |
+| `namespaces` | array of string |  | Glob patterns of namespaces; empty = every namespace. |
+| `channelIds` | array of string (uuid), required | min items 1 |  |
+| `reason` | string, required | min length 1; max length 1024 |  |
+
+## NotificationRule { #notificationrule }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | string (uuid), required |  |  |
+| `name` | string, required |  |  |
+| `enabled` | boolean, required |  |  |
+| `eventTypes` | array of NotificationEventType (enum), required |  |  |
+| `clusters` | array of string, required |  |  |
+| `namespaces` | array of string, required |  |  |
+| `channelIds` | array of string (uuid), required |  |  |
+| `version` | integer, required |  |  |
+| `createdAt` | string (date-time), required |  |  |
+| `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `updatedAt` | string (date-time), required |  |  |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+
+## NotificationRuleList { #notificationrulelist }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `items` | array of [NotificationRule](schemas.md#notificationrule), required |  |  |
+
+## NotificationDigestInput { #notificationdigestinput }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `enabled` | boolean, required |  |  |
+| `weekday` | integer, required | min 0; max 6 | 0 = Sunday ... 6 = Saturday. |
+| `time` | string, required | pattern `^([01][0-9]\|2[0-3]):[0-5][0-9]$` | Local time of day in `timezone`. |
+| `timezone` | string, required |  | IANA time zone, e.g. `Europe/Berlin`. |
+| `channelIds` | array of string (uuid), required |  |  |
+| `reason` | string, required | min length 1; max length 1024 |  |
+
+## NotificationDigest { #notificationdigest }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `enabled` | boolean, required |  |  |
+| `weekday` | integer, required |  |  |
+| `time` | string, required |  |  |
+| `timezone` | string, required |  |  |
+| `channelIds` | array of string (uuid), required |  |  |
+| `nextSendAt` | string (date-time) |  | Set while the digest is enabled. |
+| `lastSentAt` | string (date-time) |  | The scheduled time of the last digest that was queued. |
+| `version` | integer, required |  |  |
+| `updatedAt` | string (date-time), required |  |  |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+
+## NotificationDigestQueued { #notificationdigestqueued }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `queued` | integer, required |  | Deliveries queued (one per channel). |
+
+## NotificationDelivery { #notificationdelivery }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | string (uuid), required |  |  |
+| `channelId` | string (uuid), required |  |  |
+| `channelName` | string, required |  |  |
+| `kind` | NotificationDeliveryKind (enum), required | one of `event`, `digest`, `test` |  |
+| `eventType` | NotificationEventType (enum) | one of `applied`, `rolled_back`, `failed`, `blocked`, `readiness_degraded`, `automation_paused`, `automation_resumed` | `applied`, `rolled_back`, `failed` and `blocked` are the workload events of `docs/contracts/events.md`; `readiness_degraded` (a cluster's readiness state went down), `automation_paused` and `automation_resumed` come from the configuration audit. |
+| `summary` | string, required |  |  |
+| `status` | NotificationDeliveryStatus (enum), required | one of `pending`, `sent`, `failed` |  |
+| `attempts` | integer, required |  |  |
+| `nextAttemptAt` | string (date-time) |  | Set while `pending`. |
+| `lastError` | string |  |  |
+| `httpStatus` | integer |  |  |
+| `createdAt` | string (date-time), required |  |  |
+| `lastAttemptAt` | string (date-time) |  |  |
+| `sentAt` | string (date-time) |  |  |
+
+## NotificationDeliveryList { #notificationdeliverylist }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `items` | array of [NotificationDelivery](schemas.md#notificationdelivery), required |  |  |
+| `continue` | string |  |  |
+
+## NotificationStatus { #notificationstatus }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `secretsKey` | boolean, required |  | Webhook URLs can be stored (the secrets encryption key is configured). |
+| `links` | boolean, required |  | Messages link to the web UI (`notifications.baseURL` is set). |
+| `rateLimitPerMinute` | integer, required |  |  |
+| `retryWindowSeconds` | integer, required |  |  |

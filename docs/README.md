@@ -20,11 +20,13 @@ with search and a version switch, at [getkerf.dev/docs](https://getkerf.dev/docs
 | [Helm chart reference](../deploy/charts/kerf/README.md) | `global.mode`, the umbrella values, opt-in features |
 | [Component charts](../deploy/charts) | Values of `hub`, `web`, `pricing`, `agent`, `webhook` ([hub](../deploy/charts/hub/README.md), [agent](../deploy/charts/agent/README.md)) |
 | [Grafana dashboards](../dashboards/README.md) | Overview, opportunities, automation and workload dashboards |
+| [Notifications](notifications.md) | Slack, Teams and signed webhook channels, rules, the weekly digest, retries and metrics |
 | [Pricing](pricing.md) | Where node rates come from (`cur`, `list`, `spot`, `static`), effective rates from the AWS Cost and Usage Report with Savings Plans and Reserved Instances amortised, its IAM policy and Data Exports settings |
 | [Realized savings](realized-savings.md) | What applied changes actually saved, kept apart from estimates; the method, with SQL and PromQL to reproduce it |
 | [Sign-in and access](auth.md) | Required sign-in, users and roles, sign-in protection, bearer tokens for automation, upgrading from anonymous read access |
 | [Copy a recommendation as a patch](copy-as-patch.md) | Hand a recommendation over as a strategic merge patch, a `kubectl patch` command, a Kustomize patch or Helm values, for one workload or a selection |
 | [Sign-in and access](auth.md) | Required sign-in, users and roles, sign-in with OpenID Connect (Okta, Entra ID, Google, Keycloak, Dex), sign-in protection, bearer tokens for automation, upgrading from anonymous read access |
+| [Node savings](node-savings.md) | Capacity, the node estimate after the recommendations, consolidation blockers with Karpenter and the Cluster Autoscaler |
 | [Maintenance and updates](maintenance.md) | Component versions, the check for a new release, turning it off |
 | [Changelog](../CHANGELOG.md) | What changed in each release and how to upgrade |
 | [Security policy](../SECURITY.md) | How to report a vulnerability |
@@ -39,6 +41,7 @@ The interfaces between components. Changes to them need a design note (see [CONT
 | [Hub API](../api/openapi/hub.yaml) | The HTTP API used by the agents, the web UI and automation (OpenAPI 3) |
 | [Metrics](contracts/metrics.md) | The `kerf_*` metrics and the PromQL the recommender runs |
 | [Events](contracts/events.md) | The audit trail: what the agent decided and did, as sent to the hub |
+| [Notification webhook](contracts/notifications.md) | The signed JSON payload (version 1), its headers, retries, and how to verify the signature |
 | [Admin area](contracts/admin.md) | Users, roles, tokens, policies and settings through the API and UI |
 | [Readiness](contracts/readiness.md) | Metrics sources (datasources) and the per-cluster readiness checks |
 | [Database schema](../db/migrations) | PostgreSQL migrations of the hub |

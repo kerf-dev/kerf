@@ -9,6 +9,10 @@ import type {
   HubPolicyType,
   InstallFormat,
   MetricsBinding,
+  NotificationChannelInput,
+  NotificationDeliveryStatus,
+  NotificationDigestInput,
+  NotificationRuleInput,
   PolicyChange,
   PolicyInput,
   PricingSettings,
@@ -181,6 +185,58 @@ export const useMaintenance = () =>
     queryKey: ['admin', 'maintenance'],
     queryFn: () => unwrap(api.GET('/v1/admin/maintenance')),
     refetchInterval: 60_000,
+  })
+
+/** Admin → Notifications: channels, rules, the weekly digest and the delivery history. */
+export const useNotificationStatus = () =>
+  useQuery({
+    queryKey: ['admin', 'notifications', 'status'],
+    queryFn: () => unwrap(api.GET('/v1/admin/notifications/status')),
+  })
+
+export const useNotificationChannels = () =>
+  useQuery({
+    queryKey: ['admin', 'notifications', 'channels'],
+    queryFn: () => unwrap(api.GET('/v1/admin/notifications/channels')),
+    // The last delivery and the queue depth change on their own.
+    refetchInterval: 30_000,
+  })
+
+export const useNotificationRules = () =>
+  useQuery({
+    queryKey: ['admin', 'notifications', 'rules'],
+    queryFn: () => unwrap(api.GET('/v1/admin/notifications/rules')),
+  })
+
+export const useNotificationDigest = () =>
+  useQuery({
+    queryKey: ['admin', 'notifications', 'digest'],
+    queryFn: () => unwrap(api.GET('/v1/admin/notifications/digest')),
+    refetchInterval: 60_000,
+  })
+
+export const useNotificationDeliveries = (filter: {
+  channelId?: string
+  status?: NotificationDeliveryStatus
+}) =>
+  useInfiniteQuery({
+    queryKey: ['admin', 'notifications', 'deliveries', filter],
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        api.GET('/v1/admin/notifications/deliveries', {
+          params: {
+            query: {
+              ...(filter.channelId ? { channelId: filter.channelId } : {}),
+              ...(filter.status ? { status: filter.status } : {}),
+              limit: 25,
+              ...(pageParam ? { continue: pageParam } : {}),
+            },
+          },
+        }),
+      ),
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.continue || undefined,
+    refetchInterval: 30_000,
   })
 
 /**
@@ -366,6 +422,53 @@ export const writes = {
     ),
   checkForUpdate: () => unwrap(api.POST('/v1/admin/maintenance/update-check')),
 
+  createNotificationChannel: (body: NotificationChannelInput) =>
+    unwrap(api.POST('/v1/admin/notifications/channels', { body })),
+  updateNotificationChannel: (v: { id: string; version: number; body: NotificationChannelInput }) =>
+    unwrap(
+      api.PUT('/v1/admin/notifications/channels/{channelId}', {
+        params: { path: { channelId: v.id }, header: { 'If-Match': ifMatch(v.version) } },
+        body: v.body,
+      }),
+    ),
+  deleteNotificationChannel: (v: { id: string; version: number; reason: string }) =>
+    unwrap(
+      api.DELETE('/v1/admin/notifications/channels/{channelId}', {
+        params: { path: { channelId: v.id }, header: { 'If-Match': ifMatch(v.version) } },
+        body: { reason: v.reason },
+      }),
+    ),
+  testNotificationChannel: (v: { id: string }) =>
+    unwrap(
+      api.POST('/v1/admin/notifications/channels/{channelId}/test', {
+        params: { path: { channelId: v.id } },
+      }),
+    ),
+  createNotificationRule: (body: NotificationRuleInput) =>
+    unwrap(api.POST('/v1/admin/notifications/rules', { body })),
+  updateNotificationRule: (v: { id: string; version: number; body: NotificationRuleInput }) =>
+    unwrap(
+      api.PUT('/v1/admin/notifications/rules/{ruleId}', {
+        params: { path: { ruleId: v.id }, header: { 'If-Match': ifMatch(v.version) } },
+        body: v.body,
+      }),
+    ),
+  deleteNotificationRule: (v: { id: string; version: number; reason: string }) =>
+    unwrap(
+      api.DELETE('/v1/admin/notifications/rules/{ruleId}', {
+        params: { path: { ruleId: v.id }, header: { 'If-Match': ifMatch(v.version) } },
+        body: { reason: v.reason },
+      }),
+    ),
+  putNotificationDigest: (v: { version: number; body: NotificationDigestInput }) =>
+    unwrap(
+      api.PUT('/v1/admin/notifications/digest', {
+        params: { header: { 'If-Match': ifMatch(v.version) } },
+        body: v.body,
+      }),
+    ),
+  sendNotificationDigest: () => unwrap(api.POST('/v1/admin/notifications/digest/send')),
+
   testDatasource: (v: { id: string; binding?: MetricsBinding }) =>
     unwrap(
       api.POST('/v1/admin/datasources/{datasourceId}/test', {
@@ -398,4 +501,14 @@ export const useWorkloadIndex = (max = 2000) =>
       return { rows, truncated: !!cont }
     },
     staleTime: 5 * 60_000,
+  })
+
+export const useClusterCapacity = (cluster: string | undefined) =>
+  useQuery({
+    queryKey: ['capacity', cluster],
+    queryFn: () =>
+      unwrap(api.GET('/v1/clusters/{cluster}/capacity', { params: { path: { cluster: cluster! } } })),
+    enabled: !!cluster,
+    retry: notFoundIsFinal,
+    refetchInterval: 60_000,
   })

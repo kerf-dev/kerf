@@ -166,7 +166,7 @@ const (
 )
 
 // ConfigTargetTypes lists the ConfigTargetType enum.
-var ConfigTargetTypes = []string{TargetSettings, TargetPolicy, TargetWorkloadOverride, TargetApproval, TargetCluster, TargetAutomation, TargetToken, TargetUser, TargetDatasource, TargetReadiness}
+var ConfigTargetTypes = []string{TargetSettings, TargetPolicy, TargetWorkloadOverride, TargetApproval, TargetCluster, TargetAutomation, TargetToken, TargetUser, TargetDatasource, TargetReadiness, TargetNotification}
 
 // Config actions (ConfigAction, docs/contracts/events.md).
 const (
@@ -198,6 +198,8 @@ var ConfigActions = []string{
 	ActionClusterDeleted, ActionAutomationPaused, ActionAutomationResumed, ActionTokenCreated, ActionTokenRevoked,
 	ActionUserCreated, ActionUserUpdated, ActionUserDeleted, ActionPasswordReset,
 	ActionDatasourceCreated, ActionDatasourceUpdated, ActionDatasourceDeleted, ActionReadinessChanged,
+	ActionNotificationChannelCreated, ActionNotificationChannelUpdated, ActionNotificationChannelDeleted,
+	ActionNotificationRuleCreated, ActionNotificationRuleUpdated, ActionNotificationRuleDeleted, ActionNotificationDigestUpdated,
 }
 
 // Actor is who made a change.

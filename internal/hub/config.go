@@ -65,6 +65,8 @@ type Config struct {
 	HA          HAConfig          `json:"ha"`
 	UpdateCheck UpdateCheckConfig `json:"updateCheck"`
 	Maintenance MaintenanceConfig `json:"maintenance"`
+	// Notifications: Slack, Teams and webhook channels, rules and the weekly digest.
+	Notifications NotificationsConfig `json:"notifications"`
 }
 
 // UpdateCheckConfig configures the check for a newer Kerf release (WO-33, Admin -> Maintenance).

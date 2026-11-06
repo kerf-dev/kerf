@@ -51,6 +51,12 @@ auth:
     clientSecret:
       value: ro-dev-oidc-3f9a6c1e8b2d7054e1a9c6b3
 
+# Notifications: messages link to the web UI on localhost; plain-HTTP receivers are allowed so the e2e
+# suite can run a fake one on the host (test/e2e/notifications_test.go, via host.k3d.internal).
+notifications:
+  baseURL: http://localhost:19090
+  allowInsecureHTTP: true
+
 config:
   prometheusURL: http://victoria-metrics.monitoring.svc:8428
   corsOrigins: ["http://localhost:5173"]

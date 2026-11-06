@@ -39,6 +39,8 @@ export function WriteDialog({
   wide,
   testId = 'write-dialog',
   confirmDisabled,
+  onSubmitAttempt,
+  reasonAutoFocus = true,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -56,6 +58,10 @@ export function WriteDialog({
   wide?: boolean
   testId?: string
   confirmDisabled?: boolean
+  /** Called on every submit, before the checks, so a form can show its own field errors. */
+  onSubmitAttempt?: () => void
+  /** Focus the reason on open. Turn off for forms with fields above it, so the first field gets focus. */
+  reasonAutoFocus?: boolean
 }) {
   const auth = useAuth()
   const qc = useQueryClient()
@@ -87,6 +93,7 @@ export function WriteDialog({
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setTouched(true)
+    onSubmitAttempt?.()
     if (!canSubmit) return
     setPending(true)
     setError(undefined)
@@ -195,7 +202,7 @@ export function WriteDialog({
                 rows={2}
                 aria-invalid={touched && (reasonMissing || reasonTooLong)}
                 data-testid="reason"
-                autoFocus
+                autoFocus={reasonAutoFocus}
               />
             </Field>
           </div>
@@ -239,6 +246,21 @@ const CODE_TITLE: Record<string, string> = {
   recommendation_stale: 'A newer recommendation exists',
   not_in_audit: 'Nothing to approve',
   not_found: 'It no longer exists',
+  invalid_channel: 'The channel settings are invalid',
+  invalid_rule: 'The rule is invalid',
+  invalid_digest: 'The digest settings are invalid',
+  channel_in_use: 'The channel is still in use',
+  channel_read_only: 'This channel is managed by the chart values',
+  secrets_key_missing: 'The hub cannot store webhook URLs yet',
+  no_channels: 'The digest has no channel to send to',
+}
+
+/** What to do next, for problem codes where the hub's own message does not say. */
+const CODE_HINT: Record<string, string> = {
+  channel_in_use: 'Remove it from the rules and the digest that send to it first.',
+  channel_read_only: 'Change or remove it in the hub chart values and upgrade the hub.',
+  secrets_key_missing: 'Set the hub secrets encryption key in the chart values, then try again.',
+  no_channels: 'Pick at least one channel for the digest and save it first.',
 }
 
 /** Explains a failed write in terms of what the user can do about it. */
@@ -300,6 +322,7 @@ export function WriteError({ error, onReload }: { error: unknown; onReload?: () 
       }
     >
       {e ? e.message : String(error)}
+      {e?.code && CODE_HINT[e.code] ? <span className="block">{CODE_HINT[e.code]}</span> : null}
       {e?.code ? <span className="ml-1 font-mono text-[11px]">({e.code})</span> : null}
     </Callout>
   )
