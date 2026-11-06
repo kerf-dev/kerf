@@ -82,7 +82,7 @@ func (a *AWS) Price(ctx context.Context, k Key) (Price, error) {
 	if err != nil {
 		return Price{}, err
 	}
-	return Price{HourlyUSD: usd, Shape: od.Shape}, nil
+	return Price{HourlyUSD: usd, Shape: od.Shape, Source: SourceSpot}, nil
 }
 
 func (a *AWS) onDemand(ctx context.Context, region, instanceType string) (Price, error) {
@@ -196,7 +196,7 @@ func parsePriceListItem(doc, instanceType string) (Price, error) {
 			}
 		}
 	}
-	return Price{HourlyUSD: usd, Shape: Shape{VCPU: vcpu, MemoryGiB: mem}}, nil
+	return Price{HourlyUSD: usd, Shape: Shape{VCPU: vcpu, MemoryGiB: mem}, Source: SourceList}, nil
 }
 
 // parseMemoryGiB parses the price list's memory attribute, e.g. "16 GiB" or "0.5 GiB".

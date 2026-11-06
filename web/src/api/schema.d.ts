@@ -1791,6 +1791,29 @@ export interface components {
       source: 'metrics' | 'default'
       cpuCoreHourUSD: number
       memoryGiBHourUSD: number
+      /**
+       * @description With `source: metrics`, the cluster's priced nodes by where the pricing service took their
+       *     rate from (the `source` label of the pricing series). Absent on older recommendations.
+       */
+      rateSources?: components['schemas']['PricingRateSource'][]
+      curPeriod?: components['schemas']['PricingPeriod']
+    }
+    /**
+     * @description Nodes priced from one rate source: `cur` (the effective rate paid, from the AWS Cost and Usage
+     *     Report, Savings Plans and Reserved Instances amortised), `list` (AWS on-demand list price),
+     *     `spot` (current spot price) or `static` (the static price file).
+     */
+    PricingRateSource: {
+      /** @enum {string} */
+      source: 'cur' | 'list' | 'spot' | 'static'
+      nodes: number
+    }
+    /** @description The usage the effective (`cur`) rates were computed from. */
+    PricingPeriod: {
+      /** Format: date-time */
+      start: string
+      /** Format: date-time */
+      end: string
     }
     RecommendationList: {
       cluster: components['schemas']['ClusterName']
@@ -2539,6 +2562,32 @@ export interface components {
       updatedBy?: components['schemas']['Actor']
       reason?: string
       value: components['schemas']['PricingSettings']
+      rates?: components['schemas']['PricingRates']
+    }
+    /**
+     * @description Read-only, on GET: where the pricing service's rates come from now, read from its series in the
+     *     hub's metrics store. Absent when the store cannot be queried.
+     */
+    PricingRates: {
+      cur?: components['schemas']['PricingCURStatus']
+      clusters: components['schemas']['ClusterPricingRates'][]
+    }
+    /**
+     * @description The AWS Cost and Usage Report reader of the pricing service; absent when it is off. While
+     *     `lastReadOK` is false the last effective rates are kept for a while (`pricing.cur.maxAge`), then
+     *     every node falls back to list prices.
+     */
+    PricingCURStatus: {
+      lastReadOK: boolean
+      /** Format: date-time */
+      lastSuccess?: string
+      /** @description Instance type, region and capacity type keys with an effective rate in use. */
+      rates: number
+      period?: components['schemas']['PricingPeriod']
+    }
+    ClusterPricingRates: {
+      cluster: components['schemas']['ClusterName']
+      sources: components['schemas']['PricingRateSource'][]
     }
     PricingSettingsUpdate: {
       value: components['schemas']['PricingSettings']

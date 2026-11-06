@@ -121,6 +121,10 @@ type Pricing struct {
 	Source string `json:"source"`
 	// Nodes is the number of priced nodes the rates were averaged over.
 	Nodes int `json:"nodes,omitempty"`
+	// Sources counts the priced nodes by rate source (cur, list, spot, static).
+	Sources []hubapi.PricingRateSource `json:"sources,omitempty"`
+	// CURPeriod is the usage the effective (cur) rates were computed from; nil without cur nodes.
+	CURPeriod *hubapi.PricingPeriod `json:"curPeriod,omitempty"`
 	// Adjustment records the hub's pricing settings applied to the rates (WO-20); nil = none.
 	// CPUCoreHour and MemoryGiBHour are then the adjusted rates.
 	Adjustment *PricingAdjustment `json:"adjustment,omitempty"`
@@ -142,7 +146,8 @@ func (p Pricing) Base() Pricing {
 	if p.Adjustment == nil {
 		return p
 	}
-	return Pricing{CPUCoreHour: p.Adjustment.BaseCPUCoreHour, MemoryGiBHour: p.Adjustment.BaseMemoryGiBHour, Source: p.Source, Nodes: p.Nodes}
+	return Pricing{CPUCoreHour: p.Adjustment.BaseCPUCoreHour, MemoryGiBHour: p.Adjustment.BaseMemoryGiBHour, Source: p.Source, Nodes: p.Nodes,
+		Sources: p.Sources, CURPeriod: p.CURPeriod}
 }
 
 // Fallback reports whether the default rates were used.

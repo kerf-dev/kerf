@@ -54,6 +54,13 @@ First public version.
   the last delivery status per channel. Channels can also come from the chart (`hub.notifications`). Metrics
   `kerf_notification_deliveries_total` and `kerf_notification_last_success_timestamp_seconds`, and the alert
   `KerfNotificationDeliveryFailing`.
+- **Effective AWS prices from the Cost and Usage Report.** The pricing service can read your CUR 2.0 export
+  (AWS Data Exports, Parquet in S3), through Athena or directly from S3, and price nodes at the rate you paid
+  over the last 30 days, with Savings Plans and Reserved Instances amortised. Instance types without usage keep
+  the list price; an unreadable report falls back to list prices with a `pricing.coverage` readiness warning.
+  The workload's savings estimate and Admin → Pricing show where each rate comes from (`cur`, `list`, `spot`,
+  `static`) and the period it covers. Off by default (`pricing.cur.source`); see docs/pricing.md for the IAM
+  policy and the Data Exports settings. The cost series gain a `source` label.
 - **Realized savings.** What the applied changes actually saved since they were applied: the requests released
   by every applied change (rollbacks and later increases subtract) × the replicas that ran × the node rates of
   the time, computed hourly by the hub leader, including changes applied before the upgrade. Shown as

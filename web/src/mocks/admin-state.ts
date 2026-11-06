@@ -109,6 +109,8 @@ export interface AdminState {
   gitPolicies: GitPolicy[]
   recommender: RecommenderSettingsDoc
   pricing: PricingSettingsDoc
+  /** Read-only rate sources returned with the pricing settings (the pricing service's series). */
+  pricingRates: S['PricingRates']
   settingsVersions: SettingsVersion[]
   clusters: Map<string, ClusterMeta>
   fleet: Automation
@@ -423,6 +425,7 @@ export function seedAdmin(db: MockDb): AdminState {
     gitPolicies: [],
     recommender: { version: 0, value: { interval: '1h', retention: '2160h', profiles: [] } },
     pricing: { version: 0, value: { clusters: [] } },
+    pricingRates: { clusters: [] },
     settingsVersions: [],
     clusters: new Map(),
     fleet: { paused: false, version: 0 },
@@ -711,6 +714,26 @@ export function seedAdmin(db: MockDb): AdminState {
         ],
   }
   st.pricing = { version: 1, updatedAt: t(10), updatedBy: admin, reason: 'EDP 2027', value: pricing1 }
+  // The pricing service reads the Cost and Usage Report: most nodes at their effective rate.
+  const curSources: Record<string, S['PricingRateSource'][]> = {
+    'prod-eu-west-1': [
+      { source: 'cur', nodes: 14 },
+      { source: 'spot', nodes: 4 },
+    ],
+    'prod-us-east-1': [
+      { source: 'cur', nodes: 9 },
+      { source: 'list', nodes: 2 },
+    ],
+  }
+  st.pricingRates = empty
+    ? { clusters: [] }
+    : {
+        cur: { lastReadOK: true, lastSuccess: t(0, 7), rates: 11, period: { start: t(31), end: t(1) } },
+        clusters: db.clusters.map((c) => ({
+          cluster: c.name,
+          sources: curSources[c.name] ?? [{ source: 'list', nodes: 3 }],
+        })),
+      }
   st.settingsVersions.push(
     {
       section: 'recommender',

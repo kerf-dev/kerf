@@ -139,6 +139,14 @@ pricing:
   # static (the price file in the image) or aws (Pricing API + spot prices; IAM through EKS Pod
   # Identity for ServiceAccount <pricing name>: docs/install/eks.md).
   provider: static
+  # Effective rates from the AWS Cost and Usage Report (Savings Plans and Reserved Instances
+  # amortised; docs/pricing.md), on top of provider aws. Off by default. For example:
+  #   cur:
+  #     source: athena          # or s3 for small accounts
+  #     region: eu-west-1
+  #     athena: {database: kerf_cur, table: data, workgroup: kerf}
+  cur:
+    source: ""
   hub:
     # Empty: this release's hub Service. The token (role pricing) is read from Secret
     # tokenSecret.name, default <pricing name>-hub-token. Production:
