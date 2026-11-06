@@ -19,6 +19,6 @@ repositoryID: e400746d-fe1b-4900-ad87-d04beea21bb2
 
 # The Artifact Hub users who may claim and manage the repository (Owners). Uncomment with the email of the
 # Artifact Hub account of each maintainer.
-# owners:
-#   - name: Kerf maintainers
-#     email: maintainers@getkerf.dev
+owners:
+  - name: Kerf admin
+    email: admin@getkerf.dev
