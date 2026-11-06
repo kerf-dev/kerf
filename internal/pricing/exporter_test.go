@@ -73,8 +73,8 @@ func TestExporter(t *testing.T) {
 	want := `
 # HELP kerf_node_hourly_cost_usd Hourly price of the whole node in USD.
 # TYPE kerf_node_hourly_cost_usd gauge
-kerf_node_hourly_cost_usd{capacity_type="on-demand",cluster="ro-spoke-1",instance_type="m6i.xlarge",node="n1",provider="static",region="eu-west-1",zone="eu-west-1a"} 0.214
-kerf_node_hourly_cost_usd{capacity_type="spot",cluster="ro-spoke-2",instance_type="c6a.2xlarge",node="n2",provider="static",region="eu-west-1",zone="eu-west-1b"} 0.1356
+kerf_node_hourly_cost_usd{capacity_type="on-demand",cluster="ro-spoke-1",instance_type="m6i.xlarge",node="n1",provider="static",region="eu-west-1",source="static",zone="eu-west-1a"} 0.214
+kerf_node_hourly_cost_usd{capacity_type="spot",cluster="ro-spoke-2",instance_type="c6a.2xlarge",node="n2",provider="static",region="eu-west-1",source="static",zone="eu-west-1b"} 0.1356
 # HELP kerf_pricing_nodes Nodes seen in the last refresh by status (priced|skipped) and skip reason.
 # TYPE kerf_pricing_nodes gauge
 kerf_pricing_nodes{cluster="ro-hub",reason="",status="priced"} 2

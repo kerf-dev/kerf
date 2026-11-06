@@ -97,7 +97,7 @@ When they run:
 | `metrics.hpa` | hub | warning | – | `kube_horizontalpodautoscaler_*` missing. |
 | `metrics.node-labels` | hub | warning | – | `kube_node_labels` lacks instance type, capacity type, zone or region (KSM `--metric-labels-allowlist`). |
 | `metrics.node-allocatable` | hub | warning | – | `kube_node_status_allocatable` missing. |
-| `pricing.coverage` | hub | warning | – | Priced nodes / all nodes below 100 % (`kerf_pricing_nodes{status="skipped"}`). |
+| `pricing.coverage` | hub | warning | – | Priced nodes / all nodes below 100 % (`kerf_pricing_nodes{status="skipped"}`), or the AWS Cost and Usage Report reader's last read failed (`kerf_pricing_cur_last_read_ok` 0). `details`: `priced`, `nodes`, `source.<cur\|list\|spot\|static>` (nodes per rate source), `curLastReadOK` (when the reader is on). |
 | `metrics.recommendations` | hub | blocking | ReadyAudit | No recommendation produced yet for the cluster's live workloads. |
 | `rbac.read` | agent | blocking | AgentConnected | Missing list/watch on pods, workloads, HPAs, nodes. |
 | `rbac.resize` | agent | blocking | AutomationReady | Missing `patch pods/resize`. |

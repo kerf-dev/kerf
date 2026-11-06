@@ -225,6 +225,30 @@ type RecommendationPricing struct {
 	Source           string  `json:"source"`
 	CPUCoreHourUSD   float64 `json:"cpuCoreHourUSD"`
 	MemoryGiBHourUSD float64 `json:"memoryGiBHourUSD"`
+	// RateSources counts the cluster's priced nodes by where their rate came from (source metrics).
+	RateSources []PricingRateSource `json:"rateSources,omitempty"`
+	// CURPeriod is the usage the effective rates were computed from, when a node has source cur.
+	CURPeriod *PricingPeriod `json:"curPeriod,omitempty"`
+}
+
+// Rate sources of the pricing service (label `source` of kerf_*_hourly_cost_usd).
+const (
+	RateSourceCUR    = "cur"
+	RateSourceList   = "list"
+	RateSourceSpot   = "spot"
+	RateSourceStatic = "static"
+)
+
+// PricingRateSource is the number of nodes priced from one rate source.
+type PricingRateSource struct {
+	Source string `json:"source"`
+	Nodes  int    `json:"nodes"`
+}
+
+// PricingPeriod bounds the usage effective rates were computed from.
+type PricingPeriod struct {
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
 }
 
 // WithoutExplanations returns a copy whose containers carry no explanation.

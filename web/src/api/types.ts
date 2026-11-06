@@ -60,6 +60,8 @@ export type BlockerType = S['BlockerType']
 export type CapacityObjectRef = S['CapacityObjectRef']
 export type CapacityAutoscaler = S['CapacityAutoscaler']
 export type NodeAutoscalerKind = S['NodeAutoscalerKind']
+export type PricingRateSource = S['PricingRateSource']
+export type PricingPeriod = S['PricingPeriod']
 export type FacetsQuery = NonNullable<operations['getWorkloadFacets']['parameters']['query']>
 
 export type ListWorkloadsQuery = NonNullable<operations['listWorkloads']['parameters']['query']>
@@ -112,6 +114,8 @@ export type RecommenderSettingsDoc = S['RecommenderSettingsDoc']
 export type PricingSettings = S['PricingSettings']
 export type PricingSettingsDoc = S['PricingSettingsDoc']
 export type ClusterPricingAdjustment = S['ClusterPricingAdjustment']
+export type PricingRates = S['PricingRates']
+export type PricingCURStatus = S['PricingCURStatus']
 export type Settings = S['Settings']
 export type SettingsVersion = S['SettingsVersion']
 export type HubPolicyType = S['HubPolicyType']
