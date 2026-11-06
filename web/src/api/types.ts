@@ -149,6 +149,13 @@ export type ClusterReadiness = S['ClusterReadiness']
 export type ReadinessHistoryEntry = S['ReadinessHistoryEntry']
 export type InstallFormat = S['InstallFormat']
 export type InstallSnippet = S['InstallSnippet']
+export type Maintenance = S['Maintenance']
+export type ComponentVersion = S['ComponentVersion']
+export type ComponentName = S['ComponentName']
+export type VersionCompat = S['VersionCompat']
+export type UpdateState = S['UpdateState']
+export type UpdateStatus = S['UpdateStatus']
+export type UpgradeCommands = S['UpgradeCommands']
 export type ConfigAuditQuery = NonNullable<operations['queryConfigAudit']['parameters']['query']>
 
 export const USER_ROLES: UserRole[] = ['viewer', 'operator', 'admin']

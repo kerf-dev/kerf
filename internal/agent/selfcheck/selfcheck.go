@@ -101,14 +101,18 @@ type Checker struct {
 type Result struct {
 	Checks       []hubclient.ReadinessCheck
 	Capabilities []hubclient.AgentCapability
-	At           time.Time
+	// Components are the Kerf components found (the webhook pods and their versions, WO-33): nil
+	// = unknown (the webhook could not be inspected), empty = none.
+	Components []hubclient.AgentComponent
+	At         time.Time
 }
 
 type result struct {
-	c      *Checker
-	at     time.Time
-	checks []hubclient.ReadinessCheck
-	caps   []hubclient.AgentCapability
+	c          *Checker
+	at         time.Time
+	checks     []hubclient.ReadinessCheck
+	caps       []hubclient.AgentCapability
+	components []hubclient.AgentComponent
 }
 
 func (r *result) add(id string, st rd.Status, msg, remediation, remType string, details map[string]string) {
@@ -152,7 +156,7 @@ func (c *Checker) Run(ctx context.Context) Result {
 		order[cat.ID] = i
 	}
 	sort.SliceStable(r.checks, func(i, j int) bool { return order[r.checks[i].ID] < order[r.checks[j].ID] })
-	return Result{Checks: r.checks, Capabilities: r.caps, At: r.at}
+	return Result{Checks: r.checks, Capabilities: r.caps, Components: r.components, At: r.at}
 }
 
 // semver parses v (a leading v allowed); nil for non-semver builds (dev, main-<sha>).
@@ -413,6 +417,7 @@ func (c *Checker) checkWebhook(ctx context.Context, r *result) {
 		r.add(rd.CheckCertManager, rd.StatusUnknown, "webhook configuration unreadable", "", "", nil)
 		return
 	case m == nil:
+		r.components = []hubclient.AgentComponent{}
 		r.add(rd.CheckWebhook, rd.StatusWarn, "the Kerf webhook is not installed: new pods start with their template values until the agent resizes them", installRem, RemediationCommand, nil)
 		r.add(rd.CheckCertManager, rd.StatusPass, "no webhook, cert-manager not needed", "", "", nil)
 		return
@@ -432,7 +437,10 @@ func (c *Checker) checkWebhook(ctx context.Context, r *result) {
 	}
 	if svc != nil {
 		d["service"] = svc.Namespace + "/" + svc.Name
-		ready, err := c.readyEndpoints(ctx, svc.Namespace, svc.Name)
+		ready, pods, err := c.readyEndpoints(ctx, svc.Namespace, svc.Name)
+		if err == nil {
+			r.components = c.webhookVersions(ctx, svc.Namespace, pods)
+		}
 		switch {
 		case err != nil:
 			d["endpoints"] = "unknown: " + err.Error()
@@ -464,20 +472,71 @@ func (c *Checker) checkWebhook(ctx context.Context, r *result) {
 	r.add(rd.CheckWebhook, rd.StatusPass, "webhook "+m.Name+" configured with a CA and ready endpoints", "", "", d)
 }
 
-func (c *Checker) readyEndpoints(ctx context.Context, ns, svc string) (int, error) {
+// readyEndpoints counts the ready endpoints of a Service and returns the pods behind all of its
+// endpoints (ready or not), sorted.
+func (c *Checker) readyEndpoints(ctx context.Context, ns, svc string) (int, []string, error) {
 	var slices discoveryv1.EndpointSliceList
 	if err := c.Client.List(ctx, &slices, client.InNamespace(ns), client.MatchingLabels{discoveryv1.LabelServiceName: svc}); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	n := 0
+	seen := map[string]bool{}
+	var pods []string
 	for _, s := range slices.Items {
 		for _, e := range s.Endpoints {
 			if e.Conditions.Ready == nil || *e.Conditions.Ready {
 				n++
 			}
+			if e.TargetRef != nil && e.TargetRef.Kind == "Pod" && e.TargetRef.Name != "" && !seen[e.TargetRef.Name] {
+				seen[e.TargetRef.Name] = true
+				pods = append(pods, e.TargetRef.Name)
+			}
 		}
 	}
-	return n, nil
+	sort.Strings(pods)
+	return n, pods, nil
+}
+
+// webhookVersions returns the version of each webhook pod: the tag of its webhook container's
+// image (Admin -> Maintenance, WO-33). A pod that cannot be read is listed with version "".
+func (c *Checker) webhookVersions(ctx context.Context, ns string, pods []string) []hubclient.AgentComponent {
+	out := []hubclient.AgentComponent{}
+	for _, name := range pods {
+		comp := hubclient.AgentComponent{Component: "webhook", Instance: name}
+		var p corev1.Pod
+		if err := c.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, &p); err == nil {
+			comp.Version = ImageVersion(webhookImage(&p))
+		}
+		out = append(out, comp)
+	}
+	return out
+}
+
+// webhookImage is the image of the pod's container named webhook, else its first container.
+func webhookImage(p *corev1.Pod) string {
+	for _, ctr := range p.Spec.Containers {
+		if ctr.Name == "webhook" {
+			return ctr.Image
+		}
+	}
+	if len(p.Spec.Containers) > 0 {
+		return p.Spec.Containers[0].Image
+	}
+	return ""
+}
+
+// ImageVersion is the version an image reference stands for: its tag (registry:5000/kerf/webhook:0.2.0@sha256:...
+// -> 0.2.0), else the first 12 hex digits of its digest (sha256:0123456789ab), else "".
+func ImageVersion(image string) string {
+	ref, digest, _ := strings.Cut(image, "@")
+	// A tag follows the last colon after the last slash (a registry port precedes a slash).
+	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
+		return ref[i+1:]
+	}
+	if algo, hex, ok := strings.Cut(digest, ":"); ok && hex != "" {
+		return algo + ":" + hex[:min(12, len(hex))]
+	}
+	return ""
 }
 
 // dryRun creates a dry-run copy of a pod of a workload with a recommendation and reports whether

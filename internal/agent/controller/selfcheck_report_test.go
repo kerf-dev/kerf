@@ -57,3 +57,32 @@ func TestReporterSelfChecks(t *testing.T) {
 		t.Errorf("coverage %d %v", n, ex)
 	}
 }
+
+// TestReporterComponents: the components found by a self-check run (WO-33) go with the checks; an
+// empty list is sent (no webhook), nil (unknown) is not.
+func TestReporterComponents(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name string
+		in   []hubclient.AgentComponent
+		want []hubclient.AgentComponent
+	}{
+		{"pods", []hubclient.AgentComponent{{Component: "webhook", Instance: "w-1", Version: "0.2.0"}}, []hubclient.AgentComponent{{Component: "webhook", Instance: "w-1", Version: "0.2.0"}}},
+		{"none", []hubclient.AgentComponent{}, []hubclient.AgentComponent{}},
+		{"unknown", nil, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &batchHub{}
+			rep := NewReporter(h, "test", 10, nil)
+			rep.SetSelfCheckResult(nil, []hubclient.ReadinessCheck{{ID: "webhook", Status: "pass"}}, tt.in)
+			if err := rep.Flush(ctx, false); err != nil || len(h.batches) != 1 {
+				t.Fatalf("flush: %v, %d batches", err, len(h.batches))
+			}
+			got := h.batches[0].Components
+			if (got == nil) != (tt.want == nil) || len(got) != len(tt.want) || (len(got) > 0 && got[0] != tt.want[0]) {
+				t.Errorf("components %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}

@@ -165,13 +165,22 @@ type Reporter struct {
 	checks       []hubclient.ReadinessCheck
 	checksSet    bool
 	checksDirty  bool
+	// components found by the self-checks (WO-33), sent with them; nil = unknown (omitted).
+	components []hubclient.AgentComponent
 }
 
 // SetSelfChecks records a self-check run; the next status batch carries it.
 func (r *Reporter) SetSelfChecks(caps []hubclient.AgentCapability, checks []hubclient.ReadinessCheck) {
+	r.SetSelfCheckResult(caps, checks, nil)
+}
+
+// SetSelfCheckResult records a self-check run and the Kerf components it found (nil = unknown,
+// not sent); the next status batch carries them.
+func (r *Reporter) SetSelfCheckResult(caps []hubclient.AgentCapability, checks []hubclient.ReadinessCheck, components []hubclient.AgentComponent) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.capabilities, r.checks, r.checksSet, r.checksDirty = caps, checks, true, true
+	r.components = components
 }
 
 // Coverage returns the namespaces of the reported workloads and those where every workload has
@@ -383,6 +392,9 @@ func (r *Reporter) flushStatuses(ctx context.Context, full bool) error {
 	if sentChecks {
 		batch.Capabilities = append([]hubclient.AgentCapability{}, r.capabilities...)
 		batch.Checks = append([]hubclient.ReadinessCheck{}, r.checks...)
+		if r.components != nil {
+			batch.Components = append([]hubclient.AgentComponent{}, r.components...)
+		}
 	}
 	r.mu.Unlock()
 	if len(items) == 0 && batch.PolicyInventory == nil && !sentChecks {

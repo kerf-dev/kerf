@@ -2659,6 +2659,61 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/admin/maintenance:
+    get:
+      tags: [admin]
+      operationId: getMaintenance
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Component versions and the update check
+      description: |
+        The versions of every Kerf component the hub knows of (WO-33): each hub replica (seen in the
+        last 10 minutes), the pricing service (reported with its requests to the hub, seen in the last
+        hour), and per registered cluster the agent (status batch) and webhook pods (agent self-check).
+        `compat` compares each with the hub version of the replica that answered. `update` is the
+        stored result of the check for a newer stable Kerf release (`hub.updateCheck` chart values).
+        The web UI knows its own version (build-time constant) and compares it client-side.
+      responses:
+        '200':
+          description: Versions and update status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Maintenance'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/maintenance/update-check:
+    post:
+      tags: [admin]
+      operationId: checkForUpdate
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Check for a newer Kerf release now
+      description: |
+        Reads the public GitHub releases of kerf-dev/kerf now (plain unauthenticated GET; nothing about
+        the installation is sent), stores the result and returns it. Returns the stored result without
+        a request when the last check is less than 30 seconds old. `200` also when the check failed
+        (`state: failed`, `error`). `409 update_check_disabled` when the chart value
+        `hub.updateCheck.enabled` is false.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '200':
+          description: The update status after the check.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
 components:
   securitySchemes:
     bearerAuth:
@@ -3295,6 +3350,13 @@ components:
             recheck.
           items:
             $ref: '#/components/schemas/ReadinessCheck'
+        components:
+          type: array
+          description: |
+            Kerf components the agent found in its cluster (WO-33, today the webhook pods). Sent with
+            the self-checks; absent = unchanged, an empty array = none running.
+          items:
+            $ref: '#/components/schemas/AgentComponent'
         items:
           type: array
           maxItems: 1000
@@ -5926,6 +5988,147 @@ components:
           type: array
           items:
             type: string
+    AgentComponent:
+      type: object
+      description: |
+        A Kerf component the agent found running in its cluster (WO-33). Today: the pods behind the
+        webhook Service (`component: webhook`), with the tag of their `webhook` container image as
+        `version` (`sha256:<12 hex>` for an image pinned only by digest).
+      required: [component, instance, version]
+      properties:
+        component:
+          type: string
+          enum: [webhook]
+        instance:
+          type: string
+          description: Pod name.
+        version:
+          type: string
+    ComponentName:
+      type: string
+      enum: [hub, pricing, agent, webhook]
+    VersionCompat:
+      type: string
+      description: |
+        The component's version against the hub's (both semver): `same`, `older`, `newer`; `unknown`
+        when either is not a release version (e.g. `dev`) or the component has not reported.
+      enum: [same, older, newer, unknown]
+    ComponentVersion:
+      type: object
+      required: [component, version, compat]
+      properties:
+        component:
+          $ref: '#/components/schemas/ComponentName'
+        cluster:
+          type: string
+          description: The workload cluster (agent, webhook); absent for hub-side components.
+        instance:
+          type: string
+          description: Pod name (hub replicas, pricing, webhook pods).
+        version:
+          type: string
+          description: Empty when the component has not reported a version.
+        startedAt:
+          type: string
+          format: date-time
+          description: Hub replicas only.
+        lastSeenAt:
+          type: string
+          format: date-time
+        leader:
+          type: boolean
+          description: Hub replicas only; true for the replica holding the leader lock.
+        agentStatus:
+          type: string
+          description: Agents only (`ClusterInfo.agentStatus`).
+        compat:
+          $ref: '#/components/schemas/VersionCompat'
+        message:
+          type: string
+          description: 'What to do about a mismatch, e.g. "Older than the hub (0.2.0): upgrade the chart in ro-spoke-1."'
+    UpdateState:
+      type: string
+      description: |
+        `up_to_date`, `update_available`, `disabled` (`hub.updateCheck.enabled: false`), `failed` (the
+        last check failed: `error`; `latestVersion` is the last one found), `pending` (enabled, not
+        checked yet) or `dev_build` (the hub is not a release version, so nothing is compared).
+      enum: [up_to_date, update_available, disabled, failed, pending, dev_build]
+    UpdateStatus:
+      type: object
+      required: [enabled, state, currentVersion, interval, source]
+      properties:
+        enabled:
+          type: boolean
+        state:
+          $ref: '#/components/schemas/UpdateState'
+        currentVersion:
+          type: string
+          description: The hub version the result was computed for.
+        latestVersion:
+          type: string
+          description: The latest stable release (or a pre-release of the running pre-release's minor).
+        releaseName:
+          type: string
+        releaseURL:
+          type: string
+          format: uri
+          description: Release notes.
+        publishedAt:
+          type: string
+          format: date-time
+        checkedAt:
+          type: string
+          format: date-time
+        lastSuccessAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+        interval:
+          $ref: '#/components/schemas/Duration'
+        source:
+          type: string
+          description: The releases URL that is read.
+          examples: ['https://api.github.com/repos/kerf-dev/kerf/releases']
+    UpgradeCommands:
+      type: object
+      description: |
+        `helm upgrade` commands to the latest version (docs/install/eks.md §8): the hub cluster first,
+        then each workload cluster. `<...>` marks what to fill in.
+      required: [version, chart, hubCommand, spokeCommand, docsURL]
+      properties:
+        version:
+          type: string
+        chart:
+          type: string
+        hubCommand:
+          type: string
+        spokeCommand:
+          type: string
+        docsURL:
+          type: string
+          format: uri
+    Maintenance:
+      type: object
+      required: [hubVersion, components, update]
+      properties:
+        hubVersion:
+          type: string
+          description: Version of the hub replica that answered.
+        chartVersion:
+          type: string
+          description: Version of the hub chart this replica was installed with.
+        components:
+          type: array
+          description: |
+            Hub replicas, pricing instances, then per cluster (by name) its agent (one entry, also
+            when it never reported) and webhook pods.
+          items:
+            $ref: '#/components/schemas/ComponentVersion'
+        update:
+          $ref: '#/components/schemas/UpdateStatus'
+        upgrade:
+          $ref: '#/components/schemas/UpgradeCommands'
     Problem:
       type: object
       description: |

@@ -57,8 +57,8 @@ func (s *Server) HandleNotify(payload string) {
 }
 
 // RunLeader is the leader's work: the recommender schedule and backfill, recompute requests, the
-// readiness checks (metrics checks, agent checks, re-check expiry) and the metrics snapshot. It
-// returns once ctx is done and all of it stopped.
+// readiness checks (metrics checks, agent checks, re-check expiry), the update check (WO-33) and
+// the metrics snapshot. It returns once ctx is done and all of it stopped.
 func (s *Server) RunLeader(ctx context.Context) {
 	if s.Job != nil {
 		if err := s.Job.Takeover(ctx); err != nil && ctx.Err() == nil {
@@ -80,6 +80,7 @@ func (s *Server) RunLeader(ctx context.Context) {
 		start(s.Job.RecomputeLoop)
 	}
 	start(s.RunReadiness)
+	start(s.RunMaintenance)
 	if s.Metrics != nil {
 		start(func(ctx context.Context) { s.Metrics.RefreshLoop(ctx, s.Store, time.Minute, s.Log) })
 	}

@@ -17,7 +17,12 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     resolve: { alias: { '@': path.resolve(__dirname, './src') } },
-    define: { __MOCK_API__: JSON.stringify(mode === 'mock') },
+    define: {
+      __MOCK_API__: JSON.stringify(mode === 'mock'),
+      // The UI's own version on Admin → Maintenance (WO-33): `make release` builds the image with
+      // --build-arg VERSION, which the Dockerfile passes as KERF_VERSION.
+      __KERF_VERSION__: JSON.stringify(env.KERF_VERSION || 'dev'),
+    },
     server: {
       port: 5173,
       strictPort: false,

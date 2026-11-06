@@ -700,6 +700,10 @@ every sync.
 
 ## 8. Upgrade
 
+**Admin → Maintenance** in the web UI shows the version of every component in every cluster and, once a day, checks
+for a newer stable Kerf release with its release notes and these commands ([details](../maintenance.md); turn the
+check off with `hub.updateCheck.enabled: false`).
+
 Release the new version (step 2), then upgrade the hub cluster first. Upgrade the workload clusters after it,
 each with that cluster's step 5 variables set:
 

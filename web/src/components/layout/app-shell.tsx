@@ -22,6 +22,7 @@ import {
   SunIcon,
   TrendingDownIcon,
   UsersIcon,
+  WrenchIcon,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
@@ -65,7 +66,7 @@ export const NAV: NavItem[] = [
   { to: '/activity', label: 'Activity', icon: ActivityIcon },
 ]
 
-/** The admin area (plan §4): operators see automation, policies and audit; the rest is admin-only. */
+/** The admin area (plan §4): operators see automation, policies, audit and maintenance; the rest is admin-only. */
 export const ADMIN_NAV: NavItem[] = [
   { to: '/admin', label: 'Automation', icon: GaugeIcon, end: true, min: 'operator' },
   { to: '/admin/policies', label: 'Policies', icon: ScrollTextIcon, min: 'operator' },
@@ -75,6 +76,7 @@ export const ADMIN_NAV: NavItem[] = [
   { to: '/admin/datasources', label: 'Metrics sources', icon: DatabaseIcon, min: 'admin' },
   { to: '/admin/access', label: 'Access', icon: UsersIcon, min: 'admin' },
   { to: '/admin/audit', label: 'Audit', icon: HistoryIcon, min: 'operator' },
+  { to: '/admin/maintenance', label: 'Maintenance', icon: WrenchIcon, min: 'operator' },
 ]
 
 export const visibleAdminNav = (auth: Auth) => ADMIN_NAV.filter((n) => auth.can(n.min ?? 'viewer'))

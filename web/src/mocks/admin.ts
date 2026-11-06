@@ -52,6 +52,7 @@ import {
   type Ctx,
   installUnconfigured,
 } from './core'
+import { versionCompat } from '@/lib/version'
 import { mulberry32, uuid } from './random'
 import {
   buildReadiness,
@@ -825,6 +826,112 @@ async function automationUpdate(request: Request): Promise<S['AutomationUpdate']
       return badRequest('invalid_automation', 'resumeAt: Invalid value: must be in the future')
   }
   return b
+}
+
+// ---------------------------------------------------------------------------------------------
+// Maintenance (WO-33): the hub's view of component versions
+// ---------------------------------------------------------------------------------------------
+
+function compatMessage(c: S['ComponentVersion'], hub: string): string | undefined {
+  const where = c.cluster ? `in ${c.cluster}` : 'on the hub cluster'
+  if (!c.version)
+    return c.component === 'agent' ? 'The agent has not reported a version yet.' : 'No version reported.'
+  if (c.compat === 'older') return `Older than the hub (${hub}): upgrade the Kerf chart ${where}.`
+  if (c.compat === 'newer') return `Newer than the hub (${hub}): upgrade the hub first.`
+  if (c.compat === 'unknown') return 'Not a release version: cannot compare with the hub.'
+  return undefined
+}
+
+export function maintenanceOut(st: AdminState, db: MockDb): S['Maintenance'] {
+  const m = st.maintenance
+  const hub = m.hubVersion
+  const t = Date.now()
+  const out: S['ComponentVersion'][] = []
+  const push = (c: Omit<S['ComponentVersion'], 'compat'>) => {
+    const v: S['ComponentVersion'] = { ...c, compat: c.version ? versionCompat(c.version, hub) : 'unknown' }
+    const msg = compatMessage(v, hub)
+    out.push(msg ? { ...v, message: msg } : v)
+  }
+  m.hubReplicas.forEach((r, i) =>
+    push({
+      component: 'hub',
+      instance: r.instance,
+      version: hub,
+      startedAt: r.startedAt,
+      lastSeenAt: iso(t - (8 + i * 11) * 1000),
+      leader: i === 0,
+    }),
+  )
+  for (const p of m.pricing)
+    push({ component: 'pricing', instance: p.instance, version: p.version, lastSeenAt: iso(t - 3 * 60_000) })
+  const clusters = [...st.clusters.values()]
+    .filter((c) => !c.deletedAt)
+    .sort((a, b) => a.name.localeCompare(b.name))
+  for (const c of clusters) {
+    const info = db.clusters.find((x) => x.name === c.name)
+    push({
+      component: 'agent',
+      cluster: c.name,
+      version: c.agentVersion ?? '',
+      ...(info?.lastHeartbeatAt ? { lastSeenAt: info.lastHeartbeatAt } : {}),
+      agentStatus: info?.agentStatus ?? (c.agentConnected ? 'connected' : 'never'),
+    })
+    for (const w of m.webhooks.get(c.name) ?? [])
+      push({
+        component: 'webhook',
+        cluster: c.name,
+        instance: w.instance,
+        version: w.version,
+        lastSeenAt: iso(t - 4 * 60_000),
+      })
+  }
+  const u = m.update
+  return {
+    hubVersion: hub,
+    chartVersion: m.chartVersion,
+    components: out,
+    update: u,
+    ...(u.latestVersion
+      ? {
+          upgrade: {
+            version: u.latestVersion,
+            chart: 'oci://ghcr.io/kerf-dev/kerf/charts/kerf',
+            hubCommand: `helm --kube-context <hub-cluster> upgrade kerf oci://ghcr.io/kerf-dev/kerf/charts/kerf --version ${u.latestVersion} -n kerf -f values-hub.yaml`,
+            spokeCommand: `helm --kube-context <workload-cluster> upgrade kerf oci://ghcr.io/kerf-dev/kerf/charts/kerf --version ${u.latestVersion} -n kerf -f values-spoke-<cluster>.yaml --wait`,
+            docsURL: 'https://github.com/kerf-dev/kerf/blob/main/docs/install/eks.md#8-upgrade',
+          },
+        }
+      : {}),
+  }
+}
+
+/** "Check now": reads the (simulated) public releases API unless the last check is under 30 s old. */
+function runUpdateCheck(st: AdminState): S['UpdateStatus'] {
+  const m = st.maintenance
+  const last = m.update.checkedAt ? Date.parse(m.update.checkedAt) : 0
+  if (Date.now() - last < 30_000) return m.update
+  const at = now()
+  const r = m.release
+  const cmp = versionCompat(r.version, m.hubVersion)
+  m.update = {
+    enabled: true,
+    state:
+      versionCompat(m.hubVersion, m.hubVersion) === 'unknown'
+        ? 'dev_build'
+        : cmp === 'newer'
+          ? 'update_available'
+          : 'up_to_date',
+    currentVersion: m.hubVersion,
+    latestVersion: r.version,
+    releaseName: r.name,
+    releaseURL: r.url,
+    publishedAt: r.publishedAt,
+    checkedAt: at,
+    lastSuccessAt: at,
+    interval: m.update.interval,
+    source: m.update.source,
+  }
+  return m.update
 }
 
 export const adminHandlers = [
@@ -2022,6 +2129,24 @@ export const adminHandlers = [
     const pg = page(items, sp)
     if (pg instanceof Response) return pg
     return json<S['ConfigChangeList']>(pg)
+  }),
+
+  // Maintenance (WO-33) ------------------------------------------------------------------------
+  http.get('*/v1/admin/maintenance', async ({ request }) => {
+    const g = await gate(request)
+    if (g instanceof Response) return g
+    return json<S['Maintenance']>(maintenanceOut(g.st, g.db))
+  }),
+
+  http.post('*/v1/admin/maintenance/update-check', async ({ request }) => {
+    const g = await gate(request, 'admin')
+    if (g instanceof Response) return g
+    if (!g.st.maintenance.update.enabled)
+      return conflict(
+        'update_check_disabled',
+        'the update check is off (chart value hub.updateCheck.enabled)',
+      )
+    return json<S['UpdateStatus']>(runUpdateCheck(g.st))
   }),
 
   // Datasources ------------------------------------------------------------------------------

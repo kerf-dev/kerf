@@ -150,6 +150,10 @@ func (s *Server) reportWorkloadStatus(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := validateAgentComponents(batch.Components); err != nil {
+		badRequest(w, r, "invalid_item", err.Error())
+		return
+	}
 	if err := s.Store.UpsertStatuses(r.Context(), cluster, batch.Items, s.now()); err != nil {
 		s.internal(w, r, err)
 		return
@@ -163,6 +167,11 @@ func (s *Server) reportWorkloadStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	// Agent self-checks (D-025); absent = unchanged.
 	if err := s.recordAgentChecks(r.Context(), cluster, batch); err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	// Components found by the agent, e.g. the webhook pods (WO-33); absent = unchanged.
+	if err := s.recordAgentComponents(r.Context(), cluster, batch.Components); err != nil {
 		s.internal(w, r, err)
 		return
 	}

@@ -410,6 +410,17 @@ or disabling the last enabled admin gives `409 last_admin`.
 ```
 `GET /v1/audit` (workload events) is unchanged and never returns `config_changed`.
 
+### Maintenance (WO-33)
+
+`GET /v1/admin/maintenance` (viewer) → `Maintenance`: `hubVersion`, `chartVersion`, `components` (each hub
+replica with `leader`, pricing, per cluster its `agent` and `webhook` pods, each with `compat`
+`same|older|newer|unknown` against the hub and a `message` for a mismatch), `update` (`UpdateStatus`, `state`
+`up_to_date|update_available|disabled|failed|pending|dev_build`) and `upgrade` (`helm upgrade` commands when a
+newer release is known). `POST /v1/admin/maintenance/update-check` (admin) → `UpdateStatus` after checking now;
+`409 update_check_disabled` when `hub.updateCheck.enabled` is false. Not audited: it changes no configuration.
+Agents send `components` (`[{component: webhook, instance: <pod>, version}]`) in the status batch with their
+self-checks. See [the Maintenance page](../maintenance.md).
+
 ## 6. Storage (migrations 0007 – 0010)
 
 | Migration | Tables / columns |

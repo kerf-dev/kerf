@@ -93,7 +93,9 @@ func run(ctx context.Context, o options, log *slog.Logger) error {
 		if o.hubTokenFile == "" {
 			return errors.New("--hub-url needs --hub-token-file")
 		}
-		disc.Targets = &pricing.HubTargets{HubURL: o.hubURL, Token: pricing.FileToken(o.hubTokenFile)}
+		// The User-Agent tells the hub this service's version (Admin -> Maintenance, WO-33).
+		hc := &http.Client{Timeout: 60 * time.Second, Transport: userAgent{ua: hubUserAgent()}}
+		disc.Targets = &pricing.HubTargets{HubURL: o.hubURL, Token: pricing.FileToken(o.hubTokenFile), HTTP: hc}
 	}
 	exp := pricing.NewExporter(disc, provider, splitter, log)
 
@@ -153,4 +155,29 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// hubUserAgent is kerf-pricing/<version> (<pod name>), as the hub's Maintenance page reads it.
+func hubUserAgent() string {
+	ua := "kerf-pricing/" + version
+	if h, err := os.Hostname(); err == nil && h != "" {
+		ua += " (" + h + ")"
+	}
+	return ua
+}
+
+// userAgent sets the User-Agent of every request.
+type userAgent struct {
+	ua   string
+	next http.RoundTripper
+}
+
+func (t userAgent) RoundTrip(r *http.Request) (*http.Response, error) {
+	next := t.next
+	if next == nil {
+		next = http.DefaultTransport
+	}
+	r = r.Clone(r.Context())
+	r.Header.Set("User-Agent", t.ua)
+	return next.RoundTrip(r)
 }

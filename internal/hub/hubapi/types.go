@@ -290,6 +290,9 @@ type WorkloadStatusBatch struct {
 	// Capabilities and Checks are the agent self-checks (D-025): nil = unchanged.
 	Capabilities []AgentCapability `json:"capabilities,omitempty"`
 	Checks       []ReadinessCheck  `json:"checks,omitempty"`
+	// Components are the Kerf components the agent found in its cluster (WO-33, webhook pods):
+	// nil = unchanged, empty = none.
+	Components []AgentComponent `json:"components,omitzero"`
 }
 
 // ContainerChange is a change of one container's resources.

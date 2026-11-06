@@ -236,6 +236,18 @@ config:
     # agentChart: ""
     # webhookChart: ""
 
+# Check for a newer stable Kerf release (Admin -> Maintenance, WO-33). The leader reads the public
+# GitHub releases of kerf-dev/kerf once per interval: a plain unauthenticated GET with User-Agent
+# kerf-hub/<version>; nothing about this installation is sent. Set enabled: false for air-gapped
+# sites (or no egress to api.github.com). Behind a proxy, set HTTPS_PROXY / NO_PROXY in extraEnv.
+# The result is shown on the Maintenance page and exported as kerf_update_available{current,latest}.
+updateCheck:
+  enabled: true
+  # Go duration, at least 10m; a random delay of up to a tenth of it (at most 1h) is added.
+  interval: 24h
+  # The releases API (a mirror or a test server).
+  url: https://api.github.com/repos/kerf-dev/kerf/releases
+
 # Datasource secrets (bearer tokens, passwords, mTLS keys) are encrypted at rest with this key
 # (D-025). create: the chart generates a random key once and keeps it (helm.sh/resource-policy:
 # keep); back the Secret up. Or point existingSecret at your own Secret (32 bytes, base64 or hex,
@@ -335,6 +347,8 @@ prometheusRule:
     webhookErrors: {enabled: true, for: 15m, severity: warning, ratio: 0.05}
     # The pricing service has not refreshed prices for staleAfter (cost series go stale).
     pricingStale: {enabled: true, for: 5m, severity: warning, staleAfter: 30m}
+    # A newer stable Kerf release exists (kerf_update_available, needs updateCheck.enabled).
+    updateAvailable: {enabled: true, for: 1h, severity: info}
   additionalRules: []
 
 # Grafana dashboards (dashboards/*.json, WO-05) as ConfigMaps for the Grafana sidecar. They

@@ -16,7 +16,9 @@ WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
-RUN npm run build
+# The version shown on Admin → Maintenance (make release passes --build-arg VERSION).
+ARG VERSION=dev
+RUN KERF_VERSION=${VERSION} npm run build
 
 FROM nginx:1.29-alpine
 # Pick up resolvers from /etc/resolv.conf for the runtime `resolver` directive. Templates render into

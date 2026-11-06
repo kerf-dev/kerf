@@ -57,6 +57,7 @@ test.describe('login and roles', () => {
       'Metrics sources',
       'Access',
       'Audit',
+      'Maintenance',
     ])
       await expect(nav.getByRole('link', { name: item })).toBeVisible()
     await page.getByTestId('user-menu').click()
@@ -70,6 +71,7 @@ test.describe('login and roles', () => {
     await expect(nav.getByRole('link', { name: 'Automation' })).toBeVisible()
     await expect(nav.getByRole('link', { name: 'Policies' })).toBeVisible()
     await expect(nav.getByRole('link', { name: 'Audit' })).toBeVisible()
+    await expect(nav.getByRole('link', { name: 'Maintenance' })).toBeVisible()
     await expect(nav.getByRole('link', { name: 'Defaults' })).toHaveCount(0)
     await expect(nav.getByRole('link', { name: 'Access' })).toHaveCount(0)
     await page.goto('/admin/defaults')
@@ -257,6 +259,29 @@ test.describe('operator writes', () => {
     await confirmWrite(page, 'bulk-dialog', 'payments hands off (e2e)')
     await expect(page.getByTestId('toast')).toContainText('Excluded 2 workloads')
     await expect(page.getByTestId('bulk-bar')).toHaveCount(0)
+  })
+})
+
+test.describe('maintenance (WO-33)', () => {
+  test('versions by component, the update and Check now', async ({ page }) => {
+    await login(page, 'admin')
+    await page.getByTestId('admin-nav').getByRole('link', { name: 'Maintenance' }).click()
+    await expect(page).toHaveURL(/\/admin\/maintenance$/)
+    const card = page.getByTestId('updates-card')
+    await expect(card.getByTestId('update-state')).toHaveAttribute('data-state', 'update_available')
+    await expect(card.getByTestId('latest-version')).toHaveText('0.5.0')
+    await expect(card.getByTestId('hub-command')).toContainText('--version 0.5.0')
+    await expect(page.getByTestId('leader-badge')).toHaveCount(1)
+    await expect(page.getByTestId('cluster-prod-us-east-1')).toHaveAttribute('data-compat', 'older')
+    await expect(page.getByTestId('cluster-prod-us-east-1').getByTestId('webhook-missing')).toBeVisible()
+    await page.getByTestId('check-now').click()
+    await expect(card).toContainText('Checked just now')
+  })
+
+  test('operators see the page but cannot run the check', async ({ page }) => {
+    await login(page, 'operator', '/admin/maintenance')
+    await expect(page.getByTestId('updates-card')).toBeVisible()
+    await expect(page.getByTestId('check-now')).toBeDisabled()
   })
 })
 

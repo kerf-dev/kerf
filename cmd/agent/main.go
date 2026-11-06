@@ -107,7 +107,7 @@ func newSelfCheck(mgr manager.Manager, hub *hubclient.Client, rep *controller.Re
 		return in
 	}}
 	runner := &selfcheck.Runner{Checker: checker, Interval: interval, Log: log,
-		OnResult: func(res selfcheck.Result) { rep.SetSelfChecks(res.Capabilities, res.Checks) }}
+		OnResult: func(res selfcheck.Result) { rep.SetSelfCheckResult(res.Capabilities, res.Checks, res.Components) }}
 	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		// Let the first pull and reports happen, so version, clock and coverage are known.
 		select {

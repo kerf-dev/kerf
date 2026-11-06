@@ -24,5 +24,7 @@ data:
     {{- if not (hasKey $onb "hubVersion") }}{{- $_ := set $onb "hubVersion" .Chart.AppVersion }}{{- end }}
     {{- end }}
     {{- $_ := set $cfg "onboarding" $onb }}
+    {{- $_ := set $cfg "updateCheck" (dict "enabled" .Values.updateCheck.enabled "interval" .Values.updateCheck.interval "url" .Values.updateCheck.url) }}
+    {{- $_ := set $cfg "maintenance" (dict "chartVersion" .Chart.Version "releaseName" .Release.Name "releaseNamespace" .Release.Namespace) }}
     {{- toYaml $cfg | nindent 4 }}
 {{ end -}}

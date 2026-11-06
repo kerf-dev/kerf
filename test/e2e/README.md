@@ -20,7 +20,7 @@ make e2e-vet                     # compile/vet the suite without a cluster
 
 | Tier | Target | Tests | Where |
 |---|---|---|---|
-| smoke | `make e2e-smoke` | `E2E_SMOKE_TESTS` = `TestAudit`, `TestInPlaceCPU`, `TestWebhook`, `TestRollback`, `TestAdminPolicy`, `TestReadiness`: audit, in-place apply, webhook, rollback, admin policy, readiness | pull requests touching `cmd/**`, `internal/**`, `deploy/**`, `test/e2e/**` (CI, once a runner can host the fleet) |
+| smoke | `make e2e-smoke` | `E2E_SMOKE_TESTS` = `TestAudit`, `TestInPlaceCPU`, `TestWebhook`, `TestRollback`, `TestAdminPolicy`, `TestReadiness`, `TestMaintenance`: audit, in-place apply, webhook, rollback, admin policy, readiness, component versions | pull requests touching `cmd/**`, `internal/**`, `deploy/**`, `test/e2e/**` (CI, once a runner can host the fleet) |
 | full | `make e2e` | every test | nightly (CI), and locally before merging suite or timing changes |
 
 At the end of every run the log shows a per-test duration table, the setup time (`make e2e` start

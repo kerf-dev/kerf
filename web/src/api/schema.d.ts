@@ -1271,6 +1271,55 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/admin/maintenance': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Component versions and the update check
+     * @description The versions of every Kerf component the hub knows of (WO-33): each hub replica (seen in the
+     *     last 10 minutes), the pricing service (reported with its requests to the hub, seen in the last
+     *     hour), and per registered cluster the agent (status batch) and webhook pods (agent self-check).
+     *     `compat` compares each with the hub version of the replica that answered. `update` is the
+     *     stored result of the check for a newer stable Kerf release (`hub.updateCheck` chart values).
+     *     The web UI knows its own version (build-time constant) and compares it client-side.
+     */
+    get: operations['getMaintenance']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/maintenance/update-check': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Check for a newer Kerf release now
+     * @description Reads the public GitHub releases of kerf-dev/kerf now (plain unauthenticated GET; nothing about
+     *     the installation is sent), stores the result and returns it. Returns the stored result without
+     *     a request when the last check is less than 30 seconds old. `200` also when the check failed
+     *     (`state: failed`, `error`). `409 update_check_disabled` when the chart value
+     *     `hub.updateCheck.enabled` is false.
+     */
+    post: operations['checkForUpdate']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -1551,6 +1600,11 @@ export interface components {
        *     recheck.
        */
       checks?: components['schemas']['ReadinessCheck'][]
+      /**
+       * @description Kerf components the agent found in its cluster (WO-33, today the webhook pods). Sent with
+       *     the self-checks; absent = unchanged, an empty array = none running.
+       */
+      components?: components['schemas']['AgentComponent'][]
       items: components['schemas']['WorkloadStatus'][]
     }
     ContainerChange: {
@@ -3074,6 +3128,108 @@ export interface components {
       /** @description Snippet for `argocd-cm` so Argo CD ignores fields owned by `kerf` (D-006). */
       argocdIgnoreDifferences: string
       notes?: string[]
+    }
+    /**
+     * @description A Kerf component the agent found running in its cluster (WO-33). Today: the pods behind the
+     *     webhook Service (`component: webhook`), with the tag of their `webhook` container image as
+     *     `version` (`sha256:<12 hex>` for an image pinned only by digest).
+     */
+    AgentComponent: {
+      /** @enum {string} */
+      component: 'webhook'
+      /** @description Pod name. */
+      instance: string
+      version: string
+    }
+    /** @enum {string} */
+    ComponentName: 'hub' | 'pricing' | 'agent' | 'webhook'
+    /**
+     * @description The component's version against the hub's (both semver): `same`, `older`, `newer`; `unknown`
+     *     when either is not a release version (e.g. `dev`) or the component has not reported.
+     * @enum {string}
+     */
+    VersionCompat: 'same' | 'older' | 'newer' | 'unknown'
+    ComponentVersion: {
+      component: components['schemas']['ComponentName']
+      /** @description The workload cluster (agent, webhook); absent for hub-side components. */
+      cluster?: string
+      /** @description Pod name (hub replicas, pricing, webhook pods). */
+      instance?: string
+      /** @description Empty when the component has not reported a version. */
+      version: string
+      /**
+       * Format: date-time
+       * @description Hub replicas only.
+       */
+      startedAt?: string
+      /** Format: date-time */
+      lastSeenAt?: string
+      /** @description Hub replicas only; true for the replica holding the leader lock. */
+      leader?: boolean
+      /** @description Agents only (`ClusterInfo.agentStatus`). */
+      agentStatus?: string
+      compat: components['schemas']['VersionCompat']
+      /** @description What to do about a mismatch, e.g. "Older than the hub (0.2.0): upgrade the chart in ro-spoke-1." */
+      message?: string
+    }
+    /**
+     * @description `up_to_date`, `update_available`, `disabled` (`hub.updateCheck.enabled: false`), `failed` (the
+     *     last check failed: `error`; `latestVersion` is the last one found), `pending` (enabled, not
+     *     checked yet) or `dev_build` (the hub is not a release version, so nothing is compared).
+     * @enum {string}
+     */
+    UpdateState: 'up_to_date' | 'update_available' | 'disabled' | 'failed' | 'pending' | 'dev_build'
+    UpdateStatus: {
+      enabled: boolean
+      state: components['schemas']['UpdateState']
+      /** @description The hub version the result was computed for. */
+      currentVersion: string
+      /** @description The latest stable release (or a pre-release of the running pre-release's minor). */
+      latestVersion?: string
+      releaseName?: string
+      /**
+       * Format: uri
+       * @description Release notes.
+       */
+      releaseURL?: string
+      /** Format: date-time */
+      publishedAt?: string
+      /** Format: date-time */
+      checkedAt?: string
+      /** Format: date-time */
+      lastSuccessAt?: string
+      error?: string
+      interval: components['schemas']['Duration']
+      /**
+       * @description The releases URL that is read.
+       * @example https://api.github.com/repos/kerf-dev/kerf/releases
+       */
+      source: string
+    }
+    /**
+     * @description `helm upgrade` commands to the latest version (docs/install/eks.md §8): the hub cluster first,
+     *     then each workload cluster. `<...>` marks what to fill in.
+     */
+    UpgradeCommands: {
+      version: string
+      chart: string
+      hubCommand: string
+      spokeCommand: string
+      /** Format: uri */
+      docsURL: string
+    }
+    Maintenance: {
+      /** @description Version of the hub replica that answered. */
+      hubVersion: string
+      /** @description Version of the hub chart this replica was installed with. */
+      chartVersion?: string
+      /**
+       * @description Hub replicas, pricing instances, then per cluster (by name) its agent (one entry, also
+       *     when it never reported) and webhook pods.
+       */
+      components: components['schemas']['ComponentVersion'][]
+      update: components['schemas']['UpdateStatus']
+      upgrade?: components['schemas']['UpgradeCommands']
     }
     /**
      * @description RFC 9457 problem details; the single error schema for every endpoint. `code` is a stable
@@ -5437,6 +5593,54 @@ export interface operations {
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
       404: components['responses']['NotFound']
+    }
+  }
+  getMaintenance: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Versions and update status. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Maintenance']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  checkForUpdate: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description The update status after the check. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['UpdateStatus']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
     }
   }
 }

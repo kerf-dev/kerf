@@ -39,13 +39,22 @@ type Server struct {
 	Coord *Elector
 	// Now is the clock (tests).
 	Now func() time.Time
+	// Version is this hub's version (main.version), Identity its replica name (POD_NAME) and
+	// Started its start time: the Maintenance page (WO-33).
+	Version  string
+	Identity string
+	Started  time.Time
+	// Updates checks for a newer Kerf release (WO-33); nil = off.
+	Updates *UpdateChecker
 
-	mu          sync.Mutex
-	tokens      map[string]tokenEntry
-	heartbeats  map[string]time.Time
-	ready       bool
-	ipLimiter   *auth.Limiter
-	userLimiter *auth.Limiter
+	mu         sync.Mutex
+	tokens     map[string]tokenEntry
+	heartbeats map[string]time.Time
+	// componentSeen throttles recording component versions (recordPricing).
+	componentSeen map[string]time.Time
+	ready         bool
+	ipLimiter     *auth.Limiter
+	userLimiter   *auth.Limiter
 }
 
 type tokenEntry struct {
@@ -154,6 +163,9 @@ func (s *Server) Handler() http.Handler {
 	route("POST /v1/clusters/{cluster}/readiness/recheck", accessOperator, s.recheckClusterReadiness)
 	route("GET /v1/clusters/{cluster}/readiness/history", accessViewer, s.getClusterReadinessHistory)
 	route("GET /v1/admin/clusters/{cluster}/install", accessAdmin, s.getClusterInstall)
+	// Maintenance (WO-33).
+	route("GET /v1/admin/maintenance", accessViewer, s.getMaintenance)
+	route("POST /v1/admin/maintenance/update-check", accessAdmin, s.checkForUpdate)
 	// Pricing service (D-026).
 	route("GET /v1/internal/metrics-bindings", accessPricing, s.listMetricsBindings)
 	route("GET /v1/internal/datasources/{datasourceId}/api/v1/query", accessPricing, s.proxyQuery)

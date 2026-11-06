@@ -1075,6 +1075,59 @@ describe('tokens, users, audit, datasources', () => {
   })
 })
 
+describe('maintenance (WO-33)', () => {
+  it('lists every component with its compat against the hub', async () => {
+    const r = await call('GET', '/v1/admin/maintenance')
+    expect(r.status).toBe(200)
+    expectValid('Maintenance', r.json)
+    const m = r.json as import('@/api/types').Maintenance
+    const hubs = m.components.filter((c) => c.component === 'hub')
+    expect(hubs.length).toBe(2)
+    expect(hubs.filter((h) => h.leader).length).toBe(1)
+    expect(m.components.some((c) => c.component === 'pricing')).toBe(true)
+    const agent = (cl: string) => m.components.find((c) => c.component === 'agent' && c.cluster === cl)
+    expect(agent('prod-eu-west-1')?.compat).toBe('same')
+    expect(agent('prod-us-east-1')?.compat).toBe('older')
+    expect(agent('prod-us-east-1')?.message).toMatch(/upgrade/i)
+    expect(agent('dr-eu-central-1')?.compat).toBe('unknown')
+    const hooks = (cl: string) => m.components.filter((c) => c.component === 'webhook' && c.cluster === cl)
+    expect(hooks('prod-eu-west-1').length).toBe(2)
+    expect(hooks('prod-us-east-1').length).toBe(0)
+    expect(m.update.state).toBe('update_available')
+    expect(m.upgrade?.hubCommand).toContain(`--version ${m.update.latestVersion}`)
+  })
+
+  it('check now needs admin and CSRF, and 409 when the check is off', async () => {
+    // anonymous = the read-only ui token (viewer)
+    expectProblem(await call('POST', '/v1/admin/maintenance/update-check'), 403, 'forbidden')
+    await login('operator')
+    expectProblem(await call('POST', '/v1/admin/maintenance/update-check'), 403, 'forbidden')
+    await login('admin')
+    expectProblem(
+      await call('POST', '/v1/admin/maintenance/update-check', { noCsrf: true }),
+      403,
+      'csrf_invalid',
+    )
+    getAdmin().maintenance.update.checkedAt = new Date(Date.now() - 3600_000).toISOString()
+    const r = await call('POST', '/v1/admin/maintenance/update-check')
+    expect(r.status).toBe(200)
+    expectValid('UpdateStatus', r.json)
+    expect(r.json.state).toBe('update_available')
+    expect(Date.now() - Date.parse(r.json.checkedAt)).toBeLessThan(5_000)
+    getAdmin().maintenance.update = { ...getAdmin().maintenance.update, enabled: false, state: 'disabled' }
+    expectProblem(await call('POST', '/v1/admin/maintenance/update-check'), 409, 'update_check_disabled')
+    expectValid('Maintenance', (await call('GET', '/v1/admin/maintenance')).json)
+  })
+
+  it('a fresh hub has not checked yet and offers no upgrade', async () => {
+    localStorage.setItem('ro-mock-scenario', 'empty')
+    const r = await call('GET', '/v1/admin/maintenance')
+    expectValid('Maintenance', r.json)
+    expect(r.json.update.state).toBe('pending')
+    expect(r.json.upgrade).toBeUndefined()
+  })
+})
+
 describe('scenarios', () => {
   it('error and empty apply to the admin endpoints', async () => {
     localStorage.setItem('ro-mock-scenario', 'error')

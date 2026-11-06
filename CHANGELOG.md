@@ -31,3 +31,9 @@ First public version.
   dashboards. The hub runs highly available (leader election on Postgres).
 - **Release.** Multi-arch images (`linux/amd64`, `linux/arm64`) with SBOM and provenance, signed with cosign,
   and OCI Helm charts, published to GitHub Container Registry.
+- **Maintenance page and update check.** Admin → Maintenance lists the version of every component (each hub
+  replica, the web UI, the pricing service, and the agent and webhook pods of every cluster) and flags
+  mismatches. Once a day the hub checks the public GitHub releases of kerf-dev/kerf for a newer stable version
+  and shows the release notes and `helm upgrade` commands; "Check now" runs it at once. It is on by default and
+  sends nothing about the installation; turn it off with `hub.updateCheck.enabled: false`. Metric
+  `kerf_update_available{current,latest}` and the alert `KerfUpdateAvailable` (severity `info`).

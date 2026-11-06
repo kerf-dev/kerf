@@ -65,7 +65,15 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 
 	prom := recommender.NewPromClient(cfg.PrometheusURL, cfg.PrometheusTimeout.D())
 	metrics := hub.NewMetrics()
-	srv := &hub.Server{Cfg: cfg, Store: st, Prom: prom, RecCfg: recCfg, Metrics: metrics, Log: log}
+	identity := hub.Identity()
+	srv := &hub.Server{Cfg: cfg, Store: st, Prom: prom, RecCfg: recCfg, Metrics: metrics, Log: log,
+		Version: version, Identity: identity, Started: time.Now()}
+	// The check for a newer Kerf release (WO-33): run by the leader, stored in Postgres.
+	srv.Updates = hub.NewUpdateChecker(cfg, st, version, log.With("component", "update-check"))
+	metrics.LeaderOnly().MustRegister(srv.Updates)
+	if !cfg.UpdateCheck.On() {
+		log.Info("update check disabled (updateCheck.enabled: false)")
+	}
 	var cipher *datasource.Cipher
 	if cfg.Onboarding.SecretsKeyFile != "" {
 		if cipher, err = datasource.LoadCipher(cfg.Onboarding.SecretsKeyFile); err != nil {
@@ -106,7 +114,6 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	}
 	// Leader election (WO-18a, D-028): every replica serves the API; the leader runs the
 	// recommender, recompute requests, readiness checks and sweeps (srv.RunLeader).
-	identity := hub.Identity()
 	elector, err := srv.NewElector(identity)
 	if err != nil {
 		return err
@@ -123,6 +130,10 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	electorCtx, stopElector := context.WithCancel(ctx)
 	electorDone := make(chan struct{})
 	go func() { defer close(electorDone); elector.Run(electorCtx) }()
+	// This replica's version for the Maintenance page (WO-33); its row is removed on shutdown.
+	beatCtx, stopBeat := context.WithCancel(ctx)
+	beatDone := make(chan struct{})
+	go func() { defer close(beatDone); srv.RunReplicaHeartbeat(beatCtx) }()
 
 	var serveErr error
 	select {
@@ -140,6 +151,8 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	case <-time.After(15 * time.Second):
 		log.Warn("leader work did not stop within 15s")
 	}
+	stopBeat()
+	<-beatDone
 	if serveErr != nil {
 		return serveErr
 	}

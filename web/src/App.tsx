@@ -27,6 +27,7 @@ const PricingPage = lazy(() => import('@/pages/admin/pricing'))
 const DatasourcesPage = lazy(() => import('@/pages/admin/datasources'))
 const AccessPage = lazy(() => import('@/pages/admin/access'))
 const AuditPage = lazy(() => import('@/pages/admin/audit'))
+const MaintenancePage = lazy(() => import('@/pages/admin/maintenance'))
 
 /** A 401 on any request means the session ended: re-ask `/v1/me`, which routes to the login if needed. */
 function onAuthError(e: unknown, key?: readonly unknown[]) {
@@ -81,6 +82,7 @@ const router = createBrowserRouter([
       { path: 'admin/datasources', element: admin(<DatasourcesPage />) },
       { path: 'admin/access', element: admin(<AccessPage />) },
       { path: 'admin/audit', element: admin(<AuditPage />, 'operator') },
+      { path: 'admin/maintenance', element: admin(<MaintenancePage />, 'operator') },
       { path: 'activity', element: s(<ActivityPage />) },
       { path: '*', element: s(<NotFoundPage />) },
     ],

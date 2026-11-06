@@ -34,6 +34,7 @@ export type HubPolicyType = S['HubPolicyType']
 export type RecommenderSettingsDoc = S['RecommenderSettingsDoc']
 export type PricingSettingsDoc = S['PricingSettingsDoc']
 export type SettingsVersion = S['SettingsVersion']
+export type UpdateStatus = S['UpdateStatus']
 
 export interface UserRec extends User {
   password: string
@@ -84,6 +85,20 @@ export interface ApprovalRec extends Approval {
   autoConsume: boolean
 }
 
+/** Component versions and the update check (Admin → Maintenance, WO-33). */
+export interface MaintenanceModel {
+  hubVersion: string
+  chartVersion: string
+  /** hub replicas; the first is the leader */
+  hubReplicas: { instance: string; startedAt: string }[]
+  pricing: { instance: string; version: string }[]
+  /** webhook pods per cluster (agent self-check); no entry = no webhook found */
+  webhooks: Map<string, { instance: string; version: string }[]>
+  update: UpdateStatus
+  /** what the public releases API returns on the next "Check now" */
+  release: { version: string; name: string; url: string; publishedAt: string }
+}
+
 export interface AdminState {
   users: Map<string, UserRec>
   tokens: TokenInfo[]
@@ -104,6 +119,7 @@ export interface AdminState {
   rng: Rng
   /** delay until the simulated agent applies a config change */
   syncDelayMs: number
+  maintenance: MaintenanceModel
 }
 
 export const SYSTEM: Actor = { type: 'system', name: 'system' }
@@ -415,6 +431,7 @@ export function seedAdmin(db: MockDb): AdminState {
     annotations: new Map(),
     rng: r,
     syncDelayMs: 5000,
+    maintenance: seedMaintenance(db),
   }
   const empty = db.clusters.length === 0
 
@@ -1196,6 +1213,60 @@ export function seedAdmin(db: MockDb): AdminState {
   recompute(st, db)
   sortAudit(st)
   return st
+}
+
+/**
+ * The mock fleet runs 0.4.2 (hub, pricing, prod-eu-west-1's agent and webhook); prod-us-east-1's agent
+ * is one patch behind and it has no webhook; 0.5.0 is out. A fresh (empty) hub has not checked yet.
+ */
+export function seedMaintenance(db: MockDb): MaintenanceModel {
+  const now = db.now
+  const empty = db.clusters.length === 0
+  const release = {
+    version: '0.5.0',
+    name: 'Kerf 0.5.0',
+    url: 'https://github.com/kerf-dev/kerf/releases/tag/v0.5.0',
+    publishedAt: iso(now - 3 * 86400_000),
+  }
+  const webhooks = new Map<string, { instance: string; version: string }[]>()
+  if (db.clusters.some((c) => c.name === 'prod-eu-west-1'))
+    webhooks.set('prod-eu-west-1', [
+      { instance: 'kerf-webhook-6c9f7d8b54-2xkqp', version: '0.4.2' },
+      { instance: 'kerf-webhook-6c9f7d8b54-tq7wn', version: '0.4.2' },
+    ])
+  const checkedAt = iso(now - 2 * 3600_000 - 17 * 60_000)
+  return {
+    hubVersion: '0.4.2',
+    chartVersion: '0.4.2',
+    hubReplicas: [
+      { instance: 'hub-7d5c9b6f4d-8kz2m', startedAt: iso(now - 6 * 86400_000) },
+      { instance: 'hub-7d5c9b6f4d-r4hvx', startedAt: iso(now - 6 * 86400_000 + 95_000) },
+    ],
+    pricing: [{ instance: 'pricing-5f8b7c9d6-lm2zq', version: '0.4.2' }],
+    webhooks,
+    release,
+    update: empty
+      ? {
+          enabled: true,
+          state: 'pending',
+          currentVersion: '0.4.2',
+          interval: '24h',
+          source: 'https://api.github.com/repos/kerf-dev/kerf/releases',
+        }
+      : {
+          enabled: true,
+          state: 'update_available',
+          currentVersion: '0.4.2',
+          latestVersion: release.version,
+          releaseName: release.name,
+          releaseURL: release.url,
+          publishedAt: release.publishedAt,
+          checkedAt,
+          lastSuccessAt: checkedAt,
+          interval: '24h',
+          source: 'https://api.github.com/repos/kerf-dev/kerf/releases',
+        },
+  }
 }
 
 export function stripApproval(a: ApprovalRec): Approval {

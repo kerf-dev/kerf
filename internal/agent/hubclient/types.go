@@ -43,6 +43,7 @@ var schemaTypes = map[string]any{
 	"PolicyInventoryItem": PolicyInventoryItem{},
 	"ReadinessCheck":      ReadinessCheck{},
 	"AgentCapability":     AgentCapability{},
+	"AgentComponent":      AgentComponent{},
 
 	// RightsizingPolicy spec as sent in ConfigPolicy.spec: the CRD types (api/v1alpha1).
 	"RightsizingPolicySpec": v1alpha1.RightsizingPolicySpec{},
@@ -224,6 +225,19 @@ type WorkloadStatusBatch struct {
 	// the complete set. Send them at start, every 10 minutes and after a recheck.
 	Capabilities []AgentCapability `json:"capabilities,omitempty"`
 	Checks       []ReadinessCheck  `json:"checks,omitempty"`
+	// Components are the Kerf components found in the cluster (WO-33: the webhook pods), sent
+	// with the self-checks: nil = unchanged (omitted); non-nil, even empty = all of them.
+	Components []AgentComponent `json:"components,omitzero"`
+}
+
+// AgentComponent is a Kerf component running in the cluster (Admin -> Maintenance, WO-33).
+type AgentComponent struct {
+	// Component is "webhook".
+	Component string `json:"component"`
+	// Instance is the pod name.
+	Instance string `json:"instance"`
+	// Version is the tag of the component's image (sha256:<12 hex> for a digest-only image).
+	Version string `json:"version"`
 }
 
 // ContainerChange is the before/after of one container in an event.

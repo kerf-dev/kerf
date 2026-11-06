@@ -175,6 +175,14 @@ export const useInstallSnippet = (
     enabled: !!cluster,
   })
 
+/** Component versions and the update check (Admin → Maintenance, WO-33). */
+export const useMaintenance = () =>
+  useQuery({
+    queryKey: ['admin', 'maintenance'],
+    queryFn: () => unwrap(api.GET('/v1/admin/maintenance')),
+    refetchInterval: 60_000,
+  })
+
 /**
  * Clusters whose policies come only from Git (`policySource: git`, D-022): the hub sends them no
  * policies, so policy edits (defaults, policies, overrides) do not reach them and are shown read-only.
@@ -356,6 +364,8 @@ export const writes = {
         body: { reason: v.reason },
       }),
     ),
+  checkForUpdate: () => unwrap(api.POST('/v1/admin/maintenance/update-check')),
+
   testDatasource: (v: { id: string; binding?: MetricsBinding }) =>
     unwrap(
       api.POST('/v1/admin/datasources/{datasourceId}/test', {

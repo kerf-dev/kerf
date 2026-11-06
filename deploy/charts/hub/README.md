@@ -68,7 +68,8 @@ the table above.
 | `replicaCount`, `updateStrategy`, `podDisruptionBudget`, `autoscaling`, `topologySpread` | 2, RollingUpdate, on (>1 pod), off, on (>1 pod) | replicas elect a leader on Postgres: only the leader runs the recommender, readiness checks and sweeps; every replica serves the API |
 | `serviceAccount.{create,name,annotations,automountServiceAccountToken}` | true, release name, –, false | IRSA / Pod Identity annotations |
 | `startupProbe.{enabled,periodSeconds,failureThreshold}` | on, 5, 120 | migrations run before the hub listens (10 minutes) |
-| `ingress`, `networkPolicy`, `serviceMonitor`, `prometheusRule`, `dashboards` | off | ALB example in values.yaml; alerts (agent offline, readiness blocking, recommender failing / stale, no leader, webhook errors, pricing stale); Grafana dashboard ConfigMaps (`grafana_dashboard: "1"`) |
+| `ingress`, `networkPolicy`, `serviceMonitor`, `prometheusRule`, `dashboards` | off | ALB example in values.yaml; alerts (agent offline, readiness blocking, recommender failing / stale, no leader, webhook errors, pricing stale, update available); Grafana dashboard ConfigMaps (`grafana_dashboard: "1"`) |
+| `updateCheck.enabled`, `.interval`, `.url` | `true`, `24h`, GitHub releases API of kerf-dev/kerf | the leader checks for a newer stable Kerf release (Admin → Maintenance, `kerf_update_available`); an unauthenticated GET that sends nothing about the installation. `false` for air-gapped sites; a proxy via `extraEnv` `HTTPS_PROXY` |
 
 Every production feature is switched on in `ci/values-prod.yaml` (`make charts-lint`). Names shared by
 all component charts: [deploy/charts/README.md](../README.md#value-names-shared-by-the-component-charts).

@@ -9,7 +9,7 @@ E2E_LOG            ?= $(ROOT)/bin/e2e.log
 E2E_JSON           ?= $(ROOT)/bin/e2e.json
 # Smoke tier (WO-30): one scenario per area (audit, in-place apply, webhook, rollback, admin
 # policy, readiness), for pull requests.
-E2E_SMOKE_TESTS    ?= TestAudit|TestInPlaceCPU|TestWebhook|TestRollback|TestAdminPolicy|TestReadiness
+E2E_SMOKE_TESTS    ?= TestAudit|TestInPlaceCPU|TestWebhook|TestRollback|TestAdminPolicy|TestReadiness|TestMaintenance
 E2E_SPOKE1_CONTEXT ?= k3d-ro-spoke-1
 E2E_SPOKE2_CONTEXT ?= k3d-ro-spoke-2
 export E2E_SPOKE1_CONTEXT E2E_SPOKE2_CONTEXT

@@ -62,6 +62,32 @@ type Config struct {
 	History     HistoryConfig     `json:"history"`
 	Onboarding  OnboardingConfig  `json:"onboarding"`
 	HA          HAConfig          `json:"ha"`
+	UpdateCheck UpdateCheckConfig `json:"updateCheck"`
+	Maintenance MaintenanceConfig `json:"maintenance"`
+}
+
+// UpdateCheckConfig configures the check for a newer Kerf release (WO-33, Admin -> Maintenance).
+// The leader reads the public GitHub releases of kerf-dev/kerf every Interval; nothing about the
+// installation is sent. Turn it off for air-gapped sites (chart value hub.updateCheck.enabled).
+type UpdateCheckConfig struct {
+	// Enabled (default true).
+	Enabled *bool `json:"enabled"`
+	// Interval between checks (default 24h, minimum 10m); a random delay of up to a tenth of it
+	// (at most 1h) is added.
+	Interval Duration `json:"interval"`
+	// URL is the releases API (default https://api.github.com/repos/kerf-dev/kerf/releases); a
+	// mirror or a test server.
+	URL string `json:"url"`
+}
+
+// On reports whether the check is enabled.
+func (u UpdateCheckConfig) On() bool { return u.Enabled == nil || *u.Enabled }
+
+// MaintenanceConfig is set by the hub chart for the Maintenance page and its upgrade commands.
+type MaintenanceConfig struct {
+	ChartVersion     string `json:"chartVersion"`
+	ReleaseName      string `json:"releaseName"`
+	ReleaseNamespace string `json:"releaseNamespace"`
 }
 
 // HAConfig tunes running several hub replicas on one database (WO-18a, D-028). The defaults
@@ -305,6 +331,7 @@ func DefaultConfig() Config {
 		History:           HistoryConfig{FullResolution: Duration(7 * 24 * time.Hour), Retention: Duration(90 * 24 * time.Hour)},
 		Onboarding:        OnboardingConfig{CheckInterval: Duration(time.Hour), AgentPullInterval: Duration(time.Minute)},
 		HA:                HAConfig{LeaderRetry: Duration(5 * time.Second), LeaderCheck: Duration(2 * time.Second), RecomputePoll: Duration(2 * time.Second)},
+		UpdateCheck:       UpdateCheckConfig{Interval: Duration(24 * time.Hour)},
 	}
 }
 
@@ -343,6 +370,9 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if _, err := cfg.RecommenderConfig(); err != nil {
 		return cfg, err
+	}
+	if cfg.UpdateCheck.Interval.D() < 10*time.Minute {
+		return cfg, fmt.Errorf("updateCheck.interval must be at least 10m (got %s)", cfg.UpdateCheck.Interval.D())
 	}
 	return cfg, nil
 }

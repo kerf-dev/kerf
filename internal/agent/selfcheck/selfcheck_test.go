@@ -496,3 +496,53 @@ func TestGeneratedCRDsCurrent(t *testing.T) {
 		}
 	}
 }
+
+func TestImageVersion(t *testing.T) {
+	tests := []struct{ image, want string }{
+		{"ghcr.io/kerf-dev/kerf/webhook:0.2.0", "0.2.0"},
+		{"k3d-ro-registry:5005/kerf/webhook:dev-abc123", "dev-abc123"},
+		{"123456789012.dkr.ecr.eu-west-1.amazonaws.com/kerf/webhook:0.2.0@sha256:0123456789abcdef0123", "0.2.0"},
+		{"registry:5000/kerf/webhook@sha256:0123456789abcdef0123", "sha256:0123456789ab"},
+		{"registry:5000/kerf/webhook", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := ImageVersion(tt.image); got != tt.want {
+			t.Errorf("ImageVersion(%q) = %q, want %q", tt.image, got, tt.want)
+		}
+	}
+}
+
+// The webhook pods behind the Service are reported with their image tags (WO-33).
+func TestWebhookComponents(t *testing.T) {
+	e := healthyEnv(t)
+	es := e.objs[3].(*discoveryv1.EndpointSlice)
+	notReady := false
+	es.Endpoints = []discoveryv1.Endpoint{
+		{Addresses: []string{"10.0.0.2"}, TargetRef: &corev1.ObjectReference{Kind: "Pod", Name: "webhook-b"}},
+		{Addresses: []string{"10.0.0.1"}, TargetRef: &corev1.ObjectReference{Kind: "Pod", Name: "webhook-a"}},
+		{Addresses: []string{"10.0.0.3"}, TargetRef: &corev1.ObjectReference{Kind: "Pod", Name: "webhook-gone"}, Conditions: discoveryv1.EndpointConditions{Ready: &notReady}},
+	}
+	e.objs = append(e.objs,
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "kerf", Name: "webhook-a"},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "webhook", Image: "ghcr.io/kerf-dev/kerf/webhook:0.2.0"}}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "kerf", Name: "webhook-b"},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "sidecar", Image: "x:1"}, {Name: "webhook", Image: "ghcr.io/kerf-dev/kerf/webhook:0.1.0"}}}},
+	)
+	res := e.checker(t).Run(context.Background())
+	want := []hubclient.AgentComponent{
+		{Component: "webhook", Instance: "webhook-a", Version: "0.2.0"},
+		{Component: "webhook", Instance: "webhook-b", Version: "0.1.0"},
+		{Component: "webhook", Instance: "webhook-gone", Version: ""},
+	}
+	if !reflect.DeepEqual(res.Components, want) {
+		t.Errorf("components %+v, want %+v", res.Components, want)
+	}
+
+	// Not installed: an empty list (none), not nil (unknown).
+	e = healthyEnv(t)
+	e.objs = append(e.objs[:2], e.objs[4:]...)
+	if res := e.checker(t).Run(context.Background()); res.Components == nil || len(res.Components) != 0 {
+		t.Errorf("no webhook: components %#v", res.Components)
+	}
+}

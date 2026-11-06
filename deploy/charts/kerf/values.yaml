@@ -89,6 +89,10 @@ hub:
   #   prometheusRule: {enabled: true, kind: PrometheusRule}       # or VMRule
   #   dashboards:     {enabled: true, namespace: monitoring}      # Grafana sidecar ConfigMaps
 
+  # Daily check for a newer stable Kerf release (Admin -> Maintenance): a plain GET of the public
+  # GitHub releases API, nothing about this installation is sent. Air-gapped sites: enabled: false.
+  # updateCheck: {enabled: true, interval: 24h}
+
 # ---------------------------------------------------------------------------------------------------
 # web: the UI (nginx, non-root on 8080) (mode hub, all)
 web:

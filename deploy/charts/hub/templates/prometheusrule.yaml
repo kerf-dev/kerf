@@ -101,6 +101,17 @@ spec:
             summary: "kerf pricing has not refreshed for {{ $a.pricingStale.staleAfter }}"
             description: "The pricing service has had no successful refresh for {{ $a.pricingStale.staleAfter }} (or is not running): cost series (kerf_node_hourly_cost_usd, ...) go stale and savings fall back to the default rates."
         {{- end }}
+        {{- if and (dig "updateAvailable" "enabled" false $a) .Values.updateCheck.enabled }}
+        - alert: KerfUpdateAvailable
+          expr: max by (current, latest) (kerf_update_available) == 1
+          for: {{ $a.updateAvailable.for }}
+          labels:
+            severity: {{ $a.updateAvailable.severity }}
+            {{- with $pr.additionalLabels }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: "Kerf {{`{{ $labels.latest }}`}} is available (running {{`{{ $labels.current }}`}})"
+            description: "A newer stable Kerf release exists. Admin -> Maintenance in the web UI shows the release notes and the helm upgrade commands (docs/install/eks.md section 8)."
+        {{- end }}
         {{- with $pr.additionalRules }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

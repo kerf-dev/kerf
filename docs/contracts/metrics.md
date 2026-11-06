@@ -132,10 +132,20 @@ two series have no `cluster` label because they describe the hub process, not a 
 | `kerf_hub_leader` | gauge | – | 1 while this replica is the leader, 0 otherwise. `sum(kerf_hub_leader)` is 1 in a healthy hub (0 during a failover, at most 15 s). |
 | `kerf_hub_leader_transitions_total` | counter | – | changes of `kerf_hub_leader` on this replica (acquired or lost); resets on restart, use `increase()`. |
 
+### Update check
+
+The hub's check for a newer Kerf release ([Maintenance page](../maintenance.md)). Leader only, no `cluster` label.
+
+| Series | Type | Extra labels | Meaning |
+|---|---|---|---|
+| `kerf_update_available` | gauge | `current`, `latest` | 1 when the latest stable release (`latest`) is newer than the hub's version (`current`), 0 when up to date. Absent when `hub.updateCheck.enabled` is false, before the first successful check, and for development builds. A failed check keeps the last result. |
+
+Alert example: `max by (current, latest) (kerf_update_available) == 1` (the chart's `KerfUpdateAvailable`, severity `info`).
+
 **Which replica exports what.** Series computed from the database are exported by the leader
 only, so N replicas never export N copies: every `kerf_recommendation_*`, `kerf_workload_mode`,
 `kerf_workload_phase` and `kerf_cluster_readiness*` series, and `kerf_recommender_last_success_timestamp_seconds`,
-`kerf_recommender_pricing_fallback`, `kerf_recommender_recommendations`. After a failover they come
+`kerf_recommender_pricing_fallback`, `kerf_recommender_recommendations`, `kerf_update_available`. After a failover they come
 from the new leader (they keep their values; only the scrape's pod label changes). Per-process
 series are exported by every replica and add up across replicas: `kerf_actions_total` (events stored
 by that replica), `kerf_hub_http_*`, `kerf_recommender_runs_total`, `kerf_recommender_run_duration_seconds`.
