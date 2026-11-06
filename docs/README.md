@@ -10,6 +10,7 @@ with the [README](../README.md) for the overview; this page lists everything els
 |---|---|
 | [Install on Amazon EKS](install/eks.md) | Prerequisites, AWS resources, the hub and workload clusters, readiness, turning on `auto-patch`, Argo CD, upgrade, uninstall, troubleshooting |
 | [Example values](../deploy/examples/eks) | `values-hub.yaml`, `values-spoke.yaml`, IAM policies, External Secrets, an Argo CD ApplicationSet |
+| [The `kerf` command-line tool](cli.md) | `kerf report`: recommendations and savings from your existing Prometheus, without installing the hub; install, authentication (including Amazon Managed Service for Prometheus), prices |
 | [Helm chart reference](../deploy/charts/kerf/README.md) | `global.mode`, the umbrella values, opt-in features |
 | [Component charts](../deploy/charts) | Values of `hub`, `web`, `pricing`, `agent`, `webhook` ([hub](../deploy/charts/hub/README.md), [agent](../deploy/charts/agent/README.md)) |
 | [Grafana dashboards](../dashboards/README.md) | Overview, opportunities, automation and workload dashboards |
