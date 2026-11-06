@@ -32,6 +32,23 @@ devSeed:
 # Plain HTTP on localhost:18080 / the web's nginx: the cookie cannot be Secure.
 auth:
   cookieSecure: false
+  # Sign-in with Dex. The e2e suite (TestOIDCSignIn) deploys Dex in namespace e2e-oidc while it runs;
+  # otherwise the sign-in page's "Sign in with Dex" answers that the provider cannot be reached.
+  # Development only: the client secret is in Git.
+  oidc:
+    enabled: true
+    name: Dex
+    issuer: http://dex.e2e-oidc.svc.cluster.local:5556/dex
+    clientID: kerf
+    redirectURL: http://localhost:19090/v1/auth/oidc/callback
+    scopes: [openid, profile, email, groups, offline_access]
+    roleMappings:
+      - {group: kerf-admins, role: admin}
+      - {group: kerf-operators, role: operator}
+      - {group: kerf-viewers, role: viewer}
+    refreshInterval: 1m
+    clientSecret:
+      value: ro-dev-oidc-3f9a6c1e8b2d7054e1a9c6b3
 
 config:
   prometheusURL: http://victoria-metrics.monitoring.svc:8428

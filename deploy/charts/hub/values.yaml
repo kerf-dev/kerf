@@ -196,6 +196,47 @@ auth:
         version: ""
       refreshInterval: ""
       secretStoreRef: {}
+  # Sign-in with a password. enabled: false keeps it only for the break-glass admin (breakGlassUser,
+  # default bootstrapAdmin.username), for when the identity provider is down; needs oidc.enabled.
+  local:
+    enabled: true
+    breakGlassUser: ""
+  # Sign-in with an OpenID Connect provider (Okta, Microsoft Entra ID, Google, Keycloak, Dex, ...):
+  # authorization code flow with PKCE. Settings per provider: docs/auth.md.
+  oidc:
+    enabled: false
+    name: ""                # the sign-in button: "Sign in with <name>" (default SSO)
+    issuer: ""              # e.g. https://example.okta.com
+    clientID: ""
+    # This UI's callback, registered with the provider: https://<UI host>/v1/auth/oidc/callback
+    redirectURL: ""
+    # Default: openid, profile, email, offline_access (the refresh token lets the hub re-read the
+    # groups). Dex, Keycloak: add groups.
+    scopes: []
+    authParams: {}          # extra authorization parameters, e.g. Google: {access_type: offline, prompt: consent}
+    groupsClaim: groups
+    usernameClaim: email    # users are named after this claim (lowercased)
+    # Groups to roles; the highest matching role wins. e.g.
+    #   - {group: platform-admins, role: admin}
+    #   - {group: platform, role: operator}
+    #   - {group: engineering, role: viewer}
+    roleMappings: []
+    defaultRole: ""         # role when no group matches; "" denies the sign-in
+    refreshInterval: 5m     # how often a session re-reads the groups (a removed group ends the role)
+    # The client secret: existingSecret/existingSecretKey, externalSecret (Secret <release>-oidc), or
+    # value (development only; rendered into Secret <release>-oidc).
+    clientSecret:
+      existingSecret: ""
+      existingSecretKey: client-secret
+      value: ""
+      externalSecret:
+        enabled: false
+        remoteRef:
+          key: ""           # e.g. kerf/hub/oidc
+          property: ""      # e.g. clientSecret (JSON secret); empty = the whole secret string
+          version: ""
+        refreshInterval: ""
+        secretStoreRef: {}
 
 logLevel: info
 

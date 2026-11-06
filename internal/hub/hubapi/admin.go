@@ -70,6 +70,7 @@ const (
 	CodeInvalidCredentials   = "invalid_credentials"
 	CodeAccountLocked        = "account_locked"
 	CodeRateLimited          = "rate_limited"
+	CodeIdPManaged           = "idp_managed"
 	CodeCSRFInvalid          = "csrf_invalid"
 	CodeAdminRequired        = "admin_required"
 	CodePreconditionRequired = "precondition_required"
@@ -204,6 +205,9 @@ type Actor struct {
 	Type string `json:"type"`
 	Name string `json:"name"`
 	Role string `json:"role,omitempty"`
+	// Subject and Email identify a user signed in with the identity provider (source oidc).
+	Subject string `json:"subject,omitempty"`
+	Email   string `json:"email,omitempty"`
 }
 
 // ChangeReason is the body of the DELETE endpoints.
@@ -247,6 +251,30 @@ type User struct {
 	LockedUntil        *time.Time `json:"lockedUntil,omitempty"`
 	DeletedAt          *time.Time `json:"deletedAt,omitempty"`
 	Version            int        `json:"version"`
+	// Source: UserSourceLocal (password) or UserSourceOIDC (signs in with the identity provider; the
+	// role comes from its groups). Email is set for IdP users.
+	Source string `json:"source,omitempty"`
+	Email  string `json:"email,omitempty"`
+}
+
+// User sources.
+const (
+	UserSourceLocal = "local"
+	UserSourceOIDC  = "oidc"
+)
+
+// AuthProviders is the response of GET /v1/auth/providers: how the sign-in page offers to sign in.
+type AuthProviders struct {
+	// Local: everyone may sign in with a password. false: only the break-glass admin can.
+	Local bool `json:"local"`
+	// OIDC is set when sign-in with the identity provider is configured.
+	OIDC *OIDCProvider `json:"oidc,omitempty"`
+}
+
+// OIDCProvider is the identity provider offered on the sign-in page.
+type OIDCProvider struct {
+	Name     string `json:"name"`
+	LoginURL string `json:"loginURL"`
 }
 
 // UserList is the response of GET /v1/admin/users.

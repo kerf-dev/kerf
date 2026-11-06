@@ -331,6 +331,17 @@
                     }
                   }
                 },
+                "oidc": {
+                  "properties": {
+                    "clientSecret": {
+                      "properties": {
+                        "value": {
+                          "$ref": "#/definitions/empty"
+                        }
+                      }
+                    }
+                  }
+                },
                 "users": {
                   "type": "array",
                   "items": {

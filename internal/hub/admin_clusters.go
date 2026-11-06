@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -511,6 +512,9 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	if in.Role != nil && !validEnum(w, r, "role", *in.Role, hubapi.UserRoles...) {
 		return
 	}
+	if in.Role != nil && !s.localUser(w, r, "The role of an identity-provider user comes from its groups (auth.oidc.roleMappings).") {
+		return
+	}
 	u, err := s.Store.UpdateUser(r.Context(), r.PathValue("username"), ver, in, s.change(r, hubapi.ActionUserUpdated, in.Reason))
 	if err != nil {
 		s.storeError(w, r, err, "user")
@@ -543,6 +547,9 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &in) || !validReason(w, r, in.Reason) {
 		return
 	}
+	if !s.localUser(w, r, "An identity-provider user has no Kerf password: it signs in with the provider.") {
+		return
+	}
 	out := hubapi.PasswordResetResult{MustChangePassword: true}
 	pw := in.Password
 	if pw == "" {
@@ -564,6 +571,23 @@ func (s *Server) resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, out)
+}
+
+// localUser answers 409 idp_managed (and false) when the {username} of the request signs in with
+// the identity provider.
+func (s *Server) localUser(w http.ResponseWriter, r *http.Request, detail string) bool {
+	u, err := s.Store.GetUser(r.Context(), r.PathValue("username"))
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return true // the store answers 404
+	case err != nil:
+		s.internal(w, r, err)
+		return false
+	case u.Source == hubapi.UserSourceOIDC:
+		writeProblem(w, r, http.StatusConflict, hubapi.CodeIdPManaged, detail)
+		return false
+	}
+	return true
 }
 
 // ---- config audit ----

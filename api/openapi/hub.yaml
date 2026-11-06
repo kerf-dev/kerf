@@ -790,6 +790,91 @@ paths:
           description: Logged out.
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/auth/providers:
+    get:
+      tags: [auth]
+      operationId: getAuthProviders
+      security: []
+      summary: How the sign-in page offers to sign in
+      description: |
+        Whether every local user may sign in with a password (`local`; false = only the
+        break-glass admin) and the identity provider, when one is configured.
+      responses:
+        '200':
+          description: The sign-in options.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthProviders'
+  /v1/auth/oidc/login:
+    get:
+      tags: [auth]
+      operationId: oidcLogin
+      security: []
+      summary: Start a sign-in with the identity provider
+      description: |
+        Redirects the browser to the provider (OpenID Connect authorization code flow with PKCE,
+        `state` and `nonce`) and sets the `kerf_oidc` cookie (`HttpOnly; SameSite=Lax;
+        Path=/v1/auth/oidc`, 10 minutes) that binds the sign-in to this browser. When the provider
+        cannot be reached it redirects to `/login?error=oidc_unavailable` instead.
+      parameters:
+        - name: next
+          in: query
+          description: Path to return to after sign-in (same site only; anything else gives `/`).
+          schema:
+            type: string
+      responses:
+        '302':
+          description: To the provider, or to the sign-in page with an error.
+          headers:
+            Location:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /v1/auth/oidc/callback:
+    get:
+      tags: [auth]
+      operationId: oidcCallback
+      security: []
+      summary: The provider's redirect back after sign-in
+      description: |
+        Needs the `kerf_oidc` cookie of the browser that started the sign-in and its one-time
+        `state`. Exchanges the code (with the PKCE verifier), verifies the ID token and its nonce,
+        maps the groups to a role, creates or updates the user and starts a session (cookie
+        `kerf_session`, as `POST /v1/auth/login`), then redirects to `next`. On failure it redirects
+        to `/login?error=<code>`: `oidc_expired` (unknown, used or expired state; another browser),
+        `oidc_failed` (the provider refused or the exchange failed), `oidc_denied` (no mapped group
+        and no default role, or a disabled user), `oidc_conflict` (the username belongs to a local
+        user), `oidc_unavailable`.
+      parameters:
+        - name: code
+          in: query
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+        - name: error
+          in: query
+          description: Set by the provider when the sign-in failed there.
+          schema:
+            type: string
+      responses:
+        '302':
+          description: To `next` with a session cookie, or to the sign-in page with an error.
+          headers:
+            Location:
+              schema:
+                type: string
+            Set-Cookie:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
   /v1/me:
     get:
       tags: [auth]
@@ -840,6 +925,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
   /v1/admin/settings:
@@ -2095,6 +2182,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '404':
           $ref: '#/components/responses/UserNotFound'
   /v1/audit/config:
@@ -4023,8 +4112,11 @@ components:
       enum: [agent, ui, admin, pricing]
     Username:
       type: string
-      pattern: '^[a-z0-9][a-z0-9._-]{1,62}$'
-      examples: [alice]
+      description: |
+        Local users: `^[a-z0-9][a-z0-9._-]{1,62}$`. Users of the identity provider are named after
+        their e-mail address (lowercased), so they may also contain `@` and `+`.
+      pattern: '^[a-z0-9][a-z0-9._@+-]{1,126}$'
+      examples: [alice, alice@example.com]
     Password:
       type: string
       description: At least 8 characters; at most 72 bytes (bcrypt).
@@ -4043,8 +4135,9 @@ components:
     Actor:
       type: object
       description: |
-        Who made a change. `user`: a local user (`name` = username). `token`: an API token
-        (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`).
+        Who made a change. `user`: a user (`name` = username). `token`: an API token
+        (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc`
+        for the users the identity provider creates and the roles it changes).
       required: [type, name]
       properties:
         type:
@@ -4055,6 +4148,12 @@ components:
         role:
           type: string
           description: The user role or token role at the time of the change.
+        subject:
+          type: string
+          description: A user signed in with the identity provider - its subject (`sub`) there.
+        email:
+          type: string
+          description: A user signed in with the identity provider - its e-mail there.
     ChangeReason:
       type: object
       required: [reason]
@@ -4071,6 +4170,27 @@ components:
         password:
           type: string
           maxLength: 72
+    AuthProviders:
+      type: object
+      required: [local]
+      properties:
+        local:
+          type: boolean
+          description: Every local user may sign in with a password; false = only the break-glass admin.
+        oidc:
+          $ref: '#/components/schemas/OIDCProvider'
+    OIDCProvider:
+      type: object
+      required: [name, loginURL]
+      properties:
+        name:
+          type: string
+          description: 'Shown as "Sign in with <name>".'
+          examples: [Okta]
+        loginURL:
+          type: string
+          description: Where the browser starts the sign-in (add `?next=<path>`).
+          examples: [/v1/auth/oidc/login]
     Me:
       type: object
       required: [authMethod, role]
@@ -4139,6 +4259,17 @@ components:
         version:
           type: integer
           minimum: 1
+        source:
+          type: string
+          enum: [local, oidc]
+          description: |
+            `local`: signs in with a password. `oidc`: signs in with the identity provider, which
+            created the user at its first sign-in; its role comes from its groups there
+            (`auth.oidc.roleMappings`), so it has no password and its role is not edited here
+            (`409` `idp_managed`).
+        email:
+          type: string
+          description: The e-mail at the identity provider (`oidc` users).
     UserList:
       type: object
       required: [items]

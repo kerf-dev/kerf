@@ -451,7 +451,9 @@ echo $CSRF
 Change the password there (the user menu, top right → *Change password*).
 
 Signing in is always required: give everyone who uses Kerf a user under *Admin → Access → Users*
-(at least `viewer`). See [Sign-in and access](../auth.md).
+(at least `viewer`), or sign people in with your identity provider (`hub.auth.oidc`, with the client secret
+in Secrets Manager as `kerf/hub/oidc`: [Sign in with OpenID Connect](../auth.md#sign-in-with-openid-connect)).
+See [Sign-in and access](../auth.md).
 
 Next, create the `pricing` token, store it in Secrets Manager, and let ESO pick it up. You can also
 create it in the UI under *Admin → Access → Tokens*. A token is shown once.

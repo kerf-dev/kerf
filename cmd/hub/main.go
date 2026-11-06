@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kerf-dev/kerf/internal/hub"
+	"github.com/kerf-dev/kerf/internal/hub/auth"
 	"github.com/kerf-dev/kerf/internal/hub/datasource"
 	"github.com/kerf-dev/kerf/internal/hub/store"
 	"github.com/kerf-dev/kerf/internal/recommender"
@@ -73,6 +74,12 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	metrics.LeaderOnly().MustRegister(srv.Updates)
 	if !cfg.UpdateCheck.On() {
 		log.Info("update check disabled (updateCheck.enabled: false)")
+	}
+	if cfg.Auth.OIDC.Enabled {
+		if srv.OIDC, err = auth.NewOIDC(cfg.Auth.OIDC); err != nil {
+			return err
+		}
+		log.Info("sign-in with OpenID Connect enabled", "provider", cfg.Auth.OIDC.DisplayName(), "issuer", cfg.Auth.OIDC.Issuer)
 	}
 	var cipher *datasource.Cipher
 	if cfg.Onboarding.SecretsKeyFile != "" {

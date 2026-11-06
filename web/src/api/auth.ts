@@ -65,6 +65,19 @@ export function useMe() {
   return q
 }
 
+export const AUTH_PROVIDERS_KEY = ['auth-providers'] as const
+
+/** How the sign-in page offers to sign in (public: answered without a session). */
+export function useAuthProviders() {
+  return useQuery({
+    queryKey: AUTH_PROVIDERS_KEY,
+    queryFn: () => unwrap(api.GET('/v1/auth/providers')),
+    // An older hub without the endpoint: password sign-in only.
+    retry: false,
+    staleTime: 5 * 60_000,
+  })
+}
+
 export interface Auth {
   /** Who the browser is; undefined without a session. */
   me?: Me

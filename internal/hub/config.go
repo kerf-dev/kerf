@@ -10,6 +10,7 @@ import (
 
 	"sigs.k8s.io/yaml"
 
+	"github.com/kerf-dev/kerf/internal/hub/auth"
 	"github.com/kerf-dev/kerf/internal/hub/install"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
@@ -216,6 +217,38 @@ type AuthConfig struct {
 	// BootstrapAdmin is created on a database without users (D-023). The password comes from
 	// PasswordFile (a mounted Secret) or env HUB_BOOTSTRAP_ADMIN_PASSWORD.
 	BootstrapAdmin BootstrapAdmin `json:"bootstrapAdmin"`
+	// Local sign-in with passwords; OIDC sign-in with an OpenID Connect provider (docs/auth.md).
+	Local LocalAuth       `json:"local"`
+	OIDC  auth.OIDCConfig `json:"oidc"`
+}
+
+// LocalAuth configures sign-in with a password.
+type LocalAuth struct {
+	// Enabled (default true). false: only BreakGlassUser may sign in with a password, for when the
+	// identity provider is down; everyone else signs in with OIDC.
+	Enabled *bool `json:"enabled"`
+	// BreakGlassUser is the one local user who can still use a password (default: the bootstrap
+	// admin's username, else "admin").
+	BreakGlassUser string `json:"breakGlassUser"`
+}
+
+// localEnabled reports whether every local user may sign in with a password.
+func (a AuthConfig) localEnabled() bool { return a.Local.Enabled == nil || *a.Local.Enabled }
+
+// breakGlassUser is the local user who may always sign in with a password.
+func (a AuthConfig) breakGlassUser() string {
+	switch {
+	case a.Local.BreakGlassUser != "":
+		return a.Local.BreakGlassUser
+	case a.BootstrapAdmin.Username != "":
+		return a.BootstrapAdmin.Username
+	}
+	return "admin"
+}
+
+// passwordAllowed reports whether username may sign in with a password.
+func (a AuthConfig) passwordAllowed(username string) bool {
+	return a.localEnabled() || username == a.breakGlassUser()
 }
 
 // BootstrapAdmin is the initial admin.
@@ -370,6 +403,12 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if _, err := cfg.RecommenderConfig(); err != nil {
 		return cfg, err
+	}
+	if err := cfg.Auth.OIDC.Validate(); err != nil {
+		return cfg, err
+	}
+	if !cfg.Auth.localEnabled() && !cfg.Auth.OIDC.Enabled {
+		return cfg, fmt.Errorf("auth.local.enabled is false but auth.oidc is not enabled: only %s could sign in", cfg.Auth.breakGlassUser())
 	}
 	if cfg.UpdateCheck.Interval.D() < 10*time.Minute {
 		return cfg, fmt.Errorf("updateCheck.interval must be at least 10m (got %s)", cfg.UpdateCheck.Interval.D())

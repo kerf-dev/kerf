@@ -21,7 +21,7 @@ export function currentScenario(): Scenario {
 /** `localStorage['ro-mock-install'] = 'unconfigured'`: the hub chart lacks the onboarding values (409). */
 export const installUnconfigured = () => readLocal('ro-mock-install') === 'unconfigured'
 
-function readLocal(key: string): string | null {
+export function readLocal(key: string): string | null {
   try {
     return globalThis.localStorage?.getItem(key) ?? null
   } catch {

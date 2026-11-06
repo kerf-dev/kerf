@@ -101,6 +101,11 @@ spec:
               mountPath: /etc/hub/datasource-key
               readOnly: true
             {{- end }}
+            {{- if and .Values.auth.oidc.enabled (include "hub.oidcSecret" .) }}
+            - name: oidc
+              mountPath: /etc/hub/oidc
+              readOnly: true
+            {{- end }}
             {{- if $dbCA }}
             - name: db-ca
               mountPath: /etc/hub/db-ca
@@ -126,6 +131,14 @@ spec:
             items:
               - key: {{ .Values.auth.bootstrapAdmin.existingSecretKey }}
                 path: password
+        {{- end }}
+        {{- if and .Values.auth.oidc.enabled (include "hub.oidcSecret" .) }}
+        - name: oidc
+          secret:
+            secretName: {{ include "hub.oidcSecret" . }}
+            items:
+              - key: {{ .Values.auth.oidc.clientSecret.existingSecretKey }}
+                path: client-secret
         {{- end }}
         {{- if $dsKey }}
         - name: datasource-key
