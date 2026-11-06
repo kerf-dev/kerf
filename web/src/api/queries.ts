@@ -75,6 +75,56 @@ export const useSavingsTrend = (range: TimeRange, groupBy: 'none' | 'cluster' = 
     placeholderData: keepPreviousData,
   })
 
+/** Realized window ending now: 12 months by month, or 30 days by day (UTC buckets). */
+export function realizedWindow(step: 'day' | 'month') {
+  const to = Math.floor(Date.now() / 60_000) * 60_000
+  const d = new Date(to)
+  const from =
+    step === 'month'
+      ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 11, 1)
+      : Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - 29)
+  return { from: new Date(from).toISOString(), to: new Date(to).toISOString() }
+}
+
+/** Realized savings of the fleet (or clusters): released requests x replicas x rates of the time. */
+export const useRealizedSavings = (step: 'day' | 'month', cluster?: string[]) =>
+  useQuery({
+    queryKey: ['realized', step, cluster ?? []],
+    queryFn: () =>
+      unwrap(
+        api.GET('/v1/savings/realized', {
+          params: { query: { step, ...realizedWindow(step), ...(cluster?.length ? { cluster } : {}) } },
+        }),
+      ),
+    placeholderData: keepPreviousData,
+    refetchInterval: 5 * 60_000,
+  })
+
+export const useWorkloadRealized = (id: string, enabled = true) =>
+  useQuery({
+    queryKey: ['realized-workload', id],
+    queryFn: () =>
+      unwrap(
+        api.GET('/v1/workloads/{id}/savings/realized', {
+          params: { path: { id }, query: { step: 'day', ...realizedWindow('day') } },
+        }),
+      ),
+    enabled,
+  })
+
+export const useNodeCostTrend = (cluster: string | undefined, range: TimeRange) =>
+  useQuery({
+    queryKey: ['node-cost', cluster, range],
+    queryFn: () =>
+      unwrap(
+        api.GET('/v1/savings/realized/node-cost', {
+          params: { query: { cluster: cluster!, ...rangeWindow(range) } },
+        }),
+      ),
+    enabled: !!cluster,
+    placeholderData: keepPreviousData,
+  })
+
 export const useAudit = (query: Omit<QueryAuditQuery, 'continue'>) =>
   useInfiniteQuery({
     queryKey: ['audit', query],

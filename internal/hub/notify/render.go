@@ -154,6 +154,10 @@ func (d DigestMessage) realizedLine() string {
 		return ""
 	}
 	s := fmt.Sprintf("Realized savings this week: %s", usd(d.RealizedSavings.PeriodUSD))
+	if t := d.RealizedSavings.Since; t != nil {
+		// The label of the web UI; realized savings are a different quantity than the estimate above.
+		s = fmt.Sprintf("Realized since %s: %s this week", t.UTC().Format("2 Jan 2006"), usd(d.RealizedSavings.PeriodUSD))
+	}
 	if p := d.RealizedSavings.PreviousPeriodUSD; p != nil {
 		s += fmt.Sprintf(" (%s vs the week before)", signedUSD(d.RealizedSavings.PeriodUSD-*p))
 	}

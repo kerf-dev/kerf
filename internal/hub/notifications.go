@@ -17,6 +17,7 @@ import (
 	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 	"github.com/kerf-dev/kerf/internal/hub/notify"
+	"github.com/kerf-dev/kerf/internal/hub/realized"
 	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
@@ -55,7 +56,7 @@ func (s *Server) InitNotifications(ctx context.Context, cipher notify.Sealer, m 
 		Links:     notify.Links{Base: strings.TrimRight(s.Cfg.Notifications.BaseURL, "/")},
 		AllowHTTP: s.Cfg.Notifications.AllowInsecureHTTP, RateLimit: s.Cfg.Notifications.RateLimitPerMinute,
 		Metrics: m, Log: s.Log.With("component", "notify"), Now: s.Now,
-		Digest: &digestSource{s: s},
+		Digest: &digestSource{s: s}, Realized: &realizedSource{sum: s.realizedDB()},
 	}
 	s.Notify = svc
 	return s.syncConfigChannels(ctx, svc)
@@ -511,6 +512,37 @@ func (d *digestSource) Attention(ctx context.Context) ([]notify.Attention, error
 		if len(why) > 0 {
 			out = append(out, notify.Attention{Cluster: c.Name, Reasons: why})
 		}
+	}
+	return out, nil
+}
+
+// realizedSummarizer is the part of realized.DB the digest uses.
+type realizedSummarizer interface {
+	Summary(ctx context.Context, sc realized.Scope, from, to time.Time, bucket string) (*realized.Summary, error)
+}
+
+// realizedSource gives the digest the realized savings of the fleet (docs/realized-savings.md): the
+// week's realized USD, labelled "Realized since <date>", next to the estimate and never added to it.
+type realizedSource struct{ sum realizedSummarizer }
+
+func (r *realizedSource) RealizedSavings(ctx context.Context, from, to time.Time) (*notify.RealizedSavings, error) {
+	cur, err := r.sum.Summary(ctx, realized.Scope{}, from, to, realized.BucketDay)
+	if err != nil {
+		return nil, err
+	}
+	if cur.Since == nil {
+		return nil, nil // nothing was released yet
+	}
+	since := cur.Since.UTC()
+	out := &notify.RealizedSavings{PeriodUSD: cur.InRange.Total(), Since: &since}
+	if since.Before(from) {
+		// Savings existed before this week: the week before is a fair comparison.
+		prev, err := r.sum.Summary(ctx, realized.Scope{}, from.Add(-to.Sub(from)), from, realized.BucketDay)
+		if err != nil {
+			return nil, err
+		}
+		p := prev.InRange.Total()
+		out.PreviousPeriodUSD = &p
 	}
 	return out, nil
 }

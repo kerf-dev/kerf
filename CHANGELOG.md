@@ -48,12 +48,21 @@ First public version.
   or blocked, a cluster losing readiness, automation paused or resumed) to **Slack**, **Microsoft Teams**
   (Workflows webhook) or a **generic webhook** signed with HMAC-SHA256 (`X-Kerf-Signature`, a versioned JSON payload
   documented in `docs/contracts/notifications.md`), routed by rules on event type, cluster and namespace patterns.
-  A weekly digest (day, time and time zone are yours) sums up estimated savings, the top opportunities, the changes
+  A weekly digest (day, time and time zone are yours) sums up estimated savings, the week's realized savings, the top opportunities, the changes
   and the clusters that need attention. Webhook URLs and secrets are encrypted at rest and never returned; the hub
   leader sends with retries and exponential backoff for an hour, a per-channel rate limit, a "Send test" button and
   the last delivery status per channel. Channels can also come from the chart (`hub.notifications`). Metrics
   `kerf_notification_deliveries_total` and `kerf_notification_last_success_timestamp_seconds`, and the alert
   `KerfNotificationDeliveryFailing`.
+- **Realized savings.** What the applied changes actually saved since they were applied: the requests released
+  by every applied change (rollbacks and later increases subtract) × the replicas that ran × the node rates of
+  the time, computed hourly by the hub leader, including changes applied before the upgrade. Shown as
+  "Realized since <date>" on the Overview (total and a monthly chart) and on the workload page, always apart
+  from the estimated savings, which are now labelled "Estimated (if applied)". A node cost trend per cluster
+  draws the hourly node cost and the requested/allocatable ratio next to the released requests (correlated, not
+  caused). New API `GET /v1/savings/realized`, `GET /v1/workloads/{id}/savings/realized` and
+  `GET /v1/savings/realized/node-cost`, metrics `kerf_hub_realized_*` and a Grafana row; the method is in
+  [docs/realized-savings.md](docs/realized-savings.md). Database migration `0016_realized_savings`.
 - **Copy as a patch.** A **Copy as…** menu on the workload page and on the Opportunities bulk bar turns the
   recommended values into a strategic merge patch, a `kubectl patch` command, a Kustomize `patches:` entry or a
   Helm values snippet, for one workload or a selection, so teams that keep their manifests in Git can make the

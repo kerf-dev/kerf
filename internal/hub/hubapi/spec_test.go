@@ -74,6 +74,15 @@ var schemaTypes = map[string]any{
 	"RecomputeAccepted":    RecomputeAccepted{},
 	"Problem":              Problem{},
 
+	// Realized savings
+	"RealizedAmount":   RealizedAmount{},
+	"ReleasedRequests": ReleasedRequests{},
+	"RealizedPoint":    RealizedPoint{},
+	"RealizedCoverage": RealizedCoverage{},
+	"RealizedSavings":  RealizedSavings{},
+	"NodeCostPoint":    NodeCostPoint{},
+	"NodeCostTrend":    NodeCostTrend{},
+
 	// WO-19 admin area
 	"Actor":                      Actor{},
 	"ChangeReason":               ChangeReason{},
@@ -230,6 +239,8 @@ var enumLists = map[string][]string{
 	"NotificationEventType":      NotificationEventTypes,
 	"NotificationDeliveryKind":   NotificationDeliveryKinds,
 	"NotificationDeliveryStatus": NotificationDeliveryStatuses,
+	"RealizedStep":               {RealizedStepDay, RealizedStepMonth},
+	"NodeCostStep":               {NodeCostStepHour, NodeCostStepDay},
 }
 
 func readinessStates() (out []string) {

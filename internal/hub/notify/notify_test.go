@@ -410,3 +410,42 @@ func TestMetricsNilSafe(t *testing.T) {
 	m.count("slack", true, false)
 	m.setLastSuccess(nil)
 }
+
+// The realized line carries the UI's "Realized since <date>" label and stays apart from the estimate.
+func TestRenderRealizedSince(t *testing.T) {
+	since := time.Date(2026, 10, 3, 14, 0, 0, 0, time.UTC)
+	prev := 280.0
+	d := Message{ID: "d2", Kind: KindDigest, Time: time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC), Digest: &DigestMessage{
+		PeriodStart:      time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC),
+		PeriodEnd:        time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC),
+		EstimatedSavings: EstimatedSavings{CurrentUSD: 1234},
+		RealizedSavings:  &RealizedSavings{PeriodUSD: 310, PreviousPeriodUSD: &prev, Since: &since},
+	}}
+	for _, typ := range []string{hubapi.NotificationSlack, hubapi.NotificationTeams} {
+		req, err := Render(typ, d, "", time.Now())
+		if err != nil {
+			t.Fatal(typ, err)
+		}
+		s := string(req.Body)
+		for _, want := range []string{"Realized since 3 Oct 2026: $310 this week", "+$30 vs the week before", "$1,234"} {
+			if !strings.Contains(s, want) {
+				t.Errorf("%s digest lacks %q: %s", typ, want, s)
+			}
+		}
+		// The estimate is never summed with the realized amount.
+		if strings.Contains(s, "$1,544") {
+			t.Errorf("%s digest adds realized to the estimate: %s", typ, s)
+		}
+	}
+	req, err := Render(hubapi.NotificationWebhook, d, "", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wh struct {
+		Digest DigestMessage `json:"digest"`
+	}
+	if err := json.Unmarshal(req.Body, &wh); err != nil || wh.Digest.RealizedSavings == nil || wh.Digest.RealizedSavings.Since == nil ||
+		!wh.Digest.RealizedSavings.Since.Equal(since) || wh.Digest.EstimatedSavings.CurrentUSD != 1234 {
+		t.Errorf("webhook digest: %v %s", err, req.Body)
+	}
+}

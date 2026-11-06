@@ -114,6 +114,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET /v1/workloads/{id}/usage", &accessViewer, s.getWorkloadUsage},
 		{"GET /v1/workloads/{id}/history", &accessViewer, s.getWorkloadHistory},
 		{"GET /v1/savings/trend", &accessViewer, s.getSavingsTrend},
+		{"GET /v1/savings/realized", &accessViewer, s.getRealizedSavings},
+		{"GET /v1/savings/realized/node-cost", &accessViewer, s.getNodeCostTrend},
+		{"GET /v1/workloads/{id}/savings/realized", &accessViewer, s.getWorkloadRealizedSavings},
 		{"POST /v1/admin/recompute", &accessAdmin, s.recompute},
 		// Auth.
 		{"POST /v1/auth/login", nil, s.login},

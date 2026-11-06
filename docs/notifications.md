@@ -48,7 +48,8 @@ events from before the first rule existed.
 On the day and at the time you choose (in your time zone), the digest goes to the channels you choose:
 
 - **Estimated savings** per month, and the change since last week;
-- **Realized savings** of the week, when the hub has that data;
+- **Realized savings** of the week, labelled "Realized since \<date\>" like the Overview and shown apart from the
+  estimate (see [Realized savings](realized-savings.md)); left out until a change has released requests;
 - the **top five opportunities**;
 - **changes** applied, rolled back and failed;
 - **clusters that need attention**: a silent agent, readiness below *Automation ready*, paused automation.

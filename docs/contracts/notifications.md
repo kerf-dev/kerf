@@ -100,7 +100,7 @@ the surplus waits.
     "periodStart": "2026-11-02T08:00:00Z",
     "periodEnd": "2026-11-09T08:00:00Z",
     "estimatedSavings": {"currentUSD": 1234, "previousUSD": 1000, "changeUSD": 234},
-    "realizedSavings": {"periodUSD": 310, "previousPeriodUSD": 280},
+    "realizedSavings": {"periodUSD": 310, "previousPeriodUSD": 280, "since": "2026-10-03T14:00:00Z"},
     "topOpportunities": [
       {"cluster": "prod-eu", "namespace": "payments", "kind": "Deployment", "name": "checkout", "monthlySavingsUSD": 410, "link": "https://…"}
     ],
@@ -112,7 +112,11 @@ the surplus waits.
 ```
 
 `estimatedSavings` are USD per month for the whole fleet now and a week ago (`previousUSD` and `changeUSD` are
-absent without history). `realizedSavings` is absent when the hub has no realized-savings data.
+absent without history). `realizedSavings` is what the applied changes actually saved during the week (see
+[realized-savings.md](../realized-savings.md)); `since` is when the first of them started to save, and the chat
+messages label the figure "Realized since \<date\>". It is a different quantity than `estimatedSavings` and is never
+added to it. `previousPeriodUSD` is absent when the savings began inside the week. The whole field is absent until
+some change has released requests.
 `topOpportunities` has at most five workloads. `attention` lists the clusters whose agent is silent, whose readiness
 is below *Automation ready*, or whose automation is paused; it is empty when all is well.
 

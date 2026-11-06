@@ -117,6 +117,8 @@ type EstimatedSavings struct {
 type RealizedSavings struct {
 	PeriodUSD         float64  `json:"periodUSD"`
 	PreviousPeriodUSD *float64 `json:"previousPeriodUSD,omitempty"`
+	// Since is when the first applied change started to save (the "Realized since <date>" of the UI).
+	Since *time.Time `json:"since,omitempty"`
 }
 
 // Opportunity is a workload with a large estimated saving.

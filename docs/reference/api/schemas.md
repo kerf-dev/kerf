@@ -115,13 +115,14 @@ stale (reason `RecommendationStale`) and waits for the next run.
 | `recommended` | [Resources](schemas.md#resources), required |  |  |
 | `removeLimits` | array of ResourceName (enum) |  | Resources whose limit should be removed. |
 | `riskFlags` | array of RiskFlag (enum) |  |  |
-| `monthlySavingsUSD` | [Savings](schemas.md#savings) |  | Estimated monthly savings in USD: (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. |
+| `monthlySavingsUSD` | [Savings](schemas.md#savings) |  | Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized amounts (`RealizedAmount`). |
 | `explanation` | [ContainerExplanation](schemas.md#containerexplanation) |  | Why the values were recommended. Only returned by `GET /v1/workloads/{id}`. |
 
 ## Savings { #savings }
 
-Estimated monthly savings in USD: (current - recommended request) x hourly rate x average
-replicas x 730 h. Negative for increases.
+Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x
+hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized
+amounts (`RealizedAmount`).
 
 | Field | Type | Constraints | Description |
 |---|---|---|---|
@@ -153,7 +154,7 @@ replicas x 730 h. Negative for increases.
 | `containers` | array of [ContainerRecommendation](schemas.md#containerrecommendation), required | min items 1 |  |
 | `confidence` | number, required | min 0; max 1 |  |
 | `riskFlags` | array of RiskFlag (enum), required |  | Union of the containers' flags plus workload-level flags. |
-| `monthlySavingsUSD` | [Savings](schemas.md#savings), required |  | Estimated monthly savings in USD: (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. |
+| `monthlySavingsUSD` | [Savings](schemas.md#savings), required |  | Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized amounts (`RealizedAmount`). |
 | `dataCoverage` | [DataCoverage](schemas.md#datacoverage), required |  |  |
 | `pricing` | [RecommendationPricing](schemas.md#recommendationpricing) |  | Rates used for `monthlySavingsUSD`. `source` is `metrics` when they come from the pricing series (`kerf_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when the cluster had no pricing series and the hub's configured fallback rate was used. Absent on recommendations computed before the field existed. |
 | `hpa` | [HPACoordination](schemas.md#hpacoordination) |  | HPA coordination (lifts). Present when the workload has a CPU- or memory-utilization HPA (risk flag `hpa-coupled`). The HPA's utilization is the pod's usage over the sum of its containers' requests of `metric`, so changing those requests changes when it scales. With `recommendedTarget`, the recommended requests of `metric` and that target keep `usage / (sum of requests x target)` unchanged: the agent may apply both in one change (rollout) and the HPA scales as before. The target stays within 40-90 % (or the current target if it is already outside); the requests were adjusted to keep it there. Without `recommendedTarget` (`skipReason` set) the requests of `metric` must not be changed by the agent. |
@@ -441,7 +442,7 @@ the last 24 h. Cores for CPU, bytes for memory.
 | `workloadsByPhase` | map of integer |  |  |
 | `cpu` | [ResourceTotals](schemas.md#resourcetotals), required |  | Sums over workloads (per-pod value x average replicas). `used` is the average usage over the last 24 h. Cores for CPU, bytes for memory. |
 | `memory` | [ResourceTotals](schemas.md#resourcetotals), required |  | Sums over workloads (per-pod value x average replicas). `used` is the average usage over the last 24 h. Cores for CPU, bytes for memory. |
-| `monthlySavingsUSD` | [Savings](schemas.md#savings), required |  | Estimated monthly savings in USD: (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. |
+| `monthlySavingsUSD` | [Savings](schemas.md#savings), required |  | Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized amounts (`RealizedAmount`). |
 | `lastRecommenderRunAt` | string (date-time) |  | End of the last recommender run that covered these workloads. |
 
 ## ClusterSummary { #clustersummary }
@@ -456,7 +457,7 @@ the last 24 h. Cores for CPU, bytes for memory.
 | `workloadsByPhase` | map of integer |  |  |
 | `cpu` | [ResourceTotals](schemas.md#resourcetotals), required |  | Sums over workloads (per-pod value x average replicas). `used` is the average usage over the last 24 h. Cores for CPU, bytes for memory. |
 | `memory` | [ResourceTotals](schemas.md#resourcetotals), required |  | Sums over workloads (per-pod value x average replicas). `used` is the average usage over the last 24 h. Cores for CPU, bytes for memory. |
-| `monthlySavingsUSD` | [Savings](schemas.md#savings), required |  | Estimated monthly savings in USD: (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. |
+| `monthlySavingsUSD` | [Savings](schemas.md#savings), required |  | Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized amounts (`RealizedAmount`). |
 | `lastRecommenderRunAt` | string (date-time) |  | End of the last recommender run that covered these workloads. |
 | `cluster` | string, required | pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`; example `ro-spoke-1` |  |
 
@@ -515,7 +516,7 @@ Recommendation fields are absent when the workload has no recommendation yet.
 | `containers` | array of [ContainerRecommendation](schemas.md#containerrecommendation) |  |  |
 | `confidence` | number | min 0; max 1 |  |
 | `riskFlags` | array of RiskFlag (enum) |  |  |
-| `monthlySavingsUSD` | [Savings](schemas.md#savings) |  | Estimated monthly savings in USD: (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. |
+| `monthlySavingsUSD` | [Savings](schemas.md#savings) |  | Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized amounts (`RealizedAmount`). |
 
 ## WorkloadList { #workloadlist }
 
@@ -618,6 +619,105 @@ Type: array of object. min items 2; max items 2.
 | `series` | array of object, required |  |  |
 | `series[].cluster` | string |  | Absent for the fleet series (`groupBy=none`). |
 | `series[].points` | array of [SavingsPoint](schemas.md#savingspoint), required |  |  |
+
+## RealizedStep { #realizedstep }
+
+Bucket size of a realized series (UTC).
+
+Type: string. one of `day`, `month`.
+
+## NodeCostStep { #nodecoststep }
+
+Bucket size of a node cost trend (UTC).
+
+Type: string. one of `hour`, `day`.
+
+## RealizedAmount { #realizedamount }
+
+Realized USD: requests released by applied changes x replicas that ran x the cluster's rates
+of the time. Not an estimate; never added to `Savings`. Negative when Kerf's changes raised
+requests above where they were.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cpu` | number, required |  |  |
+| `memory` | number, required |  |  |
+| `total` | number, required |  |  |
+
+## ReleasedRequests { #releasedrequests }
+
+Requests released by applied changes, times the replicas that ran.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cpuCores` | number, required |  |  |
+| `memoryBytes` | number, required |  |  |
+
+## RealizedPoint { #realizedpoint }
+
+One bucket of a realized series; `time` is the bucket start.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `time` | string (date-time), required |  |  |
+| `cpu` | number, required |  |  |
+| `memory` | number, required |  |  |
+| `total` | number, required |  |  |
+| `released` | [ReleasedRequests](schemas.md#releasedrequests), required |  | Average released requests over the computed hours of the bucket. |
+
+## RealizedCoverage { #realizedcoverage }
+
+Workload-hours with released requests in the range, by how they were computed.
+`replicasFromRecommendations`: the metrics had no data for the cluster in that hour, so the
+replicas of the workload's stored recommendation were used. `withoutReplicas`: neither
+existed; those hours count zero. `defaultPricing`: no stored rates, the default rates.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `workloadHours` | integer, required | min 0 |  |
+| `replicasFromRecommendations` | integer, required | min 0 |  |
+| `withoutReplicas` | integer, required | min 0 |  |
+| `defaultPricing` | integer, required | min 0 |  |
+
+## RealizedSavings { #realizedsavings }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `since` | string (date-time) |  | First hour with released requests in the scope; absent while nothing was applied. |
+| `computedThrough` | string (date-time) |  | Hours before this are computed for every cluster of the scope. |
+| `from` | string (date-time), required |  |  |
+| `to` | string (date-time), required |  |  |
+| `step` | RealizedStep (enum), required | one of `day`, `month` | Bucket size of a realized series (UTC). |
+| `total` | [RealizedAmount](schemas.md#realizedamount), required |  | Everything realized since `since` (all time, not only the range). |
+| `inRange` | [RealizedAmount](schemas.md#realizedamount), required |  | Realized in [`from`, `to`). |
+| `releasedNow` | [ReleasedRequests](schemas.md#releasedrequests), required |  | Requests released in the last computed hour, times replicas. |
+| `points` | array of [RealizedPoint](schemas.md#realizedpoint), required |  |  |
+| `coverage` | [RealizedCoverage](schemas.md#realizedcoverage), required |  | Workload-hours with released requests in the range, by how they were computed. `replicasFromRecommendations`: the metrics had no data for the cluster in that hour, so the replicas of the workload's stored recommendation were used. `withoutReplicas`: neither existed; those hours count zero. `defaultPricing`: no stored rates, the default rates. |
+
+## NodeCostPoint { #nodecostpoint }
+
+One bucket (hourly averages); a field is absent when the metrics had no data.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `time` | string (date-time), required |  |  |
+| `nodeCostUSDPerHour` | number |  | Cost of the cluster's priced nodes, USD per hour. |
+| `nodes` | number |  |  |
+| `cpuRequestedRatio` | number |  | Scheduled pods' CPU requests / nodes' allocatable CPU. |
+| `memoryRequestedRatio` | number |  |  |
+| `released` | [ReleasedRequests](schemas.md#releasedrequests), required |  | Requests released by Kerf's applied changes, times replicas. |
+
+## NodeCostTrend { #nodecosttrend }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cluster` | string, required | pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`; example `ro-spoke-1` |  |
+| `from` | string (date-time), required |  |  |
+| `to` | string (date-time), required |  |  |
+| `step` | NodeCostStep (enum), required | one of `hour`, `day` | Bucket size of a node cost trend (UTC). |
+| `relation` | string, required | one of `correlated` | Always `correlated`; the two are shown side by side, not as cause and effect. |
+| `computedThrough` | string (date-time) |  |  |
+| `points` | array of [NodeCostPoint](schemas.md#nodecostpoint), required |  |  |
 
 ## RecomputeAccepted { #recomputeaccepted }
 
@@ -1203,7 +1303,7 @@ it, adds a new one (a `workload-override` for a workload that already has one re
 | `after` | [EffectiveModes](schemas.md#effectivemodes), required |  |  |
 | `policyBefore` | string |  | Winning policy name before the change. |
 | `policyAfter` | string |  |  |
-| `monthlySavingsUSD` | [Savings](schemas.md#savings) |  | Estimated monthly savings in USD: (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. |
+| `monthlySavingsUSD` | [Savings](schemas.md#savings) |  | Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized amounts (`RealizedAmount`). |
 
 ## ImpactPreview { #impactpreview }
 
