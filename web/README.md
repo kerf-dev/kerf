@@ -29,6 +29,11 @@ Every write asks for a reason (audit log), sends `If-Match` (a `412` shows "some
 with Reload), and asks to type the cluster name for `prod` clusters. Admins can override
 `409 cluster_not_automation_ready` with an audited checkbox.
 
+**Copy as…** on the workload page and the Opportunities bulk bar hands a recommendation over as a strategic merge patch,
+a `kubectl patch` command, a Kustomize patch or Helm values, for one workload or a selection (all roles; see
+[docs/copy-as-patch.md](../docs/copy-as-patch.md)). `npm run test:patch-dry-run` checks the output against a cluster
+with `--dry-run=server`.
+
 Press <kbd>⌘K</kbd> anywhere to search workloads and namespaces. Light, dark and system themes.
 
 ## Develop

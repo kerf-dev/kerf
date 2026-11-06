@@ -44,6 +44,11 @@ First public version.
   and shows the release notes and `helm upgrade` commands; "Check now" runs it at once. It is on by default and
   sends nothing about the installation; turn it off with `hub.updateCheck.enabled: false`. Metric
   `kerf_update_available{current,latest}` and the alert `KerfUpdateAvailable` (severity `info`).
+- **Copy as a patch.** A **Copy as…** menu on the workload page and on the Opportunities bulk bar turns the
+  recommended values into a strategic merge patch, a `kubectl patch` command, a Kustomize `patches:` entry or a
+  Helm values snippet, for one workload or a selection, so teams that keep their manifests in Git can make the
+  change through their own pull request. Viewers can select rows and copy too. See
+  [Copy a recommendation as a patch](docs/copy-as-patch.md).
 
 ### Fixed
 

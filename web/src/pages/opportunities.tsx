@@ -22,7 +22,6 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { api, unwrap } from '@/api/client'
-import { useAuth } from '@/api/auth'
 import { useClusters, useFacets, useWorkloads } from '@/api/queries'
 import {
   MODES,
@@ -67,7 +66,6 @@ import { workloadPath } from '@/lib/workload-id'
 import { BulkBar } from './opportunities-bulk'
 
 interface TableMeta {
-  selectable: boolean
   selected: Map<string, WorkloadRow>
   toggle: (w: WorkloadRow) => void
   togglePage: (on: boolean) => void
@@ -206,8 +204,6 @@ export default function OpportunitiesPage() {
   const [cursors, setCursors] = useState<string[]>([])
   const [exporting, setExporting] = useState(false)
   const [vis, setVis] = useColumnVisibility()
-  const auth = useAuth()
-  const selectable = auth.can('operator')
   const [selected, setSelected] = useState<Map<string, WorkloadRow>>(new Map())
 
   // Debounce free-text inputs into the URL.
@@ -306,14 +302,12 @@ export default function OpportunitiesPage() {
           const m = table.options.meta as TableMeta
           return (
             <span className="inline-flex items-center gap-3">
-              {m.selectable ? (
-                <Checkbox
-                  checked={m.pageState}
-                  onCheckedChange={(v) => m.togglePage(v === true)}
-                  aria-label="Select all on this page"
-                  data-testid="select-page"
-                />
-              ) : null}
+              <Checkbox
+                checked={m.pageState}
+                onCheckedChange={(v) => m.togglePage(v === true)}
+                aria-label="Select all on this page"
+                data-testid="select-page"
+              />
               Workload
             </span>
           )
@@ -324,16 +318,14 @@ export default function OpportunitiesPage() {
           const m = table.options.meta as TableMeta
           return (
             <div className="flex min-w-0 items-center gap-3 py-0.5">
-              {m.selectable ? (
-                <Checkbox
-                  checked={m.selected.has(w.id)}
-                  onCheckedChange={() => m.toggle(w)}
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  aria-label={`Select ${w.name}`}
-                  data-testid="select-row"
-                />
-              ) : null}
+              <Checkbox
+                checked={m.selected.has(w.id)}
+                onCheckedChange={() => m.toggle(w)}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+                aria-label={`Select ${w.name}`}
+                data-testid="select-row"
+              />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <Link
@@ -456,7 +448,6 @@ export default function OpportunitiesPage() {
     getCoreRowModel: getCoreRowModel(),
     getRowId: (r) => r.id,
     meta: {
-      selectable,
       selected,
       toggle: (w: WorkloadRow) =>
         setSelected((m) => {
