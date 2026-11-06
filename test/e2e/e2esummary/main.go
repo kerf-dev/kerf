@@ -162,14 +162,14 @@ func main() {
 		line := sc.Bytes()
 		var e event
 		if len(line) == 0 || line[0] != '{' || json.Unmarshal(line, &e) != nil {
-			out.Write(line)
-			out.WriteByte('\n')
+			_, _ = out.Write(line)
+			_ = out.WriteByte('\n')
 			out.Flush()
 			continue
 		}
 		s.add(e)
 		if e.Output != "" {
-			out.WriteString(e.Output)
+			_, _ = out.WriteString(e.Output)
 			out.Flush()
 		}
 	}
