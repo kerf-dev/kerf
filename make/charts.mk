@@ -114,6 +114,13 @@ charts-lint-umbrella: kubeconform yq ## helm lint + kubeconform of the umbrella 
 	agent=$$($(YQ) e -N 'select(.kind == "Deployment" and .metadata.name == "kerf-agent") | .spec.template.spec.containers[0].args[] | select(test("^--hub-url="))' $$out); \
 	echo "   web HUB_UPSTREAM=$$web  pricing $$pricing  agent $$agent"; \
 	[ "$$web" = "$$hub" ] && [ "$$pricing" = "--hub-url=http://$$hub" ] && [ "$$agent" = "--hub-url=http://$$hub" ] || { echo "wiring to the hub Service $$hub is wrong"; exit 1; }; \
+	echo "== $(UMBRELLA): removed web values fail with an upgrade message"; \
+	for set in web.auth.anonymousRead=true web.auth.anonymousRead=false web.token.value=x; do \
+	  if msg=$$(helm template $(UMBRELLA) $(UMBRELLA_DIR) -n kerf --set global.mode=hub $(UMBRELLA_REQUIRED) --set $$set 2>&1); then \
+	    echo "--set $$set rendered; want an upgrade error"; exit 1; fi; \
+	  echo "$$msg" | grep -q 'was removed: .*docs/auth.md' || { echo "--set $$set: $$msg"; exit 1; }; \
+	  echo "   --set $$set: refused"; \
+	done; \
 	echo "== $(UMBRELLA_EXAMPLES): manifests and IAM policies"; \
 	$(KUBECONFORM) -strict -summary -kubernetes-version $(CHARTS_K8S_VERSION) -cache $(KUBECONFORM_CACHE) \
 	  -schema-location default -schema-location '$(CRDS_CATALOG)' \

@@ -85,23 +85,36 @@ func TestCookies(t *testing.T) {
 }
 
 func TestClientIP(t *testing.T) {
-	r := httptest.NewRequest(http.MethodPost, "/", nil)
-	r.RemoteAddr = "10.0.0.1:1234"
-	if got := ClientIP(r); got != "10.0.0.1" {
-		t.Errorf("remote: %q", got)
+	tests := []struct {
+		name   string
+		remote string
+		xff    []string
+		realIP string
+		want   string
+	}{
+		{name: "remote address", remote: "10.0.0.1:1234", want: "10.0.0.1"},
+		{name: "remote without port", remote: "pipe", want: "pipe"},
+		{name: "x-real-ip", remote: "10.0.0.1:1234", realIP: "10.0.0.2", want: "10.0.0.2"},
+		{name: "one forwarded entry", remote: "10.0.0.1:1234", xff: []string{"192.168.1.5"}, want: "192.168.1.5"},
+		// A client can send its own X-Forwarded-For; only the entry the last proxy added counts.
+		{name: "spoofed first entries", remote: "10.0.0.1:1234", xff: []string{" 6.6.6.6 , 192.168.1.5 "}, want: "192.168.1.5"},
+		{name: "several headers", remote: "10.0.0.1:1234", xff: []string{"6.6.6.6", "7.7.7.7, 192.168.1.6"}, want: "192.168.1.6"},
+		{name: "empty last entry", remote: "10.0.0.1:1234", xff: []string{"6.6.6.6, "}, want: "10.0.0.1"},
 	}
-	r.Header.Set("X-Real-IP", "10.0.0.2")
-	if got := ClientIP(r); got != "10.0.0.2" {
-		t.Errorf("x-real-ip: %q", got)
-	}
-	r.Header.Set("X-Forwarded-For", " 192.168.1.5 , 10.0.0.3")
-	if got := ClientIP(r); got != "192.168.1.5" {
-		t.Errorf("xff: %q", got)
-	}
-	r = httptest.NewRequest(http.MethodPost, "/", nil)
-	r.RemoteAddr = "pipe"
-	if got := ClientIP(r); got != "pipe" {
-		t.Errorf("no port: %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/", nil)
+			r.RemoteAddr = tt.remote
+			for _, v := range tt.xff {
+				r.Header.Add("X-Forwarded-For", v)
+			}
+			if tt.realIP != "" {
+				r.Header.Set("X-Real-IP", tt.realIP)
+			}
+			if got := ClientIP(r); got != tt.want {
+				t.Errorf("ClientIP = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

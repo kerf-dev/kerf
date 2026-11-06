@@ -120,12 +120,14 @@ func ClearCookie(secure bool) *http.Cookie {
 	}
 }
 
-// ClientIP returns the caller's address for rate limiting: the first X-Forwarded-For entry (the
-// web nginx sets it) or else the connection's remote host.
+// ClientIP returns the caller's address for rate limiting: the last X-Forwarded-For entry or else
+// the connection's remote host. The last entry is the one the proxy right in front of the hub added
+// (the web nginx overwrites the header with the client it saw, an ALB appends it); earlier entries
+// come from the client and are not trusted.
 func ClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		first, _, _ := strings.Cut(xff, ",")
-		if ip := strings.TrimSpace(first); ip != "" {
+	if xffs := r.Header.Values("X-Forwarded-For"); len(xffs) > 0 {
+		parts := strings.Split(xffs[len(xffs)-1], ",")
+		if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {
 			return ip
 		}
 	}

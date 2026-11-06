@@ -131,7 +131,7 @@ func TestAuthSessions(t *testing.T) {
 	expectCode(t, "stale cookie + ui token", e.do(http.MethodGet, "/v1/summary", tokUI, nil, "Cookie", hubapi.SessionCookie+"=stale"), 200)
 	e.problem(e.do(http.MethodGet, "/v1/summary", "", nil, "Cookie", hubapi.SessionCookie+"=stale"), 401, "unauthorized")
 	// Session-only endpoints refuse bearer tokens.
-	e.problem(e.do(http.MethodPost, "/v1/auth/logout", tokAdmin, nil), 401, "unauthorized")
+	e.problem(e.do(http.MethodPost, "/v1/me/password", tokAdmin, hubapi.PasswordChange{CurrentPassword: "x", NewPassword: "y"}), 401, "unauthorized")
 
 	// Own password change: other sessions are revoked, the current one stays.
 	op1, _ := e.login("operator", testPassword)
@@ -143,32 +143,74 @@ func TestAuthSessions(t *testing.T) {
 	e.problem(e.sdo(op2, http.MethodGet, "/v1/me", nil), 401, "unauthorized")
 	e.login("operator", "another password")
 
-	// Logout ends the session.
-	expectCode(t, "logout", e.sdo(viewer, http.MethodPost, "/v1/auth/logout", nil), 204)
+	// Logout needs the CSRF token of a live session, then ends it and clears the cookie.
+	e.problem(e.do(http.MethodPost, "/v1/auth/logout", "", nil, "Cookie", hubapi.SessionCookie+"="+viewer.cookie), 403, hubapi.CodeCSRFInvalid)
+	r = e.sdo(viewer, http.MethodPost, "/v1/auth/logout", nil)
+	expectCode(t, "logout", r, 204)
+	expectClearedCookie(t, "logout", r)
 	e.problem(e.sdo(viewer, http.MethodGet, "/v1/me", nil), 401, "unauthorized")
+	// Signing out again, with a dead cookie or none at all, still clears the cookie.
+	r = e.sdo(viewer, http.MethodPost, "/v1/auth/logout", nil)
+	expectCode(t, "logout with an ended session", r, 204)
+	expectClearedCookie(t, "logout with an ended session", r)
+	expectCode(t, "logout without a cookie", e.do(http.MethodPost, "/v1/auth/logout", "", nil), 204)
+}
+
+func expectClearedCookie(t *testing.T, what string, r resp) {
+	t.Helper()
+	for _, c := range (&http.Response{Header: r.header}).Cookies() {
+		if c.Name == hubapi.SessionCookie && c.Value == "" && c.MaxAge < 0 {
+			return
+		}
+	}
+	t.Errorf("%s: the session cookie is not cleared (Set-Cookie %q)", what, r.header.Values("Set-Cookie"))
 }
 
 func TestLoginLockoutAndRateLimit(t *testing.T) {
 	e := newEnv(t)
 	e.seedUsers()
-	// 5 failures lock the account; the right password is then refused with 429.
+	login := func(user, pw string, hdr ...string) resp {
+		return e.do(http.MethodPost, "/v1/auth/login", "", hubapi.LoginRequest{Username: user, Password: pw}, hdr...)
+	}
+	// 5 failures lock the account. While it is locked even the right password fails, with the same
+	// answer as an unknown user, so the response never tells whether the user exists.
 	for i := 0; i < 5; i++ {
-		e.problem(e.do(http.MethodPost, "/v1/auth/login", "", hubapi.LoginRequest{Username: "viewer", Password: "wrong-password"}), 401, hubapi.CodeInvalidCredentials)
+		e.problem(login("viewer", "wrong-password"), 401, hubapi.CodeInvalidCredentials)
 	}
-	r := e.do(http.MethodPost, "/v1/auth/login", "", hubapi.LoginRequest{Username: "viewer", Password: testPassword})
-	e.problem(r, 429, hubapi.CodeAccountLocked)
-	if r.header.Get("Retry-After") == "" {
-		t.Error("no Retry-After")
+	locked := login("viewer", testPassword)
+	unknown := login("nobody-here", "wrong-password")
+	e.problem(locked, 401, hubapi.CodeInvalidCredentials)
+	e.problem(unknown, 401, hubapi.CodeInvalidCredentials)
+	if strip := func(b []byte) string { return strings.ReplaceAll(string(b), "nobody-here", "viewer") }; strip(locked.body) != strip(unknown.body) {
+		t.Errorf("locked and unknown users get different answers:\n%s\n%s", locked.body, unknown.body)
 	}
-	// The lock ends; an admin reset also clears it.
+	// The lock ends.
 	e.advance(16 * time.Minute)
 	e.login("viewer", testPassword)
 
-	// Per-user rate limit (10 a minute).
-	for i := 0; i < 10; i++ {
-		e.do(http.MethodPost, "/v1/auth/login", "", hubapi.LoginRequest{Username: "ghost", Password: "whatever-pw"})
+	// Per-user rate limit (10 a minute), the same answer for a known and an unknown user.
+	for _, user := range []string{"ghost", "operator"} {
+		for i := 0; i < 10; i++ {
+			login(user, "whatever-pw", "X-Forwarded-For", "192.0.2."+strconv.Itoa(i))
+		}
+		r := login(user, "whatever-pw", "X-Forwarded-For", "192.0.2.99")
+		e.problem(r, 429, hubapi.CodeRateLimited)
+		if r.header.Get("Retry-After") == "" {
+			t.Errorf("%s: no Retry-After", user)
+		}
+		if !strings.Contains(string(r.body), "Too many sign-in attempts. Try again later.") {
+			t.Errorf("%s: rate limit answer %s", user, r.body)
+		}
 	}
-	e.problem(e.do(http.MethodPost, "/v1/auth/login", "", hubapi.LoginRequest{Username: "ghost", Password: "whatever-pw"}), 429, hubapi.CodeRateLimited)
+
+	// Per-address rate limit (30 a minute). A forged X-Forwarded-For entry does not escape it: only
+	// the last entry (added by the proxy in front of the hub) counts.
+	e.advance(2 * time.Minute)
+	for i := 0; i < 30; i++ {
+		login("user-"+strconv.Itoa(i), "whatever-pw", "X-Forwarded-For", "6.6.6."+strconv.Itoa(i)+", 198.51.100.7")
+	}
+	e.problem(login("someone-else", "whatever-pw", "X-Forwarded-For", "6.6.6.250, 198.51.100.7"), 429, hubapi.CodeRateLimited)
+	e.problem(login("someone-else", "whatever-pw", "X-Forwarded-For", "198.51.100.8"), 401, hubapi.CodeInvalidCredentials)
 }
 
 // ---- settings ----

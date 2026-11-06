@@ -1,36 +1,29 @@
-import {
-  ArrowRightIcon,
-  EyeIcon,
-  EyeOffIcon,
-  FlaskConicalIcon,
-  Loader2Icon,
-  LockKeyholeIcon,
-} from 'lucide-react'
+import { ClockIcon, EyeIcon, EyeOffIcon, FlaskConicalIcon, Loader2Icon, LockKeyholeIcon } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { ApiError } from '@/api/client'
-import { useAuth, useLogin } from '@/api/auth'
+import { safeNext, useAuth, useLogin } from '@/api/auth'
 import { Logo } from '@/components/layout/logo'
 import { Button } from '@/components/ui/button'
 import { Callout, Field } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { safeNext } from '@/lib/policy'
 
 function loginError(e: unknown): { title: string; detail?: string } | undefined {
   if (!e) return undefined
   if (e instanceof ApiError) {
+    // One message for a wrong password and an unknown, disabled or locked user (the hub does the same).
     if (e.status === 401) return { title: 'Wrong username or password.' }
     if (e.status === 429) {
       const mins = e.retryAfter ? Math.max(1, Math.ceil(e.retryAfter / 60)) : undefined
       return {
-        title: e.code === 'account_locked' ? 'Account temporarily locked' : 'Too many attempts',
+        title: 'Too many attempts',
         detail: `Too many failed sign-ins. Try again${mins ? ` in ${mins} minute${mins === 1 ? '' : 's'}` : ' later'}, or ask an admin to reset your password.`,
       }
     }
     if (e.status === 404 || e.status === 501)
       return {
-        title: 'This hub does not support sign-in yet',
-        detail: 'The read-only views keep working without it.',
+        title: 'This hub does not support sign-in',
+        detail: 'Upgrade the hub to the version of this web UI.',
       }
     if (e.status === 0 || e.status >= 500) return { title: 'Cannot reach the hub', detail: e.message }
     return { title: 'Sign-in failed', detail: e.message }
@@ -50,6 +43,8 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
+  // Set by the app shell when the session this tab had ended (expired, revoked, signed out elsewhere).
+  const expired = (useLocation().state as { expired?: boolean } | null)?.expired === true
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
@@ -99,6 +94,12 @@ export default function LoginPage() {
             <Callout tone="destructive" icon={LockKeyholeIcon} title={err.title}>
               {err.detail}
             </Callout>
+          ) : expired ? (
+            <div data-testid="session-expired" role="status">
+              <Callout tone="info" icon={ClockIcon} title="Your session ended">
+                Sign in again to continue where you were.
+              </Callout>
+            </div>
           ) : null}
           <Field
             label="Username"
@@ -157,16 +158,6 @@ export default function LoginPage() {
             Forgot your password? Ask an admin to reset it.
           </p>
         </form>
-        {!auth.loginRequired ? (
-          <div className="mt-4 text-center">
-            <Link
-              to={next}
-              className="inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"
-            >
-              Continue without signing in (read-only) <ArrowRightIcon className="size-3.5" />
-            </Link>
-          </div>
-        ) : null}
         {__MOCK_API__ ? (
           <div className="mt-6 rounded-xl border border-dashed bg-card/60 p-3.5 text-xs">
             <div className="mb-2 flex items-center gap-1.5 font-medium text-muted-foreground">

@@ -25,16 +25,3 @@ export function withoutSelector(spec: RightsizingPolicySpec | undefined): Rights
   delete out.priority
   return out
 }
-
-/** Only same-app paths: never redirect to another origin after login. */
-export function safeNext(next: string | null) {
-  if (
-    !next ||
-    !next.startsWith('/') ||
-    next.startsWith('//') ||
-    next.startsWith('/\\') ||
-    next.startsWith('/login')
-  )
-    return '/'
-  return next
-}
