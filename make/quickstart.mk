@@ -31,7 +31,8 @@ charts-lint-quickstart: kubeconform ## helm lint + kubeconform of the quickstart
 	for s in quickstart.enabled=true webhook.tls.selfSigned.enabled=true; do \
 	  if helm template $(UMBRELLA) $(UMBRELLA_DIR) -n kerf $(UMBRELLA_REQUIRED) --set global.mode=all --set $$s >/dev/null 2>&1; then \
 	    echo "$$s must be refused without dev: true"; exit 1; fi; \
-	  helm template $(UMBRELLA) $(UMBRELLA_DIR) -n kerf $(UMBRELLA_REQUIRED) --set global.mode=all --set $$s 2>&1 | grep -q "must be one of false" || { echo "$$s: refused, but not by the schema"; exit 1; }; \
+	  msg=$$(helm template $(UMBRELLA) $(UMBRELLA_DIR) -n kerf $(UMBRELLA_REQUIRED) --set global.mode=all --set $$s 2>&1 || true); \
+	  case "$$msg" in *"don't meet the specifications of the schema"*) ;; *) echo "$$s: refused, but not by the schema:"; echo "$$msg"; exit 1 ;; esac; \
 	done; \
 	echo "quickstart values OK; the schema refuses the quickstart settings without dev: true"
 
