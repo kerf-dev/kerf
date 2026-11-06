@@ -1,5 +1,5 @@
 # JVM sized by -XX:MaxRAMPercentage=75 (via JAVA_TOOL_OPTIONS): max heap follows the memory limit.
-# Memory changes need a container restart to take effect (D-007), hence resizePolicy RestartContainer.
+# Memory changes need a container restart to take effect, hence resizePolicy RestartContainer.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

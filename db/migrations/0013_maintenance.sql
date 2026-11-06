@@ -1,4 +1,4 @@
--- WO-33: Admin -> Maintenance. Versions of the components the hub hears from (hub replicas, the
+-- Admin -> Maintenance. Versions of the components the hub hears from (hub replicas, the
 -- pricing service, webhook pods reported by each agent; the agent's own version stays in
 -- clusters.agent_version) and the stored result of the check for a newer Kerf release, run by the
 -- leader (or "Check now" on any replica). Additive: nothing else changes.

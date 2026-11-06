@@ -34,7 +34,9 @@ Read-only endpoints for the web UI.
 Accepts: bearer token with role `ui` or session of a user with role `viewer` or higher.
 
 Totals over the latest recommendation of every live workload. Workloads the agent never
-reported count as `audit` / `Pending` (global default).
+reported count as `audit` / `Pending` (the global default). A team-scoped caller gets the
+totals of its teams' workloads only, and only the clusters where it has workloads; `teams`
+groups the same totals by team (docs/teams.md).
 
 **Responses**
 
@@ -42,7 +44,7 @@ reported count as `audit` / `Pending` (global default).
 |---|---|---|
 | `200` | Summary. | [FleetSummary](schemas.md#fleetsummary) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Clusters with agent heartbeat and counts { #listClusters }
 
@@ -56,7 +58,7 @@ Accepts: bearer token with role `ui` or session of a user with role `viewer` or 
 |---|---|---|
 | `200` | Clusters, ordered by name. | [ClusterList](schemas.md#clusterlist) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Workloads with their latest recommendation { #listWorkloads }
 
@@ -66,7 +68,8 @@ Accepts: bearer token with role `ui` or session of a user with role `viewer` or 
 
 One row per live workload, including workloads that have no recommendation yet (their
 recommendation fields are absent). All filters are combined with AND; repeatable filters
-match any of their values.
+match any of their values. A team-scoped caller sees only the workloads of its teams, and
+`total` counts only those (docs/teams.md).
 
 **Parameters**
 
@@ -78,6 +81,7 @@ match any of their values.
 | `mode` | query | array of Mode (enum) | Matches if the CPU or the memory mode is one of the values. |
 | `riskFlag` | query | array of RiskFlag (enum) | Matches if the workload has any of the flags. |
 | `gpu` | query | array of GPUFilter (enum) | GPU workloads. `any` matches every workload that requests `nvidia.com/gpu`; the other values match `GPUUsage.status`. Matches if any of the values matches. |
+| `team` | query | array of string | Team ids (`unassigned` = workloads in no team); matches any of them. |
 | `minSavings` | query | number | Minimum total estimated monthly savings in USD. |
 | `q` | query | string | Case-insensitive substring match on namespace and workload name. max length 253 |
 | `sort` | query | string | one of `savings`, `confidence`, `name`; default `savings` |
@@ -92,7 +96,7 @@ match any of their values.
 | `200` | Workloads. | [WorkloadList](schemas.md#workloadlist) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Filter values with workload counts { #getWorkloadFacets }
 
@@ -101,6 +105,7 @@ match any of their values.
 Accepts: bearer token with role `ui` or session of a user with role `viewer` or higher.
 
 Counts of live workloads per filter value, for building the filters of the workload list.
+Like every read, only the workloads of the caller's teams are counted (docs/teams.md).
 Takes the same filters as `GET /v1/workloads`. Each facet is counted with every filter
 applied except its own (so a multi-select keeps showing the other values of that facet);
 `total` applies all filters and equals `WorkloadList.total`. A workload counts once per
@@ -117,6 +122,7 @@ of its flags, in `gpu` under its GPU status. Values with zero workloads are omit
 | `mode` | query | array of Mode (enum) | Matches if the CPU or the memory mode is one of the values. |
 | `riskFlag` | query | array of RiskFlag (enum) | Matches if the workload has any of the flags. |
 | `gpu` | query | array of GPUFilter (enum) | GPU workloads. `any` matches every workload that requests `nvidia.com/gpu`; the other values match `GPUUsage.status`. Matches if any of the values matches. |
+| `team` | query | array of string | Team ids (`unassigned` = workloads in no team); matches any of them. |
 | `minSavings` | query | number | Minimum total estimated monthly savings in USD. |
 | `q` | query | string | Case-insensitive substring match on namespace and workload name. max length 253 |
 
@@ -127,7 +133,7 @@ of its flags, in `gpu` under its GPU status. Values with zero workloads are omit
 | `200` | Facets. | [WorkloadFacets](schemas.md#workloadfacets) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Workload detail with per-container explanation { #getWorkload }
 
@@ -148,7 +154,7 @@ Accepts: bearer token with role `ui` or session of a user with role `viewer` or 
 | `200` | Workload detail. | [WorkloadDetail](schemas.md#workloaddetail) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown workload id. | [Problem](schemas.md#problem) |
 
 ### Usage, request, limit and recommendation time series { #getWorkloadUsage }
@@ -180,7 +186,7 @@ bytes for `memory`.
 | `200` | Time series. | [UsageSeries](schemas.md#usageseries) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown workload id. | [Problem](schemas.md#problem) |
 
 ### Past recommendations and audit events of a workload { #getWorkloadHistory }
@@ -207,7 +213,7 @@ Both lists are newest first and capped at `limit` entries each.
 | `200` | History. | [WorkloadHistory](schemas.md#workloadhistory) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown workload id. | [Problem](schemas.md#problem) |
 
 ### Estimated monthly savings over time { #getSavingsTrend }
@@ -227,7 +233,8 @@ time `t` holds the value at the end of its bucket, `min(t + step, to)`, so with 
 | Name | In | Type | Description |
 |---|---|---|---|
 | `cluster` | query | array of string |  |
-| `groupBy` | query | string | `none` returns one fleet series; `cluster` one series per cluster. one of `none`, `cluster`; default `none` |
+| `team` | query | array of string | Team ids (`unassigned` = workloads in no team); matches any of them. |
+| `groupBy` | query | string | `none` returns one fleet series; `cluster` one series per cluster; `team` one series per team (`unassigned` for workloads in no team). Team totals are recorded by the recommender runs since teams exist; with a `team` filter, `groupBy=team` or a team-scoped caller the series start there. one of `none`, `cluster`, `team`; default `none` |
 | `from` | query | string (date-time) | Inclusive start. Default `to` minus 7 days. |
 | `to` | query | string (date-time) | Exclusive end. Default now. |
 | `step` | query | string | Resolution (Go duration). Default chosen so the result has at most 1000 points. example `5m`, `1h` |
@@ -239,7 +246,7 @@ time `t` holds the value at the end of its bucket, `min(t + step, to)`, so with 
 | `200` | Savings trend. | [SavingsTrend](schemas.md#savingstrend) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Realized savings from applied changes { #getRealizedSavings }
 
@@ -265,6 +272,7 @@ its bucket. Hours at or after `computedThrough` are not computed yet.
 |---|---|---|---|
 | `cluster` | query | array of string |  |
 | `namespace` | query | array of string |  |
+| `team` | query | array of string | Team ids (`unassigned` = workloads in no team); matches any of them. |
 | `from` | query | string (date-time) | Inclusive start. Default 12 months before `to` (`step=month`) or 30 days (`step=day`). |
 | `to` | query | string (date-time) | Exclusive end. Default now. |
 | `step` | query | RealizedStep (enum) | one of `day`, `month` |
@@ -276,7 +284,7 @@ its bucket. Hours at or after `computedThrough` are not computed yet.
 | `200` | Realized savings. | [RealizedSavings](schemas.md#realizedsavings) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Node cost trend of a cluster, next to the released requests { #getNodeCostTrend }
 
@@ -306,7 +314,7 @@ nodes, the lines show it, but Kerf does not claim one caused the other.
 | `200` | Node cost trend. | [NodeCostTrend](schemas.md#nodecosttrend) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### Realized savings of one workload { #getWorkloadRealizedSavings }
@@ -334,7 +342,7 @@ has realized history.
 | `200` | Realized savings. | [RealizedSavings](schemas.md#realizedsavings) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Precedence chain and winning value per field { #getEffectivePolicy }
 
@@ -363,7 +371,7 @@ the agent last reported, so the UI can show a difference (e.g. before the next p
 | `200` | Effective policy. | [EffectivePolicy](schemas.md#effectivepolicy) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown workload id. | [Problem](schemas.md#problem) |
 
 ### The workload's hub override policy { #getWorkloadOverride }
@@ -385,7 +393,7 @@ Accepts: session of a user with role `viewer` or higher or bearer token with rol
 | `200` | Override. | [AdminPolicy](schemas.md#adminpolicy) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown workload id. | [Problem](schemas.md#problem) |
 
 ### Create or replace the workload's override { #putWorkloadOverride }
@@ -421,7 +429,7 @@ Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives
 | `200` | Saved. | [AdminPolicy](schemas.md#adminpolicy) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown workload id. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -452,7 +460,7 @@ Soft-deletes the override policy; the workload inherits again. Records `Override
 | `204` | Cleared. |  |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown workload id. | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
 | `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
@@ -488,7 +496,7 @@ unless an admin sends `overrideReadiness: true`.
 | `201` | Approved. | [Approval](schemas.md#approval) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown workload id. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 
@@ -513,7 +521,7 @@ imply and what blocks the next state. Checks never run yet have status `unknown`
 |---|---|---|
 | `200` | Readiness. | [ClusterReadiness](schemas.md#clusterreadiness) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### Re-run the readiness checks now { #recheckClusterReadiness }
@@ -539,7 +547,7 @@ agent re-runs its self-checks on its next pull. Results appear in
 |---|---|---|
 | `202` | Re-check queued. | [RecheckAccepted](schemas.md#recheckaccepted) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### State transitions and check status changes { #getClusterReadinessHistory }
@@ -567,7 +575,7 @@ Only changes are stored (a check's status or the state), newest first.
 | `200` | History. | [ReadinessHistory](schemas.md#readinesshistory) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### Node capacity, the node estimate after the open recommendations, and consolidation blockers { #getClusterCapacity }
@@ -595,5 +603,5 @@ feature, or `--capacity=false`); the other fields are then empty.
 |---|---|---|
 | `200` | Capacity. | [ClusterCapacity](schemas.md#clustercapacity) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |

@@ -10,7 +10,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
-// TestHPACoordination: the recommendation of an hpa-coupled workload carries hpa (WO-11) on the
+// TestHPACoordination: the recommendation of an hpa-coupled workload carries hpa on the
 // agent and UI endpoints and in the history; other workloads have none.
 func TestHPACoordination(t *testing.T) {
 	e := newEnv(t)

@@ -1,4 +1,4 @@
--- WO-25 phase 2 (D-026): API tokens of role pricing (the pricing service: metrics bindings and the
+-- Pricing service: API tokens of role pricing (the pricing service: metrics bindings and the
 -- datasource query proxy). Like ui and admin tokens they have no cluster.
 -- Idempotent: safe to re-run on a database that already has it.
 

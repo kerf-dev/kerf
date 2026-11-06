@@ -1,7 +1,7 @@
 import { GitBranchIcon } from 'lucide-react'
 import { Callout } from '@/components/ui/form'
 
-/** Explains why a policy edit does not apply to Git-only clusters (`policySource: git`, D-022). */
+/** Explains why a policy edit does not apply to Git-only clusters (`policySource: git`). */
 export function GitOnlyNotice({ clusters, what = 'This change' }: { clusters: string[]; what?: string }) {
   if (!clusters.length) return null
   return (

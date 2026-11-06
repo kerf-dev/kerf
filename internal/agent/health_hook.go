@@ -13,14 +13,14 @@ import (
 	"github.com/kerf-dev/kerf/internal/health"
 )
 
-// HealthConfig configures the health watch (WO-08).
+// HealthConfig configures the health watch.
 type HealthConfig struct {
 	Enabled bool
 	// MetricsURL is the Prometheus-compatible endpoint for the throttling ratio (the hub's
 	// VictoriaMetrics); empty disables it.
 	MetricsURL       string
 	MetricsTokenFile string
-	// MetricsSelector selects the cluster's series at MetricsURL (its metrics binding, D-025);
+	// MetricsSelector selects the cluster's series at MetricsURL (its metrics binding);
 	// nil = label cluster = the cluster name.
 	MetricsSelector *health.MetricsSelector
 	// CadvisorFallback reads throttling from the kubelets (nodes/proxy) when MetricsURL fails.

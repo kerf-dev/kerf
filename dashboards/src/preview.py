@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import the generated dashboards into Grafana through its HTTP API, as previews (WO-05).
+"""Import the generated dashboards into Grafana through its HTTP API, as previews.
 
 Grafana provisions dashboards/ from the main checkout; to try a branch before it is merged, this
 script imports every dashboard with "-preview" appended to its UID, " (preview)" to its title, tag
@@ -79,7 +79,7 @@ def main():
         d = previewed(fn())
         code, body = http("POST", "/api/dashboards/db",
                           {"dashboard": d, "folderUid": FOLDER_UID, "overwrite": True,
-                           "message": "WO-05 preview import"})
+                           "message": "Dashboard preview import"})
         if code != 200:
             rc = 1
             print("FAILED", name, code, body, file=sys.stderr)

@@ -30,7 +30,7 @@ type RawContainer struct {
 	Current  Current
 	// Used24hCPU / Used24hMemory: mean over the last 24 h of the usage summed over pods.
 	Used24hCPU, Used24hMemory float64
-	// Images are the container's images within the inventory lookback (JVM detection, WO-12).
+	// Images are the container's images within the inventory lookback (JVM detection).
 	Images []string
 }
 
@@ -44,7 +44,7 @@ type RawWorkload struct {
 	// HasRequests is true when the workload was found by the inventory (KSM) queries.
 	HasRequests bool
 	// Live is true when the workload has request/limit series at the window end (default lookback):
-	// it has pods right now (WO-04e).
+	// it has pods right now.
 	Live bool
 	// GPU is set when the workload's pods request GPUs.
 	GPU *RawGPU
@@ -77,8 +77,8 @@ type Source struct {
 	Cfg Config
 	// Concurrency bounds parallel queries per cluster.
 	Concurrency int
-	// Binder returns where a cluster's metrics are (D-025): its datasource and the matcher of its
-	// series. nil, or a nil matcher, = Q with label cluster (the queries before D-025). Pricing
+	// Binder returns where a cluster's metrics are: its datasource and the matcher of its
+	// series. nil, or a nil matcher, = Q with label cluster (the queries without a binding). Pricing
 	// series are always read from Q (the hub's own store).
 	Binder func(ctx context.Context, cluster string) (Querier, *datasource.Matcher, error)
 }

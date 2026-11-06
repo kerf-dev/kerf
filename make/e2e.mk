@@ -1,4 +1,4 @@
-# WO-09 end-to-end suite (test/e2e), with the admin-area scenarios of WO-24 and the tiers of WO-30.
+# End-to-end suite (test/e2e), with the admin-area scenarios and the test tiers.
 # Runs against the existing k3d environment; see test/e2e/README.md.
 
 E2E_TIMEOUT        ?= 40m
@@ -7,7 +7,7 @@ E2E_RUN            ?=
 E2E_FLAGS          ?=
 E2E_LOG            ?= $(ROOT)/bin/e2e.log
 E2E_JSON           ?= $(ROOT)/bin/e2e.json
-# Smoke tier (WO-30): one scenario per area (audit, in-place apply, webhook, rollback, admin
+# Smoke tier: one scenario per area (audit, in-place apply, webhook, rollback, admin
 # policy, readiness), for pull requests.
 E2E_SMOKE_TESTS    ?= TestAudit|TestInPlaceCPU|TestWebhook|TestRollback|TestAdminPolicy|TestReadiness|TestMaintenance|TestWebSignIn
 E2E_SPOKE1_CONTEXT ?= k3d-ro-spoke-1
@@ -16,7 +16,7 @@ export E2E_SPOKE1_CONTEXT E2E_SPOKE2_CONTEXT
 
 E2E_LABEL := e2e.kerf.getkerf.dev/suite=true
 
-##@ End-to-end (WO-09, WO-24, WO-30)
+##@ End-to-end
 
 .PHONY: e2e
 e2e: ## Run the full e2e suite against the running clusters (E2E_RUN=TestAudit to pick scenarios).

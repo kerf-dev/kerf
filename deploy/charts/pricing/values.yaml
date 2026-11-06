@@ -73,8 +73,8 @@ clusters: ""
 defaultRegion: ""
 logLevel: info
 
-# Clusters bound to other datasources (D-025) are discovered through the hub's query proxy with a
-# token of role pricing (D-026); empty url = only vmURL (clusters without a binding).
+# Clusters bound to other datasources are discovered through the hub's query proxy with a
+# token of role pricing; empty url = only vmURL (clusters without a binding).
 hub:
   url: ""
   tokenSecret:

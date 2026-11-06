@@ -1,4 +1,4 @@
-# Local k3d only: dev token for ro-spoke-1, matching deploy/charts/hub/values-dev.yaml (D-012).
+# Local k3d only: dev token for ro-spoke-1, matching deploy/charts/hub/values-dev.yaml.
 # Picked up by `make deploy-agent` (values-<cluster>.yaml). Never use create: true outside dev.
 hub:
   tokenSecret:

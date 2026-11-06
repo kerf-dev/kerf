@@ -109,10 +109,17 @@ export const EVENT_TYPES: EventType[] = [
   'failed',
 ]
 
-// ---- Admin area (WO-19 contract: docs/contracts/admin.md, readiness.md) ----
+// ---- Admin area (contract: docs/contracts/admin.md, readiness.md) ----
 export type UserRole = S['UserRole']
 export type TokenRole = S['TokenRole']
 export type Me = S['Me']
+export type UserScope = S['UserScope']
+export type TeamRole = S['TeamRole']
+export type TeamInput = S['TeamInput']
+export type Team = S['Team']
+export type TeamList = S['TeamList']
+export type TeamCounts = S['TeamCounts']
+export type TeamSummary = S['TeamSummary']
 export type User = S['User']
 export type TokenInfo = S['TokenInfo']
 export type TokenCreated = S['TokenCreated']

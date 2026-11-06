@@ -72,8 +72,11 @@ export function BulkBar({ selected, onClear }: { selected: Map<string, WorkloadR
   }, [open])
   const git = useGitOnlyClusters()
   const all = [...selected.values()]
-  // Workload overrides are hub policies, which Git-only clusters never receive (D-022): skip those.
-  const rows = all.filter((w) => !git.has(w.cluster))
+  // Workload overrides are hub policies, which Git-only clusters never receive: skip those.
+  // A workload also needs operator on its team (docs/teams.md): a viewer of that team cannot change it.
+  const noRole = all.filter((w) => !git.has(w.cluster) && !auth.canOperateTeam(w.team))
+  const rows = all.filter((w) => !git.has(w.cluster) && auth.canOperateTeam(w.team))
+  const gitSkipped = all.filter((w) => git.has(w.cluster))
   const skipped = all.length - rows.length
   const savings = rows.reduce((s, w) => s + (w.monthlySavingsUSD?.total ?? 0), 0)
   const target = open === 'exclude' ? { cpu: 'off' as Mode, memory: 'off' as Mode } : modes
@@ -205,9 +208,19 @@ export function BulkBar({ selected, onClear }: { selected: Map<string, WorkloadR
             tone="muted"
             title={`${formatNumber(skipped)} selected workload${skipped === 1 ? ' is' : 's are'} skipped`}
           >
-            They run on Git-only clusters (
-            {[...new Set(all.filter((w) => git.has(w.cluster)).map((w) => w.cluster))].join(', ')}), which
-            take their policies from Git.
+            {gitSkipped.length ? (
+              <>
+                {formatNumber(gitSkipped.length)} run on Git-only clusters (
+                {[...new Set(gitSkipped.map((w) => w.cluster))].join(', ')}), which take their policies from
+                Git.{' '}
+              </>
+            ) : null}
+            {noRole.length ? (
+              <>
+                {formatNumber(noRole.length)} belong to teams where you are not an operator (
+                {[...new Set(noRole.map((w) => w.team ?? 'unassigned'))].join(', ')}).
+              </>
+            ) : null}
           </Callout>
         ) : null}
         {open === 'mode' ? (

@@ -208,7 +208,7 @@ func onlyCPUMem(r corev1.ResourceRequirements) corev1.ResourceRequirements {
 	return corev1.ResourceRequirements{Requests: pick(r.Requests), Limits: pick(r.Limits)}
 }
 
-// NodeSupportsInPlace reports whether in-place resize may be used on a node (D-007): not for
+// NodeSupportsInPlace reports whether in-place resize may be used on a node: not for
 // memory changes on nodes with swap (memory accounting differs; CPU is unaffected), and not on
 // nodes matching one of the unsupported label selectors (e.g. nodes whose kubelet runs a static
 // CPU or Memory Manager policy, which the API does not expose).

@@ -68,7 +68,7 @@ config:
       static_configs:
         - targets: ["kube-state-metrics.monitoring.svc:8080"]
 
-    # Spoke components (agent WO-06, webhook WO-07): annotate the Service with
+    # Spoke components (agent, webhook): annotate the Service with
     # prometheus.io/scrape: "true" and prometheus.io/port (and optionally prometheus.io/path, /scheme).
     - job_name: annotated-services
       honor_labels: true

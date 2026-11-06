@@ -36,7 +36,7 @@ type Change struct {
 	Version  int
 	Before   any
 	After    any
-	// AfterExtra adds keys to the stored after object (e.g. overrideReadiness, D-025).
+	// AfterExtra adds keys to the stored after object (e.g. overrideReadiness).
 	AfterExtra map[string]any
 }
 
@@ -161,6 +161,8 @@ func (s *Store) QueryConfigChanges(ctx context.Context, q ConfigQuery) ([]hubapi
 	if len(q.Actions) > 0 {
 		add("e.reason = ANY($%d)", q.Actions)
 	}
+	// A team-scoped caller sees only the changes to its teams' workloads (overrides, approvals).
+	conds = append(conds, workloadIDsInScope(ctx, "e.workload_id", &args))
 	if q.From != nil {
 		add("e.time >= $%d", *q.From)
 	}

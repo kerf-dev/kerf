@@ -23,6 +23,7 @@ import {
   SunIcon,
   TrendingDownIcon,
   UsersIcon,
+  UsersRoundIcon,
   WrenchIcon,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -59,6 +60,8 @@ interface NavItem {
   end?: boolean
   /** Lowest role that sees the item (signed-in users only). */
   min?: UserRole
+  /** Also for team-scoped users; the other admin pages are fleet-wide. */
+  teams?: boolean
 }
 
 export const NAV: NavItem[] = [
@@ -68,7 +71,7 @@ export const NAV: NavItem[] = [
   { to: '/activity', label: 'Activity', icon: ActivityIcon },
 ]
 
-/** The admin area (plan §4): operators see automation, policies, audit, notifications and maintenance; the rest is admin-only. */
+/** The admin area (plan §4): operators see automation, policies, audit, notifications and maintenance; the rest is admin-only. Everyone sees Teams; team-scoped users see nothing else here. */
 export const ADMIN_NAV: NavItem[] = [
   { to: '/admin', label: 'Automation', icon: GaugeIcon, end: true, min: 'operator' },
   { to: '/admin/policies', label: 'Policies', icon: ScrollTextIcon, min: 'operator' },
@@ -77,12 +80,14 @@ export const ADMIN_NAV: NavItem[] = [
   { to: '/admin/pricing', label: 'Pricing', icon: BadgeDollarSignIcon, min: 'admin' },
   { to: '/admin/datasources', label: 'Metrics sources', icon: DatabaseIcon, min: 'admin' },
   { to: '/admin/access', label: 'Access', icon: UsersIcon, min: 'admin' },
+  { to: '/admin/teams', label: 'Teams', icon: UsersRoundIcon, min: 'viewer', teams: true },
   { to: '/admin/audit', label: 'Audit', icon: HistoryIcon, min: 'operator' },
   { to: '/admin/notifications', label: 'Notifications', icon: BellIcon, min: 'operator' },
   { to: '/admin/maintenance', label: 'Maintenance', icon: WrenchIcon, min: 'operator' },
 ]
 
-export const visibleAdminNav = (auth: Auth) => ADMIN_NAV.filter((n) => auth.can(n.min ?? 'viewer'))
+export const visibleAdminNav = (auth: Auth) =>
+  ADMIN_NAV.filter((n) => auth.can(n.min ?? 'viewer') && (!auth.teamScoped || n.teams))
 
 function Freshness() {
   const { data } = useSummary()

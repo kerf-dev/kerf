@@ -33,19 +33,19 @@ type Server struct {
 	Log     *slog.Logger
 	// Job runs the recommender; POST /v1/admin/recompute queues runs on it.
 	Job *Job
-	// Onb serves datasources, readiness and install (D-025); nil answers 501 (InitOnboarding).
+	// Onb serves datasources, readiness and install; nil answers 501 (InitOnboarding).
 	Onb *Onboarding
 	// Coord is the leader election and notification channel shared with the other hub replicas
-	// (WO-18a); nil = this process is the only hub and leads (tests).
+	// nil = this process is the only hub and leads (tests).
 	Coord *Elector
 	// Now is the clock (tests).
 	Now func() time.Time
 	// Version is this hub's version (main.version), Identity its replica name (POD_NAME) and
-	// Started its start time: the Maintenance page (WO-33).
+	// Started its start time: the Maintenance page.
 	Version  string
 	Identity string
 	Started  time.Time
-	// Updates checks for a newer Kerf release (WO-33); nil = off.
+	// Updates checks for a newer Kerf release; nil = off.
 	Updates *UpdateChecker
 	// OIDC is sign-in with an OpenID Connect provider; nil = not configured.
 	OIDC *auth.OIDC
@@ -108,17 +108,17 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET /v1/clusters/{cluster}/config", &accessAgent, s.getClusterConfig},
 		{"GET /v1/audit", &accessAudit, s.queryAudit},
 		// UI (read).
-		{"GET /v1/summary", &accessViewer, s.getSummary},
-		{"GET /v1/clusters", &accessViewer, s.listClusters},
-		{"GET /v1/workloads", &accessViewer, s.listWorkloads},
-		{"GET /v1/workloads/facets", &accessViewer, s.getWorkloadFacets},
-		{"GET /v1/workloads/{id}", &accessViewer, s.getWorkload},
-		{"GET /v1/workloads/{id}/usage", &accessViewer, s.getWorkloadUsage},
-		{"GET /v1/workloads/{id}/history", &accessViewer, s.getWorkloadHistory},
-		{"GET /v1/savings/trend", &accessViewer, s.getSavingsTrend},
-		{"GET /v1/savings/realized", &accessViewer, s.getRealizedSavings},
+		{"GET /v1/summary", &accessTeamViewer, s.getSummary},
+		{"GET /v1/clusters", &accessTeamViewer, s.listClusters},
+		{"GET /v1/workloads", &accessTeamViewer, s.listWorkloads},
+		{"GET /v1/workloads/facets", &accessTeamViewer, s.getWorkloadFacets},
+		{"GET /v1/workloads/{id}", &accessTeamViewer, s.getWorkload},
+		{"GET /v1/workloads/{id}/usage", &accessTeamViewer, s.getWorkloadUsage},
+		{"GET /v1/workloads/{id}/history", &accessTeamViewer, s.getWorkloadHistory},
+		{"GET /v1/savings/trend", &accessTeamViewer, s.getSavingsTrend},
+		{"GET /v1/savings/realized", &accessTeamViewer, s.getRealizedSavings},
 		{"GET /v1/savings/realized/node-cost", &accessViewer, s.getNodeCostTrend},
-		{"GET /v1/workloads/{id}/savings/realized", &accessViewer, s.getWorkloadRealizedSavings},
+		{"GET /v1/workloads/{id}/savings/realized", &accessTeamViewer, s.getWorkloadRealizedSavings},
 		{"GET /v1/clusters/{cluster}/capacity", &accessViewer, s.getClusterCapacity},
 		{"POST /v1/admin/recompute", &accessAdmin, s.recompute},
 		// Auth.
@@ -127,13 +127,13 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET /v1/auth/providers", nil, s.authProviders},
 		{"GET /v1/auth/oidc/login", nil, s.oidcLogin},
 		{"GET /v1/auth/oidc/callback", nil, s.oidcCallback},
-		{"GET /v1/me", &accessViewer, s.getMe},
+		{"GET /v1/me", &accessTeamViewer, s.getMe},
 		{"POST /v1/me/password", &accessSession, s.changeOwnPassword},
 		// Settings.
-		{"GET /v1/admin/settings", &accessViewer, s.getSettings},
-		{"GET /v1/admin/settings/recommender", &accessViewer, s.getRecommenderSettings},
+		{"GET /v1/admin/settings", &accessTeamViewer, s.getSettings},
+		{"GET /v1/admin/settings/recommender", &accessTeamViewer, s.getRecommenderSettings},
 		{"PUT /v1/admin/settings/recommender", &accessAdmin, s.putRecommenderSettings},
-		{"GET /v1/admin/settings/pricing", &accessViewer, s.getPricingSettings},
+		{"GET /v1/admin/settings/pricing", &accessTeamViewer, s.getPricingSettings},
 		{"PUT /v1/admin/settings/pricing", &accessAdmin, s.putPricingSettings},
 		{"GET /v1/admin/settings/{section}/versions", &accessViewer, s.listSettingsVersions},
 		// Policies.
@@ -146,18 +146,18 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST /v1/admin/policies/{policyId}/revert", &accessAdmin, s.revertPolicy},
 		{"GET /v1/admin/policy-inventory", &accessViewer, s.getPolicyInventory},
 		{"POST /v1/admin/preview", &accessOperator, s.previewPolicyChange},
-		{"GET /v1/workloads/{id}/effective-policy", &accessViewer, s.getEffectivePolicy},
-		{"GET /v1/workloads/{id}/override", &accessViewer, s.getWorkloadOverride},
-		{"PUT /v1/workloads/{id}/override", &accessOperator, s.putWorkloadOverride},
-		{"DELETE /v1/workloads/{id}/override", &accessOperator, s.deleteWorkloadOverride},
-		{"POST /v1/workloads/{id}/approve", &accessOperator, s.approveRecommendation},
+		{"GET /v1/workloads/{id}/effective-policy", &accessTeamViewer, s.getEffectivePolicy},
+		{"GET /v1/workloads/{id}/override", &accessTeamViewer, s.getWorkloadOverride},
+		{"PUT /v1/workloads/{id}/override", &accessTeamOperator, s.putWorkloadOverride},
+		{"DELETE /v1/workloads/{id}/override", &accessTeamOperator, s.deleteWorkloadOverride},
+		{"POST /v1/workloads/{id}/approve", &accessTeamOperator, s.approveRecommendation},
 		// Clusters and automation.
 		{"POST /v1/admin/clusters", &accessAdmin, s.createCluster},
 		{"GET /v1/admin/clusters/{cluster}", &accessViewer, s.getClusterAdmin},
 		{"PATCH /v1/admin/clusters/{cluster}", &accessAdmin, s.updateCluster},
 		{"DELETE /v1/admin/clusters/{cluster}", &accessAdmin, s.deleteCluster},
 		{"PUT /v1/clusters/{cluster}/automation", &accessOperator, s.setClusterAutomation},
-		{"GET /v1/admin/automation", &accessViewer, s.getFleetAutomation},
+		{"GET /v1/admin/automation", &accessTeamViewer, s.getFleetAutomation},
 		{"PUT /v1/admin/automation", &accessOperator, s.setFleetAutomation},
 		// Tokens and users.
 		{"GET /v1/admin/tokens", &accessAdmin, s.listTokens},
@@ -169,7 +169,13 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"PATCH /v1/admin/users/{username}", &accessAdmin, s.updateUser},
 		{"DELETE /v1/admin/users/{username}", &accessAdmin, s.deleteUser},
 		{"POST /v1/admin/users/{username}/reset-password", &accessAdmin, s.resetUserPassword},
-		{"GET /v1/audit/config", &accessViewer, s.queryConfigAudit},
+		{"GET /v1/audit/config", &accessTeamViewer, s.queryConfigAudit},
+		// Teams.
+		{"GET /v1/admin/teams", &accessTeamViewer, s.listTeams},
+		{"POST /v1/admin/teams", &accessAdmin, s.createTeam},
+		{"GET /v1/admin/teams/{teamId}", &accessTeamViewer, s.getTeam},
+		{"PUT /v1/admin/teams/{teamId}", &accessAdmin, s.updateTeam},
+		{"DELETE /v1/admin/teams/{teamId}", &accessAdmin, s.deleteTeam},
 		// Onboarding and readiness.
 		{"GET /v1/admin/datasources", &accessViewer, s.listDatasources},
 		{"POST /v1/admin/datasources", &accessAdmin, s.createDatasource},
@@ -251,7 +257,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Add("Vary", "Origin")
-			// Sessions (D-023): credentials only for explicitly listed origins, never for "*".
+			// Sessions: credentials only for explicitly listed origins, never for "*".
 			if allowed[origin] {
 				h.Set("Access-Control-Allow-Credentials", "true")
 			}
@@ -322,7 +328,7 @@ func (s *Server) heartbeat(ctx context.Context, cluster, version string) {
 
 // ---- responses ----
 
-// recompute serves POST /v1/admin/recompute (D-019).
+// recompute serves POST /v1/admin/recompute.
 func (s *Server) recompute(w http.ResponseWriter, r *http.Request) {
 	cluster := r.URL.Query().Get("cluster")
 	if cluster != "" {
@@ -353,9 +359,9 @@ func (s *Server) recompute(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusAccepted, hubapi.RecomputeAccepted{RunID: id.String(), Cluster: cluster, RequestedAt: at.UTC(), Coalesced: coalesced})
 }
 
-// notImplemented answers routes of later work-orders (D-025, WO-25).
+// notImplemented answers routes that exist in the API spec but are not implemented yet.
 func notImplemented(w http.ResponseWriter, r *http.Request) {
-	writeProblem(w, r, http.StatusNotImplemented, hubapi.CodeNotImplemented, "Not implemented yet (WO-25).")
+	writeProblem(w, r, http.StatusNotImplemented, hubapi.CodeNotImplemented, "Not implemented yet.")
 }
 
 // writeJSON writes a 200 JSON response.

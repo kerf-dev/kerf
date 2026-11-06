@@ -1,7 +1,7 @@
 // Package install renders the install instructions of a workload cluster for the onboarding
 // wizard: a Helm script, a values file, or an Argo CD Application, plus the Argo CD
-// ignoreDifferences snippet for argocd-cm (D-006). All three install the umbrella chart
-// kerf with global.mode spoke (D-028, docs/install/eks.md step 5.3): the agent, the
+// ignoreDifferences snippet for argocd-cm. All three install the umbrella chart
+// kerf with global.mode spoke (docs/install/eks.md step 5.3): the agent, the
 // admission webhook and the CRDs in one release.
 //
 // The token never appears: the snippets reference the Secret kerf-agent-token (key
@@ -38,7 +38,7 @@ const (
 	// ChartName and ReleaseName of the umbrella chart (deploy/charts/kerf).
 	ChartName   = "kerf"
 	ReleaseName = "kerf"
-	// FieldManager is the agent's server-side apply field manager (D-006).
+	// FieldManager is the agent's server-side apply field manager.
 	FieldManager = "kerf"
 	// TokenEnv is the shell variable the Helm snippet reads the agent token from.
 	TokenEnv = "KERF_AGENT_TOKEN"
@@ -69,7 +69,7 @@ type Options struct {
 	Webhook, CertManager bool
 	// CertManagerChart / CertManagerVersion default to DefaultCertManagerRef / Ver.
 	CertManagerChart, CertManagerVersion string
-	// Health is the cluster's metrics binding for the agent's throttling health watch (D-025);
+	// Health is the cluster's metrics binding for the agent's throttling health watch;
 	// nil = the chart defaults (no throttling rollback).
 	Health *HealthMetrics
 	// TokenExternalSecret makes the chart build the token Secret with the External Secrets
@@ -178,7 +178,7 @@ func RegistryOf(ref string) string {
 }
 
 // UmbrellaFromComponent derives the umbrella chart reference from a component chart reference
-// (the pre-WO-18f onboarding.agentChart): make release publishes it next to the components, e.g.
+// (the older onboarding.agentChart): make release publishes it next to the components, e.g.
 // oci://<registry>/charts/agent -> oci://<registry>/charts/kerf,
 // <repo>|agent -> <repo>|kerf, deploy/charts/agent -> deploy/charts/kerf.
 func UmbrellaFromComponent(ref string) string {
@@ -197,7 +197,7 @@ func UmbrellaFromComponent(ref string) string {
 }
 
 // ArgoCDIgnoreDifferences is the argocd-cm data entry that makes Argo CD ignore the fields the
-// agent manages (D-006).
+// agent manages.
 func ArgoCDIgnoreDifferences() string {
 	return "resource.customizations.ignoreDifferences.all: |\n  managedFieldsManagers:\n  - " + FieldManager + "\n"
 }
@@ -483,7 +483,7 @@ func argoSource(ref, version string) appSource {
 
 // argoCD renders the Application of the umbrella chart, as one Application of
 // deploy/examples/eks/applicationset.yaml: the agent's fields and the webhook's caBundle (written
-// by cert-manager's CA injector) are ignored (D-006), and deleting the Application keeps the
+// by cert-manager's CA injector) are ignored, and deleting the Application keeps the
 // objects (no resources finalizer: the CRDs hold every policy).
 func argoCD(o Options) (string, error) {
 	var a application

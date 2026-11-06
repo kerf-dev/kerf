@@ -1,4 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useFleetScope } from './admin'
 import { api, unwrap } from './client'
 import type { FacetsQuery, ListWorkloadsQuery, QueryAuditQuery, ResourceName } from './types'
 
@@ -121,7 +122,7 @@ export const useNodeCostTrend = (cluster: string | undefined, range: TimeRange) 
           params: { query: { cluster: cluster!, ...rangeWindow(range) } },
         }),
       ),
-    enabled: !!cluster,
+    enabled: useFleetScope(!!cluster),
     placeholderData: keepPreviousData,
   })
 
@@ -138,12 +139,12 @@ export const useAudit = (query: Omit<QueryAuditQuery, 'continue'>) =>
     getNextPageParam: (last) => last.continue || undefined,
   })
 
-/** Filter values with counts (D-016). Each facet ignores its own filter. */
+/** Filter values with counts. Each facet ignores its own filter. */
 export const useFacets = (query: FacetsQuery) =>
   useQuery({
     queryKey: ['facets', query],
     queryFn: () => unwrap(api.GET('/v1/workloads/facets', { params: { query } })),
     placeholderData: keepPreviousData,
-    // Older hubs (before WO-04b) have no facets endpoint; callers fall back to static options.
+    // Older hubs have no facets endpoint; callers fall back to static options.
     retry: false,
   })

@@ -1,4 +1,4 @@
-# Pricing service (WO-03). Included by the root Makefile.
+# Pricing service. Included by the root Makefile.
 
 PRICING_IMAGE ?= localhost:5005/kerf/pricing
 PRICING_TAG   ?= dev-$(shell date +%Y%m%d-%H%M%S)

@@ -97,6 +97,17 @@ First public version.
   subject and e-mail. `hub.auth.local.enabled: false` keeps passwords only for one break-glass admin. The
   client secret comes from a Secret; refresh tokens are stored encrypted and no token is ever logged. Settings
   per provider: [Sign-in and access](docs/auth.md#sign-in-with-openid-connect).
+- **Teams and team-scoped access.** Admin → Teams defines teams by namespace selectors (names, globs, namespace
+  labels, clusters) and an owner label on the workload or its namespace (`team` by default,
+  `hub.config.teams.ownerLabel`); the workload's own label wins, and workloads in no team are "Unassigned". Users
+  get `viewer` or `operator` on one or more teams in Admin → Access, and identity-provider users from group
+  mappings with `teams:`; `admin` stays fleet-wide. The hub filters every list, count, total, detail and write by
+  the caller's teams: other teams' workloads are not found, and approving or overriding them answers
+  `403 scope_forbidden`. The audit log records the team that allowed each action (`actor.teams`). Opportunities
+  filters and groups by team, the Overview shows savings by team, the workload page shows its team, and the weekly
+  digest has a savings-by-team section. New API `/v1/admin/teams`, `team` filters and `groupBy=team` on workloads,
+  facets, the savings trend and realized savings. The agent reports workload and namespace labels and now reads
+  namespaces (RBAC). Database migration `0021_teams`. See [Teams](docs/teams.md).
 
 ### Changed
 
@@ -138,6 +149,8 @@ First public version.
 
 ### Fixed
 
+- The realized savings card showed "Memory -$0.00" when a resource saved less than a cent: amounts that round to
+  zero no longer carry a minus sign, and a CPU or memory line that rounds to zero is left out.
 - After signing in, the browser tab kept the title "Sign in · Kerf" on every page.
 - Signing in through the web UI kept users read-only: the web proxy looked for the old session cookie name
   and never forwarded `kerf_session`, so every request still went out with the read-only UI token.

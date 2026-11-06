@@ -43,12 +43,12 @@ type ThrottleSource interface {
 // minPeriods is the minimum number of CFS periods (100 ms each) in the window for a ratio to count.
 const minPeriods = 300
 
-// PromSource queries a Prometheus-compatible endpoint (the hub's VictoriaMetrics, D-003).
+// PromSource queries a Prometheus-compatible endpoint (the hub's VictoriaMetrics).
 type PromSource struct {
 	URL       string
 	TokenFile string
 	HTTP      *http.Client
-	// Selector selects this cluster's series (the cluster's metrics binding, D-025); nil = label
+	// Selector selects this cluster's series (the cluster's metrics binding); nil = label
 	// cluster = the cluster name.
 	Selector *MetricsSelector
 }

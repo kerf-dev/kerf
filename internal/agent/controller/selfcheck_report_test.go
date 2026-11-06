@@ -23,7 +23,7 @@ func (h *batchHub) ReportEvents(context.Context, []hubclient.Event) (hubclient.B
 }
 
 // TestReporterSelfChecks: a self-check run goes with the next batch (even without changed
-// statuses), then only with full batches (D-025).
+// statuses), then only with full batches.
 func TestReporterSelfChecks(t *testing.T) {
 	h := &batchHub{}
 	rep := NewReporter(h, "test", 10, nil)
@@ -58,7 +58,7 @@ func TestReporterSelfChecks(t *testing.T) {
 	}
 }
 
-// TestReporterComponents: the components found by a self-check run (WO-33) go with the checks; an
+// TestReporterComponents: the components found by a self-check run go with the checks; an
 // empty list is sent (no webhook), nil (unknown) is not.
 func TestReporterComponents(t *testing.T) {
 	ctx := context.Background()

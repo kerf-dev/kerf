@@ -363,7 +363,7 @@ export function ConfidenceCard({ rec }: { rec: WorkloadRecommendation }) {
   const reducers = rec.riskFlags.filter((f) =>
     ['restarting', 'short-lived', 'low-confidence', 'throttled', 'oom-killed'].includes(f),
   )
-  // D-016: each container's confidence is Σ score × weight; the workload's is the minimum, so the
+  // Each container's confidence is Σ score × weight; the workload's is the minimum, so the
   // breakdown shown is the container that limits it.
   const withFactors = rec.containers
     .filter((c) => c.explanation?.confidenceFactors)

@@ -40,7 +40,7 @@ default). An agent token implicitly filters on its own cluster.
 | `200` | Audit events. | [AuditEventList](schemas.md#auditeventlist) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Configuration changes (audit type `config_changed`) { #queryConfigAudit }
 
@@ -76,4 +76,4 @@ AND.
 | `200` | Changes. | [ConfigChangeList](schemas.md#configchangelist) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |

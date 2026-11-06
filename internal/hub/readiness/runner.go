@@ -50,7 +50,7 @@ func RecommendationsCheck(live, recommended int, now time.Time, docsBase string)
 }
 
 // NotAutomationReady returns the target clusters that are not AutomationReady with their state
-// (clusters without stored readiness are Registered). Auto-patch gating (D-025).
+// (clusters without stored readiness are Registered). Auto-patch gating.
 func NotAutomationReady(states map[string]rd.State, targets []string) map[string]rd.State {
 	out := map[string]rd.State{}
 	for _, c := range targets {

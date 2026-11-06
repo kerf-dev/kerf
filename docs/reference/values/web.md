@@ -62,14 +62,14 @@ The values of the `web` component chart. In the `kerf` chart they sit under `web
 | `extraVolumes` | array | `[]` |  |
 | `extraVolumeMounts` | array | `[]` |  |
 | `hub` | object | see the keys below |  |
-| `hub.upstream` | string | `hub.kerf.svc.cluster.local:8080` | host:port of the hub API Service (the chart names it after its release, `hub`). nginx resolves it per request with the cluster DNS, which does not apply search domains: use the full name. |
+| `hub.upstream` | string | `hub.kerf.svc.cluster.local:8080` | host:port of the hub API Service (the hub chart names it after its release, `hub`). nginx resolves it per request with the cluster DNS, which does not apply search domains: use the full name. |
 | `trustedProxies` | array | `[]` | Load balancers or ingress controllers in front of the UI (CIDRs or addresses, e.g. the VPC subnets of the ALB). nginx then takes the client address from the X-Forwarded-For entry they add, and the hub rate-limits failed sign-ins per real client. Empty: the client is the connecting address (the proxy's, when there is one). |
 | `service` | object | see the keys below |  |
 | `service.type` | string | `ClusterIP` |  |
 | `service.port` | integer | `80` |  |
 | `service.nodePort` | object | `null` | e.g. 30090 with type NodePort |
 | `service.annotations` | object | `{}` |  |
-| `ingress` | object | see the keys below | The UI for browsers. AWS Load Balancer Controller example (: scheme of your choice, ACM):<br>`className: alb`<br>`annotations:`<br>`alb.ingress.kubernetes.io/scheme: internal          # or internet-facing`<br>`alb.ingress.kubernetes.io/target-type: ip`<br>`alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'`<br>`alb.ingress.kubernetes.io/ssl-redirect: "443"`<br>`alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account>:certificate/<id>`<br>`alb.ingress.kubernetes.io/healthcheck-path: /healthz`<br>`hosts: [{host: ro.example.com, paths: [{path: /, pathType: Prefix}]}]`<br>`tls: [{hosts: [ro.example.com]}]` |
+| `ingress` | object | see the keys below | The UI for browsers. AWS Load Balancer Controller example (scheme of your choice, ACM):<br>`className: alb`<br>`annotations:`<br>`alb.ingress.kubernetes.io/scheme: internal          # or internet-facing`<br>`alb.ingress.kubernetes.io/target-type: ip`<br>`alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'`<br>`alb.ingress.kubernetes.io/ssl-redirect: "443"`<br>`alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account>:certificate/<id>`<br>`alb.ingress.kubernetes.io/healthcheck-path: /healthz`<br>`hosts: [{host: ro.example.com, paths: [{path: /, pathType: Prefix}]}]`<br>`tls: [{hosts: [ro.example.com]}]` |
 | `ingress.enabled` | boolean | `false` |  |
 | `ingress.className` | string | `""` |  |
 | `ingress.annotations` | object | `{}` |  |

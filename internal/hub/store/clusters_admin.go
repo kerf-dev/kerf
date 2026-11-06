@@ -12,7 +12,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// ---- cluster administration (D-022, D-025 fields stored only) ----
+// ---- cluster administration (metrics source fields stored only) ----
 
 // ClusterRow is a cluster with its admin metadata, agent sync state and metrics binding.
 type ClusterRow struct {
@@ -117,7 +117,7 @@ func lockCluster(ctx context.Context, tx pgx.Tx, name string) (ClusterRow, error
 }
 
 // ensureDatasource makes sure a binding's datasource exists: 'local' is created from localURL
-// when missing (WO-25 upserts it at start-up); another id must exist and be live.
+// when missing (the hub upserts it at start-up); another id must exist and be live.
 func ensureDatasource(ctx context.Context, tx pgx.Tx, id, localURL string) error {
 	if id == hubapi.LocalDatasourceID {
 		_, err := tx.Exec(ctx, `INSERT INTO datasources (id, name, type, url, built_in) VALUES ('local', 'local', 'victoriametrics', $1, true)
@@ -464,7 +464,7 @@ func (s *Store) ExpirePauses(ctx context.Context, now time.Time) ([]string, erro
 	return scopes, err
 }
 
-// ---- approve once (D-024) ----
+// ---- approve once ----
 
 const approvalColumns = `id, cluster, namespace, kind, name, recommendation_id, approved_by, approved_at, expires_at, reason,
 	consumed_at, consumed_event_id, superseded_at`

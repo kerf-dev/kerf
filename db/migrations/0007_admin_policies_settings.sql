@@ -1,4 +1,4 @@
--- WO-19 (admin area, D-022): hub-only settings with versions, hub-managed policies with versions,
+-- Admin area: hub-only settings with versions, hub-managed policies with versions,
 -- cluster metadata, automation (pause) and the agents' config sync and policy inventory.
 -- API shapes: api/openapi/hub.yaml; flow: docs/contracts/admin.md.
 -- Idempotent: safe to re-run on a database that already has it.

@@ -6,7 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// RecordChange records a config change outside another transaction (datasource changes, D-025).
+// RecordChange records a config change outside another transaction (datasource changes).
 func (s *Store) RecordChange(ctx context.Context, c Change) error {
 	return s.inTx(ctx, func(tx pgx.Tx) error { return recordChange(ctx, tx, c) })
 }

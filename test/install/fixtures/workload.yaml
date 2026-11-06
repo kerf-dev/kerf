@@ -1,4 +1,4 @@
-# WO-18e: one over-provisioned workload for the guide's step 6 (auto-patch). stress-ng uses ~2% of
+# One over-provisioned workload for the guide's step 6 (auto-patch). stress-ng uses ~2% of
 # a core against a 500m request, so the recommendation is a CPU decrease.
 apiVersion: v1
 kind: Namespace

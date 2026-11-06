@@ -1,7 +1,7 @@
 # vm/victoria-metrics-single on ro-hub, namespace monitoring. Service: victoria-metrics:8428 (NodePort 30428).
 server:
   fullnameOverride: victoria-metrics
-  # Kept just above the longest synthetic backfill (WO-02: 30 days). VictoriaMetrics drops samples
+  # Kept just above the longest synthetic backfill (30 days). VictoriaMetrics drops samples
   # older than the retention period on ingest, so this cannot be shorter.
   retentionPeriod: 35d
   extraArgs:
@@ -16,7 +16,7 @@ server:
       cpu: 100m
       memory: 512Mi
     limits:
-      # WO-02 bulk backfill (~0.9B samples) OOM-killed it at 768Mi.
+      # The synthetic bulk backfill (~0.9B samples) OOM-killed it at 768Mi.
       memory: 3Gi
   service:
     annotations:

@@ -15,7 +15,7 @@ import (
 	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
-const pythonImage = "docker.io/library/python:3.13.18-alpine3.23" // already on the nodes (WO-01)
+const pythonImage = "docker.io/library/python:3.13.18-alpine3.23" // already on the nodes
 
 // controllable holds `mib` MiB of touched memory and exits while `crash` is 1, both read every
 // second from ConfigMap <name>-ctl, so a test can make a running workload misbehave.
@@ -68,7 +68,7 @@ func setControl(t *testing.T, cl cluster, ns, name string, data map[string]strin
 	}
 	cm.Data = data
 	must(t, cl.C.Update(ctx(t), cm))
-	// The program reads the ConfigMap volume: make the kubelet refresh it now (WO-30).
+	// The program reads the ConfigMap volume: make the kubelet refresh it now.
 	nudgePods(t, cl, ns, map[string]string{"app": name}, "e2e.kerf.getkerf.dev/ctl-nudge", time.Now().UTC().Format(time.RFC3339Nano))
 }
 
@@ -80,7 +80,7 @@ func rollbackGuardrails() *v1alpha1.Guardrails {
 	return g
 }
 
-// Scenario 10: rollback (WO-08). A change that makes the workload unhealthy within the watch
+// Scenario 10: rollback. A change that makes the workload unhealthy within the watch
 // window is rolled back to status.previous, with a rolled_back event.
 func TestRollback(t *testing.T) {
 	t.Parallel()

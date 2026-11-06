@@ -1,4 +1,4 @@
-// Package policy resolves the effective rightsizing policy of a workload (D-005, D-022):
+// Package policy resolves the effective rightsizing policy of a workload:
 //
 //	built-in defaults < hub ro-global-defaults < chart cluster defaults < hub ro-cluster-defaults
 //	  < winning RightsizingPolicy (highest priority match) < hub workload override < annotations
@@ -35,7 +35,7 @@ const (
 	DefaultRollbackOOMs    = 1
 	DefaultRollbackRestart = 3
 	DefaultThrottlingRatio = 0.25
-	// HPA target bounds (WO-11), percent.
+	// HPA target bounds, percent.
 	DefaultHPAMinTarget int32 = 40
 	DefaultHPAMaxTarget int32 = 90
 )
@@ -57,7 +57,7 @@ type Workload struct {
 // Effective is the resolved policy of one workload, with every default filled in.
 type Effective struct {
 	Policy string
-	// Override is the hub workload-override policy layered on top of Policy (D-022).
+	// Override is the hub workload-override policy layered on top of Policy.
 	Override         string
 	CPUMode          v1alpha1.Mode
 	CPUModeSource    v1alpha1.ModeSource
@@ -81,7 +81,7 @@ type Effective struct {
 	MinMemory        resource.Quantity
 	Cooldown         time.Duration
 
-	// Rollback (health watch, WO-08).
+	// Rollback (health watch).
 	WatchDuration    time.Duration
 	RollbackOOMKills int32
 	RollbackRestarts int32
@@ -89,7 +89,7 @@ type Effective struct {
 
 	JVMDetect bool
 
-	// HPA coordination (WO-11): change requests of an HPA's utilization resource only together
+	// HPA coordination: change requests of an HPA's utilization resource only together
 	// with its target, which must stay within [HPAMinTarget, HPAMaxTarget] percent.
 	HPACoordinate bool
 	HPAMinTarget  int32

@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -16,23 +17,33 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/auth"
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 	"github.com/kerf-dev/kerf/internal/hub/store"
+	"github.com/kerf-dev/kerf/internal/hub/teams"
 )
 
 // access is who may call a route: bearer tokens of the listed roles (an admin token always) and,
-// when session is set, browser sessions of users with at least that role (D-023).
+// when session is set, browser sessions of users with at least that role.
+//
+// teams marks the routes a team-scoped user may call (docs/teams.md): their data is filtered by the
+// caller's scope in the store, and on /v1/workloads/{id}/... routes the caller needs the role on
+// the workload's team. Every other route needs the role fleet-wide.
 type access struct {
 	tokens  []string
 	session string
+	teams   bool
 }
 
 var (
 	accessAgent    = access{tokens: []string{hubapi.RoleAgent}}
-	accessAudit    = access{tokens: []string{hubapi.RoleAgent, hubapi.RoleUI}, session: hubapi.UserRoleViewer}
+	accessAudit    = access{tokens: []string{hubapi.RoleAgent, hubapi.RoleUI}, session: hubapi.UserRoleViewer, teams: true}
 	accessViewer   = access{tokens: []string{hubapi.RoleUI}, session: hubapi.UserRoleViewer}
 	accessOperator = access{tokens: []string{hubapi.RoleAdmin}, session: hubapi.UserRoleOperator}
 	accessAdmin    = access{tokens: []string{hubapi.RoleAdmin}, session: hubapi.UserRoleAdmin}
-	accessSession  = access{session: hubapi.UserRoleViewer}
-	// accessPricing: the pricing service's token (D-026) or an admin token.
+	accessSession  = access{session: hubapi.UserRoleViewer, teams: true}
+	// accessTeamViewer and accessTeamOperator: as accessViewer and accessOperator, also for
+	// team-scoped users (filtered data; the role on the workload's team).
+	accessTeamViewer   = access{tokens: []string{hubapi.RoleUI}, session: hubapi.UserRoleViewer, teams: true}
+	accessTeamOperator = access{tokens: []string{hubapi.RoleAdmin}, session: hubapi.UserRoleOperator, teams: true}
+	// accessPricing: the pricing service's token or an admin token.
 	accessPricing = access{tokens: []string{hubapi.RolePricing}}
 )
 
@@ -42,6 +53,10 @@ type Principal struct {
 	Role    string // user role (viewer/operator/admin); "" for agent tokens
 	Token   store.Token
 	Session *store.Session
+	// Scope is what the caller may see and do (fleet-wide for tokens).
+	Scope teams.Scope
+	// usedTeams is the scope used by this request: the team whose binding allowed the action.
+	usedTeams []string
 }
 
 // Actor returns the audit actor of the caller. An IdP user carries its subject and e-mail.
@@ -51,9 +66,19 @@ func (p Principal) Actor() hubapi.Actor {
 		if p.Session.IsOIDC() {
 			a.Subject, a.Email = p.Session.OIDCSubject, p.Session.User.Email
 		}
+		a.Teams = p.usedTeams
 		return a
 	}
 	return hubapi.Actor{Type: hubapi.ActorToken, Name: "token:" + strconv.FormatInt(p.Token.ID, 10), Role: p.Role}
+}
+
+// sessionScope returns the scope of a signed-in user.
+func sessionScope(u store.UserRow) teams.Scope {
+	bs := make([]teams.Binding, 0, len(u.TeamRoles))
+	for _, b := range u.TeamRoles {
+		bs = append(bs, teams.Binding{Team: b.Team, Role: b.Role})
+	}
+	return teams.UserScope(u.Role, u.Scope == hubapi.ScopeTeams, bs)
 }
 
 // IsAdmin reports whether the caller has admin rights.
@@ -83,7 +108,8 @@ func (s *Server) authenticate(a access, next http.HandlerFunc) http.Handler {
 			case err == nil && sess.IsOIDC() && s.refreshOIDC(r.Context(), &sess):
 				// The provider ended the session: treated as no session (401).
 			case err == nil:
-				p = Principal{Method: hubapi.AuthMethodSession, Role: sess.User.Role, Session: &sess}
+				sc := sessionScope(sess.User)
+				p = Principal{Method: hubapi.AuthMethodSession, Role: sc.MaxRole(), Session: &sess, Scope: sc}
 			case !errors.Is(err, store.ErrNotFound):
 				s.internal(w, r, err)
 				return
@@ -96,6 +122,11 @@ func (s *Server) authenticate(a access, next http.HandlerFunc) http.Handler {
 			}
 			if !hubapi.UserRoleAtLeast(p.Role, a.session) {
 				writeProblem(w, r, http.StatusForbidden, "role_forbidden", "Role "+p.Role+" may not use this endpoint (needs "+a.session+").")
+				return
+			}
+			if !a.teams && !hubapi.UserRoleAtLeast(p.Scope.FleetRole, a.session) {
+				writeProblem(w, r, http.StatusForbidden, hubapi.CodeScopeForbidden,
+					"This endpoint covers the whole fleet; your roles are on teams "+strings.Join(p.Scope.Teams(), ", ")+" (needs "+a.session+" fleet-wide).")
 				return
 			}
 		} else {
@@ -124,6 +155,15 @@ func (s *Server) authenticate(a access, next http.HandlerFunc) http.Handler {
 				return
 			}
 			p = Principal{Method: hubapi.AuthMethodToken, Role: hubapi.TokenUserRole(tok.Role), Token: tok}
+			// Tokens are fleet-wide (agent tokens are restricted to their cluster below).
+			p.Scope = teams.Fleet(cmp.Or(p.Role, hubapi.UserRoleViewer))
+		}
+		if id := r.PathValue("id"); id != "" && a.session != "" && !hubapi.UserRoleAtLeast(p.Scope.FleetRole, a.session) {
+			// A workload route the fleet role does not cover: the caller needs the route's role on
+			// the workload's team.
+			if !s.authorizeWorkload(w, r, &p, a.session, id) {
+				return
+			}
 		}
 		if cluster := r.PathValue("cluster"); cluster != "" {
 			if p.Token.Role == hubapi.RoleAgent && p.Token.Cluster != cluster {
@@ -145,8 +185,42 @@ func (s *Server) authenticate(a access, next http.HandlerFunc) http.Handler {
 		}
 		ctx := context.WithValue(r.Context(), ctxKey{}, p.Token)
 		ctx = context.WithValue(ctx, principalKey{}, p)
+		// Every read of the store is filtered by the caller's scope.
+		ctx = teams.WithScope(ctx, p.Scope)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// authorizeWorkload checks the caller's role on the team of workload id. A workload the caller
+// cannot see is not found for reads and forbidden for writes; one it sees without the role is
+// forbidden. A team binding that grants a write is recorded as the scope used (Actor.Teams). An
+// unknown or malformed id is left to the handler.
+func (s *Server) authorizeWorkload(w http.ResponseWriter, r *http.Request, p *Principal, need, id string) bool {
+	key, err := hubapi.ParseWorkloadID(id)
+	if err != nil {
+		return true
+	}
+	team, found, err := s.Store.WorkloadTeam(r.Context(), key)
+	if err != nil {
+		s.internal(w, r, err)
+		return false
+	}
+	if !found {
+		return true
+	}
+	if !p.Scope.CanSee(team) && safeMethod(r.Method) {
+		writeProblem(w, r, http.StatusNotFound, "workload_not_found", "Unknown workload "+key.ID()+".")
+		return false
+	}
+	ok, byTeam := p.Scope.Grants(team, need)
+	if !ok {
+		writeProblem(w, r, http.StatusForbidden, hubapi.CodeScopeForbidden, "Your role on the team of workload "+key.ID()+" does not allow this (needs "+need+").")
+		return false
+	}
+	if byTeam {
+		p.usedTeams = []string{team}
+	}
+	return true
 }
 
 func (s *Server) lookupToken(ctx context.Context, raw string) (store.Token, error) {
@@ -225,9 +299,10 @@ func tooMany(w http.ResponseWriter, r *http.Request, retry time.Duration, detail
 }
 
 func (s *Server) me(sess *store.Session, csrf bool) hubapi.Me {
-	m := hubapi.Me{AuthMethod: hubapi.AuthMethodSession, Role: sess.User.Role}
+	m := hubapi.Me{AuthMethod: hubapi.AuthMethodSession, Role: sessionScope(sess.User).MaxRole()}
 	u := sess.User.User
 	m.User = &u
+	m.Scope, m.TeamRoles = cmp.Or(u.Scope, hubapi.ScopeFleet), u.TeamRoles
 	if csrf {
 		m.CSRFToken = sess.CSRFToken
 	}
@@ -348,7 +423,7 @@ func (s *Server) getMe(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, s.me(p.Session, true))
 		return
 	}
-	writeJSON(w, hubapi.Me{AuthMethod: hubapi.AuthMethodToken, Role: p.Role, TokenID: strconv.FormatInt(p.Token.ID, 10)})
+	writeJSON(w, hubapi.Me{AuthMethod: hubapi.AuthMethodToken, Role: p.Role, TokenID: strconv.FormatInt(p.Token.ID, 10), Scope: hubapi.ScopeFleet})
 }
 
 // changeOwnPassword serves POST /v1/me/password.
@@ -390,7 +465,7 @@ func (s *Server) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 
 // ---- bootstrap and dev users ----
 
-// BootstrapUsers creates the initial admin on a database without users (D-023) and the dev seed
+// BootstrapUsers creates the initial admin on a database without users and the dev seed
 // users when missing. Passwords are hashed with cfg.Auth.BcryptCost.
 func BootstrapUsers(ctx context.Context, st *store.Store, cfg Config, log interface {
 	InfoContext(context.Context, string, ...any)

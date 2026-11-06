@@ -1,5 +1,5 @@
-// Package umbrella checks the Kerf umbrella chart's wiring to its component charts
-// (WO-18d). Rendering checks are in `make charts-lint` (charts-lint-umbrella).
+// Package umbrella checks the Kerf umbrella chart's wiring to its component charts.
+// Rendering checks are in `make charts-lint` (charts-lint-umbrella).
 package umbrella
 
 import (
@@ -28,7 +28,7 @@ func TestTemplatesGated(t *testing.T) {
 			}
 			s := string(b)
 			if !strings.HasPrefix(s, head) || !strings.HasSuffix(s, "{{ end -}}\n") {
-				t.Errorf("%s: wrap the file in %q ... %q (WO-18d gate)", f, strings.TrimSpace(head), "{{ end -}}")
+				t.Errorf("%s: wrap the file in %q ... %q (umbrella chart gate)", f, strings.TrimSpace(head), "{{ end -}}")
 			}
 		}
 	}

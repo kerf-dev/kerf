@@ -17,8 +17,8 @@ import (
 
 // HubTargets lists the clusters with a metrics binding from the hub (GET
 // /v1/internal/metrics-bindings, pricing token) and queries their datasources through the hub's
-// query proxy, which adds the datasource's credentials (D-026). Clusters without a binding are
-// read from --vm-url as before D-025.
+// query proxy, which adds the datasource's credentials. Clusters without a binding are
+// read from --vm-url as before metrics bindings.
 type HubTargets struct {
 	// HubURL is the hub API base URL, e.g. http://hub-api.hub.svc:8080.
 	HubURL string

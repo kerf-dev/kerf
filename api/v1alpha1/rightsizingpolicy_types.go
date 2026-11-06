@@ -6,7 +6,7 @@ import (
 )
 
 // Unset fields in a RightsizingPolicy mean "inherit from the next lower precedence level"
-// (cluster default, then global default; D-005). The CRD therefore has no OpenAPI defaults:
+// (cluster default, then global default). The CRD therefore has no OpenAPI defaults:
 // the agent fills in defaults during policy resolution. Documented global defaults are
 // listed on each field as "Global default".
 
@@ -44,12 +44,12 @@ type RightsizingPolicySpec struct {
 	// +optional
 	Guardrails *Guardrails `json:"guardrails,omitempty"`
 
-	// HPA configures coordination with HorizontalPodAutoscalers (WO-11; until then, workloads with
-	// a CPU/memory-utilization HPA stay audit-only regardless of this field, D-011).
+	// HPA configures coordination with HorizontalPodAutoscalers. Without coordination, workloads with
+	// a CPU/memory-utilization HPA stay audit-only.
 	// +optional
 	HPA *HPAPolicy `json:"hpa,omitempty"`
 
-	// JVM configures JVM detection (WO-12).
+	// JVM configures JVM detection.
 	// +optional
 	JVM *JVMPolicy `json:"jvm,omitempty"`
 }
@@ -83,7 +83,7 @@ type PolicySelector struct {
 
 	// Workloads restricts the policy to the listed workloads: a workload matches if it equals any
 	// entry. Empty means no restriction. Like every criterion it is combined with the others (AND).
-	// The hub uses it for UI workload overrides (D-022). Agents older than this field ignore it,
+	// The hub uses it for UI workload overrides. Agents older than this field ignore it,
 	// so the hub also sets namespaces and kinds to narrow such a policy.
 	// +optional
 	// +kubebuilder:validation:MaxItems=100
@@ -135,7 +135,7 @@ type MemoryPolicy struct {
 	LimitEqualsRequest *bool `json:"limitEqualsRequest,omitempty"`
 }
 
-// ApplyPolicy configures how changes are applied (D-007).
+// ApplyPolicy configures how changes are applied.
 type ApplyPolicy struct {
 	// Strategy used to apply changes. Global default: in-place.
 	// +optional
@@ -144,7 +144,7 @@ type ApplyPolicy struct {
 	// to rollout. Infeasible resizes fall back immediately. Global default: 10m.
 	// +optional
 	FallbackAfter *metav1.Duration `json:"fallbackAfter,omitempty"`
-	// MaintenanceWindows are the only times the deferred strategy may apply changes (WO-10).
+	// MaintenanceWindows are the only times the deferred strategy may apply changes.
 	// +optional
 	// +kubebuilder:validation:MaxItems=16
 	// +listType=atomic
@@ -206,7 +206,7 @@ type Guardrails struct {
 	// further decreases of the rolled-back resource are blocked. Global default: 24h.
 	// +optional
 	Cooldown *metav1.Duration `json:"cooldown,omitempty"`
-	// Rollback configures the health watch after each change (WO-08).
+	// Rollback configures the health watch after each change.
 	// +optional
 	Rollback *RollbackPolicy `json:"rollback,omitempty"`
 }
@@ -232,7 +232,7 @@ type RollbackPolicy struct {
 	ThrottlingRatio string `json:"throttlingRatio,omitempty"`
 }
 
-// HPAPolicy configures coordination with HorizontalPodAutoscalers (WO-11).
+// HPAPolicy configures coordination with HorizontalPodAutoscalers.
 type HPAPolicy struct {
 	// Coordinate changes requests and the HPA utilization target in one step. Global default: false.
 	// +optional
@@ -255,10 +255,10 @@ type HPATargetBounds struct {
 	MaxUtilization *int32 `json:"maxUtilization,omitempty"`
 }
 
-// JVMPolicy configures JVM detection (WO-12).
+// JVMPolicy configures JVM detection.
 type JVMPolicy struct {
 	// Detect JVM containers and treat their memory as heap-bound (memory changes need
-	// RestartContainer or rollout, D-007). Global default: true.
+	// RestartContainer or rollout). Global default: true.
 	// +optional
 	Detect *bool `json:"detect,omitempty"`
 }

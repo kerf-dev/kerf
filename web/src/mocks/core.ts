@@ -1,6 +1,6 @@
 /**
  * Shared plumbing of the mock hub: scenarios, the seeded databases, problem responses, the mock
- * session (D-023) and the lazy "background" work of the simulated agent and hub.
+ * session and the lazy "background" work of the simulated agent and hub.
  */
 import { delay, HttpResponse } from 'msw'
 import type { Problem } from '@/api/types'
@@ -126,7 +126,7 @@ export function json<T>(body: T, init: { status?: number; version?: number } = {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Session (D-023). The mock keeps it in localStorage (a service worker cannot hold an HttpOnly
+// Session. The mock keeps it in localStorage (a service worker cannot hold an HttpOnly
 // cookie for the page), so reloads stay signed in.
 // ---------------------------------------------------------------------------------------------
 
@@ -198,6 +198,21 @@ export interface Ctx {
 const WRITE = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 /**
+ * Endpoints a team-scoped caller (docs/teams.md) never reaches: everything under /v1/admin except
+ * reading teams, settings and automation, plus the fleet-wide cluster and savings views.
+ */
+export function fleetOnly(method: string, pathname: string): boolean {
+  const p = pathname.replace(/\/+$/, '')
+  if (p.startsWith('/v1/admin/')) {
+    if (method !== 'GET') return true
+    return !/^\/v1\/admin\/(teams(\/[^/]+)?|settings(\/.*)?|automation)$/.test(p)
+  }
+  return (
+    p === '/v1/savings/realized/node-cost' || /^\/v1\/clusters\/[^/]+\/(capacity|readiness(\/.*)?)$/.test(p)
+  )
+}
+
+/**
  * Scenario latency and errors, background ticks, authentication, CSRF on session writes and the
  * role check (`min` = the operation's lowest sessionAuth role; `null` = no auth).
  */
@@ -218,6 +233,8 @@ export async function gate(request?: Request, min: UserRole | null = 'viewer'): 
     if (request.headers.get('X-CSRF-Token') !== who.session.csrfToken)
       return forbidden('csrf_invalid', 'missing or wrong X-CSRF-Token')
   }
+  if (request && who.user?.scope === 'teams' && fleetOnly(request.method, new URL(request.url).pathname))
+    return forbidden('scope_forbidden', 'this endpoint is fleet-wide; your access is limited to some teams')
   if (!roleAtLeast(who.role, min)) return forbidden('forbidden', `requires role ${min} (you are ${who.role})`)
   return { db: d, st, empty, who }
 }

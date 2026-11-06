@@ -1,5 +1,5 @@
 {{- /*
-Shared helpers of the Kerf component charts (WO-18b).
+Shared helpers of the Kerf component charts.
 
 The master copy lives in deploy/charts/hub/templates/_common.tpl; `make charts-sync` copies it
 into web, pricing, agent and webhook with the "hub." prefix replaced by the chart's own, and
@@ -268,7 +268,7 @@ spec:
 {{- $s | int -}}
 {{- end -}}
 
-{{- /* ---- Umbrella chart (WO-18d): enable gate, names and wiring --------------------------------
+{{- /* ---- Umbrella chart: enable gate, names and wiring --------------------------------
 
 Every template file of every component chart is wrapped in
   {{- if include "hub.c.enabled" . -}} ... {{ end -}}

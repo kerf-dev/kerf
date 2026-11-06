@@ -164,8 +164,8 @@ func TestInPlaceCPU(t *testing.T) {
 }
 
 // Scenario 3: in-place memory decrease on a JVM workload restarts the container, not the pod.
-// On nodes with swap the agent must refuse in-place memory changes instead (D-007, WO-06).
-// Two replicas: a single replica whose resize restarts the container is blocked (WO-13, see
+// On nodes with swap the agent must refuse in-place memory changes instead.
+// Two replicas: a single replica whose resize restarts the container is blocked (see
 // TestSingleReplicaRestartIsBlocked).
 func TestInPlaceJVMMemory(t *testing.T) {
 	t.Parallel()
@@ -210,10 +210,10 @@ func TestInPlaceJVMMemory(t *testing.T) {
 	}
 }
 
-// reasonSingleReplicaUnsafe is WO-13's blocked reason (not yet in api/v1alpha1/wellknown.go).
+// reasonSingleReplicaUnsafe is the blocked reason for single-replica workloads (not yet in api/v1alpha1/wellknown.go).
 const reasonSingleReplicaUnsafe = "SingleReplicaUnsafe"
 
-// WO-13: a single-replica workload is not changed in a way that takes its only pod down. An
+// A single-replica workload is not changed in a way that takes its only pod down. An
 // in-place memory resize with resizePolicy RestartContainer restarts the container, so it is
 // blocked (unless the workload opts in with kerf.getkerf.dev/allow-disruption).
 func TestSingleReplicaRestartIsBlocked(t *testing.T) {
@@ -238,7 +238,7 @@ func TestSingleReplicaRestartIsBlocked(t *testing.T) {
 	}
 }
 
-// WO-12: a JVM with a fixed maximum heap (-Xmx) is memory audit-only, whatever the policy says.
+// A JVM with a fixed maximum heap (-Xmx) is memory audit-only, whatever the policy says.
 func TestJVMFixedHeapIsAuditOnly(t *testing.T) {
 	t.Parallel()
 	cl := env.Spoke1

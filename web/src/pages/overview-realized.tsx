@@ -17,7 +17,14 @@ import { NativeSelect } from '@/components/ui/form'
 import { Segmented } from '@/components/ui/segmented'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip } from '@/components/ui/tooltip'
-import { formatBytes, formatCores, formatDateTime, formatPercent, formatUSD } from '@/lib/format'
+import {
+  formatBytes,
+  formatCores,
+  formatDateTime,
+  formatPercent,
+  formatUSD,
+  roundsToZeroUSD,
+} from '@/lib/format'
 import { realizedLabel } from '@/lib/realized'
 
 /** Hours per month of the estimate's monthly costs (as in the hub). */
@@ -87,6 +94,13 @@ export function RealizedCard({ className }: { className?: string }) {
     }
   }, [r, c, step])
   const note = r ? coverageNote(r) : undefined
+  // A resource whose realized amount rounds to $0.00 gets no line.
+  const breakdown = r
+    ? [
+        { label: 'CPU', value: r.total.cpu, dot: 'bg-chart-1' },
+        { label: 'Memory', value: r.total.memory, dot: 'bg-chart-2' },
+      ].filter((l) => !roundsToZeroUSD(l.value))
+    : []
   return (
     <Card className={className} data-testid="realized-card">
       <CardHeader>
@@ -117,7 +131,7 @@ export function RealizedCard({ className }: { className?: string }) {
             <Skeleton className="h-8 w-40" />
             <Skeleton className="h-52 w-full" />
           </div>
-        ) : !r.since ? (
+        ) : !r.since || !breakdown.length ? (
           <EmptyState
             icon={BadgeCheckIcon}
             title="Nothing realized yet"
@@ -137,16 +151,19 @@ export function RealizedCard({ className }: { className?: string }) {
                 >
                   {formatUSD(r.total.total, { cents: r.total.total < 100 })}
                 </div>
-                <div className="mt-1.5 flex gap-3 text-xs text-muted-foreground tabular">
-                  <span className="flex items-center gap-1.5">
-                    <span className="size-1.5 rounded-full bg-chart-1" />
-                    CPU {formatUSD(r.total.cpu, { compact: true })}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="size-1.5 rounded-full bg-chart-2" />
-                    Memory {formatUSD(r.total.memory, { compact: true })}
-                  </span>
-                </div>
+                {breakdown.length ? (
+                  <div
+                    className="mt-1.5 flex gap-3 text-xs text-muted-foreground tabular"
+                    data-testid="realized-breakdown"
+                  >
+                    {breakdown.map((l) => (
+                      <span key={l.label} className="flex items-center gap-1.5">
+                        <span className={`size-1.5 rounded-full ${l.dot}`} />
+                        {l.label} {formatUSD(l.value, { compact: true })}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div className="text-right text-xs text-muted-foreground">
                 <div>Released now</div>

@@ -1,4 +1,4 @@
-# Hub (WO-04) targets. Hooked into the shared targets in make/common.mk only by prerequisites.
+# Hub targets. Hooked into the shared targets in make/common.mk only by prerequisites.
 
 HUB_IMAGE_REPO ?= localhost:5005/kerf/hub
 HUB_TAG        ?= dev-$(shell git rev-parse --short HEAD 2>/dev/null || echo local)

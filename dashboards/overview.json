@@ -2268,7 +2268,7 @@
     {
       "type": "barchart",
       "title": "Workloads per mode",
-      "description": "Effective mode per resource (D-005: global default audit < cluster default < policy < annotation).",
+      "description": "Effective mode per resource (global default audit < cluster default < policy < annotation).",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -2414,7 +2414,7 @@
     {
       "type": "bargauge",
       "title": "Workloads per risk flag",
-      "description": "How many workloads carry each risk flag. throttled / oom-killed: never decreased; hpa-coupled: audit only (D-011); low-confidence: confidence < 0.5.",
+      "description": "How many workloads carry each risk flag. throttled / oom-killed: never decreased; hpa-coupled: audit only; low-confidence: confidence < 0.5.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"

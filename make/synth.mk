@@ -1,4 +1,4 @@
-# WO-02 synthetic metrics (tools/synth). See tools/synth/README.md.
+# Synthetic metrics (tools/synth). See tools/synth/README.md.
 
 SYNTH_VM_URL   ?= http://localhost:18428
 SYNTH_SCENARIO ?= tools/synth/scenarios/fleet-default.yaml
@@ -14,7 +14,7 @@ SYNTH_GPU_LIVE_DIR ?= $(HOME)/.cache/kerf/synth-live-gpu
 
 synth_live_running = [ -f $(SYNTH_LIVE_DIR)/pid ] && kill -0 $$(cat $(SYNTH_LIVE_DIR)/pid) 2>/dev/null
 
-##@ Synthetic data (WO-02)
+##@ Synthetic data
 
 .PHONY: synth-build
 synth-build: ## Build the synth CLI into ./bin/synth.

@@ -1,7 +1,7 @@
 import type { VersionCompat } from '@/api/types'
 
 /**
- * Semver comparison for Admin → Maintenance (WO-33), the same rule as the hub's `compat`: both
+ * Semver comparison for Admin → Maintenance, the same rule as the hub's `compat`: both
  * versions must be release versions (`1.2.3` or `1.2.3-rc.1`, a leading `v` allowed); anything else
  * (`dev`, `dev-abc123`, a digest, empty) is `unknown`.
  */

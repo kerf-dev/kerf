@@ -146,6 +146,8 @@ shape differs from a workload event: it is served by `GET /v1/audit/config` (sch
 | `NotificationChannelCreated` / `NotificationChannelUpdated` / `NotificationChannelDeleted` | `notification` (`id` = channel id, `name` = channel name) | notification channel changes (the URL and the signing secret are never recorded: the masked URL only) |
 | `NotificationRuleCreated` / `NotificationRuleUpdated` / `NotificationRuleDeleted` | `notification` (`id` = rule id) | notification rule changes |
 | `NotificationDigestUpdated` | `notification` (`id` = `digest`) | the weekly digest's schedule or channels changed |
+| `TeamCreated` / `TeamUpdated` / `TeamDeleted` | `team` (`id` = team id) | team changes ([teams.md](../teams.md)) |
 
 `before`/`after` hold the target's API representation and never contain password hashes, passwords
-or token values. Login attempts are not configuration changes and are not recorded here.
+or token values. When a user's team role (not a fleet-wide role) allowed the change, `actor.teams` lists that team:
+the scope used ([teams.md](../teams.md)). Login attempts are not configuration changes and are not recorded here.

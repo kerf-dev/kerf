@@ -67,9 +67,18 @@ type Config struct {
 	Maintenance MaintenanceConfig `json:"maintenance"`
 	// Notifications: Slack, Teams and webhook channels, rules and the weekly digest.
 	Notifications NotificationsConfig `json:"notifications"`
+	// Teams: team ownership of workloads (docs/teams.md).
+	Teams TeamsConfig `json:"teams"`
 }
 
-// UpdateCheckConfig configures the check for a newer Kerf release (WO-33, Admin -> Maintenance).
+// TeamsConfig configures team ownership. Teams themselves are defined in Admin -> Teams.
+type TeamsConfig struct {
+	// OwnerLabel is the label on workloads and namespaces whose value names the owning team
+	// (default "team"). A workload's own label wins over its namespace's.
+	OwnerLabel string `json:"ownerLabel"`
+}
+
+// UpdateCheckConfig configures the check for a newer Kerf release (Admin -> Maintenance).
 // The leader reads the public GitHub releases of kerf-dev/kerf every Interval; nothing about the
 // installation is sent. Turn it off for air-gapped sites (chart value hub.updateCheck.enabled).
 type UpdateCheckConfig struct {
@@ -93,7 +102,7 @@ type MaintenanceConfig struct {
 	ReleaseNamespace string `json:"releaseNamespace"`
 }
 
-// HAConfig tunes running several hub replicas on one database (WO-18a, D-028). The defaults
+// HAConfig tunes running several hub replicas on one database. The defaults
 // give a failover of at most 15 s after the leader dies.
 type HAConfig struct {
 	// LeaderRetry: how often a follower tries to take the leader lock (default 5s).
@@ -106,7 +115,7 @@ type HAConfig struct {
 	RecomputePoll Duration `json:"recomputePoll"`
 }
 
-// OnboardingConfig configures datasources, readiness checks and install snippets (D-025).
+// OnboardingConfig configures datasources, readiness checks and install snippets.
 type OnboardingConfig struct {
 	// SecretsKeyFile holds the datasource secrets encryption key(s), one per line, the first
 	// encrypts (a mounted Secret; env HUB_DATASOURCE_KEY_FILE). Empty: datasources with a secret
@@ -122,7 +131,7 @@ type OnboardingConfig struct {
 	// HubVersion and MinAgentVersion are sent to agents for the agent.version check.
 	HubVersion      string `json:"hubVersion"`
 	MinAgentVersion string `json:"minAgentVersion"`
-	// Install snippets of the cluster wizard (internal/hub/install, WO-18f): the hub URL as agents
+	// Install snippets of the cluster wizard (internal/hub/install): the hub URL as agents
 	// reach it and the umbrella chart kerf (installed with global.mode spoke):
 	// oci://registry/path/kerf, <repo URL>|kerf, or a local chart path.
 	HubURL string `json:"hubURL"`
@@ -135,7 +144,7 @@ type OnboardingConfig struct {
 	// AgentTokenExternalSecret: the snippets let the chart build the agent token Secret with the
 	// External Secrets Operator (as docs/install/eks.md does). Unset: an existing Secret.
 	AgentTokenExternalSecret *TokenExternalSecretConfig `json:"agentTokenExternalSecret,omitempty"`
-	// Deprecated (component charts, before WO-18f): Chart defaults to the umbrella chart next to
+	// Deprecated (component charts, before the umbrella chart): Chart defaults to the umbrella chart next to
 	// AgentChart (…/agent -> …/kerf). WebhookChart is ignored.
 	AgentChart   string `json:"agentChart"`
 	WebhookChart string `json:"webhookChart"`
@@ -200,7 +209,7 @@ type DevUser struct {
 	Password    string `json:"password"`
 }
 
-// AuthConfig configures local users and browser sessions (D-023).
+// AuthConfig configures local users and browser sessions.
 type AuthConfig struct {
 	// CookieSecure sets the Secure attribute of the session cookie (default true; false only for
 	// plain-HTTP development).
@@ -216,7 +225,7 @@ type AuthConfig struct {
 	// LoginRateLimit is the number of login attempts per minute per client address and per
 	// username (default 10).
 	LoginRateLimit int `json:"loginRateLimit"`
-	// BootstrapAdmin is created on a database without users (D-023). The password comes from
+	// BootstrapAdmin is created on a database without users. The password comes from
 	// PasswordFile (a mounted Secret) or env HUB_BOOTSTRAP_ADMIN_PASSWORD.
 	BootstrapAdmin BootstrapAdmin `json:"bootstrapAdmin"`
 	// Local sign-in with passwords; OIDC sign-in with an OpenID Connect provider (docs/auth.md).
@@ -316,7 +325,7 @@ type RecommenderConfig struct {
 	// IncompleteMetricsGrace: a regular run whose inventory, or number of workloads with request
 	// series, fell below half of the previous one is treated as incomplete metrics and not stored
 	// for up to this long (the previous results stay current); after that the drop is accepted
-	// as real (WO-04d). Default 30m; negative disables the check.
+	// as real. Default 30m; negative disables the check.
 	IncompleteMetricsGrace Duration `json:"incompleteMetricsGrace"`
 
 	Step *Duration `json:"step"`
@@ -412,6 +421,9 @@ func LoadConfig(path string) (Config, error) {
 	if !cfg.Auth.localEnabled() && !cfg.Auth.OIDC.Enabled {
 		return cfg, fmt.Errorf("auth.local.enabled is false but auth.oidc is not enabled: only %s could sign in", cfg.Auth.breakGlassUser())
 	}
+	if l := cfg.Teams.OwnerLabel; l != "" && !labelKeyRE.MatchString(l) {
+		return cfg, fmt.Errorf("teams.ownerLabel %q is not a Kubernetes label key", l)
+	}
 	if cfg.UpdateCheck.Interval.D() < 10*time.Minute {
 		return cfg, fmt.Errorf("updateCheck.interval must be at least 10m (got %s)", cfg.UpdateCheck.Interval.D())
 	}
@@ -485,3 +497,7 @@ func (c Config) RecommenderConfig() (recommender.Config, error) {
 	}
 	return out, out.Validate()
 }
+
+// labelKeyRE is a Kubernetes label key: an optional DNS subdomain prefix and a name of at most 63
+// characters.
+var labelKeyRE = regexp.MustCompile(`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$`)

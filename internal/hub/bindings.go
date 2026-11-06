@@ -10,9 +10,9 @@ import (
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
-// Bindings resolves where a cluster's metrics are (D-025): its datasource (querier, API) and the
+// Bindings resolves where a cluster's metrics are: its datasource (querier, API) and the
 // matcher selecting its series. A cluster without a stored binding uses the hub's own store with
-// label cluster = its name, exactly as before D-025.
+// label cluster = its name, exactly as it was without a binding.
 type Bindings struct {
 	PG       *datasource.PG
 	Registry *datasource.Registry
@@ -26,7 +26,7 @@ type Bindings struct {
 // Resolved is a cluster's metrics location.
 type Resolved struct {
 	Binding hubapi.MetricsBinding
-	// Bound is false without a stored binding (behaviour before D-025).
+	// Bound is false without a stored binding (behaviour without a binding).
 	Bound   bool
 	Q       recommender.Querier
 	API     *datasource.API

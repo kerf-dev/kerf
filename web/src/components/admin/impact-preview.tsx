@@ -1,5 +1,6 @@
 import { ArrowRightIcon, Loader2Icon, TriangleAlertIcon } from 'lucide-react'
 import { Link } from 'react-router'
+import { useFleetScope } from '@/api/admin'
 import type { ImpactPreview as Preview, Mode } from '@/api/types'
 import { ModeBadge } from '@/components/domain'
 import { Callout } from '@/components/ui/form'
@@ -31,6 +32,14 @@ export function ImpactPreview({
   error?: unknown
   compact?: boolean
 }) {
+  const fleet = useFleetScope()
+  // The dry-run counts workloads fleet-wide: a team-scoped user does not get it.
+  if (!fleet)
+    return (
+      <p className="rounded-lg border border-dashed px-4 py-4 text-[13px] text-muted-foreground">
+        The impact preview is not available for team-scoped access.
+      </p>
+    )
   if (error) return <ErrorState error={error} compact />
   if (loading || !preview)
     return (

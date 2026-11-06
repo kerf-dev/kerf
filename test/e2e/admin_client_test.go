@@ -2,8 +2,8 @@
 
 package e2e
 
-// Admin-area client (WO-24): the scenarios drive the hub API like the web UI does, as a logged-in
-// user with the session cookie and the CSRF token (docs/contracts/admin.md, D-023).
+// Admin-area client: the scenarios drive the hub API like the web UI does, as a logged-in
+// user with the session cookie and the CSRF token (docs/contracts/admin.md).
 
 import (
 	"bytes"
@@ -36,7 +36,9 @@ var devPasswords = map[string]string{
 type session struct {
 	User string
 	CSRF string
-	c    *http.Client
+	// Me is the login answer.
+	Me hubapi.Me
+	c  *http.Client
 }
 
 var (
@@ -53,7 +55,7 @@ func as(t *testing.T, user string) *session {
 	if s := sessions[user]; s != nil {
 		return s
 	}
-	s, err := login(user, getenv("E2E_"+strings.ToUpper(user)+"_PASSWORD", devPasswords[user]))
+	s, err := loginExpect(user, getenv("E2E_"+strings.ToUpper(user)+"_PASSWORD", devPasswords[user]), user)
 	if err != nil {
 		t.Fatalf("log in as %s: %v", user, err)
 	}
@@ -78,10 +80,22 @@ func login(user, password string) (*session, error) {
 	if err := json.Unmarshal(body, &me); err != nil {
 		return nil, err
 	}
-	if me.CSRFToken == "" || me.Role != user {
+	if me.CSRFToken == "" || me.AuthMethod != hubapi.AuthMethodSession {
 		return nil, fmt.Errorf("unexpected login answer: %s", body)
 	}
-	s.CSRF = me.CSRFToken
+	s.CSRF, s.Me = me.CSRFToken, me
+	return s, nil
+}
+
+// loginExpect logs in and requires the session's role (the dev users are named after their role).
+func loginExpect(user, password, role string) (*session, error) {
+	s, err := login(user, password)
+	if err != nil {
+		return nil, err
+	}
+	if s.Me.Role != role {
+		return nil, fmt.Errorf("log in as %s: role %q, want %q", user, s.Me.Role, role)
+	}
 	return s, nil
 }
 
@@ -346,7 +360,7 @@ func approve(t *testing.T, user string, cl cluster, ns, name string) hubapi.Appr
 // event for it (the event names the approved recommendation). A recommender run between the
 // approval and the agent's next pull supersedes the approval (only the latest recommendation can
 // be approved): then it approves the new one, up to 3 times. The applied event of a superseded
-// approval may still arrive (the agent had applied it, WO-29); it is not the one waited for. The
+// approval may still arrive (the agent had applied it); it is not the one waited for. The
 // suite's own recompute requests are held off meanwhile.
 func approveApplied(t *testing.T, user string, cl cluster, ns, name string) (hubapi.Approval, auditEvent) {
 	t.Helper()
@@ -542,7 +556,7 @@ func lockSpoke2(t *testing.T) (unlock func()) {
 // pauses set by the suite (reason "e2e …"). Runs before the scenarios (setup) and from
 // `make e2e-clean`; never while scenarios run, since they own such objects.
 func sweepHub(logf func(string, ...any)) error {
-	s, err := login(hubapi.UserRoleAdmin, getenv("E2E_ADMIN_PASSWORD", devPasswords[hubapi.UserRoleAdmin]))
+	s, err := loginExpect(hubapi.UserRoleAdmin, getenv("E2E_ADMIN_PASSWORD", devPasswords[hubapi.UserRoleAdmin]), hubapi.UserRoleAdmin)
 	if err != nil {
 		return fmt.Errorf("log in as admin: %w", err)
 	}
@@ -583,6 +597,16 @@ func sweepHub(logf func(string, ...any)) error {
 				return fmt.Errorf("delete cluster %s: %w", cl.Name, err)
 			}
 			logf("sweep: deleted cluster %s", cl.Name)
+		}
+	}
+	var teams hubapi.TeamList
+	if err := getJSON("/v1/admin/teams", &teams); err != nil {
+		return err
+	}
+	for _, tm := range teams.Items {
+		if strings.HasPrefix(tm.ID, "e2e-") {
+			deleteTeamQuiet(tm.ID, "e2e sweep: left by an interrupted run")
+			logf("sweep: deleted team %s", tm.ID)
 		}
 	}
 	var auto hubapi.FleetAutomation

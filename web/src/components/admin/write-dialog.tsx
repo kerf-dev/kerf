@@ -21,7 +21,7 @@ export interface WriteOptions {
  * - asks for the required `reason` (stored in the audit log);
  * - for clusters labelled `prod`, asks the user to type the cluster name;
  * - shows a version conflict (`412`) with a reload option instead of overwriting;
- * - offers admins the audited readiness override on `409 cluster_not_automation_ready` (D-025).
+ * - offers admins the audited readiness override on `409 cluster_not_automation_ready`.
  */
 export function WriteDialog({
   open,
@@ -253,6 +253,8 @@ const CODE_TITLE: Record<string, string> = {
   channel_read_only: 'This channel is managed by the chart values',
   secrets_key_missing: 'The hub cannot store webhook URLs yet',
   no_channels: 'The digest has no channel to send to',
+  invalid_team: 'The team settings are invalid',
+  idp_managed: 'Managed by the identity provider',
 }
 
 /** What to do next, for problem codes where the hub's own message does not say. */

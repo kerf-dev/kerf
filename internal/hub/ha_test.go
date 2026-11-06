@@ -20,7 +20,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
-// Hub HA tests (WO-18a): several hub replicas, each with its own pool, elector and HTTP server,
+// Hub HA tests: several hub replicas, each with its own pool, elector and HTTP server,
 // on one database. They use the real clock.
 
 type haHub struct {
@@ -308,7 +308,7 @@ func TestLeaderFailover(t *testing.T) {
 	stopped := time.Now()
 	next.stop()
 	waitFor(t, 4*time.Second, "takeover after a graceful stop", old.elector.IsLeader)
-	t.Logf("handover after a graceful stop took %s", time.Since(stopped).Round(10*time.Millisecond))
+	t.Logf("leadership transfer after a graceful stop took %s", time.Since(stopped).Round(10*time.Millisecond))
 }
 
 // TestMigrateConcurrent: two Migrate calls at once on an empty database both succeed and apply

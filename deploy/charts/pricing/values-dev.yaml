@@ -3,7 +3,7 @@ image:
   repository: k3d-ro-registry:5005/kerf/pricing
   tag: latest
 interval: 1m
-# synth-a/synth-b node series are a backfill (WO-02) that ends when the backfill runs; keep pricing
+# synth-a/synth-b node series are a backfill that ends when the backfill runs; keep pricing
 # them for a day afterwards so the hub has rates for the synthetic fleet.
 nodeLookback: 24h
 defaultRegion: eu-west-1

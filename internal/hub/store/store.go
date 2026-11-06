@@ -21,6 +21,7 @@ import (
 	"github.com/pressly/goose/v3/lock"
 
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/teams"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
@@ -30,6 +31,9 @@ var ErrNotFound = errors.New("not found")
 // Store wraps a pgx pool.
 type Store struct {
 	Pool *pgxpool.Pool
+	// OwnerLabel is the label key on workloads and namespaces that names their team (hub config
+	// teams.ownerLabel; empty = "team").
+	OwnerLabel string
 }
 
 // Open connects to Postgres.
@@ -53,7 +57,7 @@ func Open(ctx context.Context, url string) (*Store, error) {
 func (s *Store) Close() { s.Pool.Close() }
 
 // Migrate applies the goose migrations in fsys (db/migrations) under goose's Postgres session
-// locker (WO-18a): hub replicas starting together apply each migration once; the others wait
+// locker: hub replicas starting together apply each migration once; the others wait
 // (up to 10 minutes) for the lock and then find nothing left to apply.
 func (s *Store) Migrate(ctx context.Context, fsys fs.FS) ([]string, error) {
 	db := stdlib.OpenDBFromPool(s.Pool)
@@ -175,13 +179,13 @@ type Attributes struct {
 	AverageReplicas float64            `json:"averageReplicas"`
 	HPA             *recommender.HPA   `json:"hpa,omitempty"`
 	Used24h         map[string]float64 `json:"used24h,omitempty"` // cpu (cores), memory (bytes)
-	// Live: the workload had pods at the end of the latest regular run's data (WO-04e). Absent in
-	// attributes written before WO-04e, which count as live.
+	// Live: the workload had pods at the end of the latest regular run's data. Absent in
+	// attributes written before workload pruning, which count as live.
 	Live bool `json:"live"`
 }
 
 // liveSQL is true for a workload with pods in the latest metrics: Attributes.Live, or attributes
-// written before WO-04e. A workload only an agent reported (empty attributes) is not live.
+// written before workload pruning. A workload only an agent reported (empty attributes) is not live.
 const liveSQL = `(attributes @> '{"live": true}'::jsonb OR (attributes <> '{}'::jsonb AND NOT attributes ? 'live'))`
 
 // UpsertInventory records the workloads found by a run. When markDeleted is true, live workloads
@@ -229,6 +233,10 @@ func (s *Store) UpsertInventoryAt(ctx context.Context, cluster string, inv []rec
 		})
 	}
 	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
+		return nil, err
+	}
+	// New workloads get their team (from the namespace until the agent reports labels).
+	if err := s.recomputeTeams(ctx, tx, cluster, nil); err != nil {
 		return nil, err
 	}
 	if markDeleted {
@@ -309,7 +317,7 @@ func (r *recRow) build(ref hubapi.WorkloadRef) (*hubapi.WorkloadRecommendation, 
 	if rec.RiskFlags == nil {
 		rec.RiskFlags = []string{}
 	}
-	// Rows from before D-016 store '{}': no pricing in the response.
+	// Older rows store '{}': no pricing in the response.
 	var p hubapi.RecommendationPricing
 	if json.Unmarshal(r.pricing, &p) == nil && p.Source != "" {
 		rec.Pricing = &p
@@ -361,8 +369,10 @@ func round2(v float64) float64 { return math.Round(v*100) / 100 }
 
 // WorkloadView is a live workload with its latest recommendation and status.
 type WorkloadView struct {
-	DBID        int64
-	Key         hubapi.WorkloadKey
+	DBID int64
+	Key  hubapi.WorkloadKey
+	// Team owns the workload ("" = Unassigned).
+	Team        string
 	FirstSeenAt time.Time
 	LastSeenAt  time.Time
 	Attributes  Attributes
@@ -392,9 +402,11 @@ type WorkloadFilter struct {
 	Key     *hubapi.WorkloadKey
 }
 
-// LoadWorkloads returns live workloads with their latest recommendation and status.
+// LoadWorkloads returns live workloads with their latest recommendation and status. Only the
+// workloads of the caller's teams are returned (teams.WithScope): every list, count and total built
+// from them is scoped.
 func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*WorkloadView, error) {
-	// Workloads of deleted clusters (WO-20) are hidden like deleted workloads.
+	// Workloads of deleted clusters are hidden like deleted workloads.
 	where := "w.deleted_at IS NULL AND w.cluster NOT IN (SELECT name FROM clusters WHERE deleted_at IS NOT NULL)"
 	args := []any{}
 	if f.Key != nil {
@@ -405,7 +417,8 @@ func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*Workloa
 		where += " AND w.cluster = $1"
 		args = append(args, f.Cluster)
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT w.id, w.cluster, w.namespace, w.kind, w.name, w.first_seen_at, w.last_seen_at, w.attributes,
+	where += " AND " + teams.SQL(ctx, "w.team", &args)
+	rows, err := s.Pool.Query(ctx, `SELECT w.id, w.cluster, w.namespace, w.kind, w.name, coalesce(w.team, ''), w.first_seen_at, w.last_seen_at, w.attributes,
 		`+recColumns+`,
 		ws.workload_id IS NOT NULL, ws.recommendation_id, ws.policy, ws.cpu_mode, ws.cpu_mode_source, ws.memory_mode, ws.memory_mode_source,
 		ws.strategy, ws.settings, ws.phase, ws.reason, ws.message, ws.live, ws.applied_at, ws.observed_at, ws.next_window
@@ -431,7 +444,7 @@ func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*Workloa
 			sSettings, sLive                    []byte
 			sApplied, sObserved, sNextWindow    *time.Time
 		)
-		dest := []any{&v.DBID, &v.Key.Cluster, &v.Key.Namespace, &v.Key.Kind, &v.Key.Name, &v.FirstSeenAt, &v.LastSeenAt, &attrs}
+		dest := []any{&v.DBID, &v.Key.Cluster, &v.Key.Namespace, &v.Key.Kind, &v.Key.Name, &v.Team, &v.FirstSeenAt, &v.LastSeenAt, &attrs}
 		dest = append(dest, rec.dest()...)
 		dest = append(dest, &hasStatus, &sRecID, &sPolicy, &sCPUMode, &sCPUSrc, &sMemMode, &sMemSrc, &sStrategy, &sSettings, &sPhase,
 			&sReason, &sMessage, &sLive, &sApplied, &sObserved, &sNextWindow)
@@ -603,7 +616,7 @@ type RunInfo struct {
 	AsOf   time.Time
 	Status string
 	// RepricingNeeded: a cluster of the run used the default rates although the cluster's latest
-	// regular run had pricing series (WO-04d: backfills from before the series existed).
+	// regular run had pricing series (backfills from before the series existed).
 	RepricingNeeded bool
 }
 
@@ -775,12 +788,23 @@ func (s *Store) UpsertStatuses(ctx context.Context, cluster string, items []huba
 		if it.ObservedAt != nil {
 			observed = *it.ObservedAt
 		}
+		// Labels: nil = not reported (an older agent), the stored ones stay.
+		var labels, nsLabels []byte
+		if it.Labels != nil {
+			labels, _ = json.Marshal(it.Labels)
+		}
+		if it.NamespaceLabels != nil {
+			nsLabels, _ = json.Marshal(it.NamespaceLabels)
+		}
 		// A workload the agent reports exists: one PruneAbsent deleted is revived.
 		batch.Queue(`WITH w AS (
-				INSERT INTO workloads (cluster, namespace, kind, name, first_seen_at, last_seen_at) VALUES ($1, $2, $3, $4, $20, $20)
+				INSERT INTO workloads (cluster, namespace, kind, name, first_seen_at, last_seen_at, labels, namespace_labels)
+				VALUES ($1, $2, $3, $4, $20, $20, coalesce($21::jsonb, '{}'::jsonb), coalesce($22::jsonb, '{}'::jsonb))
 				ON CONFLICT (cluster, namespace, kind, name) DO UPDATE SET
 					deleted_at = CASE WHEN workloads.deleted_by = 'agent' THEN NULL ELSE workloads.deleted_at END,
-					deleted_by = CASE WHEN workloads.deleted_by = 'agent' THEN NULL ELSE workloads.deleted_by END
+					deleted_by = CASE WHEN workloads.deleted_by = 'agent' THEN NULL ELSE workloads.deleted_by END,
+					labels = coalesce($21::jsonb, workloads.labels),
+					namespace_labels = coalesce($22::jsonb, workloads.namespace_labels)
 				RETURNING id)
 			INSERT INTO workload_status (workload_id, recommendation_id, policy, cpu_mode, cpu_mode_source, memory_mode,
 				memory_mode_source, strategy, settings, phase, reason, message, live, applied_at, observed_at, next_window, updated_at)
@@ -792,9 +816,14 @@ func (s *Store) UpsertStatuses(ctx context.Context, cluster string, items []huba
 				applied_at = excluded.applied_at, observed_at = excluded.observed_at, next_window = excluded.next_window, updated_at = $20`,
 			cluster, it.Workload.Namespace, it.Workload.Kind, it.Workload.Name,
 			nullUUID(it.RecommendationID), it.Policy, it.Modes.CPU, nullStr(it.Modes.CPUSource), it.Modes.Memory,
-			nullStr(it.Modes.MemorySource), nullStr(it.Strategy), settings, it.Phase, it.Reason, it.Message, live, it.AppliedAt, observed, it.NextWindow, now)
+			nullStr(it.Modes.MemorySource), nullStr(it.Strategy), settings, it.Phase, it.Reason, it.Message, live, it.AppliedAt, observed, it.NextWindow, now,
+			labels, nsLabels)
 	}
 	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
+		return err
+	}
+	// The reported labels may move workloads to another team.
+	if err := s.recomputeReported(ctx, tx, cluster, items); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -815,7 +844,7 @@ func (s *Store) RecordPull(ctx context.Context, cluster string, now time.Time, m
 }
 
 // PruneAbsent soft-deletes the live workloads of an agent-backed cluster that the agent no longer
-// reports (WO-04e). The agent sends a full status batch after every pull; last and prev are the
+// reports. The agent sends a full status batch after every pull; last and prev are the
 // two pulls before the current one. A workload is deleted when
 //   - it was not reported since prev, so it is missing from the full batches after prev and last,
 //   - the full batch after last arrived (some workload of the cluster was reported since last),
@@ -943,6 +972,8 @@ func (s *Store) QueryAudit(ctx context.Context, q AuditQuery) ([]hubapi.AuditEve
 	if len(q.Types) > 0 {
 		add("e.type = ANY($%d)", q.Types)
 	}
+	// A team-scoped caller sees the events of its teams' workloads only.
+	conds = append(conds, workloadIDsInScope(ctx, "e.workload_id", &args))
 	if q.From != nil {
 		add("e.time >= $%d", *q.From)
 	}

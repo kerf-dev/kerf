@@ -9,7 +9,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// HPA coordination (WO-11, lifts D-011).
+// HPA coordination.
 //
 // An HPA on a resource's utilization scales on usage / (sum of the pod's requests x target): the
 // desired replica count is ceil(replicas x utilization / target). Changing the requests alone
@@ -20,7 +20,7 @@ import (
 // leave the bounds (40-90 %, widened to include the current target), the target is clamped and
 // the requests of that resource are scaled so the product holds again.
 
-// HPA target bounds in percent (WO-11).
+// HPA target bounds in percent.
 const (
 	HPAMinTarget = 40
 	HPAMaxTarget = 90

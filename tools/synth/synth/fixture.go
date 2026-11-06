@@ -25,7 +25,7 @@ var (
 	FixtureGPUCluster  = "synth-gpu"
 )
 
-// Fixture is a compact, pre-aggregated history of one workload for unit tests (WO-04
+// Fixture is a compact, pre-aggregated history of one workload for unit tests (the
 // recommender table tests). Arrays are aligned: element i is the bucket starting at
 // Start + i*Step seconds. null (NaN in Go) means no pod was running.
 type Fixture struct {

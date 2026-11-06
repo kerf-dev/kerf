@@ -1,4 +1,4 @@
-# Example RightsizingPolicy. Unset fields inherit the cluster default, then the global default (D-005).
+# Example RightsizingPolicy. Unset fields inherit the cluster default, then the global default.
 apiVersion: kerf.getkerf.dev/v1alpha1
 kind: RightsizingPolicy
 metadata:

@@ -69,7 +69,7 @@ for (const [name, path] of [
   })
 }
 
-// ---------------------------------------------------------------- admin area (WO-22)
+// ---------------------------------------------------------------- admin area
 
 async function signIn(page: import('@playwright/test').Page, user: string) {
   await page.goto('/login')

@@ -1,4 +1,4 @@
-# WO-18f staging: a second workload cluster, installed with the hub wizard's Helm snippet.
+# Staging: a second workload cluster, installed with the hub wizard's Helm snippet.
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:

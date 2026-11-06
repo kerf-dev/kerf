@@ -37,10 +37,10 @@ const (
 )
 
 var serviceBases = map[string][]string{
-	"payments":      {"payment-gateway", "payment-orchestrator", "sepa-transfer", "swift-adapter", "instant-payments", "fx-quote", "fee-engine", "settlement", "reconciliation", "direct-debit", "standing-orders", "payment-limits", "payment-status", "beneficiary", "mandate"},
+	"payments":      {"payment-gateway", "payment-coordinator", "sepa-transfer", "swift-adapter", "instant-payments", "fx-quote", "fee-engine", "settlement", "reconciliation", "direct-debit", "standing-orders", "payment-limits", "payment-status", "beneficiary", "mandate"},
 	"cards":         {"card-authorization", "card-issuing", "card-lifecycle", "tokenization", "threeds-challenge", "card-controls", "pin-management", "chargeback", "card-statements", "clearing", "virtual-cards", "card-limits"},
 	"ledger":        {"ledger-core", "posting-engine", "balance", "account-history", "interest-accrual", "journal", "gl-export", "end-of-day", "ledger-events", "statement-generator"},
-	"onboarding":    {"kyc-orchestrator", "identity-verification", "document-scan", "address-lookup", "customer-profile", "account-opening", "consent", "signup", "eligibility", "aml-screening-adapter"},
+	"onboarding":    {"kyc-coordinator", "identity-verification", "document-scan", "address-lookup", "customer-profile", "account-opening", "consent", "signup", "eligibility", "aml-screening-adapter"},
 	"notifications": {"push-sender", "email-sender", "sms-gateway", "notification-router", "template-renderer", "in-app-inbox", "notification-preferences", "webhook-dispatcher"},
 	"risk":          {"fraud-scoring", "transaction-monitoring", "aml-screening", "risk-rules", "device-fingerprint", "velocity-checks", "sanctions-screening", "credit-decisioning", "risk-features"},
 	"platform":      {"api-gateway", "auth-service", "token-exchange", "feature-flags", "config-service", "audit-log", "rate-limiter", "secrets-sync", "event-bridge", "outbox-relay", "schema-registry", "service-catalog"},

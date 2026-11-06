@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useEffectivePolicy, useWrite, writes } from '@/api/admin'
 import { useAuth } from '@/api/auth'
+import { UNASSIGNED } from '@/lib/teams'
 import { useClusters } from '@/api/queries'
 import type { Mode, Profile, RightsizingPolicySpec, Strategy, WorkloadDetail } from '@/api/types'
 import { ActorChip } from '@/components/admin/common'
@@ -39,7 +40,7 @@ function overrideBase(w: WorkloadDetail): RightsizingPolicySpec {
 }
 
 /**
- * Operator actions on one workload (D-022, D-024): override modes/strategy/profile, Exclude (both
+ * Operator actions on one workload: override modes/strategy/profile, Exclude (both
  * modes off), Clear override, Approve once. Writes go through the hub; the agent applies them on its
  * next pull, so modes here change once it reports back (the hub serves the intent immediately).
  */
@@ -49,7 +50,7 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
   const clusters = useClusters()
   const cluster = clusters.data?.items.find((c) => c.name === w.cluster)
   const prod = cluster?.environment === 'prod'
-  // Git-only clusters get no hub policies (D-022), so a hub override would never apply there.
+  // Git-only clusters get no hub policies, so a hub override would never apply there.
   const gitOnly = cluster?.policySource === 'git'
   const ready = !cluster?.readiness || cluster.readiness.state === 'AutomationReady'
   const [open, setOpen] = useState<Kind | null>(null)
@@ -106,7 +107,13 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
     writes.approve({ id: w.id, recommendationID: rec!.id, reason, overrideReadiness }),
   )
 
-  const can = auth.can('operator')
+  // Writes need operator on the workload's team: the fleet role, raised by a team role (docs/teams.md).
+  const can = auth.canOperateTeam(w.team)
+  const teamInvolved = auth.teamScoped || !!auth.me?.teamRoles?.length
+  const teamName = !w.team || w.team === UNASSIGNED ? undefined : w.team
+  const whyNot = teamName
+    ? `You are not an operator on team ${teamName}. Changing automation needs the operator role on that team.`
+    : 'This workload is in no team, so changing it needs the fleet-wide operator role.'
   return (
     <div className="space-y-3 border-t pt-3" data-testid="automation-actions">
       {w.override ? (
@@ -219,6 +226,20 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
             </span>
           </Tooltip>
         </div>
+      ) : auth.signedIn && teamInvolved ? (
+        <Tooltip content={whyNot}>
+          <div className="grid grid-cols-2 gap-2" data-testid="actions-no-team-role" tabIndex={0}>
+            <Button size="sm" variant="outline" disabled>
+              <PencilIcon /> Override
+            </Button>
+            <Button size="sm" variant="outline" disabled>
+              <BanIcon /> Exclude
+            </Button>
+            <Button size="sm" className="col-span-2" disabled>
+              <StampIcon /> Approve once
+            </Button>
+          </div>
+        </Tooltip>
       ) : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <LogInIcon className="size-3.5" />
@@ -260,7 +281,7 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
         description={
           open === 'exclude'
             ? 'Sets CPU and memory to off for this workload: the agent ignores it. Annotations on the workload still win.'
-            : 'Applies to this workload only, on top of its policy. Unset fields inherit. Annotations on the workload still win (D-005).'
+            : 'Applies to this workload only, on top of its policy. Unset fields inherit. Annotations on the workload still win.'
         }
         prodClusters={prod ? [w.cluster] : []}
         confirmLabel={open === 'exclude' ? 'Exclude workload' : 'Save override'}
@@ -368,7 +389,7 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
         onOpenChange={(o) => !o && setOpen(null)}
         testId="approve-dialog"
         title={`Approve the current recommendation for ${w.name} once`}
-        description="The agent applies this recommendation once, as if the mode were auto-patch, with every guardrail. The workload stays in audit; the next recommendation is not applied (D-024)."
+        description="The agent applies this recommendation once, as if the mode were auto-patch, with every guardrail. The workload stays in audit; the next recommendation is not applied."
         prodClusters={prod ? [w.cluster] : []}
         confirmLabel="Approve once"
         reasonPlaceholder="e.g. reviewed with the owner"

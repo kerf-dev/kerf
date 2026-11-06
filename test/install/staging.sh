@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# WO-18e: install kerf on two fresh k3d clusters by following docs/install/eks.md.
+# Install kerf on two fresh k3d clusters by following docs/install/eks.md.
 #   staging.sh up        clusters + the guide's prerequisites (step 1) + AWS stand-ins (step 3)
 #   staging.sh install   steps 4 and 5 of the guide (hub cluster, first sign-in, tokens, workload cluster)
 #   staging.sh verify    every Check of steps 4-6, failover, upgrade without 5xx
-#   staging.sh wizard    WO-18f: a second workload cluster installed with the hub wizard's Helm snippet
+#   staging.sh wizard    a second workload cluster installed with the hub wizard's Helm snippet
 #   staging.sh uninstall step 9
 #   staging.sh down      delete both clusters
 # Run `make release REGISTRY=localhost:5005/kerf VERSION=$VERSION` first (step 2).
@@ -224,7 +224,7 @@ register_cluster() { # [cluster]
   local c=${1:-$CLUSTER} body token
   body=$(jq -cn --arg c "$c" '{name: $c, environment: "non-prod", owner: "platform", provider: "aws",
     region: "eu-west-1", metrics: {datasourceId: "local", clusterLabel: "cluster", clusterLabelValue: $c},
-    createAgentToken: true, reason: "staging install (WO-18e)"}')
+    createAgentToken: true, reason: "staging install"}')
   token=$(curl -sS -b "$WORK/cookies" -H "X-CSRF-Token: $CSRF" -H 'Content-Type: application/json' -d "$body" \
     https://$UI_HOST/v1/admin/clusters | tee "$WORK/register.json" | jq -r '.agentToken.value // empty')
   [ -n "$token" ] || { echo "register failed: $(jq -c 'del(.agentToken,.token)' "$WORK/register.json")"; return 1; }
@@ -234,7 +234,7 @@ register_cluster() { # [cluster]
   unset AGENT_TOKEN
 }
 
-# --- WO-18f: a second workload cluster, installed with the cluster wizard's Helm snippet -----------------
+# --- A second workload cluster, installed with the cluster wizard's Helm snippet -----------------
 # The hub (values-hub.yaml) renders the snippets for the umbrella chart with the token from Secrets
 # Manager; this runs the snippet as the wizard shows it. Stand-ins, as for step 5.3: the registry as
 # this machine reaches it (plain HTTP) and the staging CA (agent.hub.caBundle), added by a helm wrapper.
@@ -265,7 +265,7 @@ wizard() {
   mkdir -p "$WORK/wizard-bin"
   cat > "$WORK/wizard-bin/helm" <<WRAPPER
 #!/bin/sh
-# Staging stand-ins for the wizard's script (WO-18f): the registry as this machine reaches it, over
+# Staging stand-ins for the wizard's script: the registry as this machine reaches it, over
 # plain HTTP, and the staging CA for the hub's certificate.
 for a do
   shift
@@ -308,14 +308,14 @@ wait_state() { # state minutes
   echo "state $1 not reached in $2 minutes"; return 1
 }
 
-# --- Step 6 and the WO-18e checks ----------------------------------------------------------------------
+# --- Step 6 and the staging checks ----------------------------------------------------------------------
 autopatch() {
   log "step 6: auto-patch one workload (namespace staging-demo)"
   signin
   ks apply -f "$INSTALL/fixtures/workload.yaml" >/dev/null
   ks -n staging-demo rollout status deploy/web --timeout=5m
   if ! curl -sS -b "$WORK/cookies" "https://$UI_HOST/v1/admin/policies?cluster=$CLUSTER" | jq -e '.items[]? | select(.name=="staging-demo")' >/dev/null; then
-    body=$(jq -cn --arg c "$CLUSTER" '{type: "policy", name: "staging-demo", clusters: [$c], reason: "staging auto-patch check (WO-18e)",
+    body=$(jq -cn --arg c "$CLUSTER" '{type: "policy", name: "staging-demo", clusters: [$c], reason: "staging auto-patch check",
       spec: {selector: {namespaces: ["staging-demo"]}, priority: 1000, cpu: {mode: "auto-patch"}, memory: {mode: "audit"},
              apply: {strategy: "in-place"}, guardrails: {learningPeriod: "0s", minConfidence: "0"}}}')
     curl -sS -b "$WORK/cookies" -H "X-CSRF-Token: $CSRF" -H 'Content-Type: application/json' -d "$body" \

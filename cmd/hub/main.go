@@ -1,5 +1,5 @@
-// Command hub runs the Kerf hub: API, recommender scheduler and metrics (WO-04).
-// Several replicas may run on one database (WO-18a): see internal/hub/leader.go.
+// Command hub runs the Kerf hub: API, recommender scheduler and metrics.
+// Several replicas may run on one database: see internal/hub/leader.go.
 package main
 
 import (
@@ -64,13 +64,14 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 		return err
 	}
 	log.Info("migrations applied", "dir", cfg.MigrationsDir, "applied", applied)
+	st.OwnerLabel = cfg.Teams.OwnerLabel
 
 	prom := recommender.NewPromClient(cfg.PrometheusURL, cfg.PrometheusTimeout.D())
 	metrics := hub.NewMetrics()
 	identity := hub.Identity()
 	srv := &hub.Server{Cfg: cfg, Store: st, Prom: prom, RecCfg: recCfg, Metrics: metrics, Log: log,
 		Version: version, Identity: identity, Started: time.Now()}
-	// The check for a newer Kerf release (WO-33): run by the leader, stored in Postgres.
+	// The check for a newer Kerf release: run by the leader, stored in Postgres.
 	srv.Updates = hub.NewUpdateChecker(cfg, st, version, log.With("component", "update-check"))
 	metrics.LeaderOnly().MustRegister(srv.Updates)
 	if !cfg.UpdateCheck.On() {
@@ -95,7 +96,7 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	} else {
 		log.Warn("no datasource secrets key (onboarding.secretsKeyFile): datasources with bearer, basic or mTLS auth cannot be created")
 	}
-	// The other start-up writes, one replica at a time (WO-18a).
+	// The other start-up writes, one replica at a time.
 	if err := st.WithInitLock(ctx, func() error {
 		if devSeed || cfg.DevSeed.Enabled {
 			if err := hub.RunDevSeed(ctx, st, cfg.DevSeed, log); err != nil {
@@ -111,6 +112,10 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 			log.Info("old sessions pruned", "sessions", n)
 		}
 		if err := srv.InitOnboarding(ctx, cipher); err != nil {
+			return err
+		}
+		// The owner label key may have changed since the last start: reassign the workloads.
+		if err := st.RecomputeTeams(ctx); err != nil {
 			return err
 		}
 		var sealer notify.Sealer
@@ -132,7 +137,7 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 		Engine:  &recommender.Engine{Loader: source, Cfg: recCfg, Strategy: strategy},
 		Metrics: metrics, Cfg: cfg, Log: log,
 	}
-	// Leader election (WO-18a, D-028): every replica serves the API; the leader runs the
+	// Leader election: every replica serves the API; the leader runs the
 	// recommender, recompute requests, readiness checks and sweeps (srv.RunLeader).
 	elector, err := srv.NewElector(identity)
 	if err != nil {
@@ -150,7 +155,7 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	electorCtx, stopElector := context.WithCancel(ctx)
 	electorDone := make(chan struct{})
 	go func() { defer close(electorDone); elector.Run(electorCtx) }()
-	// This replica's version for the Maintenance page (WO-33); its row is removed on shutdown.
+	// This replica's version for the Maintenance page; its row is removed on shutdown.
 	beatCtx, stopBeat := context.WithCancel(ctx)
 	beatDone := make(chan struct{})
 	go func() { defer close(beatDone); srv.RunReplicaHeartbeat(beatCtx) }()

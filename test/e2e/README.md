@@ -1,7 +1,7 @@
-# End-to-end suite (WO-09, WO-24, WO-30)
+# End-to-end suite
 
-Go tests (build tag `e2e`) against the running k3d environment (WO-01) with the deployed hub
-(WO-04) and agents (WO-06). Nothing is mocked: test pods burn known amounts of CPU/memory, the spoke
+Go tests (build tag `e2e`) against the running k3d environment with the deployed hub
+and agents. Nothing is mocked: test pods burn known amounts of CPU/memory, the spoke
 vmagent ships usage to VictoriaMetrics, the hub's periodic run recommends, the agent applies.
 
 ```bash
@@ -28,7 +28,7 @@ until the first test starts) and the wall time, and, for the five slowest tests,
 made (`<what> after <duration>` of `eventually`, `held for` of `consistently`, the spoke-2 lock,
 `slept`). `test/e2e/e2esummary` turns the `go test -json` stream into that log.
 
-## Timing (WO-30)
+## Timing
 
 The suite is fast because the dev charts use short timers and the suite waits for observed signals,
 not fixed durations. Production defaults are unchanged.
@@ -60,11 +60,11 @@ not fixed durations. Production defaults are unchanged.
 | 1 | `TestAudit` | spoke-1 | hub recommends a decrease; RSR reason `ModeAudit`; pods (UID, resources, restarts) and Deployment generation unchanged; never `Applied` |
 | 2 | `TestInPlaceCPU` | spoke-1 | RSR `Applied`; both pods resized in place to the RSR value (spec and kubelet-reported status), same UIDs, no restarts; Deployment generation and template unchanged; hub `applied` event, strategy in-place |
 | 3 | `TestInPlaceJVMMemory` | spoke-1 | 2 JVM pods (heap `-XX:MaxRAMPercentage=50`, so it follows the limit) with memory `resizePolicy: RestartContainer`, memory auto-patch. Node **with swap** (k3d on Docker Desktop reports 1 GiB): agent blocks with `UnsupportedNode` and pods stay untouched, then the test is **skipped** with that reason. Node without swap: memory decreased, exactly one container restart, same pod UID |
-| 3b | `TestJVMFixedHeapIsAuditOnly` | spoke-1 | JVM with a fixed `-Xmx` and memory auto-patch: agent blocks with `JVMFixedHeap` (WO-12), pods and Deployment unchanged |
-| 3c | `TestSingleReplicaRestartIsBlocked` | spoke-1 | single-replica JVM whose in-place memory resize would restart its container (RestartContainer): agent blocks with `SingleReplicaUnsafe` (WO-13), pod and Deployment unchanged |
+| 3b | `TestJVMFixedHeapIsAuditOnly` | spoke-1 | JVM with a fixed `-Xmx` and memory auto-patch: agent blocks with `JVMFixedHeap`, pods and Deployment unchanged |
+| 3c | `TestSingleReplicaRestartIsBlocked` | spoke-1 | single-replica JVM whose in-place memory resize would restart its container (RestartContainer): agent blocks with `SingleReplicaUnsafe`, pod and Deployment unchanged |
 | 4 | `TestInPlaceFallback` | spoke-1 | policy floor `guardrails.minCPU: 16` (twice the node) makes the agent resize to 16 cores; the kubelet answers `PodResizePending/Infeasible`; the agent falls back: hub `fallback` event (`ResizeInfeasible`), RSR `spec.strategy: rollout`, template cpu 16 (the new pod stays Pending, the old one keeps running) |
 | 5 | `TestRollout` | spoke-1 | RSR `Applied`; template cpu = recommendation (a decrease); field manager `kerf` owns `…containers[app].resources.requests.cpu`; new ReplicaSet, pods at the new value; hub `applied` event, strategy rollout |
-| 6 | `TestArgoCD/hard_sync_keeps_values` | spoke-1 | workload deployed by its own Argo CD Application from the in-cluster git server (`e2e/<namespace>/`), D-006 settings; after the rollout patch a hard refresh + explicit sync keeps the value, the app is Synced, and 75 s of self-heal don't revert it |
+| 6 | `TestArgoCD/hard_sync_keeps_values` | spoke-1 | workload deployed by its own Argo CD Application from the in-cluster git server (`e2e/<namespace>/`), with Argo CD set to ignore the fields owned by `kerf`; after the rollout patch a hard refresh + explicit sync keeps the value, the app is Synced, and 75 s of self-heal don't revert it |
 | 7 | `TestArgoCD/release_restores_Git_values` | spoke-1 | policy switched to audit → the agent drops its field ownership → hard refresh + sync restores the Git value (250m), app Synced |
 | 8 | `TestWebhook/scale-out_gets_the_applied_values` | spoke-1 | in-place CPU applied (RSR `Applied`, status observed its spec); scaling 1 → 2 gives new pods the applied CPU at admission (`injected-resources` annotation, no restarts); template unchanged |
 | 8 | `TestWebhook/webhook_down_does_not_block_pod_creation` | spoke-1 | webhook Deployment scaled to 0 (original replicas recorded in an annotation, restored at the end): scaling 2 → 3 still creates a Ready pod within a minute, not mutated; after the webhook is back, the agent's drift repair resizes that pod to the applied value |
@@ -75,7 +75,7 @@ not fixed durations. Production defaults are unchanged.
 | 12 | `TestRealizedSavings` | spoke-1 | in-place CPU decrease applied (2 replicas); the hub's realized savings for ro-spoke-1 are computed up to the last hour or so; applied changes of earlier runs older than two hours have a realized saving by workload id (also for deleted namespaces); the node cost trend (`relation: correlated`) has hourly points with node cost and requested/allocatable CPU. With `E2E_REALIZED_WAIT` (e.g. `75m`; the hub counts complete hours only): the CPU released now is (250m − applied) × 2 replicas, within 5 % |
 | 13 | `TestNodeCapacity` | spoke-1 | a PodDisruptionBudget with `minAvailable` = replicas and a `karpenter.sh/do-not-disrupt` pod → within a few agent capacity reports (`capacity.interval` 30s in dev) `GET /v1/clusters/{cluster}/capacity` lists both as blockers naming their objects, with message and fix; totals, pools and a `first-fit-decreasing` estimate with its method link |
 
-### Admin area (WO-24, D-022..D-027)
+### Admin area
 
 These drive the hub API like the web UI: logged in as the dev users `viewer`, `operator` and `admin`
 (values-dev.yaml; `E2E_<USER>_PASSWORD` overrides) with the `kerf_session` cookie and `X-CSRF-Token`.
@@ -87,7 +87,7 @@ These drive the hub API like the web UI: logged in as the dev users `viewer`, `o
 | A3 | `TestApproveOnce` | spoke-1 | operator approves the latest recommendation of an audit workload → `applied/ApprovedOnce`, pods resized in place, approval `consumed`, `WorkloadApproved` row; the next recommendation (new id) is not applied |
 | A5 | `TestGitPolicyUntouched` | spoke-1 | a hub policy with the name of a Git CR (no hub label): the CR is never modified or deleted (also after the hub policy is deleted); the inventory lists it as `source: git` and the hub policy as invalid |
 | A6 | `TestAdminRoles` | registered test cluster | viewer: 403 `role_forbidden` on policy create, pause, recheck; operator: 403 on global defaults, policies and recommender settings, 403 `csrf_invalid` without the token, pause + resume of a non-prod cluster OK and audited |
-| A7 | `TestApproveOnceArgoCD` | spoke-1 | approve once on an Argo CD app with self-heal (rollout): the agent keeps the field ownership (D-027), a hard sync and 75 s of self-heal keep the approved value, app Synced |
+| A7 | `TestApproveOnceArgoCD` | spoke-1 | approve once on an Argo CD app with self-heal (rollout): the agent keeps the field ownership, a hard sync and 75 s of self-heal keep the approved value, app Synced |
 | A8 | `TestOnboarding` | new cluster `e2e-onb-*` | datasource test of `local` with ro-spoke-1's label finds series; registered with that binding; recheck runs the metrics checks; state stays `Registered`; auto-patch policy → 409 `cluster_not_automation_ready`; operator `overrideReadiness` → 403; admin override → 201 with `after.overrideReadiness: true`; cluster deleted |
 | A9 | `TestReadiness/*` | both spokes | after a recheck (answered by the agent) the state is `AutomationReady`, no blocking failures, every capability granted |
 | A10 | `TestReadinessRBAC` | spoke-2 | the agent's `pods/resize` rule removed from its ClusterRole → recheck → `ReadyAudit`, `rbac.resize` fail, `ReadinessChanged` row (actor system/readiness), auto-patch policy refused (409); rule restored (also on failure, and by `make e2e-unblock`) → `AutomationReady` again |
@@ -117,7 +117,7 @@ conflict; `make e2e-unblock` drops leftover entries (also the `e2e.test` ones of
 
 Hub objects: every test deletes the policies and clusters it created and resumes what it paused.
 Before the scenarios (and in `make e2e-clean`) the suite sweeps what an interrupted run left:
-hub policies and clusters named `e2e-*`, and pauses whose reason starts with `e2e `.
+hub policies, clusters and teams named `e2e-*`, and pauses whose reason starts with `e2e `.
 
 ### Notifications
 
@@ -125,9 +125,15 @@ hub policies and clusters named `e2e-*`, and pauses whose reason starts with `e2
 |---|---|---|
 | `TestNotifications` | spoke-1 (events only) | A fake signed-webhook receiver runs on the host (the hub reaches it as `host.k3d.internal`; the dev hub values set `notifications.allowInsecureHTTP`). As admin: a webhook channel with a signing secret (never returned by the API), **Send test** arrives signed (`X-Kerf-Signature` verified with `notify.Verify`), a second channel nobody listens on shows its error (without its URL) on **Send test** and on the channel. A rule for one namespace of spoke-1 (`rolled_back`, `blocked`); events posted with spoke-1's agent token (namespaces `e2e-notify-*`; the audit log is append-only, so they stay): the rollback arrives within a minute with a link to the workload page and without the credential in its text, the rollback of another namespace and repeats of one block produce nothing more (one `blocked` message), the history lists both deliveries, `kerf_notification_deliveries_total` is exported. The rule and channels are deleted at the end. |
 
+### Teams
+
+| Test | Cluster | What is asserted |
+|---|---|---|
+| `TestTeamScopedAccess` | spoke-1 | Two namespaces `e2e-teama-*` and `e2e-teamb-*`, each with a small audit workload; team A owns its namespace by selector, team B its workload by the owner label `team` (reported by the agent). A local user bound to team A as operator only (scope `teams`): `GET /v1/workloads` and `GET /v1/summary` hold team A's workloads only (total and fleet count agree, `teams` lists A only); team B's workload is `404` to read and `403 scope_forbidden` to approve; `GET /v1/admin/policies` is `403`; approving team A's workload succeeds and its `WorkloadApproved` row has `actor.teams = [team A]`. Teams and the user are deleted at the end. |
+
 ## How the hub is driven
 
-The real hub, not the agent's stub-hub mode: the agents are shared Helm releases (WO-06) and a
+The real hub, not the agent's stub-hub mode: the agents are shared Helm releases and a
 second agent with a stub hub would fight them over the same workloads.
 
 - Every scenario creates namespace `e2e-<scenario>-<6 hex>` and a cluster-scoped
@@ -160,12 +166,12 @@ second agent with a stub hub would fight them over the same workloads.
 - Webhook down (scenario 8): the webhook Deployment on spoke-1 is scaled to 0 for about a minute,
   with its replicas recorded in annotation `e2e.kerf.getkerf.dev/scaled-from`, then scaled
   back. `make e2e-unblock` scales it back after a killed run.
-- Recompute (D-019): when the hub offers `POST /v1/admin/recompute`, the suite triggers it for the
+- Recompute: when the hub offers `POST /v1/admin/recompute`, the suite triggers it for the
   cluster it waits on, at most every `E2E_RECOMPUTE_EVERY` (30 s) per cluster, using the admin token from `hub-dev-tokens` (`E2E_HUB_ADMIN_TOKEN`
   overrides; `E2E_HUB_RECOMPUTE=off` disables it). Without it (404), it waits for the periodic run.
 
 Nothing outside the suite's namespaces is modified, except that temporary token swap, the webhook
-scale-down, the spoke-2 pause and `pods/resize` rule removal (WO-24) and, only with
+scale-down, the spoke-2 pause and `pods/resize` rule removal and, only with
 `KERF_E2E_DISRUPTIVE=1`, the kube-state-metrics scale-down; `make e2e-unblock` undoes the cluster-side ones.
 
 ## Configuration (environment)
@@ -191,7 +197,7 @@ scale-down, the spoke-2 pause and `pods/resize` rule removal (WO-24) and, only w
 | `KERF_E2E_DISRUPTIVE` | unset: A11 skipped; `1` runs it |
 | `E2E_KSM_NAMESPACE` / `E2E_KSM_DEPLOYMENT` | `monitoring` / `kube-state-metrics` (A11) |
 
-Prerequisites: the agents have their hub token Secret (WO-06 hand-over) and are connected.
+Prerequisites: the agents have their hub token Secret and are connected.
 
 ## CI
 

@@ -9,8 +9,9 @@ import {
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
+import { useAuth } from '@/api/auth'
 import { useSavingsTrend, useSummary, useWorkloads, type TimeRange } from '@/api/queries'
-import type { RiskFlag, Summary, WorkloadRow } from '@/api/types'
+import type { RiskFlag, Summary, TeamSummary, WorkloadRow } from '@/api/types'
 import { Chart } from '@/components/charts/chart'
 import { alpha, axisStyle, baseOption, useChartColors } from '@/components/charts/theme'
 import { Change, Confidence, KindBadge, MODE_INFO, PHASE_INFO, RISK_INFO, Savings } from '@/components/domain'
@@ -32,6 +33,7 @@ import {
   parseQuantity,
 } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { byTeamSavings, UNASSIGNED } from '@/lib/teams'
 import { workloadPath } from '@/lib/workload-id'
 import { NodeCostCard, RealizedCard } from './overview-realized'
 
@@ -53,6 +55,7 @@ function trimLeadingZeros<P extends { total: number }>(series: { points: P[] }[]
 
 export function OverviewPage() {
   const summary = useSummary()
+  const auth = useAuth()
   const s = summary.data
 
   if (summary.isError) {
@@ -123,12 +126,18 @@ export function OverviewPage() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         <RealizedCard />
-        <NodeCostCard clusters={s?.clusters} />
+        {/* Node cost and capacity are fleet-wide: a team-scoped user would get 403 for them. */}
+        {auth.teamScoped ? null : <NodeCostCard clusters={s?.clusters} />}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
         <SavingsTrendCard className="xl:col-span-2" />
-        <ClusterSavingsCard summary={s} />
+        <div className="space-y-4">
+          <ClusterSavingsCard summary={s} />
+          {s?.teams?.length ? (
+            <TeamSavingsCard teams={s.teams} total={s.fleet.monthlySavingsUSD.total} />
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -562,6 +571,59 @@ function ClusterSavingsCard({
                 </button>
               )
             })}
+      </CardContent>
+    </Card>
+  )
+}
+
+function TeamSavingsCard({ teams, total }: { teams: TeamSummary[]; total: number }) {
+  const navigate = useNavigate()
+  const rows = byTeamSavings(teams)
+  const max = Math.max(1, ...rows.map((x) => x.monthlySavingsUSD.total))
+  return (
+    <Card data-testid="team-savings">
+      <CardHeader>
+        <div>
+          <CardTitle>Savings by team</CardTitle>
+          <CardDescription>Estimated (if applied) per month, largest first</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-1 pt-3">
+        {rows.map((t) => {
+          const unassigned = t.team === UNASSIGNED
+          return (
+            <button
+              key={t.team}
+              onClick={() => navigate(`/opportunities?team=${encodeURIComponent(t.team)}`)}
+              data-testid={`team-savings-${t.team}`}
+              className="group -mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 py-2 text-left transition-colors outline-none hover:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/40"
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <span
+                  className={cn('truncate text-[13px] font-medium', unassigned && 'text-muted-foreground')}
+                >
+                  {unassigned ? 'Unassigned' : t.displayName}
+                </span>
+                <span className="text-[13px] font-semibold tabular">
+                  {formatUSD(t.monthlySavingsUSD.total)}
+                </span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all group-hover:opacity-90',
+                    unassigned ? 'bg-muted-foreground/40' : 'bg-primary',
+                  )}
+                  style={{ width: `${(t.monthlySavingsUSD.total / max) * 100}%` }}
+                />
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                {formatNumber(t.workloads)} workloads ·{' '}
+                {formatPercent(total ? t.monthlySavingsUSD.total / total : 0)} of total
+              </div>
+            </button>
+          )
+        })}
       </CardContent>
     </Card>
   )

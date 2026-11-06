@@ -3,6 +3,7 @@ import {
   flexRender,
   getCoreRowModel,
   useReactTable,
+  type Row,
   type SortingState,
   type VisibilityState,
 } from '@tanstack/react-table'
@@ -18,11 +19,13 @@ import {
   Loader2Icon,
   SearchIcon,
   SearchXIcon,
+  UsersRoundIcon,
   XIcon,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { api, unwrap } from '@/api/client'
+import { useTeams } from '@/api/admin'
 import { useClusters, useFacets, useWorkloads } from '@/api/queries'
 import {
   GPU_FILTERS,
@@ -52,6 +55,7 @@ import {
   Savings,
 } from '@/components/domain'
 import { FacetFilter } from '@/components/facet-filter'
+import { TeamChip } from '@/components/team'
 import { EmptyState, ErrorState, PageHeader } from '@/components/states'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -67,8 +71,9 @@ import { Checkbox } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { download, workloadsToCsv } from '@/lib/csv'
-import { formatBytes, formatCores, formatNumber, relativeTime, parseQuantity } from '@/lib/format'
+import { formatBytes, formatCores, formatNumber, formatUSD, relativeTime, parseQuantity } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { teamLabel, UNASSIGNED } from '@/lib/teams'
 import { workloadPath } from '@/lib/workload-id'
 import { BulkBar } from './opportunities-bulk'
 
@@ -99,6 +104,7 @@ const col = createColumnHelper<WorkloadRow>()
 
 const COLUMN_LABELS: Record<string, string> = {
   workload: 'Workload',
+  team: 'Team',
   cluster: 'Cluster',
   modes: 'Mode',
   phase: 'Phase',
@@ -131,7 +137,8 @@ const VIS_KEY = 'ro-opportunities-columns-v1'
  */
 function defaultHidden(): VisibilityState {
   const w = window.innerWidth
-  if (w < 1024) return { ...DEFAULT_HIDDEN, modes: false, phase: false, confidence: false, riskFlags: false }
+  if (w < 1024)
+    return { ...DEFAULT_HIDDEN, team: false, modes: false, phase: false, confidence: false, riskFlags: false }
   if (w < 1280) return { ...DEFAULT_HIDDEN, confidence: false, riskFlags: false }
   return DEFAULT_HIDDEN
 }
@@ -167,6 +174,8 @@ function useUrlState() {
     kind: sp.getAll('kind') as WorkloadKind[],
     mode: sp.getAll('mode') as Mode[],
     riskFlag: sp.getAll('riskFlag') as RiskFlag[],
+    team: sp.getAll('team'),
+    group: sp.get('group') === 'team' ? 'team' : '',
     gpu: sp.getAll('gpu') as GPUFilter[],
     minSavings: sp.get('minSavings') ?? '',
     q: sp.get('q') ?? '',
@@ -194,7 +203,10 @@ function useUrlState() {
       { replace: true },
     )
   }
-  const toggle = (key: 'cluster' | 'namespace' | 'kind' | 'mode' | 'riskFlag' | 'gpu', value: string) =>
+  const toggle = (
+    key: 'cluster' | 'namespace' | 'kind' | 'mode' | 'riskFlag' | 'team' | 'gpu',
+    value: string,
+  ) =>
     setSp(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -238,6 +250,7 @@ export default function OpportunitiesPage() {
       ...(s.kind.length ? { kind: s.kind } : {}),
       ...(s.mode.length ? { mode: s.mode } : {}),
       ...(s.riskFlag.length ? { riskFlag: s.riskFlag } : {}),
+      ...(s.team.length ? { team: s.team } : {}),
       ...(s.gpu.length ? { gpu: s.gpu } : {}),
       ...(s.minSavings !== '' && !Number.isNaN(Number(s.minSavings))
         ? { minSavings: Number(s.minSavings) }
@@ -260,11 +273,14 @@ export default function OpportunitiesPage() {
   const query = { ...filterQuery, limit: s.size, ...(cursor ? { continue: cursor } : {}) }
   const list = useWorkloads(query)
   const clusters = useClusters()
-  // Facet options with counts from GET /v1/workloads/facets (D-016). Each facet is counted without its
+  // Facet options with counts from GET /v1/workloads/facets. Each facet is counted without its
   // own filter, so a multi-select keeps showing the other values. Hubs without the endpoint fall back
   // to static values and the namespaces of one large page.
   const { sort: _sort, order: _order, ...facetQuery } = filterQuery
   const facets = useFacets(facetQuery)
+  // Team names come from the teams list; the filter shows only once teams exist.
+  const teams = useTeams()
+  const hasTeams = !!teams.data?.items.length
   const fallback = useWorkloads({ limit: 500, sort: 'name' }, { enabled: facets.isError })
   const options = useMemo(() => {
     const withSelected = (counts: { value: string; count?: number }[], selected: string[]) => {
@@ -284,6 +300,7 @@ export default function OpportunitiesPage() {
         kinds: WORKLOAD_KINDS.map((k) => ({ value: k, count: kinds.get(k) ?? 0 })),
         modes: MODES.map((m) => ({ value: m, count: modes.get(m) ?? 0 })),
         riskFlags: RISK_FLAGS.map((r) => ({ value: r, count: flags.get(r) ?? 0 })),
+        teams: withSelected(f.teams ?? [], s.team),
         // `any` counts every workload with GPUs; a workload has one status, so the sum is exact.
         gpus: GPU_FILTERS.map((g) => ({
           value: g,
@@ -308,9 +325,20 @@ export default function OpportunitiesPage() {
       kinds: WORKLOAD_KINDS.map((k) => ({ value: k, count: undefined as number | undefined })),
       modes: MODES.map((m) => ({ value: m, count: undefined as number | undefined })),
       riskFlags: RISK_FLAGS.map((r) => ({ value: r, count: undefined as number | undefined })),
+      teams: withSelected(
+        [...(teams.data?.items ?? []).map((t) => t.id), ...(teams.data?.unassigned ? [UNASSIGNED] : [])].map(
+          (value) => ({ value, count: undefined as number | undefined }),
+        ),
+        s.team,
+      ),
       gpus: GPU_FILTERS.map((g) => ({ value: g, count: undefined as number | undefined })),
     }
-  }, [facets.data, fallback.data, clusters.data, s.cluster, s.namespace])
+  }, [facets.data, fallback.data, clusters.data, teams.data, s.cluster, s.namespace, s.team])
+  const teamOptions = useMemo(
+    () => options.teams.map((o) => ({ ...o, label: teamLabel(o.value, teams.data?.items) })),
+    [options.teams, teams.data],
+  )
+  const showTeams = hasTeams || s.team.length > 0 || teamOptions.some((o) => o.value !== UNASSIGNED)
 
   const sorting: SortingState = [
     { id: s.sort, desc: (s.order ?? (s.sort === 'name' ? 'asc' : 'desc')) === 'desc' },
@@ -367,6 +395,12 @@ export default function OpportunitiesPage() {
             </div>
           )
         },
+      }),
+      col.display({
+        id: 'team',
+        header: 'Team',
+        cell: ({ row: { original: w } }) =>
+          w.team ? <TeamChip team={w.team} /> : <span className="text-muted-foreground/60">—</span>,
       }),
       col.accessor('cluster', {
         header: 'Cluster',
@@ -483,7 +517,7 @@ export default function OpportunitiesPage() {
   const table = useReactTable({
     data: list.data?.items ?? [],
     columns,
-    state: { sorting, columnVisibility },
+    state: { sorting, columnVisibility: showTeams ? columnVisibility : { ...columnVisibility, team: false } },
     onColumnVisibilityChange,
     manualSorting: true,
     manualPagination: true,
@@ -523,6 +557,7 @@ export default function OpportunitiesPage() {
     s.kind.length +
     s.mode.length +
     s.riskFlag.length +
+    s.team.length +
     s.gpu.length +
     (s.minSavings ? 1 : 0) +
     (s.q ? 1 : 0)
@@ -535,6 +570,7 @@ export default function OpportunitiesPage() {
       kind: [],
       mode: [],
       riskFlag: [],
+      team: [],
       gpu: [],
       minSavings: undefined,
       q: undefined,
@@ -568,6 +604,51 @@ export default function OpportunitiesPage() {
     }
   }
 
+  const renderRow = (row: Row<WorkloadRow>) => (
+    <tr
+      key={row.id}
+      tabIndex={0}
+      data-testid="opportunity-row"
+      onClick={() => navigate(workloadPath(row.original.id))}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') navigate(workloadPath(row.original.id))
+      }}
+      className="group cursor-pointer border-b border-border/60 transition-colors outline-none last:border-0 hover:bg-accent/50 focus-visible:bg-accent/70 focus-visible:shadow-[inset_2px_0_0_var(--primary)]"
+    >
+      {row.getVisibleCells().map((cell) => {
+        const meta = cell.column.columnDef.meta as { align?: 'right' } | undefined
+        return (
+          <td
+            key={cell.id}
+            className={cn(
+              'h-14 max-w-72 px-2.5 first:pl-4 last:pr-4',
+              // Workload and savings stay visible while the table scrolls sideways.
+              'first:sticky first:left-0 first:z-[1] first:bg-card last:sticky last:right-0 last:z-[1] last:bg-card group-hover:first:bg-[color-mix(in_oklch,var(--accent)_50%,var(--card))] group-hover:last:bg-[color-mix(in_oklch,var(--accent)_50%,var(--card))]',
+              meta?.align === 'right' && 'text-right',
+            )}
+          >
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </td>
+        )
+      })}
+    </tr>
+  )
+  // "Group by team": the rows of the page under one header per team, biggest savings first.
+  const groups = (() => {
+    if (s.group !== 'team') return undefined
+    const by = new Map<string, { team: string; rows: Row<WorkloadRow>[]; savings: number }>()
+    for (const row of table.getRowModel().rows) {
+      const team = row.original.team ?? UNASSIGNED
+      const g = by.get(team) ?? { team, rows: [], savings: 0 }
+      g.rows.push(row)
+      g.savings += row.original.monthlySavingsUSD?.total ?? 0
+      by.set(team, g)
+    }
+    return [...by.values()].sort(
+      (a, b) => Number(a.team === UNASSIGNED) - Number(b.team === UNASSIGNED) || b.savings - a.savings,
+    )
+  })()
+
   const total = list.data?.total ?? 0
   const pageStart = cursors.length * s.size
   const items = list.data?.items ?? []
@@ -590,7 +671,7 @@ export default function OpportunitiesPage() {
                 <DropdownMenuSeparator />
                 {table
                   .getAllLeafColumns()
-                  .filter((c) => c.id !== 'workload')
+                  .filter((c) => c.id !== 'workload' && (c.id !== 'team' || showTeams))
                   .map((c) => (
                     <DropdownMenuCheckboxItem
                       key={c.id}
@@ -628,6 +709,15 @@ export default function OpportunitiesPage() {
           onToggle={(v) => toggle('cluster', v)}
           onClear={() => update({ cluster: [] })}
         />
+        {showTeams ? (
+          <FacetFilter
+            title="Team"
+            options={teamOptions}
+            selected={s.team}
+            onToggle={(v) => toggle('team', v)}
+            onClear={() => update({ team: [] })}
+          />
+        ) : null}
         <FacetFilter
           title="Namespace"
           options={options.namespaces}
@@ -687,6 +777,18 @@ export default function OpportunitiesPage() {
             aria-label="Minimum monthly savings in USD"
           />
         </div>
+        {showTeams ? (
+          <label className="flex h-8 items-center gap-2 rounded-lg border px-2.5 text-[13px]">
+            <Checkbox
+              checked={s.group === 'team'}
+              onCheckedChange={(v) => update({ group: v === true ? 'team' : undefined })}
+              aria-label="Group by team"
+              data-testid="group-by-team"
+            />
+            <UsersRoundIcon className="size-3.5 text-muted-foreground" />
+            Group by team
+          </label>
+        ) : null}
         {activeFilters ? (
           <Button variant="ghost" size="sm" onClick={clearAll} className="text-muted-foreground">
             Reset <XIcon />
@@ -781,35 +883,25 @@ export default function OpportunitiesPage() {
                         ))}
                       </tr>
                     ))
-                  : table.getRowModel().rows.map((row) => (
-                      <tr
-                        key={row.id}
-                        tabIndex={0}
-                        data-testid="opportunity-row"
-                        onClick={() => navigate(workloadPath(row.original.id))}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') navigate(workloadPath(row.original.id))
-                        }}
-                        className="group cursor-pointer border-b border-border/60 transition-colors outline-none last:border-0 hover:bg-accent/50 focus-visible:bg-accent/70 focus-visible:shadow-[inset_2px_0_0_var(--primary)]"
-                      >
-                        {row.getVisibleCells().map((cell) => {
-                          const meta = cell.column.columnDef.meta as { align?: 'right' } | undefined
-                          return (
-                            <td
-                              key={cell.id}
-                              className={cn(
-                                'h-14 max-w-72 px-2.5 first:pl-4 last:pr-4',
-                                // Workload and savings stay visible while the table scrolls sideways.
-                                'first:sticky first:left-0 first:z-[1] first:bg-card last:sticky last:right-0 last:z-[1] last:bg-card group-hover:first:bg-[color-mix(in_oklch,var(--accent)_50%,var(--card))] group-hover:last:bg-[color-mix(in_oklch,var(--accent)_50%,var(--card))]',
-                                meta?.align === 'right' && 'text-right',
-                              )}
+                  : groups
+                    ? groups.map((g) => (
+                        <Fragment key={g.team}>
+                          <tr className="border-b bg-muted/40" data-testid="team-group">
+                            <th
+                              scope="rowgroup"
+                              colSpan={table.getVisibleLeafColumns().length}
+                              className="h-9 px-4 text-left text-[13px] font-medium"
                             >
-                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
+                              {teamLabel(g.team, teams.data?.items)}
+                              <span className="ml-2 font-normal text-muted-foreground">
+                                {formatNumber(g.rows.length)} on this page · {formatUSD(g.savings)}/mo
+                              </span>
+                            </th>
+                          </tr>
+                          {g.rows.map(renderRow)}
+                        </Fragment>
+                      ))
+                    : table.getRowModel().rows.map(renderRow)}
               </tbody>
             </table>
             {list.data && !items.length ? (

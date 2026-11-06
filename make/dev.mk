@@ -1,4 +1,4 @@
-# Local dev environment (WO-01): k3d hub + two spokes. Included by the root Makefile (include make/*.mk);
+# Local dev environment: k3d hub + two spokes. Included by the root Makefile (include make/*.mk);
 # until that exists, run e.g. `make -f make/dev.mk dev-up`. See dev/README.md.
 
 DEV_SCRIPTS := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../dev/scripts)
@@ -21,7 +21,7 @@ dev-purge: ## dev-down and also remove the docker.io pull cache and the ro-dev n
 dev-status: ## Pod counts per cluster and access URLs
 	@$(DEV_SCRIPTS)/status.sh
 
-dev-verify: ## Run the WO-01 verification checks against the running fleet
+dev-verify: ## Run the fleet verification checks against the running fleet
 	@$(DEV_SCRIPTS)/verify.sh
 
 dev-dashboards: ## Re-provision Grafana dashboards from dashboards/

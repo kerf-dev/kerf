@@ -19,7 +19,7 @@ import (
 
 // schemaTypes maps components/schemas names to the Go types that mirror them.
 var schemaTypes = map[string]any{
-	// WO-00 .. WO-14
+	// Core API
 	"ResourceValues":          ResourceValues{},
 	"Resources":               Resources{},
 	"ContainerResources":      ContainerResources{},
@@ -55,7 +55,7 @@ var schemaTypes = map[string]any{
 	"CapacityPoolEstimate":     CapacityPoolEstimate{},
 	"CapacityInstanceType":     CapacityInstanceType{},
 	"ConsolidationBlocker":     ConsolidationBlocker{},
-	// Maintenance (WO-33)
+	// Maintenance
 	"AgentComponent":       AgentComponent{},
 	"ComponentVersion":     ComponentVersion{},
 	"UpdateStatus":         UpdateStatus{},
@@ -94,6 +94,13 @@ var schemaTypes = map[string]any{
 	"Problem":              Problem{},
 	"GPUUsage":             GPUUsage{},
 	"GPUSuggestion":        GPUSuggestion{},
+	// Teams
+	"TeamRole":    TeamRole{},
+	"TeamInput":   TeamInput{},
+	"Team":        Team{},
+	"TeamCounts":  TeamCounts{},
+	"TeamList":    TeamList{},
+	"TeamSummary": TeamSummary{},
 
 	// Realized savings
 	"RealizedAmount":   RealizedAmount{},
@@ -104,7 +111,7 @@ var schemaTypes = map[string]any{
 	"NodeCostPoint":    NodeCostPoint{},
 	"NodeCostTrend":    NodeCostTrend{},
 
-	// WO-19 admin area
+	// Admin area
 	"Actor":                      Actor{},
 	"ChangeReason":               ChangeReason{},
 	"LoginRequest":               LoginRequest{},
@@ -172,7 +179,7 @@ var schemaTypes = map[string]any{
 	"ConfigChange":               ConfigChange{},
 	"ConfigChangeList":           ConfigChangeList{},
 
-	// WO-19 onboarding and readiness (D-025)
+	// Onboarding and readiness
 	"DatasourceSigV4":       DatasourceSigV4{},
 	"DatasourceTLSInput":    DatasourceTLSInput{},
 	"DatasourceAuthInput":   DatasourceAuthInput{},
@@ -242,6 +249,7 @@ var enumLists = map[string][]string{
 	"VersionCompat":      VersionCompats,
 	"UpdateState":        UpdateStates,
 	"UserRole":           UserRoles,
+	"UserScope":          UserScopes,
 	"ConfigAction":       ConfigActions,
 	"ConfigTargetType":   ConfigTargetTypes,
 	"LayerSource":        LayerSources,
