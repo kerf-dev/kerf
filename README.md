@@ -197,18 +197,19 @@ cert-manager in each workload cluster (the webhook's certificate), and PostgreSQ
 
 Kerf takes ideas from the tools below. They are good tools; pick the one that fits.
 
-| | License | Your data stays in your infrastructure | Applies changes | In-place resize | Rollback on bad health | Savings in $ | HPA and JVM aware |
-|---|---|---|---|---|---|---|---|
-| **Kerf** | Apache-2.0 | ✓ | ✓ policies, maintenance windows | ✓ | ✓ | ✓ | ✓ both |
-| [Vertical Pod Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler) | Apache-2.0 | ✓ | ✓ evict and webhook | ✓ `InPlaceOrRecreate` | – | – | not with an HPA on the same metric |
-| [Goldilocks](https://github.com/FairwindsOps/goldilocks) | Apache-2.0 | ✓ | through VPA, opt-in | through VPA | – | – | – |
-| [Robusta KRR](https://github.com/robusta-dev/krr) | MIT | ✓ CLI; the UI is SaaS | optional webhook, with a Robusta account | – | – | – | `--allow-hpa` |
-| [IBM Kubecost](https://www.ibm.com/products/kubecost) | commercial, free tier | ✓ self-hosted option | Kubescaler (alpha) | – | – | ✓ | – |
-| [StormForge](https://www.cloudbolt.io/stormforge/) | commercial | metrics go to SaaS | ✓ | ✓ | ✓ | ✓ | ✓ both |
-| [PerfectScale](https://www.perfectscale.io/) | commercial, free tier | ✓ self-hosted option | ✓ maintenance windows | ✓ | – | ✓ | JVM; HPA advice |
-| [CAST AI](https://cast.ai/) | commercial | SaaS console | ✓ | ✓ | – | ✓ | ✓ both |
+| | License | Your data stays in your infrastructure | Applies changes | In-place resize | Rollback on bad health | Savings in $ | HPA and JVM aware | Alerts in chat | SSO | Realized savings |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **Kerf** | Apache-2.0 | ✓ | ✓ policies, maintenance windows | ✓ | ✓ | ✓ | ✓ both | ✓ [Slack, Teams, webhook](docs/notifications.md) | ✓ [OIDC](docs/auth.md#sign-in-with-openid-connect) | ✓ [from applied changes](docs/realized-savings.md) |
+| [Vertical Pod Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler) | Apache-2.0 | ✓ | ✓ evict and webhook | ✓ `InPlaceOrRecreate` | – | – | not with an HPA on the same metric | – | – | – |
+| [Goldilocks](https://github.com/FairwindsOps/goldilocks) | Apache-2.0 | ✓ | through VPA, opt-in | through VPA | – | – | – | – | – | – |
+| [Robusta KRR](https://github.com/robusta-dev/krr) | MIT | ✓ CLI; the UI is SaaS | optional webhook, with a Robusta account | – | – | – | `--allow-hpa` | ✓ Slack (through Robusta), Teams | – | – |
+| [IBM Kubecost](https://www.ibm.com/products/kubecost) | commercial, free tier | ✓ self-hosted option | Kubescaler (alpha) | – | – | ✓ | – | ✓ Slack, Teams, email | ✓ SAML, Enterprise | – |
+| [StormForge](https://www.cloudbolt.io/stormforge/) | commercial | metrics go to SaaS | ✓ | ✓ | ✓ | ✓ | ✓ both | ✓ webhook, for example Slack | – | – |
+| [PerfectScale](https://www.perfectscale.io/) | commercial, free tier | ✓ self-hosted option | ✓ maintenance windows | ✓ | – | ✓ | JVM; HPA advice | ✓ Slack, Teams | ✓ SAML, OIDC, Expert plan | – |
+| [CAST AI](https://cast.ai/) | commercial | SaaS console | ✓ | ✓ | – | ✓ | ✓ both | ✓ Slack, Teams, webhook | ✓ OIDC | ✓ savings report |
 
-✓ = documented. – = not found in their public docs on 2026-11-05, which is not proof that it's missing.
+✓ = documented. – = not found in their public docs on 2026-11-05 (2026-11-06 for the last three columns), which is not
+proof that it's missing.
 [Sources and details](docs/branding/comparison.md). Corrections are welcome: open an issue.
 
 **In short:** VPA or Goldilocks suit one cluster that you watch closely. KRR gives a quick report from
