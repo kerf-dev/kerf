@@ -37,3 +37,8 @@ tilt_modules/
 /docs/work-orders/
 /docs/handover/
 /docs/plans/
+
+# Documentation site
+/.venv-docs/
+/_docs-site/
+/_site/

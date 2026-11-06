@@ -2,13 +2,19 @@
 
 Kerf is open-source, self-hosted Kubernetes rightsizing: it recommends CPU and memory requests and limits from
 usage history, prices the savings, and applies changes per policy with guardrails and automatic rollback. Start
-with the [README](../README.md) for the overview; this page lists everything else.
+with the [README](../README.md) for the overview; this page lists everything else. The same pages are published,
+with search and a version switch, at [getkerf.dev/docs](https://getkerf.dev/docs/).
 
 ## Use Kerf
 
 | Document | What it covers |
 |---|---|
 | [Install on Amazon EKS](install/eks.md) | Prerequisites, AWS resources, the hub and workload clusters, readiness, turning on `auto-patch`, Argo CD, upgrade, uninstall, troubleshooting |
+| [Install on any cluster](install/any-cluster.md) | The same chart on a conformant cluster, with a static price table instead of the AWS price list |
+| [Concepts](concepts/README.md) | Modes, policies and precedence, apply strategies, guardrails, rollback, HPA coordination, JVM, approve once, GitOps and Argo CD |
+| [Operate](operate/README.md) | Upgrade, backup, alerts and dashboards, readiness checks and their fixes, troubleshooting |
+| [Reference](reference/README.md) | Generated pages: chart values, custom resources, hub API; plus metrics and events |
+| [FAQ](faq.md) and [comparison](comparison.md) | Short answers, and how Kerf differs from VPA, Goldilocks, KRR and the commercial tools |
 | [Example values](../deploy/examples/eks) | `values-hub.yaml`, `values-spoke.yaml`, IAM policies, External Secrets, an Argo CD ApplicationSet |
 | [The `kerf` command-line tool](cli.md) | `kerf report`: recommendations and savings from your existing Prometheus, without installing the hub; install, authentication (including Amazon Managed Service for Prometheus), prices |
 | [Helm chart reference](../deploy/charts/kerf/README.md) | `global.mode`, the umbrella values, opt-in features |
