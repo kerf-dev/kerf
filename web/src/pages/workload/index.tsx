@@ -26,6 +26,7 @@ import {
   RISK_INFO,
   Savings,
 } from '@/components/domain'
+import { CopyAsMenu } from '@/components/copy-as'
 import { EmptyState, ErrorState } from '@/components/states'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -216,6 +217,21 @@ function Header({ id, w }: { id: string; w?: WorkloadDetail }) {
         </div>
         {rec || realized?.since ? (
           <div className="flex flex-wrap items-stretch gap-3">
+            {rec ? (
+              <div className="self-center">
+                <CopyAsMenu
+                  workloads={[
+                    {
+                      kind: p[2] as WorkloadKind,
+                      namespace: p[1]!,
+                      name: p[3]!,
+                      cluster: p[0],
+                      containers: rec.containers,
+                    },
+                  ]}
+                />
+              </div>
+            ) : null}
             {realized?.since ? (
               <div
                 className="rounded-xl border border-success/30 bg-success/5 px-4 py-2.5 text-right shadow-xs"

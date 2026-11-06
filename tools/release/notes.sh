@@ -12,7 +12,7 @@
 #   - "Highlights": the CHANGELOG.md section `## [VERSION]` (a pre-release such as 0.2.0-rc.1 falls back to
 #     `## [0.2.0]`, then to `## [Unreleased]`), the hand-written summary;
 #   - "What's changed": the Conventional Commits since the previous release, grouped by type (git-cliff, cliff.toml);
-#   - how to install, and the published images and charts with their digests (bin/release/images.txt and
+#   - how to install (the Helm chart, and the command-line tool's binaries), and the published images and charts with their digests (bin/release/images.txt and
 #     charts.txt, written by `make release`);
 #   - the link to the full changelog (the compare view).
 #
@@ -225,6 +225,22 @@ helm install kerf $CHART \\
 - Quick start and values: [deploy/charts/kerf](https://github.com/$REPO/tree/v$VERSION/deploy/charts/kerf)
 - Production install on Amazon EKS: [docs/install/eks.md](https://github.com/$REPO/blob/v$VERSION/docs/install/eks.md)
 - Upgrading: read the notes above first; CRDs are upgraded by the chart.
+
+**Command-line tool.** \`kerf report\` shows what a cluster over-requests from its existing Prometheus, without
+installing anything in the cluster ([docs/cli.md](https://github.com/$REPO/blob/v$VERSION/docs/cli.md)). Binaries for
+Linux and macOS (amd64, arm64), signed with cosign, are attached to this release:
+
+\`\`\`bash
+os=\$(uname -s | tr A-Z a-z); arch=\$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/)
+bin=kerf_${VERSION}_\${os}_\${arch}
+curl -fsSLO https://github.com/$REPO/releases/download/$TAG/\$bin
+curl -fsSLO https://github.com/$REPO/releases/download/$TAG/\$bin.sigstore.json
+cosign verify-blob --bundle \$bin.sigstore.json \\
+  --certificate-identity-regexp '^https://github.com/$REPO/.github/workflows/release.yaml@' \\
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \$bin
+install -m 0755 \$bin /usr/local/bin/kerf
+kerf report --prometheus-url https://prometheus.example.com --cluster-label cluster=prod-eu-1
+\`\`\`
 
 ## Artifacts
 
