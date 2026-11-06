@@ -789,7 +789,7 @@ Accepts: session of a user with role `admin` or higher or bearer token with role
 
 | Name | In | Type | Description |
 |---|---|---|---|
-| `username` | path | string, required | pattern `^[a-z0-9][a-z0-9._-]{1,62}$`; example `alice` |
+| `username` | path | string, required | pattern `^[a-z0-9][a-z0-9._@+-]{1,126}$`; example `alice`, `alice@example.com` |
 
 **Responses**
 
@@ -814,7 +814,7 @@ Records `UserDeleted`.
 
 | Name | In | Type | Description |
 |---|---|---|---|
-| `username` | path | string, required | pattern `^[a-z0-9][a-z0-9._-]{1,62}$`; example `alice` |
+| `username` | path | string, required | pattern `^[a-z0-9][a-z0-9._@+-]{1,126}$`; example `alice`, `alice@example.com` |
 | `If-Match` | header | string, required | ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). |
 | `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
 
@@ -847,7 +847,7 @@ sessions. The last enabled admin cannot be demoted or disabled (`409`, code
 
 | Name | In | Type | Description |
 |---|---|---|---|
-| `username` | path | string, required | pattern `^[a-z0-9][a-z0-9._-]{1,62}$`; example `alice` |
+| `username` | path | string, required | pattern `^[a-z0-9][a-z0-9._@+-]{1,126}$`; example `alice`, `alice@example.com` |
 | `If-Match` | header | string, required | ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). |
 | `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
 
@@ -880,7 +880,7 @@ Records `PasswordReset` (without the password).
 
 | Name | In | Type | Description |
 |---|---|---|---|
-| `username` | path | string, required | pattern `^[a-z0-9][a-z0-9._-]{1,62}$`; example `alice` |
+| `username` | path | string, required | pattern `^[a-z0-9][a-z0-9._@+-]{1,126}$`; example `alice`, `alice@example.com` |
 | `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
 
 **Request body** (`application/json`, required): [PasswordReset](schemas.md#passwordreset)
@@ -893,6 +893,7 @@ Records `PasswordReset` (without the password).
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
 | `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `404` | Unknown username. | [Problem](schemas.md#problem) |
 
 ### Metrics datasources { #listDatasources }

@@ -120,6 +120,34 @@ The values of the `hub` component chart. In the `kerf` chart they sit under `hub
 | `auth.bootstrapAdmin.externalSecret.remoteRef.version` | string | `""` |  |
 | `auth.bootstrapAdmin.externalSecret.refreshInterval` | string | `""` |  |
 | `auth.bootstrapAdmin.externalSecret.secretStoreRef` | object | `{}` |  |
+| `auth.local` | object | see the keys below | Sign-in with a password. enabled: false keeps it only for the break-glass admin (breakGlassUser, default bootstrapAdmin.username), for when the identity provider is down; needs oidc.enabled. |
+| `auth.local.enabled` | boolean | `true` |  |
+| `auth.local.breakGlassUser` | string | `""` |  |
+| `auth.oidc` | object | see the keys below | Sign-in with an OpenID Connect provider (Okta, Microsoft Entra ID, Google, Keycloak, Dex, ...): authorization code flow with PKCE. Settings per provider: docs/auth.md. |
+| `auth.oidc.enabled` | boolean | `false` |  |
+| `auth.oidc.name` | string | `""` | the sign-in button: "Sign in with <name>" (default SSO) |
+| `auth.oidc.issuer` | string | `""` | e.g. https://example.okta.com |
+| `auth.oidc.clientID` | string | `""` |  |
+| `auth.oidc.redirectURL` | string | `""` | This UI's callback, registered with the provider: https://<UI host>/v1/auth/oidc/callback |
+| `auth.oidc.scopes` | array | `[]` | Default: openid, profile, email, offline_access (the refresh token lets the hub re-read the groups). Dex, Keycloak: add groups. |
+| `auth.oidc.authParams` | object | `{}` | extra authorization parameters, e.g. Google: {access_type: offline, prompt: consent} |
+| `auth.oidc.groupsClaim` | string | `groups` |  |
+| `auth.oidc.usernameClaim` | string | `email` | users are named after this claim (lowercased) |
+| `auth.oidc.roleMappings` | array | `[]` | Groups to roles; the highest matching role wins. e.g. - {group: platform-admins, role: admin} - {group: platform, role: operator} - {group: engineering, role: viewer} |
+| `auth.oidc.defaultRole` | string | `""` | ole when no group matches; "" denies the sign-in |
+| `auth.oidc.refreshInterval` | string | `5m` | how often a session re-reads the groups (a removed group ends the role) |
+| `auth.oidc.clientSecret` | object | see the keys below | The client secret: existingSecret/existingSecretKey, externalSecret (Secret <release>-oidc), or value (development only; rendered into Secret <release>-oidc). |
+| `auth.oidc.clientSecret.existingSecret` | string | `""` |  |
+| `auth.oidc.clientSecret.existingSecretKey` | string | `client-secret` |  |
+| `auth.oidc.clientSecret.value` | string | `""` |  |
+| `auth.oidc.clientSecret.externalSecret` | object | see the keys below |  |
+| `auth.oidc.clientSecret.externalSecret.enabled` | boolean | `false` |  |
+| `auth.oidc.clientSecret.externalSecret.remoteRef` | object | see the keys below |  |
+| `auth.oidc.clientSecret.externalSecret.remoteRef.key` | string | `""` | e.g. kerf/hub/oidc |
+| `auth.oidc.clientSecret.externalSecret.remoteRef.property` | string | `""` | e.g. clientSecret (JSON secret); empty = the whole secret string |
+| `auth.oidc.clientSecret.externalSecret.remoteRef.version` | string | `""` |  |
+| `auth.oidc.clientSecret.externalSecret.refreshInterval` | string | `""` |  |
+| `auth.oidc.clientSecret.externalSecret.secretStoreRef` | object | `{}` |  |
 | `logLevel` | string | `info` |  |
 | `config` | object | see the keys below | Hub configuration file (internal/hub/config.go). databaseURL and devSeed are injected by the chart. |
 | `config.listen` | string | `:8080` |  |

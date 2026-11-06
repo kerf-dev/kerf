@@ -50,7 +50,7 @@ ETag `"<version>"`: missing gives `428` (code `precondition_required`), stale gi
 | [Web UI](ui.md) | 16 | Read-only endpoints for the web UI. |
 | [Audit](audit.md) | 2 | Audit log queries. |
 | [Admin](admin.md) | 41 | Administration (admin area). Roles per operation. |
-| [Authentication](auth.md) | 4 | Login, logout and the caller's identity. |
+| [Authentication](auth.md) | 7 | Login, logout and the caller's identity. |
 | [Internal](internal.md) | 5 | Service endpoints for the pricing service (token role `pricing`). |
 
 The request and response objects are described on the [schemas](schemas.md) page. The machine-readable contract is [api/openapi/hub.yaml](https://github.com/kerf-dev/kerf/blob/main/api/openapi/hub.yaml) (OpenAPI 3.1.0).
