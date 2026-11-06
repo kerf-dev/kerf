@@ -12,9 +12,20 @@ import { GpuPanel } from './gpu-panel'
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
-beforeEach(() => {
+async function signIn(username: string) {
+  const r = await fetch(`${window.location.origin}/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password: 'dev-password' }),
+  })
+  expect(r.status).toBe(200)
+}
+
+beforeEach(async () => {
   localStorage.clear()
   resetDb()
+  // Sign-in is required: read as a viewer.
+  await signIn('viewer')
 })
 afterEach(cleanup)
 

@@ -261,7 +261,7 @@ nodePools:
 workloads:
   - name: inference-light
     namespace: ml
-    fixture: synth-gpu-light-0      # optional: written to testdata/series by `synth fixtures`
+    fixture: gpu-light-0      # optional: written to testdata/series by `synth fixtures`
     replicas: 2
     containers:
       - name: server

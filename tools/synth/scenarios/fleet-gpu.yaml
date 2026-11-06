@@ -28,7 +28,7 @@ clusters:
       # 1 GPU, never used: scale to zero.
       - name: trainer-idle
         namespace: ml
-        fixture: synth-gpu-idle-0
+        fixture: gpu-idle-0
         replicas: 1
         containers:
           - name: trainer
@@ -50,7 +50,7 @@ clusters:
       # scrape without honor_labels delivers them.
       - name: inference-light
         namespace: ml
-        fixture: synth-gpu-light-0
+        fixture: gpu-light-0
         replicas: 2
         containers:
           - name: server
@@ -72,7 +72,7 @@ clusters:
       # 2 pods x 1 GPU, ~80 % utilisation: ok.
       - name: inference-busy
         namespace: ml
-        fixture: synth-gpu-busy-0
+        fixture: gpu-busy-0
         replicas: 2
         containers:
           - name: server
@@ -113,7 +113,7 @@ clusters:
       # Requests a GPU but the DCGM exporter has no series for it: no-data.
       - name: notebook-nodata
         namespace: ml
-        fixture: synth-gpu-nodata-0
+        fixture: gpu-nodata-0
         replicas: 1
         containers:
           - name: notebook

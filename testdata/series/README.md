@@ -31,10 +31,10 @@ go test ./tools/synth/...    # TestFixturesUpToDate fails if the files are stale
 | `synth-restarting-0.json` | crash (reason `Error`) every ~8h | `restarting` |
 | `synth-daemon-0.json` | DaemonSet, one pod per node | cpu ↓, memory ↓ |
 | `synth-ledger-store-0.json` | StatefulSet, 3 replicas, weekly pattern | cpu ↓, memory ↓ |
-| `synth-gpu-idle-0.json` | 1 GPU, utilisation ~0-2 % with rare blips (`trainer-idle`) | `gpu.expect`: `idle`, `scale-to-zero` |
-| `synth-gpu-light-0.json` | 2 pods x 1 GPU, daily cycle p95 ~25 %, ~20 % of the memory, exported labels (`inference-light`) | `under-used`, `time-slicing` |
-| `synth-gpu-busy-0.json` | 2 pods x 1 GPU, daily cycle p95 ~80 % (`inference-busy`) | `ok`, no suggestion |
-| `synth-gpu-nodata-0.json` | requests a GPU, no DCGM series (`notebook-nodata`) | `no-data` |
+| `gpu-idle-0.json` | 1 GPU, utilisation ~0-2 % with rare blips (`trainer-idle`) | `gpu.expect`: `idle`, `scale-to-zero` |
+| `gpu-light-0.json` | 2 pods x 1 GPU, daily cycle p95 ~25 %, ~20 % of the memory, exported labels (`inference-light`) | `under-used`, `time-slicing` |
+| `gpu-busy-0.json` | 2 pods x 1 GPU, daily cycle p95 ~80 % (`inference-busy`) | `ok`, no suggestion |
+| `gpu-nodata-0.json` | requests a GPU, no DCGM series (`notebook-nodata`) | `no-data` |
 
 The GPU fixtures come from `tools/synth/scenarios/fleet-gpu.yaml` (cluster `synth-gpu`, same 14 days and
 end time, workloads with a `fixture:` name; their `workload` field is the workload's real name).
