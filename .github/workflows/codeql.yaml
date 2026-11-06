@@ -4,7 +4,8 @@ name: codeql
 # languages it changes (.github/scripts/codeql-languages.sh), so a docs-only or YAML-only change does not pay
 # for the multi-minute Go scan. Pushes to main, the weekly schedule and manual runs scan every language.
 # A change to this workflow or the script scans everything. CodeQL is not a required check, so a language
-# that is skipped never blocks a merge. Actions are pinned by commit SHA (Dependabot updates them).
+# that is skipped never blocks a merge. The default query suite is used (no `queries` input). Actions are pinned
+# by commit SHA (Dependabot updates them).
 
 on:
   pull_request:
@@ -74,7 +75,6 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix['build-mode'] }}
-          queries: default
       - name: Analyze
         uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
