@@ -112,6 +112,14 @@ the `metav1.Condition` reasons on `RightsizingRecommendation.status`, and to the
 The hub adds `cluster` (from the URL path) and `receivedAt` when it stores an event; both are returned
 by `GET /v1/audit`.
 
+## Notifications
+
+The hub sends the events that matter to people to Slack, Teams and webhooks ([notifications](../notifications.md),
+payload: [notifications contract](notifications.md)): `applied`, `rolled_back`, `failed` and `blocked` events of this
+contract, plus `readiness_degraded` (a `ReadinessChanged` whose state went down) and `automation_paused` /
+`automation_resumed` (`AutomationPaused` / `AutomationResumed`) from the configuration changes below. Nothing is
+added to the event model.
+
 ## Configuration changes (`config_changed`)
 
 The hub itself records every configuration change made through its API (admin area) in
@@ -135,6 +143,9 @@ shape differs from a workload event: it is served by `GET /v1/audit/config` (sch
 | `UserCreated` / `UserUpdated` / `UserDeleted` / `PasswordReset` | `user` | local user changes |
 | `DatasourceCreated` / `DatasourceUpdated` / `DatasourceDeleted` | `datasource` | metrics datasource changes (never secrets) |
 | `ReadinessChanged` | `readiness` (`id` = cluster) | the cluster's readiness state changed (actor type `system`, `before`/`after` = `{"state": …}`, `docs/contracts/readiness.md`) |
+| `NotificationChannelCreated` / `NotificationChannelUpdated` / `NotificationChannelDeleted` | `notification` (`id` = channel id, `name` = channel name) | notification channel changes (the URL and the signing secret are never recorded: the masked URL only) |
+| `NotificationRuleCreated` / `NotificationRuleUpdated` / `NotificationRuleDeleted` | `notification` (`id` = rule id) | notification rule changes |
+| `NotificationDigestUpdated` | `notification` (`id` = `digest`) | the weekly digest's schedule or channels changed |
 
 `before`/`after` hold the target's API representation and never contain password hashes, passwords
 or token values. Login attempts are not configuration changes and are not recorded here.

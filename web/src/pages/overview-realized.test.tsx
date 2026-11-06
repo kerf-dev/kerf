@@ -3,7 +3,7 @@
  * estimated amounts are never added together or shown with the same label.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -173,6 +173,23 @@ describe('Overview: realized savings', () => {
       ),
     ).toBeInTheDocument()
     expect(await within(card).findByRole('combobox', { name: 'Cluster' })).toBeInTheDocument()
+  })
+
+  it('shows the node estimate as a labelled level, linked to the capacity tab and the method', async () => {
+    renderAt('/')
+    const card = await screen.findByTestId('node-cost-card')
+    fireEvent.change(await within(card).findByRole('combobox', { name: 'Cluster' }), {
+      target: { value: 'prod-eu-west-1' },
+    })
+    const note = await within(card).findByTestId('node-estimate-note', {}, { timeout: 8000 })
+    expect(note).toHaveTextContent('Estimate')
+    expect(note).toHaveTextContent('after the open recommendations')
+    expect(within(note).getByRole('link', { name: 'Capacity and blockers' })).toHaveAttribute(
+      'href',
+      '/clusters/prod-eu-west-1?tab=capacity',
+    )
+    const method = within(note).getByRole('link', { name: /How this is estimated/ })
+    expect(method).toHaveAttribute('target', '_blank')
   })
 })
 

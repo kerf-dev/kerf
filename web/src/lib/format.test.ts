@@ -4,6 +4,7 @@ import {
   formatBytes,
   formatCores,
   formatDelta,
+  formatGiB,
   formatPercent,
   formatQuantity,
   formatUSD,
@@ -98,5 +99,13 @@ describe('workload ids', () => {
   })
   it('builds readable UI routes', () => {
     expect(workloadPath('c/ns/Deployment/web')).toBe('/workloads/c/ns/Deployment/web')
+  })
+})
+
+describe('formatGiB', () => {
+  it('always uses GiB', () => {
+    expect(formatGiB(17179869184)).toBe('16 GiB')
+    expect(formatGiB(536870912)).toBe('0.5 GiB')
+    expect(formatGiB(undefined)).toBe('—')
   })
 })

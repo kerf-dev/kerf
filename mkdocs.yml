@@ -122,6 +122,7 @@ nav:
       - notifications.md
       - pricing.md
       - realized-savings.md
+      - node-savings.md
       - cli.md
       - copy-as-patch.md
   - Reference:

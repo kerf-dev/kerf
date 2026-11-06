@@ -66,6 +66,7 @@ import { BUILT_IN, mergeSpecs, prune, selectorSummary } from '@/lib/spec'
 import { validateSpec } from '@/lib/validate'
 import { cn } from '@/lib/utils'
 import { changedPaths } from '@/lib/policy'
+import { CapacityTab } from './cluster-capacity'
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -661,6 +662,7 @@ export default function ClusterDetailPage() {
                   </span>
                 ) : null}
               </TabsTrigger>
+              <TabsTrigger value="capacity">Capacity</TabsTrigger>
               <TabsTrigger value="settings">Cluster defaults</TabsTrigger>
               {auth.can('admin') ? <TabsTrigger value="agent">Agent and install</TabsTrigger> : null}
             </TabsList>
@@ -669,6 +671,9 @@ export default function ClusterDetailPage() {
             </TabsContent>
             <TabsContent value="readiness" className="mt-4">
               <ReadinessTab cluster={c.name} />
+            </TabsContent>
+            <TabsContent value="capacity" className="mt-4">
+              <CapacityTab cluster={c.name} />
             </TabsContent>
             <TabsContent value="settings" className="mt-4">
               <SettingsTab c={c} />

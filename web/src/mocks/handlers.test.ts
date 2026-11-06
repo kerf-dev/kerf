@@ -43,6 +43,12 @@ describe('mock fleet', () => {
 })
 
 describe('mock responses match hub.yaml', () => {
+  it('GET /v1/clusters/{cluster}/capacity', async () => {
+    for (const cluster of ['prod-eu-west-1', 'prod-us-east-1', 'dr-eu-central-1']) {
+      const data = await unwrap(api.GET('/v1/clusters/{cluster}/capacity', { params: { path: { cluster } } }))
+      expectValid('ClusterCapacity', data)
+    }
+  })
   it('GET /v1/summary', async () => {
     expectValid('FleetSummary', await unwrap(api.GET('/v1/summary')))
   })

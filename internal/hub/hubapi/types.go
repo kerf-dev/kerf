@@ -319,6 +319,8 @@ type WorkloadStatusBatch struct {
 	// Components are the Kerf components the agent found in its cluster (WO-33, webhook pods):
 	// nil = unchanged, empty = none.
 	Components []AgentComponent `json:"components,omitzero"`
+	// Capacity is the node and node pool snapshot for the node estimate: nil = unchanged.
+	Capacity *CapacityReport `json:"capacity,omitempty"`
 }
 
 // ContainerChange is a change of one container's resources.

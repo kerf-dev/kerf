@@ -124,6 +124,16 @@ spec:
             - --health-cadvisor-fallback={{ .Values.health.cadvisorFallback }}
             - --max-pod-deletes-per-run={{ .Values.onDelete.maxPodDeletesPerRun }}
             - --ondelete-settle={{ .Values.onDelete.settle }}
+            - --capacity={{ .Values.capacity.enabled }}
+            - --capacity-interval={{ .Values.capacity.interval }}
+            {{- if .Values.capacity.clusterAutoscaler.enabled }}
+            - --cluster-autoscaler-status={{ .Values.capacity.clusterAutoscaler.statusConfigMap.namespace }}/{{ .Values.capacity.clusterAutoscaler.statusConfigMap.name }}
+            {{- else }}
+            - --cluster-autoscaler-status=
+            {{- end }}
+            {{- range .Values.capacity.nodePoolLabels }}
+            - --node-pool-label={{ . }}
+            {{- end }}
             - --config-sync={{ .Values.configSync.enabled }}
             - --config-state-configmap={{ include "agent.fullname" . }}-config-state
             {{- range .Values.unsupportedNodeSelectors }}

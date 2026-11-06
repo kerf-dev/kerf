@@ -15,6 +15,7 @@ import (
 
 	"github.com/kerf-dev/kerf/internal/hub"
 	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/notify"
 	"github.com/kerf-dev/kerf/internal/hub/store"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
@@ -74,6 +75,11 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	if !cfg.UpdateCheck.On() {
 		log.Info("update check disabled (updateCheck.enabled: false)")
 	}
+	// Notifications (docs/notifications.md): the counter is per replica, the last-success gauge is
+	// read from the database by the leader.
+	nmetrics := notify.NewMetrics()
+	metrics.Registry.MustRegister(nmetrics.Deliveries())
+	metrics.LeaderOnly().MustRegister(nmetrics.LastSuccess())
 	var cipher *datasource.Cipher
 	if cfg.Onboarding.SecretsKeyFile != "" {
 		if cipher, err = datasource.LoadCipher(cfg.Onboarding.SecretsKeyFile); err != nil {
@@ -97,7 +103,14 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 		} else if n > 0 {
 			log.Info("old sessions pruned", "sessions", n)
 		}
-		return srv.InitOnboarding(ctx, cipher)
+		if err := srv.InitOnboarding(ctx, cipher); err != nil {
+			return err
+		}
+		var sealer notify.Sealer
+		if cipher != nil { // a nil *Cipher in the interface would not be nil
+			sealer = cipher
+		}
+		return srv.InitNotifications(ctx, sealer, nmetrics)
 	}); err != nil {
 		return err
 	}

@@ -92,6 +92,13 @@ rules:
     resources: ["pods"]
     verbs: ["create"]
   {{- end }}
+  {{- if .Values.capacity.enabled }}
+  # Capacity report (read only): Karpenter NodePools and NodeClaims. Nodes, pods and
+  # PodDisruptionBudgets are covered above.
+  - apiGroups: ["karpenter.sh"]
+    resources: ["nodepools", "nodeclaims"]
+    verbs: ["get", "list"]
+  {{- end }}
   # Kubernetes Events on RightsizingRecommendations (docs/contracts/events.md).
   - apiGroups: ["events.k8s.io"]
     resources: ["events"]
@@ -141,6 +148,37 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: {{ include "agent.fullname" . }}-config-state
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "agent.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- if and .Values.capacity.enabled .Values.capacity.clusterAutoscaler.enabled }}
+{{- $ca := .Values.capacity.clusterAutoscaler.statusConfigMap }}
+---
+# Capacity report: read the Cluster Autoscaler status ConfigMap (only that one, read only).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "agent.fullname" . }}-cluster-autoscaler-status
+  namespace: {{ $ca.namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: [{{ $ca.name | quote }}]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "agent.fullname" . }}-cluster-autoscaler-status
+  namespace: {{ $ca.namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "agent.fullname" . }}-cluster-autoscaler-status
 subjects:
   - kind: ServiceAccount
     name: {{ include "agent.serviceAccountName" . }}

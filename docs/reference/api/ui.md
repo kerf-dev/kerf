@@ -25,6 +25,7 @@ Read-only endpoints for the web UI.
 | [`GET /v1/clusters/{cluster}/readiness`](#getClusterReadiness) | Readiness state and check results of a cluster |
 | [`POST /v1/clusters/{cluster}/readiness/recheck`](#recheckClusterReadiness) | Re-run the readiness checks now |
 | [`GET /v1/clusters/{cluster}/readiness/history`](#getClusterReadinessHistory) | State transitions and check status changes |
+| [`GET /v1/clusters/{cluster}/capacity`](#getClusterCapacity) | Node capacity, the node estimate after the open recommendations, and consolidation blockers |
 
 ### Fleet and per-cluster totals { #getSummary }
 
@@ -563,6 +564,34 @@ Only changes are stored (a check's status or the state), newest first.
 |---|---|---|
 | `200` | History. | [ReadinessHistory](schemas.md#readinesshistory) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+
+### Node capacity, the node estimate after the open recommendations, and consolidation blockers { #getClusterCapacity }
+
+`GET /v1/clusters/{cluster}/capacity`
+
+Accepts: session of a user with role `viewer` or higher or bearer token with role `ui`.
+
+Built from the agent's last capacity report (`WorkloadStatusBatch.capacity`), the open
+recommendations and the pricing series. The node estimate is an estimate: a
+first-fit-decreasing bin packing of pod requests per node pool, described in
+`docs/node-savings.md` (`estimate.methodURL`). Kerf never creates, deletes or drains nodes.
+`reportedAt` is absent when the agent never sent a capacity report (agents before this
+feature, or `--capacity=false`); the other fields are then empty.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `cluster` | path | string, required | Cluster name. pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`; example `ro-spoke-1` |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Capacity. | [ClusterCapacity](schemas.md#clustercapacity) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
 | `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |

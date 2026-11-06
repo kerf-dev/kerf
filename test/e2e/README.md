@@ -36,6 +36,7 @@ not fixed durations. Production defaults are unchanged.
 | Setting | Production default | Dev/e2e value | Where | Effect |
 |---|---|---|---|---|
 | hub `config.recommender.endAlignment` | the step (5m) | `30s` | `deploy/charts/hub/values-dev.yaml` | a run (and a recompute) sees usage up to 30 s ago instead of the last full 5-minute step: a new workload gets its first recommendation ~1 min after it starts instead of ~5.5 min |
+| agent `capacity.interval` | `5m` | `30s` | `deploy/charts/agent/values-dev.yaml` | `TestNodeCapacity` sees its blockers within a minute |
 | agent `pullInterval` | `1m` | `15s` (was 30s) | `deploy/charts/agent/values-dev.yaml` | recommendations, policies, pause and approvals reach the agent sooner |
 | agent `hubStaleAfter` | `5m` | `1m` | same | `TestHubUnreachable` waits 1 min plus the cut-off, not 6.5 min |
 | agent `reportInterval` | `10s` | `5s` (unchanged) | same | events reach the hub |
@@ -72,6 +73,7 @@ not fixed durations. Production defaults are unchanged.
 | 10 | `TestRollback/restarts_after_an_in-place_CPU_change` | spoke-1 | in-place CPU decrease applied; the container is then made to crash-loop (ConfigMap) → ≥ 3 restarts → RSR `RolledBack`, pods resized back to 250m in place, template untouched, hub `rolled_back` event reason `Restarts` |
 | 11 | `TestHubUnreachable` | spoke-2 | with one workload applied and one waiting in audit, the agent is cut off from the hub (invalid hub token) until it counts the hub as unreachable (`hubStaleAfter` after its last request, as recorded by the hub); switching the waiting workload to auto-patch gives `HubUnreachable` and nothing changes for 2 agent pulls (at least 30 s); the applied workload is not reverted; after reconnecting, the pending change is applied |
 | 12 | `TestRealizedSavings` | spoke-1 | in-place CPU decrease applied (2 replicas); the hub's realized savings for ro-spoke-1 are computed up to the last hour or so; applied changes of earlier runs older than two hours have a realized saving by workload id (also for deleted namespaces); the node cost trend (`relation: correlated`) has hourly points with node cost and requested/allocatable CPU. With `E2E_REALIZED_WAIT` (e.g. `75m`; the hub counts complete hours only): the CPU released now is (250m − applied) × 2 replicas, within 5 % |
+| 13 | `TestNodeCapacity` | spoke-1 | a PodDisruptionBudget with `minAvailable` = replicas and a `karpenter.sh/do-not-disrupt` pod → within a few agent capacity reports (`capacity.interval` 30s in dev) `GET /v1/clusters/{cluster}/capacity` lists both as blockers naming their objects, with message and fix; totals, pools and a `first-fit-decreasing` estimate with its method link |
 
 ### Admin area (WO-24, D-022..D-027)
 
@@ -116,6 +118,12 @@ conflict; `make e2e-unblock` drops leftover entries (also the `e2e.test` ones of
 Hub objects: every test deletes the policies and clusters it created and resumes what it paused.
 Before the scenarios (and in `make e2e-clean`) the suite sweeps what an interrupted run left:
 hub policies and clusters named `e2e-*`, and pauses whose reason starts with `e2e `.
+
+### Notifications
+
+| Test | Cluster | What is asserted |
+|---|---|---|
+| `TestNotifications` | spoke-1 (events only) | A fake signed-webhook receiver runs on the host (the hub reaches it as `host.k3d.internal`; the dev hub values set `notifications.allowInsecureHTTP`). As admin: a webhook channel with a signing secret (never returned by the API), **Send test** arrives signed (`X-Kerf-Signature` verified with `notify.Verify`), a second channel nobody listens on shows its error (without its URL) on **Send test** and on the channel. A rule for one namespace of spoke-1 (`rolled_back`, `blocked`); events posted with spoke-1's agent token (namespaces `e2e-notify-*`; the audit log is append-only, so they stay): the rollback arrives within a minute with a link to the workload page and without the credential in its text, the rollback of another namespace and repeats of one block produce nothing more (one `blocked` message), the history lists both deliveries, `kerf_notification_deliveries_total` is exported. The rule and channels are deleted at the end. |
 
 ## How the hub is driven
 
@@ -176,6 +184,7 @@ scale-down, the spoke-2 pause and `pods/resize` rule removal (WO-24) and, only w
 | `E2E_REALIZED_WAIT` | `0` = off; how long `TestRealizedSavings` may wait for the applied change's first complete hour |
 | `E2E_AGENT_DEPLOYMENT` | `kerf-agent` (scenario 11 reads its args) |
 | `E2E_INFEASIBLE_CPU` | `16` (scenario 4's CPU floor; must exceed the node's capacity) |
+| `E2E_NOTIFY_HOST` | `host.k3d.internal` (how the hub pod reaches the suite's fake receiver; `TestNotifications`) |
 | `E2E_KEEP` | set to keep namespaces/policies/apps for debugging (`make e2e-clean` later) |
 | `E2E_VIEWER_PASSWORD` / `E2E_OPERATOR_PASSWORD` / `E2E_ADMIN_PASSWORD` | dev users of values-dev.yaml |
 | `E2E_AGENT_CLUSTERROLE` | `kerf-agent` (scenario A10) |

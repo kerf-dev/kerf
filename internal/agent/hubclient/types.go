@@ -36,6 +36,17 @@ var schemaTypes = map[string]any{
 	"BatchResult":             BatchResult{},
 	"Problem":                 Problem{},
 
+	// Node capacity report.
+	"CapacityReport":           CapacityReport{},
+	"CapacityObjectRef":        CapacityObjectRef{},
+	"CapacityAutoscaler":       CapacityAutoscaler{},
+	"CapacityNodePool":         CapacityNodePool{},
+	"CapacityDisruptionBudget": CapacityDisruptionBudget{},
+	"CapacityNode":             CapacityNode{},
+	"CapacityPodGroup":         CapacityPodGroup{},
+	"CapacityPDB":              CapacityPDB{},
+	"CapacityPod":              CapacityPod{},
+
 	// Admin area (WO-19, D-022/D-024).
 	"ClusterConfig":       ClusterConfig{},
 	"ConfigPolicy":        ConfigPolicy{},
@@ -246,6 +257,9 @@ type WorkloadStatusBatch struct {
 	// Components are the Kerf components found in the cluster (WO-33: the webhook pods), sent
 	// with the self-checks: nil = unchanged (omitted); non-nil, even empty = all of them.
 	Components []AgentComponent `json:"components,omitzero"`
+	// Capacity is the node and node pool snapshot (sent every 5 minutes when it changed): nil =
+	// unchanged (omitted).
+	Capacity *CapacityReport `json:"capacity,omitempty"`
 }
 
 // AgentComponent is a Kerf component running in the cluster (Admin -> Maintenance, WO-33).

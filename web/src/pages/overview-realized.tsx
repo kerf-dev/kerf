@@ -2,13 +2,16 @@
  * Overview: realized savings (what the applied changes actually saved) and the node cost trend.
  * Realized amounts are never added to the estimated ones, and never share their label.
  */
-import { BadgeCheckIcon, InfoIcon, ServerIcon } from 'lucide-react'
+import { BadgeCheckIcon, ExternalLinkIcon, InfoIcon, ServerIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router'
+import { useClusterCapacity } from '@/api/admin'
 import { useNodeCostTrend, useRealizedSavings, type TimeRange } from '@/api/queries'
 import type { ClusterSummary, RealizedSavings } from '@/api/types'
 import { Chart } from '@/components/charts/chart'
 import { alpha, axisStyle, baseOption, useChartColors } from '@/components/charts/theme'
 import { EmptyState, ErrorState } from '@/components/states'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { NativeSelect } from '@/components/ui/form'
 import { Segmented } from '@/components/ui/segmented'
@@ -16,6 +19,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip } from '@/components/ui/tooltip'
 import { formatBytes, formatCores, formatDateTime, formatPercent, formatUSD } from '@/lib/format'
 import { realizedLabel } from '@/lib/realized'
+
+/** Hours per month of the estimate's monthly costs (as in the hub). */
+const HOURS_PER_MONTH = 730
 
 const monthOnly = new Intl.DateTimeFormat('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })
 const dayMonth = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
@@ -182,6 +188,14 @@ export function NodeCostCard({ clusters, className }: { clusters?: ClusterSummar
   const cluster = picked && names.includes(picked) ? picked : names[0]
   const [range, setRange] = useState<TimeRange>('14d')
   const q = useNodeCostTrend(cluster, range)
+  // The node estimate of the Capacity tab, drawn as a level on the node cost: what the nodes would
+  // cost per hour after the open recommendations. Never mixed into the realized amounts.
+  const capacity = useClusterCapacity(cluster)
+  const estimate = capacity.data?.estimate
+  const estimateHourly =
+    estimate && estimate.priceSource !== 'none' && estimate.estimatedNodes > 0
+      ? estimate.estimatedMonthlyUSD / HOURS_PER_MONTH
+      : undefined
   const c = useChartColors()
   const pts = useMemo(() => q.data?.points ?? [], [q.data])
   const option = useMemo(() => {
@@ -225,6 +239,13 @@ export function NodeCostCard({ clusters, className }: { clusters?: ClusterSummar
           type: 'value',
           gridIndex: 0,
           scale: true,
+          // Keep the estimate level in view.
+          ...(estimateHourly != null
+            ? {
+                min: (v: { min: number }) => Math.min(v.min, estimateHourly),
+                max: (v: { max: number }) => Math.max(v.max, estimateHourly),
+              }
+            : {}),
           name: 'USD / h',
           nameTextStyle: { color: c['muted-foreground'], fontSize: 10, align: 'left' },
           ...axisStyle(c),
@@ -259,6 +280,22 @@ export function NodeCostCard({ clusters, className }: { clusters?: ClusterSummar
           lineStyle: { width: 1.75, color: c['chart-4'] },
           itemStyle: { color: c['chart-4'] },
           data: pts.map((p) => [p.time, time(p.nodeCostUSDPerHour)]),
+          ...(estimateHourly != null
+            ? {
+                markLine: {
+                  symbol: 'none',
+                  silent: true,
+                  lineStyle: { type: 'dashed', width: 1.25, color: c['chart-4'] },
+                  label: {
+                    formatter: 'Estimate',
+                    position: 'insideEndTop',
+                    color: c['muted-foreground'],
+                    fontSize: 10,
+                  },
+                  data: [{ yAxis: estimateHourly }],
+                },
+              }
+            : {}),
         },
         {
           name: 'Released CPU requests',
@@ -285,7 +322,7 @@ export function NodeCostCard({ clusters, className }: { clusters?: ClusterSummar
         },
       ],
     }
-  }, [pts, c])
+  }, [pts, c, estimateHourly])
   const legend = [
     { label: 'Node cost / hour', color: 'bg-chart-4' },
     { label: 'Released CPU requests', color: 'bg-success' },
@@ -372,6 +409,31 @@ export function NodeCostCard({ clusters, className }: { clusters?: ClusterSummar
               className="h-64"
               ariaLabel={`Node cost per hour and released CPU requests for ${cluster}`}
             />
+            {estimate && estimateHourly != null ? (
+              <p
+                className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground"
+                data-testid="node-estimate-note"
+              >
+                <Badge variant="warning">Estimate</Badge>
+                Dashed line: {formatUSD(estimateHourly, { cents: true })}/h on {estimate.estimatedNodes} nodes
+                (now {estimate.currentNodes}) after the open recommendations.
+                <Link
+                  to={`/clusters/${encodeURIComponent(cluster)}?tab=capacity`}
+                  className="text-primary hover:underline"
+                >
+                  Capacity and blockers
+                </Link>
+                ·
+                <a
+                  href={estimate.methodURL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-0.5 text-primary hover:underline"
+                >
+                  How this is estimated <ExternalLinkIcon className="size-3" />
+                </a>
+              </p>
+            ) : null}
           </>
         )}
       </CardContent>
