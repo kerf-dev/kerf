@@ -10,6 +10,7 @@ import { ImpactPreview } from '@/components/admin/impact-preview'
 import { ModeField } from '@/components/admin/policy-form'
 import { usePreview } from '@/components/admin/save-bar'
 import { WriteDialog } from '@/components/admin/write-dialog'
+import { CopyAsMenu } from '@/components/copy-as'
 import { Button } from '@/components/ui/button'
 import { Callout } from '@/components/ui/form'
 import { formatNumber, formatUSD } from '@/lib/format'
@@ -56,6 +57,12 @@ export function BulkBar({ selected, onClear }: { selected: Map<string, WorkloadR
   const [modes, setModes] = useState<{ cpu?: Mode; memory?: Mode }>({})
   const [progress, setProgress] = useState<{ done: number; total: number }>()
   const done = useRef(new Set<string>())
+  const hasSelection = selected.size > 0
+  // Lets the toaster stack above the bar instead of covering its buttons (see toast.tsx).
+  useEffect(() => {
+    document.body.toggleAttribute('data-bulk-bar', hasSelection)
+    return () => document.body.removeAttribute('data-bulk-bar')
+  }, [hasSelection])
   useEffect(() => {
     if (open) {
       done.current = new Set()
@@ -87,7 +94,9 @@ export function BulkBar({ selected, onClear }: { selected: Map<string, WorkloadR
   const prod = [...new Set(rows.map((w) => w.cluster))].filter((c) => prodEnv.has(c))
   const setsAuto = target.cpu === 'auto-patch' || target.memory === 'auto-patch'
 
-  if (!selected.size || !auth.can('operator')) return null
+  if (!selected.size) return null
+  // Copying a patch only reads what the page shows, so viewers get it too; changing modes needs an operator.
+  const canWrite = auth.can('operator')
   return (
     <>
       <div
@@ -104,12 +113,22 @@ export function BulkBar({ selected, onClear }: { selected: Map<string, WorkloadR
           <Button size="sm" variant="ghost" onClick={onClear}>
             <XIcon /> Clear
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setOpen('exclude')} data-testid="bulk-exclude">
-            <BanIcon /> Exclude
-          </Button>
-          <Button size="sm" onClick={() => setOpen('mode')} data-testid="bulk-set-mode">
-            <SlidersHorizontalIcon /> Set mode…
-          </Button>
+          <CopyAsMenu workloads={all} testId="bulk-copy-as" />
+          {canWrite ? (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setOpen('exclude')}
+                data-testid="bulk-exclude"
+              >
+                <BanIcon /> Exclude
+              </Button>
+              <Button size="sm" onClick={() => setOpen('mode')} data-testid="bulk-set-mode">
+                <SlidersHorizontalIcon /> Set mode…
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
       <WriteDialog
