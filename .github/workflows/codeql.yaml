@@ -1,0 +1,81 @@
+name: codeql
+
+# Static analysis with CodeQL (advanced setup; GitHub's default setup is off). A pull request scans only the
+# languages it changes (.github/scripts/codeql-languages.sh), so a docs-only or YAML-only change does not pay
+# for the multi-minute Go scan. Pushes to main, the weekly schedule and manual runs scan every language.
+# A change to this workflow or the script scans everything. CodeQL is not a required check, so a language
+# that is skipped never blocks a merge. The default query suite is used (no `queries` input). Actions are pinned
+# by commit SHA (Dependabot updates them).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request supersedes the run in progress; runs on main are never cancelled.
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  languages:
+    name: which languages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      any: ${{ steps.matrix.outputs.any }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - name: Which languages changed
+        id: languages
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: .github/scripts/codeql-languages.sh
+      - name: Build the scan matrix
+        id: matrix
+        env:
+          LANGUAGES: ${{ toJSON(steps.languages.outputs) }}
+        run: |
+          matrix=$(jq -c '{include: [to_entries[] | select(.value == "true") | {language: .key, "build-mode": (if .key == "go" then "autobuild" else "none" end)}]}' <<<"$LANGUAGES")
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "any=$(jq -c '.include | length > 0' <<<"$matrix")" >> "$GITHUB_OUTPUT"
+          echo "$matrix"
+
+  analyze:
+    name: analyze (${{ matrix.language }})
+    needs: languages
+    if: needs.languages.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.languages.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: matrix.language == 'go'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix['build-mode'] }}
+      - name: Analyze
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
