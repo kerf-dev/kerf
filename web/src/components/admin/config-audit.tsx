@@ -30,6 +30,7 @@ export const TARGET_LABEL: Record<ConfigTargetType, string> = {
   datasource: 'Datasource',
   readiness: 'Readiness',
   notification: 'Notification',
+  team: 'Team',
 }
 
 const ACTION_TONE: Partial<
@@ -42,6 +43,7 @@ const ACTION_TONE: Partial<
   DatasourceCreated: 'success',
   NotificationChannelCreated: 'success',
   NotificationRuleCreated: 'success',
+  TeamCreated: 'success',
   PolicyDeleted: 'destructive',
   ClusterDeleted: 'destructive',
   UserDeleted: 'destructive',
@@ -49,6 +51,7 @@ const ACTION_TONE: Partial<
   DatasourceDeleted: 'destructive',
   NotificationChannelDeleted: 'destructive',
   NotificationRuleDeleted: 'destructive',
+  TeamDeleted: 'destructive',
   AutomationPaused: 'warning',
   PolicyReverted: 'warning',
   AutomationResumed: 'success',

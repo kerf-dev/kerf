@@ -4,8 +4,18 @@ import { useSearchParams } from 'react-router'
 import { useTokens, useUsers, useWrite, writes } from '@/api/admin'
 import { useAuth } from '@/api/auth'
 import { useClusters } from '@/api/queries'
-import type { PasswordResetResult, TokenCreated, TokenInfo, TokenRole, User, UserRole } from '@/api/types'
+import type {
+  PasswordResetResult,
+  TeamRole,
+  TokenCreated,
+  TokenInfo,
+  TokenRole,
+  User,
+  UserRole,
+  UserScope,
+} from '@/api/types'
 import { RoleBadge, SecretOnce } from '@/components/admin/common'
+import { AccessFields, accessBody, accessProblem, type AccessValue } from '@/components/admin/team-roles'
 import { TokenCreatedDialog } from '@/components/admin/install'
 import { WriteDialog } from '@/components/admin/write-dialog'
 import { passwordProblem } from '@/components/layout/change-password'
@@ -40,13 +50,23 @@ function UserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
     username: '',
     displayName: '',
     role: 'viewer' as UserRole,
+    scope: 'fleet' as UserScope,
+    teamRoles: [] as TeamRole[],
     password: '',
     mustChangePassword: true,
   })
   const [touched, setTouched] = useState(false)
   useEffect(() => {
     if (open) {
-      setF({ username: '', displayName: '', role: 'viewer', password: '', mustChangePassword: true })
+      setF({
+        username: '',
+        displayName: '',
+        role: 'viewer',
+        scope: 'fleet',
+        teamRoles: [],
+        password: '',
+        mustChangePassword: true,
+      })
       setTouched(false)
     }
   }, [open])
@@ -54,8 +74,14 @@ function UserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
     ? 'Lowercase letters, digits, ".", "_" and "-"; 2–63 characters.'
     : undefined
   const pwErr = passwordProblem(f.password)
+  const accessErr = accessProblem(f)
   const write = useWrite(({ reason }: { reason: string }) =>
-    writes.createUser({ ...f, displayName: f.displayName || undefined, reason }),
+    writes.createUser({
+      ...f,
+      ...accessBody(f),
+      displayName: f.displayName || undefined,
+      reason,
+    }),
   )
   return (
     <WriteDialog
@@ -66,7 +92,8 @@ function UserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
       confirmLabel="Add user"
       onConfirm={(o) => {
         setTouched(true)
-        if (userErr || pwErr) return Promise.reject(new Error('Fix the highlighted fields first.'))
+        if (userErr || pwErr || accessErr)
+          return Promise.reject(new Error('Fix the highlighted fields first.'))
         return write.mutateAsync(o)
       }}
       successMessage={`Added ${f.username}`}
@@ -84,13 +111,11 @@ function UserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
         <Field label="Display name" optional>
           <Input value={f.displayName} onChange={(e) => setF({ ...f, displayName: e.target.value })} />
         </Field>
-        <Field label="Role" className="sm:col-span-2" hint={ROLE_DESC[f.role]}>
-          <NativeSelect value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as UserRole })}>
-            <option value="viewer">viewer</option>
-            <option value="operator">operator</option>
-            <option value="admin">admin</option>
-          </NativeSelect>
-        </Field>
+        <AccessFields
+          value={f}
+          onChange={(a) => setF({ ...f, ...a })}
+          error={touched ? accessErr : undefined}
+        />
         <Field
           label="Initial password"
           className="sm:col-span-2"
@@ -117,6 +142,73 @@ function UserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
   )
 }
 
+/** Role, scope and team roles of a local user. */
+function AccessDialog({ user, onClose }: { user?: User; onClose: () => void }) {
+  const [v, setV] = useState<AccessValue>({ role: 'viewer', scope: 'fleet', teamRoles: [] })
+  const [touched, setTouched] = useState(false)
+  useEffect(() => {
+    if (user) {
+      setV({ role: user.role, scope: user.scope ?? 'fleet', teamRoles: user.teamRoles ?? [] })
+      setTouched(false)
+    }
+  }, [user])
+  const err = accessProblem(v)
+  const write = useWrite(({ reason }: { reason: string }) =>
+    writes.updateUser({
+      username: user!.username,
+      version: user!.version,
+      body: { ...accessBody(v), reason },
+    }),
+  )
+  return (
+    <WriteDialog
+      open={!!user}
+      onOpenChange={(o) => !o && onClose()}
+      title={`Edit access of ${user?.username}`}
+      description="Role, scope and team roles take effect at their next request."
+      confirmLabel="Save access"
+      reasonAutoFocus={false}
+      testId="access-dialog"
+      onSubmitAttempt={() => setTouched(true)}
+      onConfirm={(o) => {
+        if (err) return Promise.reject(new Error('Fix the highlighted fields first.'))
+        return write.mutateAsync(o)
+      }}
+      successMessage="Access updated"
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <AccessFields value={v} onChange={setV} error={touched ? err : undefined} />
+      </div>
+    </WriteDialog>
+  )
+}
+
+/** Scope and team roles of a user, in a table cell. */
+function AccessCell({ u }: { u: User }) {
+  const teams = u.scope === 'teams'
+  const roles = u.teamRoles ?? []
+  return (
+    <div className="space-y-1" data-testid="user-access">
+      {teams ? (
+        <Tooltip content="Sees and acts only on the workloads of its teams">
+          <Badge variant="info">Some teams</Badge>
+        </Tooltip>
+      ) : (
+        <span className="text-muted-foreground">Whole fleet</span>
+      )}
+      {roles.length ? (
+        <div className="flex flex-wrap gap-1">
+          {roles.map((r) => (
+            <Badge key={r.team} variant="muted" data-testid="team-role-badge">
+              <span className="font-mono">{r.team}</span> · {r.role}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function UsersTab() {
   const auth = useAuth()
   const users = useUsers()
@@ -126,6 +218,7 @@ function UsersTab() {
     user: User
     role?: UserRole
   } | null>(null)
+  const [editAccess, setEditAccess] = useState<User>()
   const [reset, setReset] = useState<{ user: string; r: PasswordResetResult }>()
   const write = useWrite(async ({ reason }: { reason: string }): Promise<unknown> => {
     const u = act!.user
@@ -134,7 +227,12 @@ function UsersTab() {
         return writes.updateUser({
           username: u.username,
           version: u.version,
-          body: { role: act!.role!, reason },
+          // An admin is always fleet-wide, without team roles.
+          body: {
+            role: act!.role!,
+            ...(act!.role === 'admin' ? { scope: 'fleet' as const, teamRoles: [] } : {}),
+            reason,
+          },
         })
       case 'disable':
       case 'enable':
@@ -154,7 +252,7 @@ function UsersTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[13px] text-muted-foreground">
-          Local users and their roles. Disabling or deleting signs them out.
+          Local users, their roles and the teams they can see. Disabling or deleting signs them out.
         </p>
         <Button size="sm" onClick={() => setAdd(true)} data-testid="add-user">
           <UserPlusIcon /> Add user
@@ -178,6 +276,7 @@ function UsersTab() {
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">User</th>
                   <th className="px-3 py-2 text-left font-medium">Role</th>
+                  <th className="px-3 py-2 text-left font-medium">Access</th>
                   <th className="px-3 py-2 text-left font-medium">Status</th>
                   <th className="hidden px-3 py-2 text-left font-medium md:table-cell">Last sign-in</th>
                   <th className="w-12" />
@@ -205,6 +304,9 @@ function UsersTab() {
                         <RoleBadge role={u.role} />
                       </td>
                       <td className="px-3 py-2.5">
+                        <AccessCell u={u} />
+                      </td>
+                      <td className="px-3 py-2.5">
                         <div className="flex flex-wrap gap-1">
                           {u.disabled ? (
                             <Badge variant="muted">disabled</Badge>
@@ -220,7 +322,7 @@ function UsersTab() {
                           ) : null}
                           {u.mustChangePassword ? <Badge variant="info">must change password</Badge> : null}
                           {u.source === 'oidc' ? (
-                            <Tooltip content="Signs in with the identity provider; the role comes from its groups">
+                            <Tooltip content="Signs in with the identity provider; the role, scope and team roles come from its groups">
                               <Badge variant="info" data-testid="idp-user">
                                 identity provider
                               </Badge>
@@ -240,8 +342,13 @@ function UsersTab() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
                             {/* An IdP user's role comes from its groups and it has no password. */}
+                            {u.source === 'oidc' ? null : (
+                              <DropdownMenuItem onSelect={() => setEditAccess(u)}>
+                                Edit scope and teams
+                              </DropdownMenuItem>
+                            )}
                             {(['viewer', 'operator', 'admin'] as UserRole[])
-                              .filter((r) => r !== u.role && u.source !== 'oidc')
+                              .filter((r) => r !== u.role && u.source !== 'oidc' && u.scope !== 'teams')
                               .map((r) => (
                                 <DropdownMenuItem
                                   key={r}
@@ -282,6 +389,7 @@ function UsersTab() {
         )}
       </Card>
       <UserDialog open={add} onOpenChange={setAdd} />
+      <AccessDialog user={editAccess} onClose={() => setEditAccess(undefined)} />
       <WriteDialog
         open={!!act}
         onOpenChange={(o) => !o && setAct(null)}

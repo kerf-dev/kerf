@@ -20,6 +20,7 @@ export type Actor = S['Actor']
 export type User = S['User']
 export type UserRole = S['UserRole']
 export type TokenInfo = S['TokenInfo']
+export type Team = S['Team']
 export type Automation = S['Automation']
 export type ConfigChange = S['ConfigChange']
 export type Datasource = S['Datasource']
@@ -42,6 +43,9 @@ export interface UserRec extends User {
   failedLogins: number
   lockedUntilMs?: number
 }
+
+/** A team as stored: the counts of `Team` are computed from the fleet when it is read. */
+export type TeamRec = Omit<Team, 'workloads' | 'monthlySavingsUSD'>
 
 export interface GitPolicy {
   name: string
@@ -102,6 +106,10 @@ export interface MaintenanceModel {
 
 export interface AdminState {
   users: Map<string, UserRec>
+  /** Teams (docs/teams.md), ordered by id; selectors match namespace names (the mock has no labels). */
+  teams: TeamRec[]
+  /** The label key that names a workload's team. */
+  ownerLabel: string
   tokens: TokenInfo[]
   nextTokenId: number
   policies: AdminPolicy[]
@@ -418,6 +426,8 @@ export function seedAdmin(db: MockDb): AdminState {
 
   const st: AdminState = {
     users: new Map(),
+    teams: [],
+    ownerLabel: 'team',
     tokens: [],
     nextTokenId: 1,
     policies: [],
@@ -493,6 +503,78 @@ export function seedAdmin(db: MockDb): AdminState {
       mustChangePassword: true,
     },
     1,
+  )
+
+  // Team-scoped and mixed users (docs/teams.md). `oidc` users get their access from IdP groups.
+  user(
+    {
+      username: 'paula',
+      role: 'operator',
+      displayName: 'Payments lead',
+      createdBy: 'admin',
+      scope: 'teams',
+      teamRoles: [{ team: 'payments', role: 'operator' }],
+    },
+    30,
+  )
+  user(
+    {
+      username: 'victor',
+      role: 'viewer',
+      displayName: 'Fleet viewer, risk operator',
+      createdBy: 'admin',
+      scope: 'fleet',
+      teamRoles: [{ team: 'risk', role: 'operator' }],
+    },
+    30,
+  )
+  user(
+    {
+      username: 'idp-cards',
+      role: 'viewer',
+      displayName: 'Cards (identity provider)',
+      source: 'oidc',
+      scope: 'teams',
+      teamRoles: [{ team: 'cards', role: 'viewer' }],
+    },
+    14,
+  )
+
+  // Teams: a few namespaces each; accounts, lending, observability and platform stay unassigned.
+  const team = (rec: Partial<TeamRec> & Pick<TeamRec, 'id'>, createdDaysAgo: number) =>
+    st.teams.push({
+      displayName: rec.id,
+      namespaces: [],
+      namespaceLabels: {},
+      clusters: [],
+      ownerValues: [],
+      version: 1,
+      createdAt: t(createdDaysAgo),
+      createdBy: 'admin',
+      ...rec,
+    })
+  team(
+    {
+      id: 'cards',
+      displayName: 'Cards',
+      description: 'Card issuing and transfers',
+      namespaces: ['cards', 'transfers'],
+    },
+    60,
+  )
+  team(
+    {
+      id: 'payments',
+      displayName: 'Payments',
+      description: 'Checkout, processing and settlement',
+      namespaces: ['payments'],
+      ownerValues: ['payments-squad'],
+    },
+    60,
+  )
+  team(
+    { id: 'risk', displayName: 'Risk and ledger', namespaces: ['risk', 'ledger'], clusters: ['prod-*'] },
+    45,
   )
 
   // Datasources ------------------------------------------------------------------------------

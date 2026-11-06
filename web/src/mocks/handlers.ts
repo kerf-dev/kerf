@@ -28,7 +28,16 @@ import {
 import { adminHandlers, decorateClusters, decorateDetail, decorateHistory } from './admin'
 import { capacityHandlers } from './capacity'
 import { nodeCostTrend, realizedSavings } from './realized'
-import { dec, enc, gate, problem } from './core'
+import { dec, enc, gate, problem, type Ctx } from './core'
+import {
+  seesWorkload,
+  teamHandlers,
+  teamOf,
+  teamSummaries,
+  visibleWorkloads,
+  withTeam,
+  UNASSIGNED,
+} from './teams'
 
 export { currentScenario, getDb, getAdmin, resetDb, timing, type Scenario } from './core'
 
@@ -45,14 +54,22 @@ function decodeId(raw: string | readonly string[] | undefined): string {
   return s.includes('%') ? decodeURIComponent(s) : s
 }
 
-function findWorkload(db: MockDb, raw: string | readonly string[] | undefined): WorkloadModel | Response {
+function findWorkload(
+  db: MockDb,
+  raw: string | readonly string[] | undefined,
+  g?: Ctx,
+): WorkloadModel | Response {
   const id = decodeId(raw)
   if (
     !/^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?\/[^/]+\/(Deployment|StatefulSet|DaemonSet|CronJob)\/[^/]+$/.test(id)
   ) {
     return problem(400, 'invalid_workload_id', 'Bad Request', `invalid workload id ${JSON.stringify(id)}`)
   }
-  return db.byId.get(id) ?? problem(404, 'workload_not_found', 'Not Found', `workload ${id} not found`)
+  const w = db.byId.get(id)
+  // A team-scoped caller does not see the workloads of other teams at all.
+  return w && (!g || seesWorkload(g, w))
+    ? w
+    : problem(404, 'workload_not_found', 'Not Found', `workload ${id} not found`)
 }
 
 interface Filters {
@@ -61,6 +78,7 @@ interface Filters {
   kinds: WorkloadKind[]
   modes: Mode[]
   riskFlags: RiskFlag[]
+  teams: string[]
   minSavings?: number
   q?: string
 }
@@ -75,14 +93,16 @@ function parseFilters(sp: URLSearchParams): Filters | Response {
     kinds: sp.getAll('kind') as WorkloadKind[],
     modes: sp.getAll('mode') as Mode[],
     riskFlags: sp.getAll('riskFlag') as RiskFlag[],
+    teams: sp.getAll('team'),
     minSavings,
     q: sp.get('q')?.toLowerCase() || undefined,
   }
 }
 
-function filterWorkloads(db: MockDb, f: Filters): WorkloadModel[] {
-  return db.workloads.filter(
+function filterWorkloads(g: Ctx, f: Filters): WorkloadModel[] {
+  return visibleWorkloads(g).filter(
     (w) =>
+      (!f.teams.length || f.teams.includes(teamOf(g.st, w))) &&
       (!f.clusters.length || f.clusters.includes(w.cluster)) &&
       (!f.namespaces.length || f.namespaces.includes(w.namespace)) &&
       (!f.kinds.length || f.kinds.includes(w.kind)) &&
@@ -95,22 +115,27 @@ function filterWorkloads(db: MockDb, f: Filters): WorkloadModel[] {
 
 export const handlers = [
   ...adminHandlers,
+  ...teamHandlers,
   ...capacityHandlers,
 
   http.get('*/v1/summary', async () => {
     const g = await gate()
     if (g instanceof Response) return g
     const { db } = g
+    // A team-scoped caller's totals cover only its teams' workloads.
+    const pool = visibleWorkloads(g)
+    const teams = teamSummaries(g, pool)
     const body: FleetSummary = {
       generatedAt: new Date(db.now).toISOString(),
-      fleet: summarize(db.workloads, db.lastRunAt),
+      fleet: summarize(pool, db.lastRunAt),
       clusters: db.clusters.map((c) => ({
         cluster: c.name,
         ...summarize(
-          db.workloads.filter((w) => w.cluster === c.name),
+          pool.filter((w) => w.cluster === c.name),
           db.lastRunAt,
         ),
       })),
+      ...(teams ? { teams } : {}),
     }
     return HttpResponse.json(body)
   }),
@@ -139,7 +164,7 @@ export const handlers = [
 
     const f = parseFilters(sp)
     if (f instanceof Response) return f
-    let ws = filterWorkloads(g.db, f)
+    let ws = filterWorkloads(g, f)
     const dir = order === 'asc' ? 1 : -1
     ws = [...ws].sort((a, b) => {
       let c: number
@@ -161,7 +186,7 @@ export const handlers = [
       ws = [...ws.filter((w) => w.hasRecommendation), ...ws.filter((w) => !w.hasRecommendation)]
     const page = ws.slice(offset, offset + limit)
     const body: WorkloadList = {
-      items: page.map(toRow),
+      items: page.map((w) => withTeam(g.st, w, toRow(w))),
       total: ws.length,
       ...(offset + limit < ws.length ? { continue: enc(offset + limit) } : {}),
     }
@@ -176,7 +201,7 @@ export const handlers = [
     // Each facet ignores its own filter so a multi-select keeps offering the other values.
     const count = (key: keyof Filters, values: (w: WorkloadModel) => string[]) => {
       const m = new Map<string, number>()
-      for (const w of filterWorkloads(g.db, {
+      for (const w of filterWorkloads(g, {
         ...f,
         [key]: key === 'minSavings' || key === 'q' ? undefined : [],
       }))
@@ -186,12 +211,13 @@ export const handlers = [
         .map(([value, n]) => ({ value, count: n }))
     }
     const body: WorkloadFacets = {
-      total: filterWorkloads(g.db, f).length,
+      total: filterWorkloads(g, f).length,
       clusters: count('clusters', (w) => [w.cluster]),
       namespaces: count('namespaces', (w) => [w.namespace]),
       kinds: count('kinds', (w) => [w.kind]),
       modes: count('modes', (w) => [w.modes.cpu, w.modes.memory]),
       riskFlags: count('riskFlags', (w) => w.riskFlags),
+      ...(g.st.teams.length ? { teams: count('teams', (w) => [teamOf(g.st, w)]) } : {}),
     }
     return HttpResponse.json(body)
   }),
@@ -199,7 +225,7 @@ export const handlers = [
   http.get('*/v1/workloads/:id/usage', async ({ request, params }) => {
     const g = await gate()
     if (g instanceof Response) return g
-    const w = findWorkload(g.db, params.id)
+    const w = findWorkload(g.db, params.id, g)
     if (w instanceof Response) return w
     const url = new URL(request.url)
     const resource = url.searchParams.get('resource')
@@ -226,7 +252,7 @@ export const handlers = [
   http.get('*/v1/workloads/:id/history', async ({ request, params }) => {
     const g = await gate()
     if (g instanceof Response) return g
-    const w = findWorkload(g.db, params.id)
+    const w = findWorkload(g.db, params.id, g)
     if (w instanceof Response) return w
     const url = new URL(request.url)
     const limit = Number(url.searchParams.get('limit') ?? 100)
@@ -246,26 +272,28 @@ export const handlers = [
   http.get('*/v1/workloads/:id', async ({ params }) => {
     const g = await gate()
     if (g instanceof Response) return g
-    const w = findWorkload(g.db, params.id)
+    const w = findWorkload(g.db, params.id, g)
     if (w instanceof Response) return w
-    return HttpResponse.json(decorateDetail(g.st, toDetail(w, g.db)))
+    return HttpResponse.json(decorateDetail(g.st, withTeam(g.st, w, toDetail(w, g.db))))
   }),
 
   http.get('*/v1/savings/trend', async ({ request }) => {
-    const g = await gate()
+    const g = await gate(request)
     if (g instanceof Response) return g
     const url = new URL(request.url)
     const groupBy = url.searchParams.get('groupBy') ?? 'none'
     const clusters = url.searchParams.getAll('cluster')
+    const teams = url.searchParams.getAll('team')
     const { from, to } = range(url, g.db)
     const step = parseStep(url.searchParams.get('step')) ?? chooseStep((to - from) / 1000)
     const names = g.db.clusters.map((c) => c.name).filter((n) => !clusters.length || clusters.includes(n))
-    const per = savingsTrend(g.db, names, from / 1000, to / 1000, step)
-    let series: SavingsTrend['series']
-    if (groupBy === 'cluster') series = per
-    else {
+    // The workloads in scope: the caller's teams, narrowed by the `team` filter.
+    const pool = visibleWorkloads(g).filter((w) => !teams.length || teams.includes(teamOf(g.st, w)))
+    const per = (ws: WorkloadModel[]) =>
+      savingsTrend({ ...g.db, workloads: ws }, names, from / 1000, to / 1000, step)
+    const merge = (ps: ReturnType<typeof per>) => {
       const pts = new Map<string, { time: string; cpu: number; memory: number; total: number }>()
-      for (const s of per)
+      for (const s of ps)
         for (const p of s.points) {
           const cur = pts.get(p.time) ?? { time: p.time, cpu: 0, memory: 0, total: 0 }
           cur.cpu += p.cpu
@@ -274,14 +302,21 @@ export const handlers = [
           pts.set(p.time, cur)
         }
       const r2 = (n: number) => Math.round(n * 100) / 100
-      series = [
-        {
-          points: [...pts.values()]
-            .sort((a, b) => a.time.localeCompare(b.time))
-            .map((p) => ({ time: p.time, cpu: r2(p.cpu), memory: r2(p.memory), total: r2(p.total) })),
-        },
-      ]
+      return [...pts.values()]
+        .sort((a, b) => a.time.localeCompare(b.time))
+        .map((p) => ({ time: p.time, cpu: r2(p.cpu), memory: r2(p.memory), total: r2(p.total) }))
     }
+    let series: SavingsTrend['series']
+    if (groupBy === 'cluster') series = per(pool)
+    else if (groupBy === 'team') {
+      const ids = [...new Set(pool.map((w) => teamOf(g.st, w)))].sort(
+        (a, b) => Number(a === UNASSIGNED) - Number(b === UNASSIGNED) || a.localeCompare(b),
+      )
+      series = ids.map((team) => ({
+        team,
+        points: merge(per(pool.filter((w) => teamOf(g.st, w) === team))),
+      }))
+    } else series = [{ points: merge(per(pool)) }]
     const body: SavingsTrend = {
       from: new Date(from).toISOString(),
       to: new Date(to).toISOString(),
@@ -292,7 +327,7 @@ export const handlers = [
   }),
 
   http.get('*/v1/savings/realized/node-cost', async ({ request }) => {
-    const g = await gate()
+    const g = await gate(request)
     if (g instanceof Response) return g
     const url = new URL(request.url)
     const cluster = url.searchParams.get('cluster')
@@ -306,7 +341,7 @@ export const handlers = [
   }),
 
   http.get('*/v1/savings/realized', async ({ request }) => {
-    const g = await gate()
+    const g = await gate(request)
     if (g instanceof Response) return g
     const url = new URL(request.url)
     const step = (url.searchParams.get('step') ?? 'month') as 'day' | 'month'
@@ -317,13 +352,15 @@ export const handlers = [
       clusters: url.searchParams.getAll('cluster'),
       namespaces: url.searchParams.getAll('namespace'),
     }
-    return HttpResponse.json(realizedSavings(g.db, scope, from, to, step))
+    const teams = url.searchParams.getAll('team')
+    const pool = visibleWorkloads(g).filter((w) => !teams.length || teams.includes(teamOf(g.st, w)))
+    return HttpResponse.json(realizedSavings({ ...g.db, workloads: pool }, scope, from, to, step))
   }),
 
   http.get('*/v1/workloads/:id/savings/realized', async ({ params, request }) => {
     const g = await gate()
     if (g instanceof Response) return g
-    const w = findWorkload(g.db, params.id)
+    const w = findWorkload(g.db, params.id, g)
     if (w instanceof Response) return w
     const url = new URL(request.url)
     const step = (url.searchParams.get('step') ?? 'day') as 'day' | 'month'

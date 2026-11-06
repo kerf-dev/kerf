@@ -558,6 +558,9 @@ function DigestCard({ canEdit }: { canEdit: boolean }) {
           <CardDescription>
             A weekly summary of what Kerf changed and saved, sent to the channels you pick.
           </CardDescription>
+          <p className="mt-1 text-xs text-muted-foreground" data-testid="digest-teams-note">
+            When teams exist, the digest also includes the savings by team. There is nothing to set for it.
+          </p>
         </div>
         {canEdit && digest ? (
           <div className="flex flex-col items-end gap-2">

@@ -67,6 +67,7 @@ import {
   type InstallFormat,
 } from './readiness'
 import { overridePolicyName } from './sha256'
+import { highestRole, needOperatorOn, seesWorkload, storedRole, validateAccess } from './teams'
 
 type S = components['schemas']
 
@@ -194,6 +195,8 @@ export function userOut(u: UserRec): S['User'] {
   delete out.lockedUntilMs
   if (u.lockedUntilMs && u.lockedUntilMs > Date.now()) out.lockedUntil = iso(u.lockedUntilMs)
   else delete out.lockedUntil
+  out.scope = u.scope ?? 'fleet'
+  out.teamRoles = u.teamRoles ?? []
   return out
 }
 
@@ -453,13 +456,19 @@ function decodeId(raw: string | readonly string[] | undefined): string {
   const s = Array.isArray(raw) ? raw.join('/') : String(raw ?? '')
   return s.includes('%') ? decodeURIComponent(s) : s
 }
-function findWorkload(db: MockDb, raw: string | readonly string[] | undefined): WorkloadModel | Response {
+function findWorkload(
+  db: MockDb,
+  raw: string | readonly string[] | undefined,
+  g?: Ctx,
+): WorkloadModel | Response {
   const id = decodeId(raw)
   if (
     !/^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?\/[^/]+\/(Deployment|StatefulSet|DaemonSet|CronJob)\/[^/]+$/.test(id)
   )
     return badRequest('invalid_workload_id', `invalid workload id ${JSON.stringify(id)}`)
-  return db.byId.get(id) ?? notFound('workload_not_found', `workload ${id} not found`)
+  const w = db.byId.get(id)
+  // A team-scoped caller does not see the workloads of other teams at all.
+  return w && (!g || seesWorkload(g, w)) ? w : notFound('workload_not_found', `workload ${id} not found`)
 }
 
 const overrideSelector = (w: WorkloadModel): S['PolicySelector'] => ({
@@ -619,7 +628,10 @@ function page<T>(
 function meOut(u: UserRec, s: { csrfToken: string; expiresAt: string }): S['Me'] {
   return {
     authMethod: 'session',
-    role: u.role,
+    // The highest role anywhere (team roles included); `user.role` is the user's own.
+    role: highestRole(u),
+    scope: u.scope ?? 'fleet',
+    teamRoles: u.teamRoles ?? [],
     user: userOut(u),
     csrfToken: s.csrfToken,
     sessionExpiresAt: s.expiresAt,
@@ -1366,7 +1378,7 @@ export const adminHandlers = [
   http.get('*/v1/workloads/:id/effective-policy', async ({ request, params }) => {
     const g = await gate(request)
     if (g instanceof Response) return g
-    const w = findWorkload(g.db, params.id)
+    const w = findWorkload(g.db, params.id, g)
     if (w instanceof Response) return w
     const e = evaluate(g.st, w)
     const meta = g.st.clusters.get(w.cluster)
@@ -1391,7 +1403,7 @@ export const adminHandlers = [
   http.get('*/v1/workloads/:id/override', async ({ request, params }) => {
     const g = await gate(request)
     if (g instanceof Response) return g
-    const w = findWorkload(g.db, params.id)
+    const w = findWorkload(g.db, params.id, g)
     if (w instanceof Response) return w
     const ov = liveOverride(g.st, w.id)
     if (!ov) return notFound('not_found', `workload ${w.id} has no override`)
@@ -1399,10 +1411,12 @@ export const adminHandlers = [
   }),
 
   http.put('*/v1/workloads/:id/override', async ({ request, params }) => {
-    const g = await gate(request, 'operator')
+    const g = await gate(request, 'viewer')
     if (g instanceof Response) return g
-    const w = findWorkload(g.db, params.id)
+    const w = findWorkload(g.db, params.id, g)
     if (w instanceof Response) return w
+    const deny = needOperatorOn(g, w)
+    if (deny) return deny
     const existing = liveOverride(g.st, w.id)
     if (existing) {
       const m = ifMatch(request, existing.version)
@@ -1479,10 +1493,12 @@ export const adminHandlers = [
   }),
 
   http.delete('*/v1/workloads/:id/override', async ({ request, params }) => {
-    const g = await gate(request, 'operator')
+    const g = await gate(request, 'viewer')
     if (g instanceof Response) return g
-    const w = findWorkload(g.db, params.id)
+    const w = findWorkload(g.db, params.id, g)
     if (w instanceof Response) return w
+    const deny = needOperatorOn(g, w)
+    if (deny) return deny
     const ov = liveOverride(g.st, w.id)
     if (!ov) return notFound('not_found', `workload ${w.id} has no override`)
     const m = ifMatch(request, ov.version)
@@ -1511,10 +1527,12 @@ export const adminHandlers = [
   }),
 
   http.post('*/v1/workloads/:id/approve', async ({ request, params }) => {
-    const g = await gate(request, 'operator')
+    const g = await gate(request, 'viewer')
     if (g instanceof Response) return g
-    const w = findWorkload(g.db, params.id)
+    const w = findWorkload(g.db, params.id, g)
     if (w instanceof Response) return w
+    const deny = needOperatorOn(g, w)
+    if (deny) return deny
     const b = await body<S['ApprovalRequest']>(request)
     if (!b?.recommendationID) return badRequest('invalid_approval', 'recommendationID: Required value')
     const r = reasonError(b.reason)
@@ -1979,6 +1997,9 @@ export const adminHandlers = [
       )
     if (!['viewer', 'operator', 'admin'].includes(b.role))
       errs.push(`role: Unsupported value: ${JSON.stringify(b.role)}`)
+    const scope = b.scope ?? 'fleet'
+    const teamRoles = b.teamRoles ?? []
+    errs.push(...validateAccess(g.st, { role: b.role, scope, teamRoles }))
     if (!b.password || b.password.length < 8 || b.password.length > 72)
       errs.push('password: Invalid value: 8–72 characters')
     if (b.displayName && b.displayName.length > 128)
@@ -1989,7 +2010,10 @@ export const adminHandlers = [
     const u: UserRec = {
       username: b.username,
       displayName: b.displayName ?? b.username,
-      role: b.role,
+      // A team-scoped user's role is derived: the highest of its team roles.
+      role: storedRole({ role: b.role, scope, teamRoles }),
+      scope,
+      teamRoles,
       disabled: false,
       mustChangePassword: b.mustChangePassword ?? true,
       createdAt: now(),
@@ -2061,13 +2085,31 @@ export const adminHandlers = [
     if (r) return r
     if (b!.role && !['viewer', 'operator', 'admin'].includes(b!.role))
       return badRequest('invalid_user', `role: Unsupported value: ${JSON.stringify(b!.role)}`)
+    if (u.source === 'oidc' && (b!.role || b!.scope || b!.teamRoles))
+      return conflict(
+        'idp_managed',
+        `${u.username} signs in with the identity provider; its access comes from its groups`,
+      )
+    const next = {
+      role: (b!.role ?? u.role) as UserRole,
+      scope: b!.scope ?? u.scope ?? 'fleet',
+      teamRoles: b!.teamRoles ?? u.teamRoles ?? [],
+    }
+    if (b!.role || b!.scope || b!.teamRoles) {
+      const errs = validateAccess(g.st, next)
+      if (errs.length) return invalid('invalid_user', errs)
+    }
     const losesAdmin =
       u.role === 'admin' && !u.disabled && ((b!.role && b!.role !== 'admin') || b!.disabled === true)
     if (losesAdmin && enabledAdmins(g.st).length <= 1)
       return conflict('last_admin', `${u.username} is the last enabled admin`)
     const before = userOut(u)
     if (b!.displayName !== undefined) u.displayName = b!.displayName
-    if (b!.role) u.role = b!.role as UserRole
+    if (b!.role || b!.scope || b!.teamRoles) {
+      u.scope = next.scope
+      u.teamRoles = next.teamRoles
+      u.role = storedRole(next)
+    }
     if (b!.disabled !== undefined) u.disabled = b!.disabled
     u.version++
     u.updatedAt = now()
