@@ -7,15 +7,16 @@ import { expect, test, type Page } from '@playwright/test'
 const password = (user: string) => process.env[`E2E_${user.toUpperCase()}_PASSWORD`] ?? `ro-dev-${user}-pass`
 
 /** Paths of /v1 responses that carried data (anything but the session check and sign-in). */
+// Endpoints the sign-in page itself calls; none returns data. The unauthenticated ones are the
+// publicRoutes in internal/hub/server_routes_test.go (GET /v1/auth/providers is the public one the
+// page reads). Keep this list explicit: anything else under /v1 counts as data.
+const SIGN_IN_PATHS = ['/v1/me', '/v1/auth/login', '/v1/auth/logout', '/v1/auth/providers']
+
 function watchData(page: Page) {
   const seen: string[] = []
   page.on('response', (r) => {
     const u = new URL(r.url())
-    if (
-      !u.pathname.startsWith('/v1/') ||
-      ['/v1/me', '/v1/auth/login', '/v1/auth/logout'].includes(u.pathname)
-    )
-      return
+    if (!u.pathname.startsWith('/v1/') || SIGN_IN_PATHS.includes(u.pathname)) return
     if (r.status() < 400) seen.push(`${r.status()} ${u.pathname}`)
   })
   return seen
