@@ -108,6 +108,12 @@ Hub objects: every test deletes the policies and clusters it created and resumes
 Before the scenarios (and in `make e2e-clean`) the suite sweeps what an interrupted run left:
 hub policies and clusters named `e2e-*`, and pauses whose reason starts with `e2e `.
 
+### Notifications
+
+| Test | Cluster | What is asserted |
+|---|---|---|
+| `TestNotifications` | spoke-1 (events only) | A fake signed-webhook receiver runs on the host (the hub reaches it as `host.k3d.internal`; the dev hub values set `notifications.allowInsecureHTTP`). As admin: a webhook channel with a signing secret (never returned by the API), **Send test** arrives signed (`X-Kerf-Signature` verified with `notify.Verify`), a second channel nobody listens on shows its error (without its URL) on **Send test** and on the channel. A rule for one namespace of spoke-1 (`rolled_back`, `blocked`); events posted with spoke-1's agent token (namespaces `e2e-notify-*`; the audit log is append-only, so they stay): the rollback arrives within a minute with a link to the workload page and without the credential in its text, the rollback of another namespace and repeats of one block produce nothing more (one `blocked` message), the history lists both deliveries, `kerf_notification_deliveries_total` is exported. The rule and channels are deleted at the end. |
+
 ## How the hub is driven
 
 The real hub, not the agent's stub-hub mode: the agents are shared Helm releases (WO-06) and a
@@ -167,6 +173,7 @@ scale-down, the spoke-2 pause and `pods/resize` rule removal (WO-24) and, only w
 | `E2E_REALIZED_WAIT` | `0` = off; how long `TestRealizedSavings` may wait for the applied change's first complete hour |
 | `E2E_AGENT_DEPLOYMENT` | `kerf-agent` (scenario 11 reads its args) |
 | `E2E_INFEASIBLE_CPU` | `16` (scenario 4's CPU floor; must exceed the node's capacity) |
+| `E2E_NOTIFY_HOST` | `host.k3d.internal` (how the hub pod reaches the suite's fake receiver; `TestNotifications`) |
 | `E2E_KEEP` | set to keep namespaces/policies/apps for debugging (`make e2e-clean` later) |
 | `E2E_VIEWER_PASSWORD` / `E2E_OPERATOR_PASSWORD` / `E2E_ADMIN_PASSWORD` | dev users of values-dev.yaml |
 | `E2E_AGENT_CLUSTERROLE` | `kerf-agent` (scenario A10) |

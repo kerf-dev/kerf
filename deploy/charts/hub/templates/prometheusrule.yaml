@@ -112,6 +112,17 @@ spec:
             summary: "Kerf {{`{{ $labels.latest }}`}} is available (running {{`{{ $labels.current }}`}})"
             description: "A newer stable Kerf release exists. Admin -> Maintenance in the web UI shows the release notes and the helm upgrade commands (docs/install/eks.md section 8)."
         {{- end }}
+        {{- if dig "notificationFailing" "enabled" true $a }}
+        - alert: KerfNotificationDeliveryFailing
+          expr: sum by (channel_type) (increase(kerf_notification_deliveries_total{result="failed"}[15m])) > 0
+          for: {{ dig "notificationFailing" "for" "0m" $a }}
+          labels:
+            severity: {{ dig "notificationFailing" "severity" "warning" $a }}
+            {{- with $pr.additionalLabels }}{{ toYaml . | nindent 12 }}{{ end }}
+          annotations:
+            summary: "Kerf could not deliver {{`{{ $labels.channel_type }}`}} notifications"
+            description: "Notifications to a {{`{{ $labels.channel_type }}`}} channel failed after their retries (or with an error that retrying does not fix, such as a revoked webhook). Admin -> Notifications shows the channel, the error and the delivery history (docs/notifications.md)."
+        {{- end }}
         {{- with $pr.additionalRules }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

@@ -29,6 +29,7 @@ export const TARGET_LABEL: Record<ConfigTargetType, string> = {
   user: 'User',
   datasource: 'Datasource',
   readiness: 'Readiness',
+  notification: 'Notification',
 }
 
 const ACTION_TONE: Partial<
@@ -39,11 +40,15 @@ const ACTION_TONE: Partial<
   UserCreated: 'success',
   TokenCreated: 'success',
   DatasourceCreated: 'success',
+  NotificationChannelCreated: 'success',
+  NotificationRuleCreated: 'success',
   PolicyDeleted: 'destructive',
   ClusterDeleted: 'destructive',
   UserDeleted: 'destructive',
   TokenRevoked: 'destructive',
   DatasourceDeleted: 'destructive',
+  NotificationChannelDeleted: 'destructive',
+  NotificationRuleDeleted: 'destructive',
   AutomationPaused: 'warning',
   PolicyReverted: 'warning',
   AutomationResumed: 'success',
@@ -73,6 +78,7 @@ function targetLink(c: ConfigChange): string | undefined {
   if (t.type === 'user' || t.type === 'token')
     return `/admin/access${t.type === 'token' ? '?tab=tokens' : ''}`
   if (t.type === 'datasource') return '/admin/datasources'
+  if (t.type === 'notification') return '/admin/notifications'
   return undefined
 }
 

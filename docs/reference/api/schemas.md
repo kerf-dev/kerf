@@ -1605,19 +1605,19 @@ Type: string. one of `built-in`, `global-default`, `cluster-default-chart`, `clu
 
 ## ConfigTargetType { #configtargettype }
 
-Type: string. one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness`.
+Type: string. one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness`, `notification`.
 
 ## ConfigAction { #configaction }
 
 CamelCase action of a configuration change (`docs/contracts/events.md`).
 
-Type: string. one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`.
+Type: string. one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`, `NotificationChannelCreated`, `NotificationChannelUpdated`, `NotificationChannelDeleted`, `NotificationRuleCreated`, `NotificationRuleUpdated`, `NotificationRuleDeleted`, `NotificationDigestUpdated`.
 
 ## ConfigTarget { #configtarget }
 
 | Field | Type | Constraints | Description |
 |---|---|---|---|
-| `type` | ConfigTargetType (enum), required | one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness` |  |
+| `type` | ConfigTargetType (enum), required | one of `settings`, `policy`, `workload-override`, `approval`, `cluster`, `automation`, `token`, `user`, `datasource`, `readiness`, `notification` |  |
 | `id` | string, required |  | Policy or approval id, settings section, cluster name (`*` for the fleet automation), token id or username. |
 | `name` | string |  | Display name, e.g. the policy name. |
 | `cluster` | string | pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`; example `ro-spoke-1` |  |
@@ -1635,7 +1635,7 @@ never including password hashes or token values.
 | `type` | string, required | one of `config_changed` |  |
 | `time` | string (date-time), required |  |  |
 | `actor` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a local user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`). |
-| `action` | ConfigAction (enum), required | one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged` | CamelCase action of a configuration change (`docs/contracts/events.md`). |
+| `action` | ConfigAction (enum), required | one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`, `NotificationChannelCreated`, `NotificationChannelUpdated`, `NotificationChannelDeleted`, `NotificationRuleCreated`, `NotificationRuleUpdated`, `NotificationRuleDeleted`, `NotificationDigestUpdated` | CamelCase action of a configuration change (`docs/contracts/events.md`). |
 | `target` | [ConfigTarget](schemas.md#configtarget), required |  |  |
 | `reason` | string, required |  | The reason given with the change. |
 | `version` | integer |  | Version of the target after the change, if it is versioned. |
@@ -2045,3 +2045,180 @@ machine-readable identifier (e.g. `cluster_forbidden`, `invalid_workload_id`).
 | `detail` | string |  |  |
 | `instance` | string |  |  |
 | `code` | string |  |  |
+
+## NotificationChannelType { #notificationchanneltype }
+
+Type: string. one of `slack`, `teams`, `webhook`.
+
+## NotificationEventType { #notificationeventtype }
+
+`applied`, `rolled_back`, `failed` and `blocked` are the workload events of `docs/contracts/events.md`;
+`readiness_degraded` (a cluster's readiness state went down), `automation_paused` and
+`automation_resumed` come from the configuration audit.
+
+Type: string. one of `applied`, `rolled_back`, `failed`, `blocked`, `readiness_degraded`, `automation_paused`, `automation_resumed`.
+
+## NotificationDeliveryKind { #notificationdeliverykind }
+
+Type: string. one of `event`, `digest`, `test`.
+
+## NotificationDeliveryStatus { #notificationdeliverystatus }
+
+Type: string. one of `pending`, `sent`, `failed`.
+
+## NotificationChannelInput { #notificationchannelinput }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `name` | string, required |  | A DNS-style label (lower case letters, digits, `-`; at most 63). |
+| `type` | NotificationChannelType (enum), required | one of `slack`, `teams`, `webhook` |  |
+| `url` | string (uri) | write-only | The incoming webhook URL. Required on create. `https` only, unless the hub allows `http` (`notifications.allowInsecureHTTP`, for tests). |
+| `secret` | string | write-only | Webhook channels only, the HMAC-SHA256 signing secret (at least 16 characters). |
+| `clearSecret` | boolean |  | Remove the stored signing secret (webhook channels). |
+| `enabled` | boolean |  | Default true. |
+| `reason` | string, required | min length 1; max length 1024 |  |
+
+## NotificationLastDelivery { #notificationlastdelivery }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `status` | string, required | one of `sent`, `failed`, `retrying` |  |
+| `at` | string (date-time), required |  |  |
+| `error` | string |  | Why the last attempt failed (never contains the URL). |
+
+## NotificationChannel { #notificationchannel }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | string (uuid), required |  |  |
+| `name` | string, required |  |  |
+| `type` | NotificationChannelType (enum), required | one of `slack`, `teams`, `webhook` |  |
+| `source` | string, required | one of `api`, `config` | `config`: defined in the chart values, read-only here. |
+| `enabled` | boolean, required |  |  |
+| `url` | string, required |  | The URL masked to its scheme and host. |
+| `secretSet` | boolean, required |  | A signing secret is stored (webhook channels). |
+| `pending` | integer, required |  | Deliveries queued for this channel. |
+| `lastDelivery` | [NotificationLastDelivery](schemas.md#notificationlastdelivery) |  |  |
+| `lastSuccessAt` | string (date-time) |  |  |
+| `version` | integer, required |  |  |
+| `createdAt` | string (date-time), required |  |  |
+| `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a local user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`). |
+| `updatedAt` | string (date-time), required |  |  |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a local user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`). |
+
+## NotificationChannelList { #notificationchannellist }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `items` | array of [NotificationChannel](schemas.md#notificationchannel), required |  |  |
+
+## NotificationTestResult { #notificationtestresult }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `ok` | boolean, required |  |  |
+| `httpStatus` | integer |  | The destination's HTTP status, when it answered. |
+| `latencyMs` | integer, required |  |  |
+| `error` | string |  |  |
+
+## NotificationRuleInput { #notificationruleinput }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `name` | string, required | min length 1; max length 100 |  |
+| `enabled` | boolean |  | Default true. |
+| `eventTypes` | array of NotificationEventType (enum), required | min items 1 |  |
+| `clusters` | array of string |  | Glob patterns of cluster names; empty = every cluster. |
+| `namespaces` | array of string |  | Glob patterns of namespaces; empty = every namespace. |
+| `channelIds` | array of string (uuid), required | min items 1 |  |
+| `reason` | string, required | min length 1; max length 1024 |  |
+
+## NotificationRule { #notificationrule }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | string (uuid), required |  |  |
+| `name` | string, required |  |  |
+| `enabled` | boolean, required |  |  |
+| `eventTypes` | array of NotificationEventType (enum), required |  |  |
+| `clusters` | array of string, required |  |  |
+| `namespaces` | array of string, required |  |  |
+| `channelIds` | array of string (uuid), required |  |  |
+| `version` | integer, required |  |  |
+| `createdAt` | string (date-time), required |  |  |
+| `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a local user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`). |
+| `updatedAt` | string (date-time), required |  |  |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a local user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`). |
+
+## NotificationRuleList { #notificationrulelist }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `items` | array of [NotificationRule](schemas.md#notificationrule), required |  |  |
+
+## NotificationDigestInput { #notificationdigestinput }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `enabled` | boolean, required |  |  |
+| `weekday` | integer, required | min 0; max 6 | 0 = Sunday ... 6 = Saturday. |
+| `time` | string, required | pattern `^([01][0-9]\|2[0-3]):[0-5][0-9]$` | Local time of day in `timezone`. |
+| `timezone` | string, required |  | IANA time zone, e.g. `Europe/Berlin`. |
+| `channelIds` | array of string (uuid), required |  |  |
+| `reason` | string, required | min length 1; max length 1024 |  |
+
+## NotificationDigest { #notificationdigest }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `enabled` | boolean, required |  |  |
+| `weekday` | integer, required |  |  |
+| `time` | string, required |  |  |
+| `timezone` | string, required |  |  |
+| `channelIds` | array of string (uuid), required |  |  |
+| `nextSendAt` | string (date-time) |  | Set while the digest is enabled. |
+| `lastSentAt` | string (date-time) |  | The scheduled time of the last digest that was queued. |
+| `version` | integer, required |  |  |
+| `updatedAt` | string (date-time), required |  |  |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a local user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`). |
+
+## NotificationDigestQueued { #notificationdigestqueued }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `queued` | integer, required |  | Deliveries queued (one per channel). |
+
+## NotificationDelivery { #notificationdelivery }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | string (uuid), required |  |  |
+| `channelId` | string (uuid), required |  |  |
+| `channelName` | string, required |  |  |
+| `kind` | NotificationDeliveryKind (enum), required | one of `event`, `digest`, `test` |  |
+| `eventType` | NotificationEventType (enum) | one of `applied`, `rolled_back`, `failed`, `blocked`, `readiness_degraded`, `automation_paused`, `automation_resumed` | `applied`, `rolled_back`, `failed` and `blocked` are the workload events of `docs/contracts/events.md`; `readiness_degraded` (a cluster's readiness state went down), `automation_paused` and `automation_resumed` come from the configuration audit. |
+| `summary` | string, required |  |  |
+| `status` | NotificationDeliveryStatus (enum), required | one of `pending`, `sent`, `failed` |  |
+| `attempts` | integer, required |  |  |
+| `nextAttemptAt` | string (date-time) |  | Set while `pending`. |
+| `lastError` | string |  |  |
+| `httpStatus` | integer |  |  |
+| `createdAt` | string (date-time), required |  |  |
+| `lastAttemptAt` | string (date-time) |  |  |
+| `sentAt` | string (date-time) |  |  |
+
+## NotificationDeliveryList { #notificationdeliverylist }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `items` | array of [NotificationDelivery](schemas.md#notificationdelivery), required |  |  |
+| `continue` | string |  |  |
+
+## NotificationStatus { #notificationstatus }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `secretsKey` | boolean, required |  | Webhook URLs can be stored (the secrets encryption key is configured). |
+| `links` | boolean, required |  | Messages link to the web UI (`notifications.baseURL` is set). |
+| `rateLimitPerMinute` | integer, required |  |  |
+| `retryWindowSeconds` | integer, required |  |  |
