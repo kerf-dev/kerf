@@ -41,6 +41,63 @@ the agent never changes it.
 
 Type: string. one of `throttled`, `oom-killed`, `restarting`, `hpa-coupled`, `sidecar`, `short-lived`, `low-confidence`, `jvm-fixed-heap`.
 
+## GPUFilter { #gpufilter }
+
+Value of the `gpu` filter: `any` (every workload that requests GPUs) or a `GPUUsage.status`.
+
+Type: string. one of `any`, `idle`, `under-used`, `ok`, `no-data`.
+
+## GPUStatus { #gpustatus }
+
+`idle`: the 95th percentile of the GPU utilisation over the window is below 5 %.
+`under-used`: it is below 40 %, or the 95th percentile of the framebuffer used is below 30 %
+of the GPU's memory. `ok`: neither. `no-data`: the workload requests GPUs but the NVIDIA
+DCGM exporter has no series for its pods (see the `metrics.dcgm` readiness check).
+
+Type: string. one of `idle`, `under-used`, `ok`, `no-data`.
+
+## GPUSuggestionKind { #gpusuggestionkind }
+
+Type: string. one of `time-slicing`, `mig`, `smaller-gpu`, `scale-to-zero`.
+
+## GPUSuggestion { #gpusuggestion }
+
+A direction for an idle or under-used GPU workload. Nothing is applied automatically.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `kind` | GPUSuggestionKind (enum), required | one of `time-slicing`, `mig`, `smaller-gpu`, `scale-to-zero` |  |
+| `message` | string, required |  |  |
+| `targetModel` | string |  | On `smaller-gpu`, a GPU type whose memory fits the workload. |
+| `monthlySavingsUSD` | number | min 0 | Set when known; `scale-to-zero` saves the whole monthly cost. |
+
+## GPUUsage { #gpuusage }
+
+GPUs of a workload (pods that request `nvidia.com/gpu`): utilisation and framebuffer memory
+from the NVIDIA DCGM exporter (`DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`,
+`DCGM_FI_DEV_FB_FREE`) over the recommender window, the cost of the GPUs and suggestions.
+Absent for workloads without GPU requests. Visibility only: it never changes a request.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `status` | GPUStatus (enum), required | one of `idle`, `under-used`, `ok`, `no-data` | `idle`: the 95th percentile of the GPU utilisation over the window is below 5 %. `under-used`: it is below 40 %, or the 95th percentile of the framebuffer used is below 30 % of the GPU's memory. `ok`: neither. `no-data`: the workload requests GPUs but the NVIDIA DCGM exporter has no series for its pods (see the `metrics.dcgm` readiness check). |
+| `gpusPerPod` | integer, required | min 1 | `nvidia.com/gpu` requested by one pod (the largest over the workload's pods). |
+| `gpus` | integer, required | min 1 | GPUs held by the workload now (all pods). |
+| `pods` | integer, required | min 1 |  |
+| `model` | string |  | GPU model from the DCGM `modelName` label, e.g. `NVIDIA A10G`. |
+| `window` | string |  | Period the statistics cover (Go duration). |
+| `samples` | integer, required | min 0 | Steps with utilisation data in the window. |
+| `utilizationP95` | number | min 0; max 100 | 95th percentile of the GPU utilisation, percent, averaged over the workload's GPUs at each step. |
+| `utilizationAvg` | number | min 0; max 100 |  |
+| `memoryUsedP95Bytes` | number | min 0 | 95th percentile of the framebuffer used on the busiest GPU of a pod. |
+| `memoryTotalBytes` | number | min 0 | Framebuffer size of one GPU. |
+| `memoryUtilizationP95` | number | min 0; max 100 | `memoryUsedP95Bytes` as a percentage of `memoryTotalBytes`. |
+| `priced` | boolean, required |  | False when no node of the workload's pods has a GPU price; the costs are then 0. |
+| `monthlyCostUSD` | number, required | min 0 | Cost of the GPUs held now: the price of each GPU node times the workload's share of the node's GPUs, over a 730-hour month. |
+| `perPodMonthlyCostUSD` | number, required | min 0 |  |
+| `unusedMonthlyCostUSD` | number, required | min 0 | `monthlyCostUSD` times the share of the GPU time not used (100 % minus the average utilisation). |
+| `suggestions` | array of [GPUSuggestion](schemas.md#gpusuggestion), required |  |  |
+
 ## EventType { #eventtype }
 
 Type: string. one of `applied`, `skipped`, `blocked`, `fallback`, `rolled_back`, `released`, `failed`.
@@ -158,6 +215,7 @@ amounts (`RealizedAmount`).
 | `dataCoverage` | [DataCoverage](schemas.md#datacoverage), required |  |  |
 | `pricing` | [RecommendationPricing](schemas.md#recommendationpricing) |  | Rates used for `monthlySavingsUSD`. `source` is `metrics` when they come from the pricing series (`kerf_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when the cluster had no pricing series and the hub's configured fallback rate was used. Absent on recommendations computed before the field existed. |
 | `hpa` | [HPACoordination](schemas.md#hpacoordination) |  | HPA coordination (lifts). Present when the workload has a CPU- or memory-utilization HPA (risk flag `hpa-coupled`). The HPA's utilization is the pod's usage over the sum of its containers' requests of `metric`, so changing those requests changes when it scales. With `recommendedTarget`, the recommended requests of `metric` and that target keep `usage / (sum of requests x target)` unchanged: the agent may apply both in one change (rollout) and the HPA scales as before. The target stays within 40-90 % (or the current target if it is already outside); the requests were adjusted to keep it there. Without `recommendedTarget` (`skipReason` set) the requests of `metric` must not be changed by the agent. |
+| `gpu` | [GPUUsage](schemas.md#gpuusage) |  | GPUs of a workload (pods that request `nvidia.com/gpu`): utilisation and framebuffer memory from the NVIDIA DCGM exporter (`DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`, `DCGM_FI_DEV_FB_FREE`) over the recommender window, the cost of the GPUs and suggestions. Absent for workloads without GPU requests. Visibility only: it never changes a request. |
 
 ## HPACoordination { #hpacoordination }
 
@@ -540,6 +598,7 @@ Recommendation fields are absent when the workload has no recommendation yet.
 | `confidence` | number | min 0; max 1 |  |
 | `riskFlags` | array of RiskFlag (enum) |  |  |
 | `monthlySavingsUSD` | [Savings](schemas.md#savings) |  | Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized amounts (`RealizedAmount`). |
+| `gpu` | [GPUUsage](schemas.md#gpuusage) |  | GPUs of a workload (pods that request `nvidia.com/gpu`): utilisation and framebuffer memory from the NVIDIA DCGM exporter (`DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`, `DCGM_FI_DEV_FB_FREE`) over the recommender window, the cost of the GPUs and suggestions. Absent for workloads without GPU requests. Visibility only: it never changes a request. |
 
 ## WorkloadList { #workloadlist }
 
@@ -566,6 +625,7 @@ Recommendation fields are absent when the workload has no recommendation yet.
 | `kinds` | array of [FacetCount](schemas.md#facetcount), required |  |  |
 | `modes` | array of [FacetCount](schemas.md#facetcount), required |  |  |
 | `riskFlags` | array of [FacetCount](schemas.md#facetcount), required |  |  |
+| `gpu` | array of [FacetCount](schemas.md#facetcount) |  | Workloads per GPU status (`GPUStatus`); workloads without GPUs are not counted. |
 
 ## WorkloadDetail { #workloaddetail }
 
