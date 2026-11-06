@@ -34,7 +34,7 @@ Read-only endpoints for the web UI.
 Accepts: bearer token with role `ui` or session of a user with role `viewer` or higher.
 
 Totals over the latest recommendation of every live workload. Workloads the agent never
-reported count as `audit` / `Pending` (global default). A team-scoped caller gets the
+reported count as `audit` / `Pending` (the global default). A team-scoped caller gets the
 totals of its teams' workloads only, and only the clusters where it has workloads; `teams`
 groups the same totals by team (docs/teams.md).
 
