@@ -470,3 +470,12 @@ describe('Notifications page: read-only users', () => {
     expect(within(card).getByTestId('digest-channels')).toHaveTextContent('finops-teams')
   })
 })
+
+describe('Notifications page: digest and teams', () => {
+  it('notes that the weekly digest includes the savings by team', async () => {
+    await signIn('admin')
+    renderPage()
+    const card = await screen.findByTestId('digest-card')
+    expect(within(card).getByTestId('digest-teams-note')).toHaveTextContent(/savings by team/)
+  })
+})

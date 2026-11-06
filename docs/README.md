@@ -28,6 +28,7 @@ with search and a version switch, at [getkerf.dev/docs](https://getkerf.dev/docs
 | [Copy a recommendation as a patch](copy-as-patch.md) | Hand a recommendation over as a strategic merge patch, a `kubectl patch` command, a Kustomize patch or Helm values, for one workload or a selection |
 | [GPU visibility](gpu.md) | Idle and under-used NVIDIA GPUs: prerequisites (DCGM exporter), the method, the cost, the readiness check |
 | [Sign-in and access](auth.md) | Required sign-in, users and roles, sign-in with OpenID Connect (Okta, Entra ID, Google, Keycloak, Dex), sign-in protection, bearer tokens for automation, upgrading from anonymous read access |
+| [Teams](teams.md) | Teams that own workloads (namespace selectors, owner label), team-scoped viewer and operator roles, identity-provider group mappings to teams, savings by team |
 | [Node savings](node-savings.md) | Capacity, the node estimate after the recommendations, consolidation blockers with Karpenter and the Cluster Autoscaler |
 | [Maintenance and updates](maintenance.md) | Component versions, the check for a new release, turning it off |
 | [Changelog](../CHANGELOG.md) | What changed in each release and how to upgrade |

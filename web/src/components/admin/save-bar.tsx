@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Loader2Icon, RotateCcwIcon } from 'lucide-react'
 import { useEffect } from 'react'
 import { useBlocker } from 'react-router'
-import { writes } from '@/api/admin'
+import { useFleetScope, writes } from '@/api/admin'
 import type { PolicyChange } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -91,12 +91,16 @@ export function useUnsavedGuard(dirty: boolean) {
   }, [dirty])
 }
 
-/** Runs the impact dry-run (`POST /v1/admin/preview`) for a set of changes while `enabled`. */
+/**
+ * Runs the impact dry-run (`POST /v1/admin/preview`) for a set of changes while `enabled`. The dry-run
+ * is fleet-wide, so a team-scoped user (who would get 403) never sends it.
+ */
 export function usePreview(changes: PolicyChange[] | undefined, enabled: boolean) {
+  const fleet = useFleetScope()
   return useQuery({
     queryKey: ['preview', changes],
     queryFn: () => writes.preview({ changes: changes!, limit: 50 }),
-    enabled: enabled && !!changes?.length,
+    enabled: fleet && enabled && !!changes?.length,
     staleTime: 0,
     gcTime: 0,
     retry: false,

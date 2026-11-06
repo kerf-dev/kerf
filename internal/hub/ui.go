@@ -35,6 +35,7 @@ func (s *Server) getSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	per := map[string]*hubapi.Summary{}
 	out := hubapi.FleetSummary{GeneratedAt: s.now().UTC(), Fleet: newSummary(), Clusters: []hubapi.ClusterSummary{}}
+	clusters = visibleClusters(r, clusters, views, func(c store.Cluster) string { return c.Name })
 	for _, c := range clusters {
 		sum := newSummary()
 		if t, ok := lastRuns[c.Name]; ok {
@@ -65,7 +66,52 @@ func (s *Server) getSummary(w http.ResponseWriter, r *http.Request) {
 	if len(out.Clusters) > 0 {
 		out.Fleet.MonthlySavingsUSD = roundSavings(fleet)
 	}
+	if out.Teams, err = s.teamSummaries(r, views); err != nil {
+		s.internal(w, r, err)
+		return
+	}
 	writeJSON(w, out)
+}
+
+// visibleClusters drops, for a team-scoped caller, the clusters where it sees no workload.
+func visibleClusters[T any](r *http.Request, clusters []T, views []*store.WorkloadView, name func(T) string) []T {
+	if PrincipalFrom(r.Context()).Scope.All() {
+		return clusters
+	}
+	seen := map[string]bool{}
+	for _, v := range views {
+		seen[v.Key.Cluster] = true
+	}
+	return slices.DeleteFunc(clusters, func(c T) bool { return !seen[name(c)] })
+}
+
+// teamSummaries groups the summary by team: every team the caller sees (also without workloads),
+// then Unassigned when it has workloads. nil while no team is defined.
+func (s *Server) teamSummaries(r *http.Request, views []*store.WorkloadView) ([]hubapi.TeamSummary, error) {
+	list, err := s.Store.ListTeams(r.Context())
+	if err != nil || len(list) == 0 {
+		return nil, err
+	}
+	byTeam := map[string][]*store.WorkloadView{}
+	for _, v := range views {
+		byTeam[teamOf(v)] = append(byTeam[teamOf(v)], v)
+	}
+	sum := func(id, name string) hubapi.TeamSummary {
+		ts := hubapi.TeamSummary{Summary: newSummary(), Team: id, DisplayName: name}
+		for _, v := range byTeam[id] {
+			addToSummary(&ts.Summary, v)
+		}
+		roundSummary(&ts.Summary)
+		return ts
+	}
+	out := make([]hubapi.TeamSummary, 0, len(list)+1)
+	for _, t := range list {
+		out = append(out, sum(t.ID, t.DisplayName))
+	}
+	if len(byTeam[hubapi.TeamUnassigned]) > 0 {
+		out = append(out, sum(hubapi.TeamUnassigned, "Unassigned"))
+	}
+	return out, nil
 }
 
 func newSummary() hubapi.Summary {
@@ -173,6 +219,7 @@ func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out := hubapi.ClusterList{Items: []hubapi.ClusterInfo{}}
+	clusters = visibleClusters(r, clusters, views, func(c store.ClusterRow) string { return c.Name })
 	for _, c := range clusters {
 		ci := hubapi.ClusterInfo{Name: c.Name, Description: c.Description, AgentVersion: c.AgentVersion, AgentStatus: "never"}
 		created := c.CreatedAt.UTC()
@@ -297,10 +344,10 @@ func (s *Server) listWorkloads(w http.ResponseWriter, r *http.Request) {
 
 // workloadFilters are the filters of GET /v1/workloads and /v1/workloads/facets.
 type workloadFilters struct {
-	clusters, namespaces, kinds, modes, riskFlags []string
-	gpu                                           []string // hubapi.GPUFilterValues
-	minSavings                                    float64  // -Inf when unset
-	search                                        string   // lower case
+	clusters, namespaces, kinds, modes, riskFlags, teams []string
+	gpu                                                  []string // hubapi.GPUFilterValues
+	minSavings                                           float64  // -Inf when unset
+	search                                               string   // lower case
 }
 
 // parseWorkloadFilters validates the filters; on error it writes the 400 response.
@@ -308,7 +355,10 @@ func parseWorkloadFilters(w http.ResponseWriter, r *http.Request) (workloadFilte
 	q := r.URL.Query()
 	f := workloadFilters{
 		clusters: q["cluster"], namespaces: q["namespace"], kinds: q["kind"], modes: q["mode"], riskFlags: q["riskFlag"], gpu: q["gpu"],
-		minSavings: math.Inf(-1), search: strings.ToLower(q.Get("q")),
+		teams: q["team"], minSavings: math.Inf(-1), search: strings.ToLower(q.Get("q")),
+	}
+	if !validTeamFilter(w, r, f.teams) {
+		return f, false
 	}
 	for _, c := range f.clusters {
 		if !hubapi.ClusterNameRE.MatchString(c) {
@@ -362,6 +412,7 @@ const (
 	facetKind      = "kind"
 	facetMode      = "mode"
 	facetRiskFlag  = "riskFlag"
+	facetTeam      = "team"
 	facetGPU       = "gpu"
 )
 
@@ -384,6 +435,9 @@ func (f workloadFilters) match(v *store.WorkloadView, skip string) bool {
 	}
 	if skip != facetRiskFlag && len(f.riskFlags) > 0 &&
 		(v.Rec == nil || !slices.ContainsFunc(f.riskFlags, func(fl string) bool { return slices.Contains(v.Rec.RiskFlags, fl) })) {
+		return false
+	}
+	if skip != facetTeam && len(f.teams) > 0 && !slices.Contains(f.teams, teamOf(v)) {
 		return false
 	}
 	if skip != facetGPU && len(f.gpu) > 0 && !f.matchGPU(v) {
@@ -452,6 +506,9 @@ func (s *Server) getWorkloadFacets(w http.ResponseWriter, r *http.Request) {
 		if wf.match(v, facetRiskFlag) && v.Rec != nil {
 			inc(facetRiskFlag, v.Rec.RiskFlags...)
 		}
+		if wf.match(v, facetTeam) {
+			inc(facetTeam, teamOf(v))
+		}
 		if wf.match(v, facetGPU) && v.Rec != nil && v.Rec.GPU != nil {
 			inc(facetGPU, v.Rec.GPU.Status)
 		}
@@ -465,7 +522,7 @@ func (s *Server) getWorkloadFacets(w http.ResponseWriter, r *http.Request) {
 		return items
 	}
 	out.Clusters, out.Namespaces, out.Kinds = list(facetCluster), list(facetNamespace), list(facetKind)
-	out.Modes, out.RiskFlags = list(facetMode), list(facetRiskFlag)
+	out.Modes, out.RiskFlags, out.Teams = list(facetMode), list(facetRiskFlag), list(facetTeam)
 	if g := list(facetGPU); len(g) > 0 {
 		out.GPU = g
 	}
@@ -475,7 +532,7 @@ func (s *Server) getWorkloadFacets(w http.ResponseWriter, r *http.Request) {
 func workloadRow(v *store.WorkloadView) hubapi.WorkloadRow {
 	row := hubapi.WorkloadRow{
 		ID: v.Key.ID(), Cluster: v.Key.Cluster, Namespace: v.Key.Namespace, Kind: v.Key.Kind, Name: v.Key.Name,
-		Modes: v.Modes(), Phase: v.Phase(),
+		Modes: v.Modes(), Phase: v.Phase(), Team: teamOf(v),
 	}
 	if v.Rec != nil {
 		rec := v.Rec.WithoutExplanations()
@@ -517,7 +574,7 @@ func (s *Server) getWorkload(w http.ResponseWriter, r *http.Request) {
 	}
 	d := hubapi.WorkloadDetail{
 		ID: v.Key.ID(), Cluster: v.Key.Cluster, Namespace: v.Key.Namespace, Kind: v.Key.Kind, Name: v.Key.Name,
-		Modes: v.Modes(), Phase: v.Phase(), FirstSeenAt: &v.FirstSeenAt, LastSeenAt: &v.LastSeenAt,
+		Modes: v.Modes(), Phase: v.Phase(), Team: teamOf(v), FirstSeenAt: &v.FirstSeenAt, LastSeenAt: &v.LastSeenAt,
 		Recommendation: v.Rec, Status: v.Status,
 	}
 	if err := s.approvalAndOverride(r, &d, v.Key); err != nil {
@@ -574,9 +631,12 @@ func (s *Server) getSavingsTrend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if !validTeamFilter(w, r, q["team"]) {
+		return
+	}
 	groupBy := cmp.Or(q.Get("groupBy"), "none")
-	if groupBy != "none" && groupBy != "cluster" {
-		badRequest(w, r, "invalid_group_by", "groupBy must be none or cluster.")
+	if groupBy != "none" && groupBy != "cluster" && groupBy != "team" {
+		badRequest(w, r, "invalid_group_by", "groupBy must be none, cluster or team.")
 		return
 	}
 	from, to, err := s.timeRange(q.Get("from"), q.Get("to"))
@@ -589,37 +649,54 @@ func (s *Server) getSavingsTrend(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, r, "invalid_step", err.Error())
 		return
 	}
-	samples, err := s.Store.SavingsSamples(r.Context(), q["cluster"], from, to)
-	if err != nil {
-		s.internal(w, r, err)
-		return
-	}
-	// Points are aligned to multiples of step; each holds the value at the end of its bucket,
-	// min(t+step, to), so the last point with the default to (now) equals the current summary.
-	byCluster := map[string][]store.SavingsSample{}
-	var names []string
-	for _, x := range samples {
-		if _, ok := byCluster[x.Cluster]; !ok {
-			names = append(names, x.Cluster)
+	// A source series is one cluster, or one cluster and team when teams matter: a team filter or
+	// grouping, or a team-scoped caller (whose trend covers its teams only).
+	type source struct{ cluster, team string }
+	bySource := map[source][]store.SavingsSample{}
+	var sources []source
+	add := func(src source, x store.SavingsSample) {
+		if _, ok := bySource[src]; !ok {
+			sources = append(sources, src)
 		}
-		byCluster[x.Cluster] = append(byCluster[x.Cluster], x)
+		bySource[src] = append(bySource[src], x)
 	}
-	slices.Sort(names)
+	if len(q["team"]) > 0 || groupBy == "team" || !PrincipalFrom(r.Context()).Scope.All() {
+		samples, err := s.Store.TeamSavingsSamples(r.Context(), q["cluster"], q["team"], from, to)
+		if err != nil {
+			s.internal(w, r, err)
+			return
+		}
+		for _, x := range samples {
+			add(source{x.Cluster, cmp.Or(x.Team, hubapi.TeamUnassigned)}, x.SavingsSample)
+		}
+	} else {
+		samples, err := s.Store.SavingsSamples(r.Context(), q["cluster"], from, to)
+		if err != nil {
+			s.internal(w, r, err)
+			return
+		}
+		for _, x := range samples {
+			add(source{cluster: x.Cluster}, x)
+		}
+	}
+	slices.SortFunc(sources, func(a, b source) int { return cmp.Or(cmp.Compare(a.cluster, b.cluster), cmp.Compare(a.team, b.team)) })
 	first := from.Truncate(step)
 	if first.Before(from) {
 		first = first.Add(step)
 	}
-	pointsFor := func(clusters []string) []hubapi.SavingsPoint {
+	// Points are aligned to multiples of step; each holds the value at the end of its bucket,
+	// min(t+step, to), so the last point with the default to (now) equals the current summary.
+	pointsFor := func(srcs []source) []hubapi.SavingsPoint {
 		pts := []hubapi.SavingsPoint{}
-		idx := make([]int, len(clusters))
+		idx := make([]int, len(srcs))
 		for t := first; t.Before(to); t = t.Add(step) {
 			at := t.Add(step)
 			if at.After(to) {
 				at = to
 			}
 			p := hubapi.SavingsPoint{Time: t.UTC()}
-			for i, c := range clusters {
-				xs := byCluster[c]
+			for i, src := range srcs {
+				xs := bySource[src]
 				for idx[i]+1 < len(xs) && !xs[idx[i]+1].At.After(at) {
 					idx[i]++
 				}
@@ -635,12 +712,32 @@ func (s *Server) getSavingsTrend(w http.ResponseWriter, r *http.Request) {
 		return pts
 	}
 	out := hubapi.SavingsTrend{From: from.UTC(), To: to.UTC(), Step: step.String(), Series: []hubapi.SavingsSeries{}}
-	if groupBy == "cluster" {
-		for _, c := range names {
-			out.Series = append(out.Series, hubapi.SavingsSeries{Cluster: c, Points: pointsFor([]string{c})})
+	group := func(key func(source) string, series func(k string, pts []hubapi.SavingsPoint) hubapi.SavingsSeries) {
+		groups := map[string][]source{}
+		var keys []string
+		for _, src := range sources {
+			k := key(src)
+			if _, ok := groups[k]; !ok {
+				keys = append(keys, k)
+			}
+			groups[k] = append(groups[k], src)
 		}
-	} else {
-		out.Series = append(out.Series, hubapi.SavingsSeries{Points: pointsFor(names)})
+		slices.Sort(keys)
+		for _, k := range keys {
+			out.Series = append(out.Series, series(k, pointsFor(groups[k])))
+		}
+	}
+	switch groupBy {
+	case "cluster":
+		group(func(x source) string { return x.cluster }, func(k string, pts []hubapi.SavingsPoint) hubapi.SavingsSeries {
+			return hubapi.SavingsSeries{Cluster: k, Points: pts}
+		})
+	case "team":
+		group(func(x source) string { return x.team }, func(k string, pts []hubapi.SavingsPoint) hubapi.SavingsSeries {
+			return hubapi.SavingsSeries{Team: k, Points: pts}
+		})
+	default:
+		out.Series = append(out.Series, hubapi.SavingsSeries{Points: pointsFor(sources)})
 	}
 	writeJSON(w, out)
 }

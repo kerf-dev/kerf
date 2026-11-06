@@ -55,6 +55,7 @@ test.describe('login and roles', () => {
       'Pricing',
       'Metrics sources',
       'Access',
+      'Teams',
       'Audit',
       'Maintenance',
     ])
@@ -77,9 +78,9 @@ test.describe('login and roles', () => {
     await expect(page.getByText('This page needs the admin role')).toBeVisible()
   })
 
-  test('viewer has no admin area', async ({ page }) => {
+  test('viewer has no admin area but can read the teams', async ({ page }) => {
     await login(page, 'viewer')
-    await expect(page.getByTestId('admin-nav')).toHaveCount(0)
+    await expect(page.getByTestId('admin-nav').getByRole('link')).toHaveText(['Teams'])
     await page.goto('/admin')
     await expect(page.getByText('This page needs the operator role')).toBeVisible()
   })

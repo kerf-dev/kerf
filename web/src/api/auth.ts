@@ -18,6 +18,34 @@ export const roleAtLeast = (role: UserRole | undefined, min: UserRole) =>
 
 export const ME_KEY = ['me'] as const
 
+/** Team-scoped callers (docs/teams.md) see only the workloads of their teams and no fleet-wide pages. */
+export const isTeamScoped = (me: Me | undefined) => me?.scope === 'teams'
+
+/** The role that applies on every workload: a team-scoped caller has none. */
+function fleetRoleOf(me: Me | undefined): UserRole | undefined {
+  if (!me || isTeamScoped(me)) return undefined
+  // `me.role` is the highest role anywhere (team roles included); the user's own role is the fleet one.
+  return me.user?.role ?? me.role
+}
+
+/**
+ * The caller's role on a team: the fleet role (fleet scope) raised by the binding on that team.
+ * `undefined` = no access to the team's workloads at all or only through the fleet (`unassigned`).
+ */
+export function roleOnTeam(me: Me | undefined, team: string | undefined): UserRole | undefined {
+  if (!me) return undefined
+  const fleet = fleetRoleOf(me)
+  const bound = team ? me.teamRoles?.find((r) => r.team === team)?.role : undefined
+  if (!bound) return fleet
+  return !fleet || ROLE_RANK[bound] > ROLE_RANK[fleet] ? bound : fleet
+}
+
+/** Operator (or better) on the workload's team: what workload writes need. */
+export function canOperateOnTeam(me: Me | undefined, team: string | undefined) {
+  const r = roleOnTeam(me, team)
+  return !!r && ROLE_RANK[r] >= ROLE_RANK.operator
+}
+
 /**
  * Where to go after sign-in: a path of this app only. Anything that would leave the origin
  * (`https://…`, `//host`, `/\host`, control characters that browsers strip) or that leads back to
@@ -92,6 +120,10 @@ export interface Auth {
   /** `/v1/me` failed for another reason (hub down, or a hub without the admin API). */
   error?: unknown
   can: (min: UserRole) => boolean
+  /** The caller sees only its teams' workloads (`scope: teams`). */
+  teamScoped: boolean
+  /** A session user with operator on the team (fleet role raised by its team roles). */
+  canOperateTeam: (team: string | undefined) => boolean
 }
 
 export function useAuth(): Auth {
@@ -101,6 +133,9 @@ export function useAuth(): Auth {
   const me = loginRequired ? undefined : q.data
   const role = me?.role ?? 'viewer'
   const signedIn = me?.authMethod === 'session'
+  // Pages and nav that need a fleet-wide role use the fleet one: a fleet viewer who is operator on one
+  // team has `role: operator` but cannot open the operator pages.
+  const gateRole = isTeamScoped(me) ? role : (fleetRoleOf(me) ?? role)
   return {
     me,
     role,
@@ -110,7 +145,9 @@ export function useAuth(): Auth {
     loading: q.isPending,
     error: q.isError && !loginRequired ? q.error : undefined,
     // Writes need a session (a bearer token in a dev proxy may read, never write).
-    can: (min) => (min === 'viewer' ? !!me : signedIn && roleAtLeast(role, min)),
+    can: (min) => (min === 'viewer' ? !!me : signedIn && roleAtLeast(gateRole, min)),
+    teamScoped: isTeamScoped(me),
+    canOperateTeam: (team) => signedIn && canOperateOnTeam(me, team),
   }
 }
 

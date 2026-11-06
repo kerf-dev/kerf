@@ -67,6 +67,15 @@ type Config struct {
 	Maintenance MaintenanceConfig `json:"maintenance"`
 	// Notifications: Slack, Teams and webhook channels, rules and the weekly digest.
 	Notifications NotificationsConfig `json:"notifications"`
+	// Teams: team ownership of workloads (docs/teams.md).
+	Teams TeamsConfig `json:"teams"`
+}
+
+// TeamsConfig configures team ownership. Teams themselves are defined in Admin -> Teams.
+type TeamsConfig struct {
+	// OwnerLabel is the label on workloads and namespaces whose value names the owning team
+	// (default "team"). A workload's own label wins over its namespace's.
+	OwnerLabel string `json:"ownerLabel"`
 }
 
 // UpdateCheckConfig configures the check for a newer Kerf release (WO-33, Admin -> Maintenance).
@@ -412,6 +421,9 @@ func LoadConfig(path string) (Config, error) {
 	if !cfg.Auth.localEnabled() && !cfg.Auth.OIDC.Enabled {
 		return cfg, fmt.Errorf("auth.local.enabled is false but auth.oidc is not enabled: only %s could sign in", cfg.Auth.breakGlassUser())
 	}
+	if l := cfg.Teams.OwnerLabel; l != "" && !labelKeyRE.MatchString(l) {
+		return cfg, fmt.Errorf("teams.ownerLabel %q is not a Kubernetes label key", l)
+	}
 	if cfg.UpdateCheck.Interval.D() < 10*time.Minute {
 		return cfg, fmt.Errorf("updateCheck.interval must be at least 10m (got %s)", cfg.UpdateCheck.Interval.D())
 	}
@@ -485,3 +497,7 @@ func (c Config) RecommenderConfig() (recommender.Config, error) {
 	}
 	return out, out.Validate()
 }
+
+// labelKeyRE is a Kubernetes label key: an optional DNS subdomain prefix and a name of at most 63
+// characters.
+var labelKeyRE = regexp.MustCompile(`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$`)

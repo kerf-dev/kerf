@@ -117,13 +117,19 @@ conflict; `make e2e-unblock` drops leftover entries (also the `e2e.test` ones of
 
 Hub objects: every test deletes the policies and clusters it created and resumes what it paused.
 Before the scenarios (and in `make e2e-clean`) the suite sweeps what an interrupted run left:
-hub policies and clusters named `e2e-*`, and pauses whose reason starts with `e2e `.
+hub policies, clusters and teams named `e2e-*`, and pauses whose reason starts with `e2e `.
 
 ### Notifications
 
 | Test | Cluster | What is asserted |
 |---|---|---|
 | `TestNotifications` | spoke-1 (events only) | A fake signed-webhook receiver runs on the host (the hub reaches it as `host.k3d.internal`; the dev hub values set `notifications.allowInsecureHTTP`). As admin: a webhook channel with a signing secret (never returned by the API), **Send test** arrives signed (`X-Kerf-Signature` verified with `notify.Verify`), a second channel nobody listens on shows its error (without its URL) on **Send test** and on the channel. A rule for one namespace of spoke-1 (`rolled_back`, `blocked`); events posted with spoke-1's agent token (namespaces `e2e-notify-*`; the audit log is append-only, so they stay): the rollback arrives within a minute with a link to the workload page and without the credential in its text, the rollback of another namespace and repeats of one block produce nothing more (one `blocked` message), the history lists both deliveries, `kerf_notification_deliveries_total` is exported. The rule and channels are deleted at the end. |
+
+### Teams
+
+| Test | Cluster | What is asserted |
+|---|---|---|
+| `TestTeamScopedAccess` | spoke-1 | Two namespaces `e2e-teama-*` and `e2e-teamb-*`, each with a small audit workload; team A owns its namespace by selector, team B its workload by the owner label `team` (reported by the agent). A local user bound to team A as operator only (scope `teams`): `GET /v1/workloads` and `GET /v1/summary` hold team A's workloads only (total and fleet count agree, `teams` lists A only); team B's workload is `404` to read and `403 scope_forbidden` to approve; `GET /v1/admin/policies` is `403`; approving team A's workload succeeds and its `WorkloadApproved` row has `actor.teams = [team A]`. Teams and the user are deleted at the end. |
 
 ## How the hub is driven
 

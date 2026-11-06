@@ -977,3 +977,30 @@ func TestSkippedWhileAppliedSurvivesRestart(t *testing.T) {
 		t.Fatalf("skipped re-emitted after a restart: %d", n)
 	}
 }
+
+// TestReportsLabels: the status sent to the hub carries the workload's and its namespace's labels
+// (the hub resolves the owning team from them).
+func TestReportsLabels(t *testing.T) {
+	needEnv(t)
+	const name = "labelled"
+	u := deploymentApply(name, nil, "100m", "64Mi")
+	u.Object["metadata"].(map[string]any)["labels"] = map[string]any{"team": "payments"}
+	if err := argoApply(t, u, false); err != nil {
+		t.Fatal(err)
+	}
+	k := wkey{"default", "Deployment", name}
+	eventually(t, 20*time.Second, "labels reported", func() error {
+		testReconciler.Reporter.mu.Lock()
+		st, ok := testReconciler.Reporter.statuses[k]
+		testReconciler.Reporter.mu.Unlock()
+		switch {
+		case !ok:
+			return fmt.Errorf("no status")
+		case st.Labels["team"] != "payments":
+			return fmt.Errorf("labels %v", st.Labels)
+		case st.NamespaceLabels["kubernetes.io/metadata.name"] != "default":
+			return fmt.Errorf("namespace labels %v", st.NamespaceLabels)
+		}
+		return nil
+	})
+}

@@ -52,7 +52,8 @@ On the day and at the time you choose (in your time zone), the digest goes to th
   estimate (see [Realized savings](realized-savings.md)); left out until a change has released requests;
 - the **top five opportunities**;
 - **changes** applied, rolled back and failed;
-- **clusters that need attention**: a silent agent, readiness below *Automation ready*, paused automation.
+- **clusters that need attention**: a silent agent, readiness below *Automation ready*, paused automation;
+- **savings by team**, when [teams](teams.md) are defined: each team's estimated monthly savings, with Unassigned.
 
 **Send digest now** queues one at once. A digest the hub was down for is sent late (up to 12 hours), then skipped.
 

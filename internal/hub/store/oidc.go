@@ -21,7 +21,18 @@ type OIDCUser struct {
 	DisplayName     string
 	Groups          []string
 	Role            string
-	Provider        string // shown in audit reasons
+	// Scope and TeamRoles come from the group mappings with teams (hubapi.User).
+	Scope     string
+	TeamRoles []hubapi.TeamRole
+	Provider  string // shown in audit reasons
+}
+
+// sameAccess reports whether a user already has the role and bindings.
+func sameAccess(u UserRow, role, scope string, roles []hubapi.TeamRole) bool {
+	if scope == "" {
+		scope = hubapi.ScopeFleet
+	}
+	return u.Role == role && u.Scope == scope && slices.Equal(u.TeamRoles, roles)
 }
 
 // systemOIDC is the actor of the user changes the provider drives (first sign-in, role from groups).
@@ -49,14 +60,16 @@ func (s *Store) UpsertOIDCUser(ctx context.Context, in OIDCUser, now time.Time) 
 			case !errors.Is(err, ErrNotFound):
 				return err
 			}
+			scope, roles := userBindings(in.Scope, in.TeamRoles)
 			out, err = scanUser(tx.QueryRow(ctx, `INSERT INTO users (username, display_name, role, password_hash, must_change_password,
-					password_changed_at, created_at, created_by, updated_at, last_login_at, source, email)
-				VALUES ($1, $2, $3, '', false, $4, $4, 'oidc', $4, $4, 'oidc', $5)
+					password_changed_at, created_at, created_by, updated_at, last_login_at, source, email, scope, team_roles)
+				VALUES ($1, $2, $3, '', false, $4, $4, 'oidc', $4, $4, 'oidc', $5, $6, $7)
 				ON CONFLICT (username) DO UPDATE SET display_name = excluded.display_name, role = excluded.role,
+					scope = excluded.scope, team_roles = excluded.team_roles,
 					created_at = excluded.created_at, created_by = excluded.created_by, updated_at = excluded.updated_at,
 					last_login_at = excluded.last_login_at, email = excluded.email, disabled = false, deleted_at = NULL,
 					version = users.version + 1
-				RETURNING `+userColumns, in.Username, in.DisplayName, in.Role, now, in.Email))
+				RETURNING `+userColumns, in.Username, in.DisplayName, in.Role, now, in.Email, scope, roles))
 			if err != nil {
 				return err
 			}
@@ -83,16 +96,18 @@ func (s *Store) UpsertOIDCUser(ctx context.Context, in OIDCUser, now time.Time) 
 		if name == "" {
 			name = cur.DisplayName
 		}
-		changed := cur.Role != in.Role || cur.DisplayName != name || cur.Email != in.Email || cur.DeletedAt != nil
+		access := !sameAccess(cur, in.Role, in.Scope, in.TeamRoles)
+		changed := access || cur.DisplayName != name || cur.Email != in.Email || cur.DeletedAt != nil
+		scope, roles := userBindings(in.Scope, in.TeamRoles)
 		out, err = scanUser(tx.QueryRow(ctx, `UPDATE users SET role = $2, display_name = $3, email = $4, last_login_at = $5,
 				deleted_at = NULL, updated_at = CASE WHEN $6 THEN $5 ELSE updated_at END,
-				version = CASE WHEN $6 THEN version + 1 ELSE version END
-			WHERE username = $1 RETURNING `+userColumns, username, in.Role, name, in.Email, now, changed))
+				version = CASE WHEN $6 THEN version + 1 ELSE version END, scope = $7, team_roles = $8
+			WHERE username = $1 RETURNING `+userColumns, username, in.Role, name, in.Email, now, changed, scope, roles))
 		if err != nil || !changed {
 			return err
 		}
 		reason := "sign-in with " + in.Provider
-		if cur.Role != in.Role {
+		if access {
 			reason = "role from the groups at " + in.Provider
 		}
 		return recordChange(ctx, tx, Change{Actor: systemOIDC, Action: hubapi.ActionUserUpdated, Time: now, Reason: reason,
@@ -102,9 +117,9 @@ func (s *Store) UpsertOIDCUser(ctx context.Context, in OIDCUser, now time.Time) 
 	return out, err
 }
 
-// SetOIDCRole applies the role re-read at a session refresh (no last_login_at change). It records the
-// change when the role differs.
-func (s *Store) SetOIDCRole(ctx context.Context, issuer, subject, role string, groups []string, provider string, now time.Time) (UserRow, error) {
+// SetOIDCRole applies the role and team bindings re-read at a session refresh (no last_login_at
+// change). It records the change when they differ.
+func (s *Store) SetOIDCRole(ctx context.Context, issuer, subject string, in OIDCUser, groups []string, provider string, now time.Time) (UserRow, error) {
 	var out UserRow
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		var username string
@@ -116,12 +131,13 @@ func (s *Store) SetOIDCRole(ctx context.Context, issuer, subject, role string, g
 			return err
 		}
 		cur, err := scanUser(tx.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE username = $1 FOR UPDATE`, username))
-		if err != nil || cur.Role == role {
+		if err != nil || sameAccess(cur, in.Role, in.Scope, in.TeamRoles) {
 			out = cur
 			return err
 		}
-		out, err = scanUser(tx.QueryRow(ctx, `UPDATE users SET role = $2, updated_at = $3, version = version + 1
-			WHERE username = $1 RETURNING `+userColumns, username, role, now))
+		scope, roles := userBindings(in.Scope, in.TeamRoles)
+		out, err = scanUser(tx.QueryRow(ctx, `UPDATE users SET role = $2, updated_at = $3, version = version + 1, scope = $4, team_roles = $5
+			WHERE username = $1 RETURNING `+userColumns, username, in.Role, now, scope, roles))
 		if err != nil {
 			return err
 		}

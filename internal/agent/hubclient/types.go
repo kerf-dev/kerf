@@ -228,6 +228,9 @@ type WorkloadStatus struct {
 	ObservedAt       *time.Time           `json:"observedAt,omitempty"`
 	// JVM lists the detected JVM containers and their heap settings (WO-12).
 	JVM []JVMContainer `json:"jvm,omitempty"`
+	// Labels of the workload and of its namespace (the hub resolves the owning team from them).
+	Labels          map[string]string `json:"labels,omitempty"`
+	NamespaceLabels map[string]string `json:"namespaceLabels,omitempty"`
 }
 
 // JVMContainer are the heap settings of one JVM container (WO-12). Empty means "not set".

@@ -279,7 +279,9 @@ paths:
       summary: Fleet and per-cluster totals
       description: |
         Totals over the latest recommendation of every live workload. Workloads the agent never
-        reported count as `audit` / `Pending` (global default, D-005).
+        reported count as `audit` / `Pending` (the global default). A team-scoped caller gets the
+        totals of its teams' workloads only, and only the clusters where it has workloads; `teams`
+        groups the same totals by team (docs/teams.md).
       responses:
         '200':
           description: Summary.
@@ -321,7 +323,8 @@ paths:
       description: |
         One row per live workload, including workloads that have no recommendation yet (their
         recommendation fields are absent). All filters are combined with AND; repeatable filters
-        match any of their values.
+        match any of their values. A team-scoped caller sees only the workloads of its teams, and
+        `total` counts only those (docs/teams.md).
       parameters:
         - name: cluster
           in: query
@@ -376,6 +379,15 @@ paths:
             type: array
             items:
               $ref: '#/components/schemas/GPUFilter'
+        - name: team
+          in: query
+          description: Team ids (`unassigned` = workloads in no team); matches any of them.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/TeamFilterValue'
         - name: minSavings
           in: query
           description: Minimum total estimated monthly savings in USD.
@@ -430,6 +442,7 @@ paths:
       summary: Filter values with workload counts (D-016)
       description: |
         Counts of live workloads per filter value, for building the filters of the workload list.
+        Like every read, only the workloads of the caller's teams are counted (docs/teams.md).
         Takes the same filters as `GET /v1/workloads`. Each facet is counted with every filter
         applied except its own (so a multi-select keeps showing the other values of that facet);
         `total` applies all filters and equals `WorkloadList.total`. A workload counts once per
@@ -489,6 +502,15 @@ paths:
             type: array
             items:
               $ref: '#/components/schemas/GPUFilter'
+        - name: team
+          in: query
+          description: Team ids (`unassigned` = workloads in no team); matches any of them.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/TeamFilterValue'
         - name: minSavings
           in: query
           description: Minimum total estimated monthly savings in USD.
@@ -641,12 +663,25 @@ paths:
             type: array
             items:
               $ref: '#/components/schemas/ClusterName'
+        - name: team
+          in: query
+          description: Team ids (`unassigned` = workloads in no team); matches any of them.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/TeamFilterValue'
         - name: groupBy
           in: query
-          description: '`none` returns one fleet series; `cluster` one series per cluster.'
+          description: |
+            `none` returns one fleet series; `cluster` one series per cluster; `team` one series per
+            team (`unassigned` for workloads in no team). Team totals are recorded by the recommender
+            runs since teams exist; with a `team` filter, `groupBy=team` or a team-scoped caller the
+            series start there.
           schema:
             type: string
-            enum: [none, cluster]
+            enum: [none, cluster, team]
             default: none
         - $ref: '#/components/parameters/From'
         - $ref: '#/components/parameters/To'
@@ -701,6 +736,15 @@ paths:
             type: array
             items:
               type: string
+        - name: team
+          in: query
+          description: Team ids (`unassigned` = workloads in no team); matches any of them.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/TeamFilterValue'
         - name: from
           in: query
           description: Inclusive start. Default 12 months before `to` (`step=month`) or 30 days (`step=day`).
@@ -2150,6 +2194,170 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/admin/teams:
+    get:
+      tags: [admin]
+      operationId: listTeams
+      security:
+        - bearerAuth: [ui]
+        - sessionAuth: [viewer]
+      summary: Teams with their workloads and estimated savings
+      description: |
+        Teams own workloads (docs/teams.md). A team-scoped caller gets only its teams and no
+        `unassigned` counts. Counts are the caller's live workloads now.
+      responses:
+        '200':
+          description: Teams, ordered by id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [admin]
+      operationId: createTeam
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Create a team
+      description: |
+        The workloads are reassigned at once: the owner label on a workload, then on its namespace,
+        then the first team (by id) whose namespace selector matches. Records `TeamCreated`.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamInput'
+      responses:
+        '201':
+          description: Created.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/teams/{teamId}:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/TeamID'
+    get:
+      tags: [admin]
+      operationId: getTeam
+      security:
+        - bearerAuth: [ui]
+        - sessionAuth: [viewer]
+      summary: One team
+      description: A team outside a team-scoped caller's teams is not found.
+      responses:
+        '200':
+          description: Team.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/TeamNotFound'
+    put:
+      tags: [admin]
+      operationId: updateTeam
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Replace a team's definition
+      description: |
+        The id never changes (bindings and IdP group mappings refer to it). The workloads are
+        reassigned at once. Records `TeamUpdated`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamInput'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/TeamNotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+    delete:
+      tags: [admin]
+      operationId: deleteTeam
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Delete a team
+      description: |
+        Its workloads go to another matching team or to Unassigned, and the users' bindings to it
+        are removed. Records `TeamDeleted`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeReason'
+      responses:
+        '204':
+          description: Deleted.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/TeamNotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
   /v1/admin/users:
     get:
       tags: [admin]
@@ -3641,7 +3849,10 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     Forbidden:
-      description: The token is not allowed to access this cluster.
+      description: |
+        The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or
+        the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`,
+        docs/teams.md).
       content:
         application/problem+json:
           schema:
@@ -3701,6 +3912,12 @@ components:
             $ref: '#/components/schemas/Problem'
     DatasourceNotFound:
       description: Unknown datasource id.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TeamNotFound:
+      description: Unknown team, or a team outside the caller's teams.
       content:
         application/problem+json:
           schema:
@@ -4198,6 +4415,18 @@ components:
             detection is off (`RightsizingPolicy.spec.jvm.detect: false`) or no container is a JVM.
           items:
             $ref: '#/components/schemas/JVMContainer'
+        labels:
+          type: object
+          description: |
+            The workload's labels (at most 64). The hub resolves the owning team from them and from
+            `namespaceLabels` (docs/teams.md). Absent: not reported, the hub keeps what it has.
+          additionalProperties:
+            type: string
+        namespaceLabels:
+          type: object
+          description: The labels of the workload's namespace (at most 64); absent when not reported.
+          additionalProperties:
+            type: string
     JVMContainer:
       type: object
       description: |
@@ -4595,6 +4824,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ClusterSummary'
+        teams:
+          type: array
+          description: |
+            The same totals per team: every team the caller sees (also without workloads), then
+            `unassigned` when workloads are in no team. Absent while no team is defined.
+          items:
+            $ref: '#/components/schemas/TeamSummary'
     ClusterInfo:
       type: object
       required: [name, agentStatus, counts]
@@ -4677,6 +4913,8 @@ components:
           $ref: '#/components/schemas/EffectiveModes'
         phase:
           $ref: '#/components/schemas/Phase'
+        team:
+          $ref: '#/components/schemas/TeamFilterValue'
         recommendationID:
           type: string
           format: uuid
@@ -4755,6 +4993,11 @@ components:
           description: Workloads per GPU status (`GPUStatus`); workloads without GPUs are not counted.
           items:
             $ref: '#/components/schemas/FacetCount'
+        teams:
+          type: array
+          description: Team ids, `unassigned` for workloads in no team.
+          items:
+            $ref: '#/components/schemas/FacetCount'
     WorkloadDetail:
       type: object
       required: [id, cluster, namespace, kind, name, modes, phase]
@@ -4773,6 +5016,8 @@ components:
           $ref: '#/components/schemas/EffectiveModes'
         phase:
           $ref: '#/components/schemas/Phase'
+        team:
+          $ref: '#/components/schemas/TeamFilterValue'
         firstSeenAt:
           type: string
           format: date-time
@@ -4907,9 +5152,13 @@ components:
             required: [points]
             properties:
               cluster:
-                description: Absent for the fleet series (`groupBy=none`).
+                description: Only with `groupBy=cluster`.
                 allOf:
                   - $ref: '#/components/schemas/ClusterName'
+              team:
+                description: Only with `groupBy=team`.
+                allOf:
+                  - $ref: '#/components/schemas/TeamFilterValue'
               points:
                 type: array
                 items:
@@ -5087,6 +5336,166 @@ components:
         coalesced:
           type: boolean
           description: True when an already queued run for the same scope was returned.
+    UserScope:
+      type: string
+      description: |
+        `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some
+        teams); it is stored as given and team roles never change it. `teams`: the user sees and acts
+        only on the workloads of its `teamRoles`; it has no fleet-wide role, so its `role` is derived
+        (the highest team role) and a `role` sent with it is ignored. Moving a `teams` user to
+        `fleet` needs `role` in the same request (`400` `role_required`). Admins are always `fleet`
+        (docs/teams.md).
+      enum: [fleet, teams]
+    TeamID:
+      type: string
+      description: A team id, a DNS label chosen when the team is created; `unassigned` is reserved.
+      pattern: '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
+      examples: [payments]
+    TeamFilterValue:
+      type: string
+      description: A team id, or `unassigned` for workloads in no team.
+      pattern: '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
+      examples: [payments, unassigned]
+    TeamRole:
+      type: object
+      required: [team, role]
+      properties:
+        team:
+          $ref: '#/components/schemas/TeamID'
+        role:
+          type: string
+          enum: [viewer, operator]
+    TeamInput:
+      type: object
+      description: |
+        A team's definition (docs/teams.md). A workload belongs to the team its owner label names
+        (the hub's `teams.ownerLabel`, default `team`; the workload's own label wins over its
+        namespace's; the value is the team id or one of `ownerValues`), else to the first team (by
+        id) whose namespace selector matches, else to no team (`unassigned`). The namespace
+        selector matches when the namespace name matches one of `namespaces` (globs) and the
+        namespace has every label of `namespaceLabels`, in a cluster matching `clusters` (globs;
+        empty = all). A team with neither `namespaces` nor `namespaceLabels` is chosen only by the
+        owner label.
+      required: [reason]
+      properties:
+        id:
+          description: Required on create; on update it must equal the path's id when present.
+          allOf:
+            - $ref: '#/components/schemas/TeamID'
+        displayName:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        namespaces:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            examples: [payments, payments-*]
+        namespaceLabels:
+          type: object
+          maxProperties: 20
+          additionalProperties:
+            type: string
+            maxLength: 63
+        clusters:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+        ownerValues:
+          type: array
+          description: Owner label values that mean this team besides its id.
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 63
+        reason:
+          $ref: '#/components/schemas/ReasonText'
+    Team:
+      type: object
+      required: [id, displayName, namespaces, namespaceLabels, clusters, ownerValues, version, createdAt, workloads, monthlySavingsUSD]
+      properties:
+        id:
+          $ref: '#/components/schemas/TeamID'
+        displayName:
+          type: string
+          description: The id when none was given.
+        description:
+          type: string
+        namespaces:
+          type: array
+          items:
+            type: string
+        namespaceLabels:
+          type: object
+          additionalProperties:
+            type: string
+        clusters:
+          type: array
+          items:
+            type: string
+        ownerValues:
+          type: array
+          items:
+            type: string
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        workloads:
+          type: integer
+          minimum: 0
+          description: The team's live workloads now.
+        monthlySavingsUSD:
+          description: Their estimated monthly savings now (as `GET /v1/summary`).
+          allOf:
+            - $ref: '#/components/schemas/Savings'
+    TeamCounts:
+      type: object
+      required: [workloads, monthlySavingsUSD]
+      properties:
+        workloads:
+          type: integer
+          minimum: 0
+        monthlySavingsUSD:
+          $ref: '#/components/schemas/Savings'
+    TeamList:
+      type: object
+      required: [items, ownerLabel]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Team'
+        ownerLabel:
+          type: string
+          description: The label key on workloads and namespaces that names their team.
+          examples: [team]
+        unassigned:
+          description: The workloads in no team; absent for team-scoped callers.
+          allOf:
+            - $ref: '#/components/schemas/TeamCounts'
+    TeamSummary:
+      allOf:
+        - $ref: '#/components/schemas/Summary'
+        - type: object
+          required: [team, displayName]
+          properties:
+            team:
+              $ref: '#/components/schemas/TeamFilterValue'
+            displayName:
+              type: string
     UserRole:
       type: string
       description: |
@@ -5145,6 +5554,13 @@ components:
         email:
           type: string
           description: A user signed in with the identity provider - its e-mail there.
+        teams:
+          type: array
+          description: |
+            The scope used: the team whose binding allowed the action (docs/teams.md). Absent when a
+            fleet-wide role allowed it.
+          items:
+            $ref: '#/components/schemas/TeamID'
     ChangeReason:
       type: object
       required: [reason]
@@ -5204,6 +5620,13 @@ components:
         sessionExpiresAt:
           type: string
           format: date-time
+        scope:
+          $ref: '#/components/schemas/UserScope'
+        teamRoles:
+          type: array
+          description: The caller's roles on teams (docs/teams.md). `role` is the highest role anywhere.
+          items:
+            $ref: '#/components/schemas/TeamRole'
     PasswordChange:
       type: object
       required: [currentPassword, newPassword]
@@ -5261,6 +5684,15 @@ components:
         email:
           type: string
           description: The e-mail at the identity provider (`oidc` users).
+        scope:
+          $ref: '#/components/schemas/UserScope'
+        teamRoles:
+          type: array
+          description: |
+            Roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the
+            fleet-wide `role` on those teams; with `scope: teams` they are all the user has.
+          items:
+            $ref: '#/components/schemas/TeamRole'
     UserList:
       type: object
       required: [items]
@@ -5285,6 +5717,15 @@ components:
         mustChangePassword:
           type: boolean
           default: true
+        scope:
+          $ref: '#/components/schemas/UserScope'
+        teamRoles:
+          type: array
+          description: |
+            Roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the
+            fleet-wide `role` on those teams; with `scope: teams` they are all the user has.
+          items:
+            $ref: '#/components/schemas/TeamRole'
         reason:
           $ref: '#/components/schemas/ReasonText'
     UserUpdate:
@@ -5298,6 +5739,15 @@ components:
           $ref: '#/components/schemas/UserRole'
         disabled:
           type: boolean
+        scope:
+          $ref: '#/components/schemas/UserScope'
+        teamRoles:
+          type: array
+          description: |
+            Replaces the roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the
+            fleet-wide `role` on those teams; with `scope: teams` they are all the user has.
+          items:
+            $ref: '#/components/schemas/TeamRole'
         reason:
           $ref: '#/components/schemas/ReasonText'
     PasswordReset:
@@ -6576,7 +7026,7 @@ components:
             type: string
     ConfigTargetType:
       type: string
-      enum: [settings, policy, workload-override, approval, cluster, automation, token, user, datasource, readiness, notification]
+      enum: [settings, policy, workload-override, approval, cluster, automation, token, user, datasource, readiness, notification, team]
     ConfigAction:
       type: string
       description: CamelCase action of a configuration change (`docs/contracts/events.md`).
@@ -6611,6 +7061,9 @@ components:
         - NotificationRuleUpdated
         - NotificationRuleDeleted
         - NotificationDigestUpdated
+        - TeamCreated
+        - TeamUpdated
+        - TeamDeleted
     ConfigTarget:
       type: object
       required: [type, id]

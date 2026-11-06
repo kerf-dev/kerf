@@ -25,6 +25,9 @@ type DigestSource interface {
 	// Attention returns the clusters that need a look: readiness below AutomationReady, a silent
 	// agent, paused automation.
 	Attention(ctx context.Context) ([]Attention, error)
+	// TeamSavings returns the estimated savings per team (Unassigned included when it has
+	// workloads), largest first; nil while no team is defined.
+	TeamSavings(ctx context.Context) ([]TeamSavings, error)
 }
 
 // RealizedSavingsSource is the hook for realized savings: how much the applied changes actually
@@ -84,6 +87,12 @@ func (s *Service) BuildDigest(ctx context.Context, end time.Time) (Message, erro
 	}
 	if d.Attention == nil {
 		d.Attention = []Attention{}
+	}
+	if d.Teams, err = s.Digest.TeamSavings(ctx); err != nil {
+		return Message{}, fmt.Errorf("savings by team: %w", err)
+	}
+	for i := range d.Teams {
+		d.Teams[i].Link = s.Links.Team(d.Teams[i].Team)
 	}
 	return Message{ID: uuid.NewString(), Kind: KindDigest, Time: end, Digest: d}, nil
 }

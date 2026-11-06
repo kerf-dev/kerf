@@ -172,6 +172,10 @@ func (o Opportunity) text() string {
 	return fmt.Sprintf("%s/%s on %s: %s per month", o.Namespace, o.Name, o.Cluster, usd(o.MonthlySavingsUSD))
 }
 
+func (t TeamSavings) text() string {
+	return fmt.Sprintf("%s: %s per month (%d workloads)", t.DisplayName, usd(t.MonthlySavingsUSD), t.Workloads)
+}
+
 func (a Attention) text() string {
 	return fmt.Sprintf("%s: %s", a.Cluster, strings.Join(a.Reasons, "; "))
 }
@@ -249,6 +253,13 @@ func slackBody(m Message) map[string]any {
 			}
 			section(strings.Join(lines, "\n"))
 		}
+		if len(d.Teams) > 0 {
+			lines := []string{"*Savings by team*"}
+			for _, t := range d.Teams {
+				lines = append(lines, "• "+slackLink(t.Link, t.text()))
+			}
+			section(strings.Join(lines, "\n"))
+		}
 		if len(d.Attention) > 0 {
 			lines := []string{"*Clusters that need attention*"}
 			for _, a := range d.Attention {
@@ -314,6 +325,12 @@ func teamsBody(m Message) map[string]any {
 			body = append(body, text("Top opportunities", map[string]any{"weight": "Bolder"}))
 			for _, o := range d.TopOpportunities {
 				body = append(body, text("• "+o.text(), map[string]any{"spacing": "None"}))
+			}
+		}
+		if len(d.Teams) > 0 {
+			body = append(body, text("Savings by team", map[string]any{"weight": "Bolder"}))
+			for _, t := range d.Teams {
+				body = append(body, text("• "+t.text(), map[string]any{"spacing": "None"}))
 			}
 		}
 		if len(d.Attention) > 0 {

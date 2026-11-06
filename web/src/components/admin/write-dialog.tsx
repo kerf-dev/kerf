@@ -253,6 +253,8 @@ const CODE_TITLE: Record<string, string> = {
   channel_read_only: 'This channel is managed by the chart values',
   secrets_key_missing: 'The hub cannot store webhook URLs yet',
   no_channels: 'The digest has no channel to send to',
+  invalid_team: 'The team settings are invalid',
+  idp_managed: 'Managed by the identity provider',
 }
 
 /** What to do next, for problem codes where the hub's own message does not say. */

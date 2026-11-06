@@ -1,4 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useFleetScope } from './admin'
 import { api, unwrap } from './client'
 import type { FacetsQuery, ListWorkloadsQuery, QueryAuditQuery, ResourceName } from './types'
 
@@ -121,7 +122,7 @@ export const useNodeCostTrend = (cluster: string | undefined, range: TimeRange) 
           params: { query: { cluster: cluster!, ...rangeWindow(range) } },
         }),
       ),
-    enabled: !!cluster,
+    enabled: useFleetScope(!!cluster),
     placeholderData: keepPreviousData,
   })
 

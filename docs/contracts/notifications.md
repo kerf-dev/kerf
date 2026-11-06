@@ -106,6 +106,10 @@ the surplus waits.
     ],
     "changes": {"applied": 12, "rolledBack": 1, "failed": 0},
     "attention": [{"cluster": "dev-1", "reasons": ["automation is paused"], "link": "https://…"}],
+    "teams": [
+      {"team": "payments", "displayName": "Payments", "workloads": 14, "monthlySavingsUSD": 620, "link": "https://…"},
+      {"team": "unassigned", "displayName": "Unassigned", "workloads": 3, "monthlySavingsUSD": 40}
+    ],
     "link": "https://kerf.example.com/"
   }
 }
@@ -119,6 +123,8 @@ added to it. `previousPeriodUSD` is absent when the savings began inside the wee
 some change has released requests.
 `topOpportunities` has at most five workloads. `attention` lists the clusters whose agent is silent, whose readiness
 is below *Automation ready*, or whose automation is paused; it is empty when all is well.
+`teams` is the estimated monthly savings per [team](../teams.md), largest first, with `unassigned` for the workloads in
+no team; the field is absent while no team is defined. Each `link` opens Opportunities filtered to the team.
 
 ### `test`
 

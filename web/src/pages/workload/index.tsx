@@ -47,6 +47,7 @@ import { cn } from '@/lib/utils'
 import { workloadId } from '@/lib/workload-id'
 import type { WorkloadKind } from '@/api/types'
 import { ReadinessReason } from '@/components/admin/readiness-reason'
+import { TeamChip } from '@/components/team'
 import { AutomationActions } from './automation-actions'
 import { GpuPanel } from './gpu-panel'
 import { HistoryCard } from './history'
@@ -189,6 +190,7 @@ function Header({ id, w }: { id: string; w?: WorkloadDetail }) {
             <h1 className="truncate text-2xl font-semibold tracking-tight">{p[3]}</h1>
             <KindBadge kind={p[2] as WorkloadKind} />
             {w ? <PhaseBadge phase={w.phase} reason={w.status?.reason} /> : <Skeleton className="h-5 w-20" />}
+            {w?.team ? <TeamChip team={w.team} /> : null}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted-foreground">
             <span>{p[2]}</span>

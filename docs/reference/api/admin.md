@@ -32,6 +32,11 @@ Administration (admin area). Roles per operation.
 | [`GET /v1/admin/tokens`](#listTokens) | API tokens (never their values) |
 | [`POST /v1/admin/tokens`](#createToken) | Create an API token |
 | [`DELETE /v1/admin/tokens/{tokenId}`](#revokeToken) | Revoke an API token |
+| [`GET /v1/admin/teams`](#listTeams) | Teams with their workloads and estimated savings |
+| [`POST /v1/admin/teams`](#createTeam) | Create a team |
+| [`GET /v1/admin/teams/{teamId}`](#getTeam) | One team |
+| [`PUT /v1/admin/teams/{teamId}`](#updateTeam) | Replace a team's definition |
+| [`DELETE /v1/admin/teams/{teamId}`](#deleteTeam) | Delete a team |
 | [`GET /v1/admin/users`](#listUsers) | Local users |
 | [`POST /v1/admin/users`](#createUser) | Create a local user |
 | [`GET /v1/admin/users/{username}`](#getUser) | One local user |
@@ -93,7 +98,7 @@ the new recommendations.
 | `202` | Run queued. | [RecomputeAccepted](schemas.md#recomputeaccepted) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### Hub-only settings (recommender, pricing) { #getSettings }
@@ -111,7 +116,7 @@ values from the hub's configuration file with `version` 0.
 |---|---|---|
 | `200` | Settings. | [Settings](schemas.md#settings) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Recommender settings { #getRecommenderSettings }
 
@@ -125,7 +130,7 @@ Accepts: session of a user with role `viewer` or higher or bearer token with rol
 |---|---|---|
 | `200` | Recommender settings. | [RecommenderSettingsDoc](schemas.md#recommendersettingsdoc) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Replace the recommender settings { #putRecommenderSettings }
 
@@ -152,7 +157,7 @@ starts one). Records a `config_changed` audit event (`SettingsUpdated`).
 | `200` | Saved. | [RecommenderSettingsDoc](schemas.md#recommendersettingsdoc) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
 | `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
 
@@ -168,7 +173,7 @@ Accepts: session of a user with role `viewer` or higher or bearer token with rol
 |---|---|---|
 | `200` | Pricing settings. | [PricingSettingsDoc](schemas.md#pricingsettingsdoc) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Replace the pricing adjustments { #putPricingSettings }
 
@@ -195,7 +200,7 @@ Records a `config_changed` audit event (`SettingsUpdated`).
 | `200` | Saved. | [PricingSettingsDoc](schemas.md#pricingsettingsdoc) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
 | `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
 
@@ -222,7 +227,7 @@ Newest first.
 | `200` | Versions. | [SettingsVersionList](schemas.md#settingsversionlist) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Hub-managed policies { #listPolicies }
 
@@ -248,7 +253,7 @@ priority descending. Policies from Git are in `GET /v1/admin/policy-inventory`.
 | `200` | Policies. | [AdminPolicyList](schemas.md#adminpolicylist) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Create a hub-managed policy { #createPolicy }
 
@@ -281,7 +286,7 @@ Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives
 | `201` | Created. | [AdminPolicy](schemas.md#adminpolicy) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 
 ### One hub-managed policy { #getPolicy }
@@ -304,7 +309,7 @@ Soft-deleted policies are returned too (with `deletedAt`).
 |---|---|---|
 | `200` | Policy. | [AdminPolicy](schemas.md#adminpolicy) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown policy id. | [Problem](schemas.md#problem) |
 
 ### Replace a hub-managed policy { #updatePolicy }
@@ -335,7 +340,7 @@ Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives
 | `200` | Saved. | [AdminPolicy](schemas.md#adminpolicy) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown policy id. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -367,7 +372,7 @@ Sets `deletedAt` and stores a version with operation `delete`; the versions are 
 | `200` | Deleted. | [AdminPolicy](schemas.md#adminpolicy) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown policy id. | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
 | `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
@@ -395,7 +400,7 @@ Newest first. Every create, update, delete and revert is one version.
 | `200` | Versions. | [PolicyVersionList](schemas.md#policyversionlist) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown policy id. | [Problem](schemas.md#problem) |
 
 ### Restore an earlier version { #revertPolicy }
@@ -426,7 +431,7 @@ A revert that newly enables `auto-patch` on a cluster that is not `AutomationRea
 | `200` | Reverted. | [AdminPolicy](schemas.md#adminpolicy) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown policy id. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -454,7 +459,7 @@ status batch), hub-managed and from Git. The UI shows Git policies read-only fro
 | `200` | Inventory per cluster. | [PolicyInventoryList](schemas.md#policyinventorylist) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Impact dry-run of policy changes { #previewPolicyChange }
 
@@ -482,7 +487,7 @@ CPU or memory mode changes and the estimated monthly savings that move into (or 
 | `200` | Impact. | [ImpactPreview](schemas.md#impactpreview) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Register a cluster { #createCluster }
 
@@ -508,7 +513,7 @@ returned once in `agentToken`. Records `ClusterCreated` (and `TokenCreated`).
 | `201` | Created. | [ClusterCreated](schemas.md#clustercreated) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 
 ### Cluster metadata, automation state and agent config sync { #getClusterAdmin }
@@ -529,7 +534,7 @@ Accepts: session of a user with role `viewer` or higher or bearer token with rol
 |---|---|---|
 | `200` | Cluster. | [ClusterAdmin](schemas.md#clusteradmin) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### Retire a cluster { #deleteCluster }
@@ -558,7 +563,7 @@ its history is kept. Records `ClusterDeleted`.
 | `204` | Deleted. |  |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
 | `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
@@ -588,7 +593,7 @@ Only the given fields change (JSON merge semantics). Records `ClusterUpdated`.
 | `200` | Saved. | [ClusterAdmin](schemas.md#clusteradmin) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
 | `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
@@ -622,7 +627,7 @@ reporting the pause at that time (the agent does not evaluate it). Records
 | `200` | Saved. | [Automation](schemas.md#automation) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
 
@@ -638,7 +643,7 @@ Accepts: session of a user with role `viewer` or higher or bearer token with rol
 |---|---|---|
 | `200` | Automation state. | [FleetAutomation](schemas.md#fleetautomation) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Pause or resume automation of the whole fleet { #setFleetAutomation }
 
@@ -666,7 +671,7 @@ optional, as for a cluster. Records `AutomationPaused` or `AutomationResumed`.
 | `200` | Saved. | [Automation](schemas.md#automation) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
 
 ### API tokens (never their values) { #listTokens }
@@ -689,7 +694,7 @@ Accepts: session of a user with role `admin` or higher or bearer token with role
 | `200` | Tokens, newest first. | [TokenList](schemas.md#tokenlist) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Create an API token { #createToken }
 
@@ -715,7 +720,7 @@ The value is returned once, in `value`; the hub stores only its SHA-256. Role `a
 | `201` | Created. | [TokenCreated](schemas.md#tokencreated) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### Revoke an API token { #revokeToken }
@@ -743,8 +748,137 @@ Revoking the token used for this request is allowed. Records `TokenRevoked`.
 | `200` | Revoked. | [TokenInfo](schemas.md#tokeninfo) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+
+### Teams with their workloads and estimated savings { #listTeams }
+
+`GET /v1/admin/teams`
+
+Accepts: bearer token with role `ui` or session of a user with role `viewer` or higher.
+
+Teams own workloads (docs/teams.md). A team-scoped caller gets only its teams and no
+`unassigned` counts. Counts are the caller's live workloads now.
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Teams, ordered by id. | [TeamList](schemas.md#teamlist) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
+
+### Create a team { #createTeam }
+
+`POST /v1/admin/teams`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+The workloads are reassigned at once: the owner label on a workload, then on its namespace,
+then the first team (by id) whose namespace selector matches. Records `TeamCreated`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Request body** (`application/json`, required): [TeamInput](schemas.md#teaminput)
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `201` | Created. | [Team](schemas.md#team) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
+| `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
+
+### One team { #getTeam }
+
+`GET /v1/admin/teams/{teamId}`
+
+Accepts: bearer token with role `ui` or session of a user with role `viewer` or higher.
+
+A team outside a team-scoped caller's teams is not found.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `teamId` | path | string, required | pattern `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; example `payments` |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Team. | [Team](schemas.md#team) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
+| `404` | Unknown team, or a team outside the caller's teams. | [Problem](schemas.md#problem) |
+
+### Replace a team's definition { #updateTeam }
+
+`PUT /v1/admin/teams/{teamId}`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+The id never changes (bindings and IdP group mappings refer to it). The workloads are
+reassigned at once. Records `TeamUpdated`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `teamId` | path | string, required | pattern `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; example `payments` |
+| `If-Match` | header | string, required | ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). |
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Request body** (`application/json`, required): [TeamInput](schemas.md#teaminput)
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Saved. | [Team](schemas.md#team) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
+| `404` | Unknown team, or a team outside the caller's teams. | [Problem](schemas.md#problem) |
+| `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
+| `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
+
+### Delete a team { #deleteTeam }
+
+`DELETE /v1/admin/teams/{teamId}`
+
+Accepts: session of a user with role `admin` or higher or bearer token with role `admin`.
+
+Its workloads go to another matching team or to Unassigned, and the users' bindings to it
+are removed. Records `TeamDeleted`.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `teamId` | path | string, required | pattern `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; example `payments` |
+| `If-Match` | header | string, required | ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). |
+| `X-CSRF-Token` | header | string | Required when the request is authenticated with the session cookie. |
+
+**Request body** (`application/json`, required): [ChangeReason](schemas.md#changereason)
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `204` | Deleted. |  |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
+| `404` | Unknown team, or a team outside the caller's teams. | [Problem](schemas.md#problem) |
+| `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
+| `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
 
 ### Local users { #listUsers }
 
@@ -765,7 +899,7 @@ Accepts: session of a user with role `admin` or higher or bearer token with role
 | `200` | Users, ordered by username. | [UserList](schemas.md#userlist) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Create a local user { #createUser }
 
@@ -791,7 +925,7 @@ The password is stored as a bcrypt hash. The user must change it at first login
 | `201` | Created. | [User](schemas.md#user) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 
 ### One local user { #getUser }
@@ -812,7 +946,7 @@ Accepts: session of a user with role `admin` or higher or bearer token with role
 |---|---|---|
 | `200` | User. | [User](schemas.md#user) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown username. | [Problem](schemas.md#problem) |
 
 ### Delete a local user { #deleteUser }
@@ -842,7 +976,7 @@ Records `UserDeleted`.
 | `204` | Deleted. |  |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown username. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -875,7 +1009,7 @@ sessions. The last enabled admin cannot be demoted or disabled (`409`, code
 | `200` | Saved. | [User](schemas.md#user) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown username. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -907,7 +1041,7 @@ Records `PasswordReset` (without the password).
 | `200` | Reset. | [PasswordResetResult](schemas.md#passwordresetresult) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `404` | Unknown username. | [Problem](schemas.md#problem) |
 
@@ -925,7 +1059,7 @@ Includes the built-in `local` datasource. Secrets are never returned.
 |---|---|---|
 | `200` | Datasources, ordered by name. | [DatasourceList](schemas.md#datasourcelist) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Add a metrics datasource { #createDatasource }
 
@@ -951,7 +1085,7 @@ Secret auth fields are write-only: stored encrypted, never returned. Records
 | `201` | Created. | [Datasource](schemas.md#datasource) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 
 ### One datasource { #getDatasource }
@@ -972,7 +1106,7 @@ Accepts: session of a user with role `viewer` or higher or bearer token with rol
 |---|---|---|
 | `200` | Datasource. | [Datasource](schemas.md#datasource) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown datasource id. | [Problem](schemas.md#problem) |
 
 ### Replace a datasource { #updateDatasource }
@@ -1002,7 +1136,7 @@ built-in `local` datasource only accepts `timeout` and `maxPoints` changes (`400
 | `200` | Saved. | [Datasource](schemas.md#datasource) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown datasource id. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -1034,7 +1168,7 @@ for `local`. Records `DatasourceDeleted`.
 | `204` | Deleted. |  |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown datasource id. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -1066,7 +1200,7 @@ Returns `200` also when checks fail; `ok` is true when no blocking check failed.
 | `200` | Check results. | [DatasourceTestResult](schemas.md#datasourcetestresult) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown datasource id. | [Problem](schemas.md#problem) |
 
 ### Agent install instructions for a cluster { #getClusterInstall }
@@ -1096,7 +1230,7 @@ once when the token is created. Also returns the Argo CD `ignoreDifferences` sni
 | `200` | Install instructions. | [InstallSnippet](schemas.md#installsnippet) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### Component versions and the update check { #getMaintenance }
@@ -1118,7 +1252,7 @@ The web UI knows its own version (build-time constant) and compares it client-si
 |---|---|---|
 | `200` | Versions and update status. | [Maintenance](schemas.md#maintenance) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Check for a newer Kerf release now { #checkForUpdate }
 
@@ -1144,7 +1278,7 @@ a request when the last check is less than 30 seconds old. `200` also when the c
 |---|---|---|
 | `200` | The update status after the check. | [UpdateStatus](schemas.md#updatestatus) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 
 ### Notification settings the page needs { #getNotificationStatus }
@@ -1161,7 +1295,7 @@ Whether webhook URLs can be stored (the secrets encryption key), whether message
 |---|---|---|
 | `200` | Status. | [NotificationStatus](schemas.md#notificationstatus) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Notification channels { #listNotificationChannels }
 
@@ -1177,7 +1311,7 @@ Slack, Microsoft Teams and generic webhook channels, ordered by name, with the o
 |---|---|---|
 | `200` | Channels. | [NotificationChannelList](schemas.md#notificationchannellist) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Add a notification channel { #createNotificationChannel }
 
@@ -1202,7 +1336,7 @@ A Slack incoming webhook, a Microsoft Teams Workflows webhook or a generic webho
 | `201` | Created. | [NotificationChannel](schemas.md#notificationchannel) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 
 ### One notification channel { #getNotificationChannel }
@@ -1223,7 +1357,7 @@ Accepts: session of a user with role `viewer` or higher or bearer token with rol
 |---|---|---|
 | `200` | Channel. | [NotificationChannel](schemas.md#notificationchannel) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### Replace a notification channel { #updateNotificationChannel }
@@ -1251,7 +1385,7 @@ Omitted `url` and `secret` keep their stored values; `clearSecret: true` removes
 | `200` | Saved. | [NotificationChannel](schemas.md#notificationchannel) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -1282,7 +1416,7 @@ Soft delete; queued deliveries of the channel are dropped. `409 channel_in_use` 
 | `204` | Done. |  |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -1309,7 +1443,7 @@ Sends a test message to the channel now, from the replica that answers (not queu
 |---|---|---|
 | `200` | The outcome. | [NotificationTestResult](schemas.md#notificationtestresult) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### Notification rules { #listNotificationRules }
@@ -1324,7 +1458,7 @@ Accepts: session of a user with role `viewer` or higher or bearer token with rol
 |---|---|---|
 | `200` | Rules, ordered by name. | [NotificationRuleList](schemas.md#notificationrulelist) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Add a notification rule { #createNotificationRule }
 
@@ -1349,7 +1483,7 @@ A rule sends the listed event types to the listed channels. `clusters` and `name
 | `201` | Created. | [NotificationRule](schemas.md#notificationrule) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 
 ### Replace a notification rule { #updateNotificationRule }
@@ -1377,7 +1511,7 @@ Records `NotificationRuleUpdated`.
 | `200` | Saved. | [NotificationRule](schemas.md#notificationrule) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -1408,7 +1542,7 @@ Soft delete. Records `NotificationRuleDeleted`.
 | `204` | Done. |  |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
@@ -1426,7 +1560,7 @@ Accepts: session of a user with role `viewer` or higher or bearer token with rol
 |---|---|---|
 | `200` | Settings. | [NotificationDigest](schemas.md#notificationdigest) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 
 ### Change the weekly digest { #updateNotificationDigest }
 
@@ -1452,7 +1586,7 @@ Day (0 = Sunday), time of day and IANA time zone of the digest and the channels 
 | `200` | Saved. | [NotificationDigest](schemas.md#notificationdigest) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `412` | `If-Match` does not match the current version (code `version_conflict`). | [Problem](schemas.md#problem) |
 | `428` | `If-Match` is required (code `precondition_required`). | [Problem](schemas.md#problem) |
 
@@ -1476,7 +1610,7 @@ Queues the digest for the configured, enabled channels now (the leader sends it)
 |---|---|---|
 | `202` | Queued. | [NotificationDigestQueued](schemas.md#notificationdigestqueued) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 
 ### Delivery history { #listNotificationDeliveries }
@@ -1503,4 +1637,4 @@ Queued, sent and failed deliveries, newest first. Deliveries are kept for 30 day
 | `200` | Deliveries. | [NotificationDeliveryList](schemas.md#notificationdeliverylist) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
-| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |

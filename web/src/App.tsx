@@ -26,6 +26,7 @@ const RecommenderPage = lazy(() => import('@/pages/admin/recommender'))
 const PricingPage = lazy(() => import('@/pages/admin/pricing'))
 const DatasourcesPage = lazy(() => import('@/pages/admin/datasources'))
 const AccessPage = lazy(() => import('@/pages/admin/access'))
+const TeamsPage = lazy(() => import('@/pages/admin/teams'))
 const AuditPage = lazy(() => import('@/pages/admin/audit'))
 const MaintenancePage = lazy(() => import('@/pages/admin/maintenance'))
 const NotificationsPage = lazy(() => import('@/pages/admin/notifications'))
@@ -56,8 +57,13 @@ function ClusterAdminRedirect() {
   return <Navigate to={cluster ? `/clusters/${encodeURIComponent(cluster)}` : '/clusters'} replace />
 }
 
-const admin = (el: React.ReactNode, min: 'operator' | 'admin' = 'admin') =>
-  s(<RequireRole min={min}>{el}</RequireRole>)
+/** `fleet: false` for pages a team-scoped user may open too (Teams); the others are fleet-wide. */
+const admin = (el: React.ReactNode, min: 'viewer' | 'operator' | 'admin' = 'admin', fleet = true) =>
+  s(
+    <RequireRole min={min} fleet={fleet}>
+      {el}
+    </RequireRole>,
+  )
 
 const router = createBrowserRouter([
   { path: 'login', element: s(<LoginPage />), errorElement: <RouteError /> },
@@ -70,7 +76,8 @@ const router = createBrowserRouter([
       { path: 'workloads/:cluster/:namespace/:kind/:name', element: s(<WorkloadPage />) },
       { path: 'clusters', element: s(<ClustersPage />) },
       { path: 'clusters/new', element: admin(<ClusterWizardPage />) },
-      { path: 'clusters/:cluster', element: s(<ClusterDetailPage />) },
+      // Readiness, capacity and defaults are fleet-wide: team-scoped users get an explanation instead of 403s.
+      { path: 'clusters/:cluster', element: admin(<ClusterDetailPage />, 'viewer') },
       { path: 'admin', element: admin(<AutomationPage />, 'operator') },
       { path: 'admin/clusters', element: <ClusterAdminRedirect /> },
       { path: 'admin/clusters/:cluster', element: <ClusterAdminRedirect /> },
@@ -82,6 +89,7 @@ const router = createBrowserRouter([
       { path: 'admin/pricing', element: admin(<PricingPage />) },
       { path: 'admin/datasources', element: admin(<DatasourcesPage />) },
       { path: 'admin/access', element: admin(<AccessPage />) },
+      { path: 'admin/teams', element: admin(<TeamsPage />, 'viewer', false) },
       { path: 'admin/audit', element: admin(<AuditPage />, 'operator') },
       { path: 'admin/notifications', element: admin(<NotificationsPage />, 'operator') },
       { path: 'admin/maintenance', element: admin(<MaintenancePage />, 'operator') },

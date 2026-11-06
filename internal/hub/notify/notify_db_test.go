@@ -106,7 +106,10 @@ func (c *fakeClock) Advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-type fakeDigest struct{ attention []Attention }
+type fakeDigest struct {
+	attention []Attention
+	teams     []TeamSavings
+}
 
 func (fakeDigest) EstimatedSavings(context.Context, time.Time, time.Time) (float64, float64, bool, error) {
 	return 1234, 1000, true, nil
@@ -117,6 +120,8 @@ func (fakeDigest) TopOpportunities(context.Context, int) ([]Opportunity, error) 
 }
 
 func (f fakeDigest) Attention(context.Context) ([]Attention, error) { return f.attention, nil }
+
+func (f fakeDigest) TeamSavings(context.Context) ([]TeamSavings, error) { return f.teams, nil }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()

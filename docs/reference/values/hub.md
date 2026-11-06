@@ -161,6 +161,8 @@ The values of the `hub` component chart. In the `kerf` chart they sit under `hub
 | `config.history` | object | see the keys below |  |
 | `config.history.fullResolution` | string | `168h` |  |
 | `config.history.retention` | string | `2160h` |  |
+| `config.teams` | object | see the keys below | Team ownership (docs/teams.md). Teams are defined in Admin -> Teams; a workload belongs to the team its owner label names (the workload's own label wins over its namespace's), else to the first team whose namespace selector matches, else to Unassigned. |
+| `config.teams.ownerLabel` | string | `team` | label key on workloads and namespaces whose value is a team id |
 | `config.onboarding` | object | see the keys below | Cluster onboarding and readiness (internal/hub/config.go OnboardingConfig). |
 | `config.onboarding.docsBaseURL` | string | `""` | Readiness docs links: <docsBaseURL>/readiness#<check id>. |
 | `config.onboarding.checkInterval` | string | `1h` |  |

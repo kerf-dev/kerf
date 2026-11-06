@@ -2,6 +2,7 @@ import { useQueries } from '@tanstack/react-query'
 import { ArrowRightIcon, HourglassIcon, OctagonAlertIcon, XIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
+import { useAuth } from '@/api/auth'
 import { api, unwrap } from '@/api/client'
 import { useClusters } from '@/api/queries'
 import type { ReadinessState } from '@/api/types'
@@ -24,9 +25,11 @@ const KEY = 'ro-readiness-banner-dismissed'
  */
 export function ReadinessBanner() {
   const clusters = useClusters()
+  // Readiness is fleet-wide: a team-scoped user gets 403 for it, so it is not asked for.
+  const teamScoped = useAuth().teamScoped
   // `summary.blocking` counts failing blocking checks only; blocking checks without a result are in
   // the detail's `summary.unknown`, so every cluster short of AutomationReady is looked at.
-  const candidates = (clusters.data?.items ?? []).filter(
+  const candidates = (teamScoped ? [] : (clusters.data?.items ?? [])).filter(
     (c) => c.readiness && ((c.readiness.blocking ?? 0) > 0 || c.readiness.state !== 'AutomationReady'),
   )
   const details = useQueries({

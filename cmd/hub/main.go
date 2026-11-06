@@ -64,6 +64,7 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 		return err
 	}
 	log.Info("migrations applied", "dir", cfg.MigrationsDir, "applied", applied)
+	st.OwnerLabel = cfg.Teams.OwnerLabel
 
 	prom := recommender.NewPromClient(cfg.PrometheusURL, cfg.PrometheusTimeout.D())
 	metrics := hub.NewMetrics()
@@ -111,6 +112,10 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 			log.Info("old sessions pruned", "sessions", n)
 		}
 		if err := srv.InitOnboarding(ctx, cipher); err != nil {
+			return err
+		}
+		// The owner label key may have changed since the last start: reassign the workloads.
+		if err := st.RecomputeTeams(ctx); err != nil {
 			return err
 		}
 		var sealer notify.Sealer

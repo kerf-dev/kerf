@@ -255,6 +255,11 @@ config:
   history:
     fullResolution: 168h
     retention: 2160h
+  # Team ownership (docs/teams.md). Teams are defined in Admin -> Teams; a workload belongs to the team
+  # its owner label names (the workload's own label wins over its namespace's), else to the first team
+  # whose namespace selector matches, else to Unassigned.
+  teams:
+    ownerLabel: team        # label key on workloads and namespaces whose value is a team id
   # Cluster onboarding and readiness (D-025, internal/hub/config.go OnboardingConfig).
   onboarding:
     # Readiness docs links: <docsBaseURL>/readiness#<check id>.

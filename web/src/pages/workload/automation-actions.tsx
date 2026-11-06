@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useEffectivePolicy, useWrite, writes } from '@/api/admin'
 import { useAuth } from '@/api/auth'
+import { UNASSIGNED } from '@/lib/teams'
 import { useClusters } from '@/api/queries'
 import type { Mode, Profile, RightsizingPolicySpec, Strategy, WorkloadDetail } from '@/api/types'
 import { ActorChip } from '@/components/admin/common'
@@ -106,7 +107,13 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
     writes.approve({ id: w.id, recommendationID: rec!.id, reason, overrideReadiness }),
   )
 
-  const can = auth.can('operator')
+  // Writes need operator on the workload's team: the fleet role, raised by a team role (docs/teams.md).
+  const can = auth.canOperateTeam(w.team)
+  const teamInvolved = auth.teamScoped || !!auth.me?.teamRoles?.length
+  const teamName = !w.team || w.team === UNASSIGNED ? undefined : w.team
+  const whyNot = teamName
+    ? `You are not an operator on team ${teamName}. Changing automation needs the operator role on that team.`
+    : 'This workload is in no team, so changing it needs the fleet-wide operator role.'
   return (
     <div className="space-y-3 border-t pt-3" data-testid="automation-actions">
       {w.override ? (
@@ -219,6 +226,20 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
             </span>
           </Tooltip>
         </div>
+      ) : auth.signedIn && teamInvolved ? (
+        <Tooltip content={whyNot}>
+          <div className="grid grid-cols-2 gap-2" data-testid="actions-no-team-role" tabIndex={0}>
+            <Button size="sm" variant="outline" disabled>
+              <PencilIcon /> Override
+            </Button>
+            <Button size="sm" variant="outline" disabled>
+              <BanIcon /> Exclude
+            </Button>
+            <Button size="sm" className="col-span-2" disabled>
+              <StampIcon /> Approve once
+            </Button>
+          </div>
+        </Tooltip>
       ) : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <LogInIcon className="size-3.5" />

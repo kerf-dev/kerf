@@ -94,6 +94,13 @@ var schemaTypes = map[string]any{
 	"Problem":              Problem{},
 	"GPUUsage":             GPUUsage{},
 	"GPUSuggestion":        GPUSuggestion{},
+	// Teams
+	"TeamRole":    TeamRole{},
+	"TeamInput":   TeamInput{},
+	"Team":        Team{},
+	"TeamCounts":  TeamCounts{},
+	"TeamList":    TeamList{},
+	"TeamSummary": TeamSummary{},
 
 	// Realized savings
 	"RealizedAmount":   RealizedAmount{},
@@ -242,6 +249,7 @@ var enumLists = map[string][]string{
 	"VersionCompat":      VersionCompats,
 	"UpdateState":        UpdateStates,
 	"UserRole":           UserRoles,
+	"UserScope":          UserScopes,
 	"ConfigAction":       ConfigActions,
 	"ConfigTargetType":   ConfigTargetTypes,
 	"LayerSource":        LayerSources,

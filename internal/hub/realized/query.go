@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/kerf-dev/kerf/internal/hub/teams"
 )
 
 // Scope selects the workloads a read covers. Empty slices select everything.
@@ -16,7 +19,15 @@ type Scope struct {
 	Namespaces []string
 	// Workload, with one cluster in Clusters, selects one workload.
 	Workload *WorkloadKey
+	// Teams selects the workloads of these teams ("unassigned" = no team).
+	Teams []string
+	// Restricted, with VisibleTeams, limits the read to the caller's teams (set from the context).
+	Restricted   bool
+	VisibleTeams []string
 }
+
+// unassigned is the team filter value of workloads in no team (hubapi.TeamUnassigned).
+const unassigned = "unassigned"
 
 func (s Scope) where(alias string, args *[]any) string {
 	conds := []string{"true"}
@@ -34,6 +45,26 @@ func (s Scope) where(alias string, args *[]any) string {
 		add("%s.namespace = $%d", s.Workload.Namespace)
 		add("%s.workload_kind = $%d", s.Workload.Kind)
 		add("%s.workload_name = $%d", s.Workload.Name)
+	}
+	// Teams: the workload's current team (rows keep the workload identity; workloads are never
+	// hard-deleted, so the join finds deleted ones too).
+	var teamConds []string
+	if len(s.Teams) > 0 {
+		named := slices.DeleteFunc(slices.Clone(s.Teams), func(t string) bool { return t == unassigned })
+		*args = append(*args, named)
+		c := fmt.Sprintf("w.team = ANY($%d::text[])", len(*args))
+		if len(named) < len(s.Teams) {
+			c = "(" + c + " OR w.team IS NULL)"
+		}
+		teamConds = append(teamConds, c)
+	}
+	if s.Restricted {
+		*args = append(*args, s.VisibleTeams)
+		teamConds = append(teamConds, fmt.Sprintf("w.team = ANY($%d::text[])", len(*args)))
+	}
+	if len(teamConds) > 0 {
+		conds = append(conds, fmt.Sprintf(`EXISTS (SELECT 1 FROM workloads w WHERE w.cluster = %[1]s.cluster AND w.namespace = %[1]s.namespace
+			AND w.kind = %[1]s.workload_kind AND w.name = %[1]s.workload_name AND `, alias)+strings.Join(teamConds, " AND ")+")")
 	}
 	return strings.Join(conds, " AND ")
 }
@@ -141,6 +172,10 @@ func hoursIn(a, b, lo, hi time.Time) float64 {
 // hour), so a bucket's amounts and its released average cover the same hours.
 func (d *DB) Summary(ctx context.Context, sc Scope, from, to time.Time, bucket string) (*Summary, error) {
 	out := &Summary{}
+	// The caller's scope always applies.
+	if ids, restricted := teams.Restriction(ctx); restricted {
+		sc.Restricted, sc.VisibleTeams = true, ids
+	}
 	from, to = hourRange(from, to)
 	{
 		var args []any

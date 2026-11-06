@@ -1,5 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { isTeamScoped, useMe } from './auth'
 import { api, ifMatch, unwrap } from './client'
+import { teamLabel } from '@/lib/teams'
 import type {
   AutomationUpdate,
   ClusterCreate,
@@ -17,8 +19,11 @@ import type {
   PolicyInput,
   PricingSettings,
   RecommenderSettings,
+  TeamInput,
+  TeamRole,
   TokenRole,
   UserRole,
+  UserScope,
   WorkloadOverrideInput,
 } from './types'
 
@@ -29,6 +34,15 @@ import type {
  */
 
 // ---------------------------------------------------------------- reads
+
+/**
+ * Fleet-wide endpoints (policies, readiness, capacity, node cost, ...) answer a team-scoped caller with
+ * `403 scope_forbidden` (docs/teams.md): those callers never send the request.
+ */
+export function useFleetScope(enabled = true) {
+  const me = useMe().data
+  return enabled && !isTeamScoped(me)
+}
 
 const notFoundIsFinal = (n: number, e: unknown) =>
   n < 2 && !(e && typeof e === 'object' && 'status' in e && (e.status === 404 || e.status === 403))
@@ -51,6 +65,7 @@ export const usePolicies = (q: { cluster?: string; type?: HubPolicyType[]; inclu
   useQuery({
     queryKey: ['admin', 'policies', q],
     queryFn: () => unwrap(api.GET('/v1/admin/policies', { params: { query: q } })),
+    enabled: useFleetScope(),
   })
 
 export const usePolicy = (policyId: string | undefined) =>
@@ -81,6 +96,7 @@ export const usePolicyInventory = (cluster?: string[]) =>
       unwrap(
         api.GET('/v1/admin/policy-inventory', { params: { query: cluster?.length ? { cluster } : {} } }),
       ),
+    enabled: useFleetScope(),
     refetchInterval: 30_000,
   })
 
@@ -89,7 +105,7 @@ export const useClusterAdmin = (cluster: string | undefined) =>
     queryKey: ['admin', 'cluster', cluster],
     queryFn: () =>
       unwrap(api.GET('/v1/admin/clusters/{cluster}', { params: { path: { cluster: cluster! } } })),
-    enabled: !!cluster,
+    enabled: useFleetScope(!!cluster),
     retry: notFoundIsFinal,
     refetchInterval: 15_000,
   })
@@ -115,6 +131,23 @@ export const useTokens = (q: { cluster?: string; includeRevoked?: boolean } = {}
     queryFn: () => unwrap(api.GET('/v1/admin/tokens', { params: { query: q } })),
     enabled,
   })
+
+/**
+ * Teams with their workload counts and estimated savings. Viewers read them; a team-scoped caller gets
+ * only its own teams and no `unassigned`.
+ */
+export const useTeams = (enabled = true) =>
+  useQuery({
+    queryKey: ['admin', 'teams'],
+    queryFn: () => unwrap(api.GET('/v1/admin/teams')),
+    enabled,
+  })
+
+/** Display names of the teams the caller can see (`unassigned` = "Unassigned"); the id while loading. */
+export function useTeamLabel() {
+  const teams = useTeams().data?.items
+  return (value: string) => teamLabel(value, teams)
+}
 
 export const useUsers = (enabled = true) =>
   useQuery({
@@ -145,7 +178,7 @@ export const useReadiness = (cluster: string | undefined, opts: { poll?: boolean
     queryKey: ['readiness', cluster],
     queryFn: () =>
       unwrap(api.GET('/v1/clusters/{cluster}/readiness', { params: { path: { cluster: cluster! } } })),
-    enabled: !!cluster,
+    enabled: useFleetScope(!!cluster),
     retry: notFoundIsFinal,
     // While a re-check is pending, poll quickly so results appear as they arrive.
     refetchInterval: (q) => (q.state.data?.recheckRequestedAt ? 2_000 : opts.poll ? 5_000 : 60_000),
@@ -160,7 +193,7 @@ export const useReadinessHistory = (cluster: string | undefined) =>
           params: { path: { cluster: cluster! }, query: { limit: 50 } },
         }),
       ),
-    enabled: !!cluster,
+    enabled: useFleetScope(!!cluster),
   })
 
 export const useInstallSnippet = (
@@ -371,10 +404,28 @@ export const writes = {
       }),
     ),
 
+  createTeam: (body: TeamInput) => unwrap(api.POST('/v1/admin/teams', { body })),
+  updateTeam: (v: { id: string; version: number; body: TeamInput }) =>
+    unwrap(
+      api.PUT('/v1/admin/teams/{teamId}', {
+        params: { path: { teamId: v.id }, header: { 'If-Match': ifMatch(v.version) } },
+        body: v.body,
+      }),
+    ),
+  deleteTeam: (v: { id: string; version: number; reason: string }) =>
+    unwrap(
+      api.DELETE('/v1/admin/teams/{teamId}', {
+        params: { path: { teamId: v.id }, header: { 'If-Match': ifMatch(v.version) } },
+        body: { reason: v.reason },
+      }),
+    ),
+
   createUser: (body: {
     username: string
     displayName?: string
     role: UserRole
+    scope?: UserScope
+    teamRoles?: TeamRole[]
     password: string
     mustChangePassword: boolean
     reason: string
@@ -382,7 +433,14 @@ export const writes = {
   updateUser: (v: {
     username: string
     version: number
-    body: { displayName?: string; role?: UserRole; disabled?: boolean; reason: string }
+    body: {
+      displayName?: string
+      role?: UserRole
+      disabled?: boolean
+      scope?: UserScope
+      teamRoles?: TeamRole[]
+      reason: string
+    }
   }) =>
     unwrap(
       api.PATCH('/v1/admin/users/{username}', {
@@ -508,7 +566,7 @@ export const useClusterCapacity = (cluster: string | undefined) =>
     queryKey: ['capacity', cluster],
     queryFn: () =>
       unwrap(api.GET('/v1/clusters/{cluster}/capacity', { params: { path: { cluster: cluster! } } })),
-    enabled: !!cluster,
+    enabled: useFleetScope(!!cluster),
     retry: notFoundIsFinal,
     refetchInterval: 60_000,
   })

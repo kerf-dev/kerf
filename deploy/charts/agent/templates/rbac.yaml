@@ -53,6 +53,10 @@ rules:
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch"]
+  # Namespaces: their labels are reported to the hub, which resolves each workload's team from them.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
   # Nodes: swap / unsupported-node detection for in-place.
   - apiGroups: [""]
     resources: ["nodes"]
