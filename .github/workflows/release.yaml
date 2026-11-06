@@ -6,9 +6,12 @@ name: release
 #      them to GitHub Container Registry: ghcr.io/<owner>/kerf/<image>:X.Y.Z and
 #      oci://ghcr.io/<owner>/kerf/charts/<chart>, the charts defaulting to these images;
 #   3. cosign signs every image and chart by digest (keyless, this workflow's GitHub OIDC identity);
-#   4. a GitHub Release vX.Y.Z is created: CHANGELOG.md's section as the highlights, the Conventional Commits
+#   4. the kerf command-line tool is built for linux and darwin (amd64, arm64) and cosign signs each binary
+#      (`cosign sign-blob`, keyless, a .sigstore.json bundle next to it);
+#   5. a GitHub Release vX.Y.Z is created: CHANGELOG.md's section as the highlights, the Conventional Commits
 #      since the previous release grouped by type (git-cliff, cliff.toml), install steps and the digests; the chart
-#      packages and digest lists are attached. A -suffix makes it a pre-release.
+#      packages, digest lists, the command-line binaries with their signature bundles and checksums are attached.
+#      A -suffix makes it a pre-release.
 
 on:
   push:
@@ -103,6 +106,19 @@ jobs:
             cosign sign --yes "$ref@$digest"
           done < <(cat bin/release/images.txt bin/release/charts.txt)
 
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build and sign the command-line tool (cosign, keyless)
+        run: |
+          make release-cli VERSION="$VERSION"
+          for f in bin/release/cli/kerf_"$VERSION"_*; do
+            echo "signing $f"
+            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
+          done
+
       - name: Release notes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # git-cliff: the author and pull request of every commit
@@ -121,4 +137,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --verify-tag $pre \
             --title "Kerf $VERSION" \
             --notes-file bin/release/notes.md \
-            bin/release/charts/*.tgz bin/release/images.txt bin/release/charts.txt bin/release/SHA256SUMS
+            bin/release/charts/*.tgz bin/release/images.txt bin/release/charts.txt bin/release/SHA256SUMS \
+            bin/release/cli/kerf_*

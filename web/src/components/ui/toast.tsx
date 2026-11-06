@@ -2,7 +2,10 @@ import { CheckCircle2Icon, InfoIcon, XCircleIcon, XIcon } from 'lucide-react'
 import { useSyncExternalStore } from 'react'
 import { cn } from '@/lib/utils'
 
-/** Minimal toaster: `toast.success('Saved')`. Rendered once by <Toaster/> in the app shell. */
+/**
+ * Minimal toaster: `toast.success('Saved')`. Rendered once by <Toaster/> in the app shell. While the Opportunities
+ * bulk bar is open (`data-bulk-bar` on <body>) the stack sits above it, so a toast never covers its buttons.
+ */
 interface ToastItem {
   id: number
   tone: 'success' | 'error' | 'info'
@@ -43,7 +46,7 @@ export function Toaster() {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2"
+      className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2 in-data-[bulk-bar]:bottom-24"
     >
       {list.map((t) => {
         const Icon = t.tone === 'success' ? CheckCircle2Icon : t.tone === 'error' ? XCircleIcon : InfoIcon
