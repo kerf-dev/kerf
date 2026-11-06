@@ -10,11 +10,12 @@
 #     artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
 #
 # The package metadata (description, links, images, CRDs, changes, signature) lives in deploy/charts/kerf/Chart.yaml.
-# Registering the repository on artifacthub.io, and claiming Verified Publisher, is a maintainer's step.
+# The repository is registered on artifacthub.io; its ID is set below, and the `artifacthub.io` tag the release workflow
+# pushes carries it, which is what earns the Verified Publisher mark.
 
-# Shown by Artifact Hub after the repository is added (Control Panel -> Repositories). Uncomment and set it, and the
-# next release marks the repository as a Verified Publisher.
-# repositoryID: 00000000-0000-0000-0000-000000000000
+# The repository ID shown by Artifact Hub (Control Panel -> Repositories). Pushed with every release, it marks the
+# repository as a Verified Publisher.
+repositoryID: e400746d-fe1b-4900-ad87-d04beea21bb2
 
 # The Artifact Hub users who may claim and manage the repository (Owners). Uncomment with the email of the
 # Artifact Hub account of each maintainer.
