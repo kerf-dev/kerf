@@ -1,0 +1,21 @@
+# Kerf
+
+> Kerf is an open-source (Apache-2.0), self-hosted Kubernetes rightsizing tool. It recommends CPU and memory requests and limits for every container from Prometheus or VictoriaMetrics usage history, prices the savings per node type (AWS price list or your own table), and, where a policy allows it, applies the change with an in-place pod resize or a rollout, inside maintenance windows, with guardrails and automatic rollback on OOM kills, restarts or CPU throttling. Everything runs in your own clusters; there is no SaaS.
+
+Kerf installs with one Helm chart (`oci://ghcr.io/kerf-dev/kerf/charts/kerf`): `global.mode: hub` on one central cluster (hub API and recommender, web UI, pricing; PostgreSQL), `spoke` on each workload cluster (agent, admission webhook, CRDs), or `all` in a single cluster. Agents pull recommendations from the hub, so the hub holds no write credentials to workload clusters. Modes per workload and per resource: `off`, `audit`, `auto-patch`. Every cluster starts in `audit`. HPA-coupled workloads get requests and the HPA target changed together; JVM containers get heap-aware memory. EKS on Kubernetes 1.35 is the tested platform. Kerf is new (0.x).
+
+## Docs
+
+- [README](https://github.com/kerf-dev/kerf/blob/main/README.md): overview, quick start, FAQ
+- [Install on Amazon EKS](https://github.com/kerf-dev/kerf/blob/main/docs/install/eks.md): the full install, step by step
+- [Chart reference](https://github.com/kerf-dev/kerf/blob/main/deploy/charts/kerf/README.md): Helm values
+- [Documentation index](https://github.com/kerf-dev/kerf/blob/main/docs/README.md): CRDs, hub API, metrics, events, readiness
+- [Comparison with other tools](https://github.com/kerf-dev/kerf/blob/main/docs/branding/comparison.md): VPA, Goldilocks, Robusta KRR, Kubecost, StormForge, PerfectScale, CAST AI, with sources
+
+## Project
+
+- [Source code](https://github.com/kerf-dev/kerf)
+- [Releases](https://github.com/kerf-dev/kerf/releases)
+- [Changelog](https://github.com/kerf-dev/kerf/blob/main/CHANGELOG.md)
+- [Security policy](https://github.com/kerf-dev/kerf/blob/main/SECURITY.md)
+- [License: Apache-2.0](https://github.com/kerf-dev/kerf/blob/main/LICENSE)

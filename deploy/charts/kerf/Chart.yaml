@@ -26,7 +26,7 @@ keywords:
   - victoriametrics
   - eks
 icon: https://raw.githubusercontent.com/kerf-dev/kerf/main/docs/branding/kerf-mark-on-light.svg
-home: https://github.com/kerf-dev/kerf
+home: https://getkerf.dev
 sources: [https://github.com/kerf-dev/kerf]
 # Artifact Hub (https://artifacthub.io/docs/topics/annotations/helm/). make release (release-chart-package) sets
 # the artifacthub.io/images tags to the release version and artifacthub.io/prerelease from it.
@@ -35,6 +35,8 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/prerelease: "false"
   artifacthub.io/links: |
+    - name: Website
+      url: https://getkerf.dev
     - name: Source
       url: https://github.com/kerf-dev/kerf
     - name: Install on Amazon EKS

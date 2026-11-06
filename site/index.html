@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kerf: open-source Kubernetes rightsizing you run yourself</title>
+<meta name="description" content="Open-source Kubernetes rightsizing: CPU and memory requests and limits from real usage, savings priced per node type, applied with guardrails and automatic rollback.">
+<link rel="canonical" href="https://getkerf.dev/">
+<meta name="theme-color" content="#f9fafb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0e14" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Kerf">
+<meta property="og:url" content="https://getkerf.dev/">
+<meta property="og:title" content="Kerf: open-source Kubernetes rightsizing you run yourself">
+<meta property="og:description" content="Requests and limits from real usage, priced in dollars, applied with guardrails and automatic rollback. One Helm chart, Apache-2.0.">
+<meta property="og:image" content="https://getkerf.dev/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Kerf. Trim what your containers don't use.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Kerf: open-source Kubernetes rightsizing you run yourself">
+<meta name="twitter:description" content="Requests and limits from real usage, priced in dollars, applied with guardrails and automatic rollback. One Helm chart, Apache-2.0.">
+<meta name="twitter:image" content="https://getkerf.dev/social-preview.png">
+<meta name="twitter:image:alt" content="Kerf. Trim what your containers don't use.">
+
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/geist-mono-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://getkerf.dev/#software",
+      "name": "Kerf",
+      "description": "Open-source, self-hosted Kubernetes rightsizing. Kerf recommends CPU and memory requests and limits for every container from Prometheus or VictoriaMetrics history, prices the savings per node type, and applies changes with in-place pod resize or a rollout, inside maintenance windows and with automatic rollback.",
+      "url": "https://getkerf.dev/",
+      "image": "https://getkerf.dev/social-preview.png",
+      "screenshot": "https://getkerf.dev/assets/shots/overview-light-1440.webp",
+      "applicationCategory": "DeveloperApplication",
+      "applicationSubCategory": "Kubernetes rightsizing",
+      "operatingSystem": "Kubernetes",
+      "isAccessibleForFree": true,
+      "license": "https://www.apache.org/licenses/LICENSE-2.0",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "downloadUrl": "https://github.com/kerf-dev/kerf/releases",
+      "installUrl": "https://github.com/kerf-dev/kerf/blob/main/docs/install/eks.md",
+      "softwareHelp": { "@type": "CreativeWork", "url": "https://github.com/kerf-dev/kerf/blob/main/docs/README.md" },
+      "keywords": "Kubernetes rightsizing, Kubernetes cost optimization, resource requests and limits, VPA alternative, in-place pod resize, FinOps",
+      "sameAs": ["https://github.com/kerf-dev/kerf"],
+      "publisher": { "@id": "https://getkerf.dev/#org" }
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://getkerf.dev/#org",
+      "name": "Kerf",
+      "url": "https://getkerf.dev/",
+      "logo": "https://getkerf.dev/icon-512.png",
+      "sameAs": ["https://github.com/kerf-dev"]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://getkerf.dev/#website",
+      "name": "Kerf",
+      "url": "https://getkerf.dev/",
+      "publisher": { "@id": "https://getkerf.dev/#org" }
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Kerf home">
+      <svg viewBox="0 0 181.17 64" aria-hidden="true" focusable="false"><path class="logo-body" d="M12 4H29L60 35V52A12 12 0 0 1 48 64H12A12 12 0 0 1 0 52V16A12 12 0 0 1 12 4Z"/><path class="logo-trim" d="M33 0H52A12 12 0 0 1 64 12V31Z"/><path class="logo-word" transform="translate(82 51)" d="M3.8 0V-34H10.1V-18.5L23.4 -34H30.7L18 -19.1L31.6 0H24.4L13.9 -14.8L10.1 -10.4V0ZM46.1 0.6Q42.3 0.6 39.5 -1.1Q36.6 -2.7 35.1 -5.7Q33.6 -8.8 33.6 -12.8Q33.6 -16.8 35.1 -19.8Q36.6 -22.8 39.4 -24.5Q42.2 -26.1 46 -26.1Q49.6 -26.1 52.4 -24.5Q55.1 -22.9 56.6 -19.8Q58.1 -16.8 58.1 -12.5V-11.1H39.9Q40.1 -7.7 41.8 -6Q43.4 -4.3 46.2 -4.3Q48.2 -4.3 49.6 -5.2Q51 -6.2 51.5 -7.9L57.8 -7.5Q56.7 -3.7 53.6 -1.6Q50.5 0.6 46.1 0.6ZM39.9 -15.2H51.8Q51.6 -18.3 50 -19.8Q48.4 -21.3 46 -21.3Q43.5 -21.3 41.9 -19.7Q40.3 -18.1 39.9 -15.2ZM62.9 0V-25.6H68.6L68.9 -18.5L68.3 -18.6Q68.9 -22.3 70.5 -23.9Q72.1 -25.6 74.9 -25.6H77.2V-20.3H74.8Q72.9 -20.3 71.6 -19.7Q70.3 -19.2 69.7 -17.9Q69 -16.7 69 -14.7V0ZM84.7 0V-26.6Q84.7 -30 86.6 -32Q88.5 -34 92.6 -34H97.5V-29.3H93.7Q92.2 -29.3 91.5 -28.5Q90.8 -27.7 90.8 -26.2V0ZM81.1 -20.8V-25.6H97.2V-20.8Z"/></svg>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a class="section-link" href="#how-it-works">How it works</a>
+      <a class="section-link" href="#features">Features</a>
+      <a class="section-link" href="#compare">Compare</a>
+      <a class="section-link" href="#quick-start">Quick start</a>
+      <a class="section-link" href="#faq">FAQ</a>
+      <a class="btn btn-sm" href="https://github.com/kerf-dev/kerf">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<div class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Open-source Kubernetes rightsizing</p>
+    <h1>Trim what your containers don't&nbsp;use.</h1>
+    <p class="lede">Kerf sets CPU and memory requests and limits from real usage, prices the difference in dollars, and applies it with guardrails and automatic rollback. You run all of it in your own clusters.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/kerf-dev/kerf/blob/main/docs/install/eks.md">Get started</a>
+      <a class="btn" href="https://github.com/kerf-dev/kerf">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+    <ul class="facts">
+      <li>Apache-2.0</li>
+      <li>One Helm chart</li>
+      <li>Starts in audit mode</li>
+      <li>Your data stays in your clusters</li>
+    </ul>
+    <figure class="shot">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="/assets/shots/overview-dark-720.webp 720w, /assets/shots/overview-dark-1440.webp 1440w" sizes="(min-width: 1160px) 1120px, calc(100vw - 40px)">
+        <img src="/assets/shots/overview-light-1440.webp" srcset="/assets/shots/overview-light-720.webp 720w, /assets/shots/overview-light-1440.webp 1440w" sizes="(min-width: 1160px) 1120px, calc(100vw - 40px)" width="1440" height="900" fetchpriority="high" decoding="async" alt="The Kerf overview: estimated monthly savings, CPU and memory requested versus recommended versus used, a savings trend per cluster and the top opportunities.">
+      </picture>
+    </figure>
+  </div>
+</div>
+
+<section id="what" aria-labelledby="what-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="what-title">What Kerf does</h2>
+      <p>Many clusters reserve far more CPU and memory than their pods use, and every reserved core is node capacity you pay for. Kerf reads each container's usage from your Prometheus or VictoriaMetrics, recommends requests and limits, and prices the difference per node type. When you allow it, Kerf applies the change and rolls it back if the workload gets unhealthy.</p>
+    </div>
+    <ul class="cards">
+      <li class="card">
+        <h3>Runs in your clusters</h3>
+        <p>One Helm chart installs the hub, the web UI, the agents and the webhook. Usage data stays in your Prometheus and your PostgreSQL. Agents pull from the hub, so the hub never holds write credentials to a workload cluster.</p>
+      </li>
+      <li class="card">
+        <h3>Changes things, carefully</h3>
+        <p>Choose <code>off</code>, <code>audit</code> or <code>auto-patch</code> per workload and per resource. Guardrails cap each decrease (50% per step by default), freeze windows block changes, and a change followed by OOM kills, restarts or CPU throttling is rolled back.</p>
+      </li>
+      <li class="card">
+        <h3>Speaks money</h3>
+        <p>Savings per workload, namespace and cluster, priced per node type from the AWS price list (on-demand and spot) or your own price table.</p>
+      </li>
+      <li class="card">
+        <h3>Knows the workload</h3>
+        <p>HPA-coupled workloads get their requests and HPA target changed together. JVM containers get heap-aware memory. Single-replica workloads and <code>OnDelete</code> StatefulSets change without downtime.</p>
+      </li>
+      <li class="card">
+        <h3>Fits GitOps</h3>
+        <p>In-place resizes leave the pod template alone, so Argo CD sees no drift. Policies live in the UI or as <code>RightsizingPolicy</code> resources in Git.</p>
+      </li>
+      <li class="card">
+        <h3>Shows its working</h3>
+        <p>Every recommendation explains itself. With the <code>production</code> profile, the CPU request is the 95th percentile of 14 days of usage plus 15% headroom, with a confidence score next to it.</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section id="how-it-works" aria-labelledby="how-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="how-title">How it works</h2>
+      <p>A hub in one cluster computes recommendations. An agent in each workload cluster decides what to apply under your policies.</p>
+    </div>
+    <figure class="arch">
+      <div class="arch-grid">
+        <div class="node cluster">
+          <p class="node-title">Each workload cluster</p>
+          <p class="node-sub">global.mode: spoke</p>
+          <ul>
+            <li>Agent <span>applies, watches, rolls back</span></li>
+            <li>Admission webhook <span>resources for new pods</span></li>
+            <li>RightsizingPolicy <span>what may change, and when</span></li>
+            <li>Your workloads</li>
+          </ul>
+        </div>
+        <div class="edge">
+          <svg viewBox="0 0 64 16" aria-hidden="true" focusable="false"><path d="M2 8H60M53 2L60 8L53 14"/></svg>
+          <small>cAdvisor and kube-state-metrics</small>
+        </div>
+        <div class="node store">
+          <p class="node-title">Your metrics store</p>
+          <p class="node-sub">Prometheus, VictoriaMetrics, Thanos, Mimir, AMP</p>
+        </div>
+        <div class="edge">
+          <svg viewBox="0 0 64 16" aria-hidden="true" focusable="false"><path d="M2 8H60M53 2L60 8L53 14"/></svg>
+          <small>usage history and node costs</small>
+        </div>
+        <div class="node cluster">
+          <p class="node-title">Hub cluster</p>
+          <p class="node-sub">global.mode: hub</p>
+          <ul>
+            <li>Hub <span>API and recommender</span></li>
+            <li>Web UI</li>
+            <li>Pricing <span>price per node type</span></li>
+            <li>PostgreSQL <span>yours</span></li>
+          </ul>
+        </div>
+        <p class="pull">Each agent pulls recommendations and policies from the hub over HTTPS and reports status back. The hub never connects to a workload cluster.</p>
+      </div>
+      <figcaption>Kerf's components and data flow. <code>global.mode: all</code> installs everything in one cluster.</figcaption>
+    </figure>
+    <ol class="steps">
+      <li><strong>Measure.</strong> The hub reads each container's CPU and memory usage from your metrics store and computes requests and limits from a percentile of the history plus headroom.</li>
+      <li><strong>Price.</strong> The pricing service prices every node from its instance type and capacity type, so each recommendation carries a monthly saving in dollars.</li>
+      <li><strong>Apply.</strong> The agent resolves the policy for a workload, checks the guardrails, and applies the change with an in-place resize, a rollout, or a deferred patch in a maintenance window.</li>
+      <li><strong>Watch.</strong> The agent watches the workload's health after a change and rolls it back on OOM kills, restarts or CPU throttling. The webhook gives new pods the recommended values.</li>
+    </ol>
+  </div>
+</section>
+
+<section id="features" aria-labelledby="features-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="features-title">Features</h2>
+      <p>A web UI for the whole fleet. These screenshots use the UI's built-in sample data.</p>
+    </div>
+    <div class="features">
+      <article class="feature">
+        <figure class="shot">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="/assets/shots/opportunities-dark-640.webp 640w, /assets/shots/opportunities-dark-1200.webp 1200w" sizes="(min-width: 1160px) 548px, (min-width: 900px) calc(50vw - 36px), calc(100vw - 40px)">
+            <img src="/assets/shots/opportunities-light-1200.webp" srcset="/assets/shots/opportunities-light-640.webp 640w, /assets/shots/opportunities-light-1200.webp 1200w" sizes="(min-width: 1160px) 548px, (min-width: 900px) calc(50vw - 36px), calc(100vw - 40px)" width="1200" height="750" loading="lazy" decoding="async" alt="Opportunities: workloads ranked by estimated monthly savings, with current, recommended and used CPU and memory.">
+          </picture>
+        </figure>
+        <h3>Opportunities</h3>
+        <p>Every workload ranked by estimated monthly savings, with the current, recommended and used values for CPU and memory, the confidence, and bulk actions.</p>
+      </article>
+      <article class="feature">
+        <figure class="shot">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="/assets/shots/workload-rolled-back-dark-640.webp 640w, /assets/shots/workload-rolled-back-dark-1200.webp 1200w" sizes="(min-width: 1160px) 548px, (min-width: 900px) calc(50vw - 36px), calc(100vw - 40px)">
+            <img src="/assets/shots/workload-rolled-back-light-1200.webp" srcset="/assets/shots/workload-rolled-back-light-640.webp 640w, /assets/shots/workload-rolled-back-light-1200.webp 1200w" sizes="(min-width: 1160px) 548px, (min-width: 900px) calc(50vw - 36px), calc(100vw - 40px)" width="1200" height="750" loading="lazy" decoding="async" alt="A workload whose CPU change was rolled back by the health watch after its throttling ratio rose above the threshold.">
+          </picture>
+        </figure>
+        <h3>Workload detail</h3>
+        <p>Usage history against requests and the recommendation, the effective policy and where it came from, and a timeline of every change and rollback.</p>
+      </article>
+      <article class="feature">
+        <figure class="shot">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="/assets/shots/cluster-readiness-dark-640.webp 640w, /assets/shots/cluster-readiness-dark-1200.webp 1200w" sizes="(min-width: 1160px) 548px, (min-width: 900px) calc(50vw - 36px), calc(100vw - 40px)">
+            <img src="/assets/shots/cluster-readiness-light-1200.webp" srcset="/assets/shots/cluster-readiness-light-640.webp 640w, /assets/shots/cluster-readiness-light-1200.webp 1200w" sizes="(min-width: 1160px) 548px, (min-width: 900px) calc(50vw - 36px), calc(100vw - 40px)" width="1200" height="750" loading="lazy" decoding="async" alt="Cluster readiness: metrics, pricing, permission and webhook checks, each with the fix when it fails.">
+          </picture>
+        </figure>
+        <h3>Cluster onboarding</h3>
+        <p>An add-cluster wizard that renders the install command, then readiness checks: Registered → Agent connected → Metrics OK → Ready for audit → Automation ready. A failed check shows the fix.</p>
+      </article>
+      <article class="feature">
+        <figure class="shot">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="/assets/shots/admin-policy-editor-dark-640.webp 640w, /assets/shots/admin-policy-editor-dark-1200.webp 1200w" sizes="(min-width: 1160px) 548px, (min-width: 900px) calc(50vw - 36px), calc(100vw - 40px)">
+            <img src="/assets/shots/admin-policy-editor-light-1200.webp" srcset="/assets/shots/admin-policy-editor-light-640.webp 640w, /assets/shots/admin-policy-editor-light-1200.webp 1200w" sizes="(min-width: 1160px) 548px, (min-width: 900px) calc(50vw - 36px), calc(100vw - 40px)" width="1200" height="750" loading="lazy" decoding="async" alt="The policy editor: CPU and memory modes, apply strategy, maintenance windows and guardrails for a rightsizing policy.">
+          </picture>
+        </figure>
+        <h3>Policies and admin</h3>
+        <p>A policy editor with a preview of what changes, defaults, maintenance windows, metrics sources, prices, users and API tokens, an audit log, and a switch that pauses automation for a cluster or the whole fleet.</p>
+      </article>
+    </div>
+    <p class="also">Also included: Grafana dashboards and Prometheus alerts, a recommendation simulator, high availability for the hub (leader election on PostgreSQL), External Secrets support, NetworkPolicies, and multi-arch images signed with cosign.</p>
+  </div>
+</section>
+
+<section id="compare" aria-labelledby="compare-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="compare-title">How Kerf compares</h2>
+      <p>Kerf takes ideas from the tools below. They are good tools; pick the one that fits.</p>
+    </div>
+    <section class="table-wrap" aria-labelledby="compare-caption" tabindex="0">
+      <table>
+        <caption id="compare-caption" class="sr-only">Kerf compared with other Kubernetes rightsizing tools</caption>
+        <thead>
+          <tr>
+            <th scope="col">Tool</th>
+            <th scope="col">License</th>
+            <th scope="col">Your data stays in your infrastructure</th>
+            <th scope="col">Applies changes</th>
+            <th scope="col">In-place resize</th>
+            <th scope="col">Rollback on bad health</th>
+            <th scope="col">Savings in $</th>
+            <th scope="col">HPA and JVM aware</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="us">
+            <th scope="row">Kerf</th>
+            <td>Apache-2.0</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes:</span> policies, maintenance windows</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes:</span> both</td>
+          </tr>
+          <tr>
+            <th scope="row">Vertical Pod Autoscaler</th>
+            <td>Apache-2.0</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes:</span> evict and webhook</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes:</span> <code>InPlaceOrRecreate</code></td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td>not with an HPA on the same metric</td>
+          </tr>
+          <tr>
+            <th scope="row">Goldilocks</th>
+            <td>Apache-2.0</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td>through VPA, opt-in</td>
+            <td>through VPA</td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Robusta KRR</th>
+            <td>MIT</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes:</span> CLI; the UI is SaaS</td>
+            <td>optional webhook, with a Robusta account</td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td><code>--allow-hpa</code></td>
+          </tr>
+          <tr>
+            <th scope="row">IBM Kubecost</th>
+            <td>commercial, free tier</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes:</span> self-hosted option</td>
+            <td>Kubescaler (alpha)</td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+          </tr>
+          <tr>
+            <th scope="row">StormForge</th>
+            <td>commercial</td>
+            <td>metrics go to SaaS</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes:</span> both</td>
+          </tr>
+          <tr>
+            <th scope="row">PerfectScale</th>
+            <td>commercial, free tier</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes:</span> self-hosted option</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes:</span> maintenance windows</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td>JVM; HPA advice</td>
+          </tr>
+          <tr>
+            <th scope="row">CAST AI</th>
+            <td>commercial</td>
+            <td>SaaS console</td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="no" aria-hidden="true">–</span><span class="sr-only">Not found</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes</span></td>
+            <td><span class="yes" aria-hidden="true">✓</span><span class="sr-only">Yes:</span> both</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+    <p class="note">✓ means documented. – means we did not find it in their public docs on 2026-11-05, which is not proof that it's missing. <a href="https://github.com/kerf-dev/kerf/blob/main/docs/branding/comparison.md">Every cell, with sources</a>. Corrections are welcome: <a href="https://github.com/kerf-dev/kerf/issues/new">open an issue</a>.</p>
+    <div class="fit">
+      <div class="card">
+        <h3>Use Kerf when</h3>
+        <p>You run several clusters, want rightsizing applied automatically under policies you control, and want it open source and entirely inside your own infrastructure.</p>
+      </div>
+      <div class="card">
+        <h3>Use something else when</h3>
+        <ul>
+          <li>You have one small cluster, and a VPA in recommendation mode is enough.</li>
+          <li>You need node autoscaling or bin packing: run Karpenter or Cluster Autoscaler next to Kerf.</li>
+          <li>You want a managed SaaS with vendor support.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="quick-start" aria-labelledby="qs-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="qs-title">Quick start</h2>
+      <p>Every cluster starts in <code>audit</code>: Kerf recommends and changes nothing until you turn on <code>auto-patch</code>.</p>
+    </div>
+    <div class="qs">
+      <div>
+        <h3>See the UI with a sample fleet</h3>
+        <p>No cluster needed. Requires Node.js 22 and <code>make</code>.</p>
+<pre tabindex="0" aria-label="Commands to run the UI with sample data"><code>git clone https://github.com/kerf-dev/kerf
+cd kerf
+make web-dev   <span class="c"># open http://localhost:5173</span></code></pre>
+      </div>
+      <div>
+        <h3>Install on your clusters</h3>
+        <p>One chart. <code>global.mode</code> picks the role of each cluster.</p>
+<pre tabindex="0" aria-label="Helm commands to install Kerf"><code><span class="c"># the central cluster: hub, web UI, pricing</span>
+helm install kerf oci://ghcr.io/kerf-dev/kerf/charts/kerf \
+  --version &lt;version&gt; -n kerf --create-namespace \
+  -f values-hub.yaml     <span class="c"># global.mode: hub</span>
+
+<span class="c"># each workload cluster: agent, webhook, CRDs</span>
+helm install kerf oci://ghcr.io/kerf-dev/kerf/charts/kerf \
+  --version &lt;version&gt; -n kerf --create-namespace \
+  -f values-spoke.yaml   <span class="c"># global.mode: spoke</span></code></pre>
+        <p>The <a href="https://github.com/kerf-dev/kerf/blob/main/docs/install/eks.md">EKS install guide</a> walks through every step, with example values in <a href="https://github.com/kerf-dev/kerf/tree/main/deploy/examples/eks">deploy/examples/eks</a>. The add-cluster wizard prints the full command for each workload cluster.</p>
+      </div>
+    </div>
+    <p class="reqs"><strong>Requirements:</strong> Kubernetes 1.35 (tested; in-place resize is GA there), Prometheus or VictoriaMetrics with cAdvisor and kube-state-metrics (Thanos, Mimir and Amazon Managed Service for Prometheus also work), cert-manager in each workload cluster, and PostgreSQL 12 or later for the hub.</p>
+  </div>
+</section>
+
+<section id="faq" aria-labelledby="faq-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 id="faq-title">Questions</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>What is Kubernetes rightsizing?</summary>
+        <div><p>Setting each container's CPU and memory requests and limits to what it actually uses, plus headroom. Requests decide how many pods fit on a node, so over-requested pods waste nodes you pay for, and under-requested pods get throttled or OOM-killed.</p></div>
+      </details>
+      <details>
+        <summary>VPA already does this. Why Kerf?</summary>
+        <div><p>VPA recommends and can apply requests in one cluster. Kerf adds dollars, a fleet UI, per-resource modes, maintenance windows, rollback on bad health and HPA coordination. VPA is a fine choice for one cluster you watch closely.</p></div>
+      </details>
+      <details>
+        <summary>Automatic changes in production scare me.</summary>
+        <div><p>Start in <code>audit</code>: nothing changes. Turn on <code>auto-patch</code> per namespace or workload, for CPU first if you like. Every change is in the activity log and can be rolled back from the UI.</p></div>
+      </details>
+      <details>
+        <summary>Can I use Kerf with the Horizontal Pod Autoscaler?</summary>
+        <div><p>Yes. When an HPA scales a workload on CPU or memory utilization, Kerf changes the requests and the HPA's utilization target in one change, so the HPA keeps scaling at the same usage as before.</p></div>
+      </details>
+      <details>
+        <summary>Does Kerf send data anywhere?</summary>
+        <div><p>No. Kerf reads metrics from your Prometheus-compatible store and keeps its state in your PostgreSQL. The only calls outside your clusters go to the AWS Pricing and EC2 APIs, and only when you choose AWS prices.</p></div>
+      </details>
+      <details>
+        <summary>Does it work outside EKS?</summary>
+        <div><p>The recommender, agent and webhook use standard Kubernetes APIs. EKS 1.35 is the tested platform. On other clusters, prices come from a static table instead of the AWS price list; please report what you find.</p></div>
+      </details>
+      <details>
+        <summary>Is it another thing to run?</summary>
+        <div><p>One chart. The hub needs PostgreSQL and a Prometheus-compatible endpoint you probably have already.</p></div>
+      </details>
+      <details>
+        <summary>Is it ready for production?</summary>
+        <div><p>Kerf is new (0.x). Run it in <code>audit</code> first, then turn on <code>auto-patch</code> for one namespace and watch the activity log. The <a href="https://github.com/kerf-dev/kerf/blob/main/roadmap.md">roadmap</a> lists what comes next.</p></div>
+      </details>
+      <details>
+        <summary>What does it cost?</summary>
+        <div><p>Nothing. Kerf is open source under the Apache License 2.0, with no paid tier and no hosted service. You pay for the compute it runs on.</p></div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="closing" aria-labelledby="closing-title">
+  <div class="wrap">
+    <h2 id="closing-title">See what your clusters reserve and don't use.</h2>
+    <p>Install Kerf in audit mode. It recommends and prices every workload and changes nothing until you say so.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/kerf-dev/kerf/blob/main/docs/install/eks.md">Get started</a>
+      <a class="btn" href="https://github.com/kerf-dev/kerf/blob/main/docs/README.md">Read the docs</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>Kerf is open source under the <a href="https://github.com/kerf-dev/kerf/blob/main/LICENSE">Apache License 2.0</a>.</p>
+    <nav aria-label="Footer">
+      <ul>
+        <li><a href="https://github.com/kerf-dev/kerf">GitHub</a></li>
+        <li><a href="https://github.com/kerf-dev/kerf/blob/main/docs/README.md">Documentation</a></li>
+        <li><a href="https://github.com/kerf-dev/kerf/releases">Releases</a></li>
+        <li><a href="https://github.com/kerf-dev/kerf/blob/main/CHANGELOG.md">Changelog</a></li>
+        <li><a href="https://github.com/kerf-dev/kerf/blob/main/SECURITY.md">Security</a></li>
+        <li><a href="https://github.com/kerf-dev/kerf/blob/main/CONTRIBUTING.md">Contributing</a></li>
+        <!-- After the Artifact Hub listing (docs/handover/WO-28-handover.md):
+        <li><a href="https://artifacthub.io/packages/helm/kerf/kerf">Artifact Hub</a></li>
+        -->
+      </ul>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

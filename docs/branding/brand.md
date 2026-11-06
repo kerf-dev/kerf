@@ -166,3 +166,25 @@ decoration.
 - In the README, show light and dark with `<picture>` and `prefers-color-scheme`.
 - The README hero images (`docs/branding/hero-*.png`) and the social preview are rendered from those
   screenshots by `node docs/branding/render.mjs` (needs `make web-install`).
+
+## Website
+
+[getkerf.dev](https://getkerf.dev) is a single static page in `site/` (plain HTML and CSS, no JavaScript),
+published to GitHub Pages by `.github/workflows/pages.yaml` on every push to `main` that touches `site/`.
+How to preview, check and regenerate it: [site/README.md](../../site/README.md).
+
+- **Copy** comes from this guide and the README: the tagline is the `h1`, the one-line promise is the lede,
+  the differentiators are the "What Kerf does" cards in the order above, the objections are in the FAQ, and
+  the comparison table repeats the README's (keep them in step with [comparison.md](comparison.md)).
+- **Colour** follows the palette above through `prefers-color-scheme`. One addition: links and the primary
+  button use `#00776a` in the light theme, Kerf Teal darkened so that link text on Paper and white button
+  text both pass WCAG AA (Kerf Teal `#008979` measures about 4.1:1 on Paper). The mark keeps `#008979`. The
+  dark theme uses Kerf Teal `#2fbda7` as is.
+- **Type:** Geist and Geist Mono, self-hosted from `site/fonts/` (latin subset, variable weight, OFL).
+- **Images:** the screenshots are the top 1440 × 900 of `docs/screenshots/<name>-{light,dark}.png` as WebP,
+  shown with `<picture>` so they follow the reader's theme. The Open Graph and Twitter image is
+  [social-preview.png](social-preview.png). After `make web-screenshots` or a logo change, rerun
+  `node site/tools/render-assets.mjs`.
+- **Search:** title, description, canonical `https://getkerf.dev/`, JSON-LD `SoftwareApplication`,
+  `robots.txt`, `sitemap.xml` and `llms.txt` (a plain-text summary for AI assistants). When a claim
+  changes in this guide, change it on the page and in `site/llms.txt` too.

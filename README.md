@@ -18,6 +18,7 @@
 </p>
 
 <p align="center">
+  <a href="https://getkerf.dev">Website</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="docs/install/eks.md">Install on EKS</a> ·
   <a href="#how-kerf-compares">Comparison</a> ·
