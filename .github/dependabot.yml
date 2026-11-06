@@ -2,26 +2,32 @@
 # one pull request for all minor and patch updates (plus the k8s.io family on its own for Go, which must move
 # together). Major versions stay separate pull requests, since they need a look. Go modules, the web UI's npm
 # packages, the Dockerfiles' base images and the GitHub Actions (pinned by commit SHA in .github/workflows/).
+# The pull request titles are Conventional Commits (`chore(deps): bump ...`, `ci(deps): bump ...`), which the
+# pr-title check accepts and the release notes list under Dependencies.
 version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
     schedule: {interval: weekly}
+    commit-message: {prefix: "chore(deps)"}
     groups:
       k8s: {patterns: ["k8s.io/*", "sigs.k8s.io/*"]}
       go-minor-and-patch: {update-types: [minor, patch]}
   - package-ecosystem: npm
     directory: /web
     schedule: {interval: weekly}
+    commit-message: {prefix: "chore(deps)"}
     groups:
       npm-minor-and-patch: {update-types: [minor, patch]}
   - package-ecosystem: docker
     directories: [/cmd/hub, /cmd/pricing, /cmd/agent, /cmd/webhook, /web]
     schedule: {interval: weekly}
+    commit-message: {prefix: "chore(deps)"}
     groups:
       docker-minor-and-patch: {update-types: [minor, patch]}
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: weekly}
+    commit-message: {prefix: "ci(deps)"}
     groups:
       actions-minor-and-patch: {update-types: [minor, patch]}
