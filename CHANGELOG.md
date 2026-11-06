@@ -147,3 +147,5 @@ First public version.
 - Sign-in rate limits per client address can no longer be dodged with a forged `X-Forwarded-For`: the web proxy
   sends the client it sees, and the hub uses the last entry. Behind an ALB or ingress controller, set
   `web.trustedProxies` so the limits count real clients.
+- Updated `github.com/go-jose/go-jose/v4` to 4.1.6, which fixes a high-severity vulnerability in the JOSE and JWT
+  handling used by OIDC sign-in.
