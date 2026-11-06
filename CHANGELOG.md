@@ -24,6 +24,11 @@ First public version.
   rollback when a workload becomes unhealthy. A mutating webhook gives new pods the recommended resources.
 - **Smarter recommendations.** HPA coordination (requests and the HPA target change together), JVM heap-aware
   memory, and zero-downtime handling of single-replica workloads and StatefulSets with `OnDelete`.
+- **`kerf report`.** A command-line tool that runs the recommender against an existing Prometheus, VictoriaMetrics or
+  Amazon Managed Service for Prometheus, without installing the hub: workloads sorted by monthly saving as a table, CSV,
+  JSON or Markdown, with the hub's profiles, confidence and risk flags. Prices come from a static table or the AWS
+  Pricing API, and a kubeconfig adds HPAs and JVM settings. Signed binaries for Linux and macOS (amd64, arm64) are
+  attached to each release ([docs/cli.md](docs/cli.md)).
 - **Web UI and admin area.** Workloads, recommendations, savings, policies, audit log; users and tokens;
   approve, apply and roll back from the UI.
 - **Cluster onboarding.** An add-cluster wizard, per-cluster metrics sources and readiness checks
@@ -39,6 +44,11 @@ First public version.
   and shows the release notes and `helm upgrade` commands; "Check now" runs it at once. It is on by default and
   sends nothing about the installation; turn it off with `hub.updateCheck.enabled: false`. Metric
   `kerf_update_available{current,latest}` and the alert `KerfUpdateAvailable` (severity `info`).
+- **Copy as a patch.** A **Copy as…** menu on the workload page and on the Opportunities bulk bar turns the
+  recommended values into a strategic merge patch, a `kubectl patch` command, a Kustomize `patches:` entry or a
+  Helm values snippet, for one workload or a selection, so teams that keep their manifests in Git can make the
+  change through their own pull request. Viewers can select rows and copy too. See
+  [Copy a recommendation as a patch](docs/copy-as-patch.md).
 
 ### Changed
 
