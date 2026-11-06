@@ -1,3 +1,11 @@
 # Local k3d development (picked up by dev/scripts/tilt-deploy.sh and `make deploy-agent`).
-pullInterval: 30s
+# Short timers so the e2e suite (test/e2e, WO-30) waits seconds, not minutes; the production
+# defaults are in values.yaml (pullInterval 1m, hubStaleAfter 5m, reportInterval 10s,
+# health.checkInterval 15s).
+pullInterval: 15s
+# TestHubUnreachable waits this out (plus ~30 s) twice per run; the suite reads it from the
+# agent's Deployment args.
+hubStaleAfter: 1m
 reportInterval: 5s
+health:
+  checkInterval: 5s

@@ -19,12 +19,20 @@ if [ "$cur" = "e2e-hub-unreachable-invalid-token" ]; then
   echo "restored the $cluster agent hub token"
 fi
 
+# Scenario 11 annotates the agent pods to make the kubelet refresh the token at once (WO-30).
+for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
+  for pod in $(kubectl --context "$ctx" -n "$ns" get pods -l app.kubernetes.io/name=kerf-agent \
+    -o jsonpath='{range .items[?(@.metadata.annotations.e2e\.kerf\.getkerf\.dev/token-nudge)]}{.metadata.name}{" "}{end}' 2>/dev/null || true); do
+    kubectl --context "$ctx" -n "$ns" annotate pod "$pod" e2e.kerf.getkerf.dev/token-nudge- >/dev/null && echo "removed the e2e token nudge from $pod on $ctx"
+  done
+done
+
 # Scenario 8 scales the webhook to 0 and records the original replicas in an annotation.
 webhook_ns=${E2E_WEBHOOK_NAMESPACE:-kerf}
 webhook=${E2E_WEBHOOK_DEPLOYMENT:-webhook}
 for ctx in "${E2E_SPOKE1_CONTEXT:-k3d-ro-spoke-1}" "$spoke_ctx"; do
   was=$(kubectl --context "$ctx" -n "$webhook_ns" get deploy "$webhook" \
-    -o jsonpath='{.metadata.annotations.e2e\.kerf\.oz\.io/scaled-from}' 2>/dev/null || true)
+    -o jsonpath='{.metadata.annotations.e2e\.kerf\.getkerf\.dev/scaled-from}' 2>/dev/null || true)
   if [ -n "$was" ]; then
     kubectl --context "$ctx" -n "$webhook_ns" scale deploy "$webhook" --replicas="$was" >/dev/null
     kubectl --context "$ctx" -n "$webhook_ns" annotate deploy "$webhook" e2e.kerf.getkerf.dev/scaled-from- >/dev/null
@@ -47,7 +55,7 @@ done
 ksm_ns=${E2E_KSM_NAMESPACE:-monitoring}
 ksm=${E2E_KSM_DEPLOYMENT:-kube-state-metrics}
 was=$(kubectl --context "$spoke_ctx" -n "$ksm_ns" get deploy "$ksm" \
-  -o jsonpath='{.metadata.annotations.e2e\.kerf\.oz\.io/scaled-from}' 2>/dev/null || true)
+  -o jsonpath='{.metadata.annotations.e2e\.kerf\.getkerf\.dev/scaled-from}' 2>/dev/null || true)
 if [ -n "$was" ]; then
   kubectl --context "$spoke_ctx" -n "$ksm_ns" scale deploy "$ksm" --replicas="$was" >/dev/null
   kubectl --context "$spoke_ctx" -n "$ksm_ns" annotate deploy "$ksm" e2e.kerf.getkerf.dev/scaled-from- >/dev/null

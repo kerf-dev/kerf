@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -11,8 +12,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
@@ -186,6 +189,36 @@ func consistently(t *testing.T, d, every time.Duration, what string, cond func()
 		}
 		time.Sleep(every)
 	}
+	t.Logf("%s held for %s", what, d)
+}
+
+// sleep waits d and logs why (the e2e summary lists it with the test's other waits).
+func sleep(t *testing.T, d time.Duration, why string) {
+	t.Helper()
+	time.Sleep(d)
+	t.Logf("slept %s: %s", d, why)
+}
+
+// nudgePods sets (value != "") or removes (value "") annotation key on the pods matching sel. A
+// pod update makes the kubelet sync the pod at once, which also refreshes its mounted ConfigMaps
+// and Secrets; otherwise that happens at the kubelet's next periodic sync (up to ~1.5 min later).
+func nudgePods(t *testing.T, cl cluster, ns string, sel map[string]string, key, value string) {
+	t.Helper()
+	var list corev1.PodList
+	if err := cl.C.List(ctx(t), &list, client.InNamespace(ns), client.MatchingLabels(sel)); err != nil {
+		t.Logf("nudge pods %v in %s on %s: %v", sel, ns, cl.Name, err)
+		return
+	}
+	var v any = value
+	if value == "" {
+		v = nil
+	}
+	patch, _ := json.Marshal(map[string]any{"metadata": map[string]any{"annotations": map[string]any{key: v}}})
+	for i := range list.Items {
+		if err := cl.C.Patch(ctx(t), &list.Items[i], client.RawPatch(types.MergePatchType, patch)); err != nil && !apierrors.IsNotFound(err) {
+			t.Logf("nudge pod %s on %s: %v", list.Items[i].Name, cl.Name, err)
+		}
+	}
 }
 
 // policy creates a cluster-scoped RightsizingPolicy named like the namespace (deleted with it).
@@ -266,7 +299,7 @@ func waitPhase(t *testing.T, cl cluster, ns, kind, name string, phase v1alpha1.P
 	t.Helper()
 	var r *v1alpha1.RightsizingRecommendation
 	eventually(t, env.ApplyTimeout, 5*time.Second, fmt.Sprintf("%s %s phase %s", kind, name, phase), func() (bool, string) {
-		env.Hub.maybeRecompute(ctx(t), t.Logf)
+		env.Hub.maybeRecompute(ctx(t), cl.Name, t.Logf)
 		r = rsr(t, cl, ns, kind, name)
 		return r != nil && r.Status.Phase == phase, rsrStatus(r)
 	})
@@ -292,7 +325,7 @@ func waitHubRecommendation(t *testing.T, cl cluster, ns, kind, name string, ok f
 	t.Helper()
 	var rec *workloadRec
 	eventually(t, env.ApplyTimeout, 10*time.Second, fmt.Sprintf("hub recommendation for %s/%s", ns, name), func() (bool, string) {
-		env.Hub.maybeRecompute(ctx(t), t.Logf)
+		env.Hub.maybeRecompute(ctx(t), cl.Name, t.Logf)
 		d, err := env.Hub.workload(ctx(t), cl.Name, ns, kind, name)
 		if err != nil {
 			return false, err.Error()

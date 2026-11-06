@@ -1,14 +1,27 @@
 name: e2e
 
 # WO-09: create the k3d environment, deploy hub, pricing and agents, run the end-to-end suite,
-# upload logs on failure. Runs nightly and on demand (the suite needs ~25 min plus ~5 min setup).
+# upload logs on failure. Tiers (WO-30): the full suite (`make e2e`, <= 8 min on the dev fleet)
+# nightly and on demand; the smoke tier (`make e2e-smoke`, <= 4 min) on pull requests that change
+# Go code, charts or the suite. Pull requests run it only once a runner can host the fleet: set the
+# repository variable E2E_ON_PULL_REQUESTS=true (and E2E_RUNNER to its label, default
+# ubuntu-latest). Setup (clusters, images, deploys) adds ~5 min.
 
 on:
   workflow_dispatch:
+    inputs:
+      tier:
+        description: "full or smoke"
+        default: full
+        type: choice
+        options: [full, smoke]
   schedule:
     - cron: "0 3 * * *"
   pull_request:
     paths:
+      - "cmd/**"
+      - "internal/**"
+      - "deploy/**"
       - "test/e2e/**"
       - "make/e2e.mk"
       - ".github/workflows/e2e.yaml"
@@ -22,8 +35,13 @@ concurrency:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest   # 4 vCPU / 16 GiB on public repositories; three k3d clusters + Argo CD + VictoriaMetrics need ~10 GiB
-    timeout-minutes: 60
+    if: github.event_name != 'pull_request' || vars.E2E_ON_PULL_REQUESTS == 'true'
+    # ubuntu-latest: 4 vCPU / 16 GiB on public repositories; three k3d clusters + Argo CD +
+    # VictoriaMetrics need ~10 GiB, and the suite's workloads ~3 cores on ro-spoke-1.
+    runs-on: ${{ vars.E2E_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    env:
+      E2E_TIER: ${{ github.event_name == 'pull_request' && 'smoke' || inputs.tier || 'full' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -49,13 +67,14 @@ jobs:
               | kubectl --context k3d-$c -n kerf create secret generic kerf-agent-token \
                   --from-file=token=/dev/stdin --dry-run=client -o yaml | kubectl --context k3d-$c apply -f -
           done
-      - name: Run e2e
-        run: make e2e
+      - name: Run e2e (${{ env.E2E_TIER }})
+        run: |
+          if [ "$E2E_TIER" = smoke ]; then make e2e-smoke; else make e2e; fi
       - name: Collect logs
         if: failure()
         run: |
           mkdir -p e2e-logs
-          cp bin/e2e.log e2e-logs/ || true
+          cp bin/e2e*.log bin/e2e*.json e2e-logs/ || true
           for c in ro-hub ro-spoke-1 ro-spoke-2; do
             kubectl --context k3d-$c cluster-info dump --all-namespaces --output-directory=e2e-logs/$c >/dev/null || true
             kubectl --context k3d-$c get rightsizingrecommendations,rightsizingpolicies -A -o yaml > e2e-logs/$c/rightsizing.yaml 2>/dev/null || true

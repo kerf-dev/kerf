@@ -175,6 +175,21 @@ func TestAdminPolicy(t *testing.T) {
 	})
 }
 
+// recommendedCPU maps the workload's recommendation ids (hub history) to the recommended cpu
+// request of its first container.
+func recommendedCPU(t *testing.T, cl cluster, ns, name string) map[string]string {
+	t.Helper()
+	var h hubapi.WorkloadHistory
+	as(t, viewer).get(t, workloadPath(cl, ns, name)+"/history?limit=1000", &h)
+	out := map[string]string{}
+	for _, r := range h.Recommendations {
+		if len(r.Containers) > 0 && r.Containers[0].Recommended.Requests != nil {
+			out[r.ID] = r.Containers[0].Recommended.Requests.CPU
+		}
+	}
+	return out
+}
+
 // clusterAgent returns the hub's view of a cluster's agent config sync.
 func clusterAgent(t *testing.T, name string) hubapi.AgentConfigSync {
 	t.Helper()
@@ -219,8 +234,12 @@ func TestAdminPause(t *testing.T) {
 	pa.Selector.MatchLabels = map[string]string{"e2e-role": "rb"}
 	pa.Priority = 1001
 	armed(t, cl, ns+"-rb", ns, "rb", overCPU, pa)
+	// From here until the blocked events are counted, no suite recompute for spoke-2 (and none in
+	// flight): a new recommendation with other values is a new proposal and gets its own blocked
+	// event (D-017). The hub's periodic run may still bring one; the count below allows for it.
+	releaseRecompute := env.Hub.holdRecompute(t, cl.Name)
 	waitPhase(t, cl, ns, deployment, "rb", v1alpha1.PhaseApplied)
-
+	env.Hub.settle(t, cl.Name)
 	before := clusterAgent(t, cl.Name).ConfigVersion
 	if r := setPause(t, operator, cl.Name, true, nil); r.Status != http.StatusOK {
 		t.Fatalf("operator pause of %s: %s", cl.Name, r)
@@ -242,7 +261,8 @@ func TestAdminPause(t *testing.T) {
 	webPods := snapshot(t, cl, ns, "web")
 	ev := waitEvent(t, cl, ns, "web", "blocked", func(e auditEvent) bool { return e.Reason == v1alpha1.ReasonPaused })
 	t.Logf("blocked event: %s", ev.Message)
-	consistently(t, 45*time.Second, 5*time.Second, "nothing applied while paused", func() (bool, string) {
+	// At least two agent pulls (45 s at the 30 s pull before WO-30).
+	consistently(t, max(2*agentFlag(t, cl, "pull-interval", time.Minute), 30*time.Second), 5*time.Second, "nothing applied while paused", func() (bool, string) {
 		if got := snapshot(t, cl, ns, "web"); fmt.Sprint(got) != fmt.Sprint(webPods) {
 			return false, fmt.Sprintf("web changed while paused: %v -> %v", webPods, got)
 		}
@@ -266,9 +286,24 @@ func TestAdminPause(t *testing.T) {
 	waitPhase(t, cl, ns, deployment, "web", v1alpha1.PhaseApplied)
 	evs, err := env.Hub.audit(ctx(t), cl.Name, ns, deployment, "web", "blocked")
 	must(t, err)
-	if n := len(slices.DeleteFunc(evs, func(e auditEvent) bool { return e.Reason != v1alpha1.ReasonPaused })); n != 1 {
-		t.Errorf("%d blocked/Paused events for web, want exactly 1 (D-017)", n)
+	evs = slices.DeleteFunc(evs, func(e auditEvent) bool { return e.Reason != v1alpha1.ReasonPaused })
+	// D-017: one blocked/Paused event, and another only when the proposed values change (a newer
+	// recommendation with another cpu request, e.g. from the hub's periodic run during the pause).
+	cpuOf := recommendedCPU(t, cl, ns, "web")
+	if len(evs) == 0 {
+		t.Errorf("no blocked/Paused event for web")
 	}
+	for i := 1; i < len(evs); i++ {
+		prev, cur := cpuOf[evs[i-1].RecommendationID], cpuOf[evs[i].RecommendationID]
+		if prev == "" || prev == cur {
+			t.Errorf("blocked/Paused event %d of %d for web repeats the proposal (recommendation %s cpu %q after %s cpu %q), want one per proposal (D-017)",
+				i+1, len(evs), evs[i].RecommendationID, cur, evs[i-1].RecommendationID, prev)
+		}
+	}
+	if len(evs) > 1 {
+		t.Logf("%d blocked/Paused events for web, one per proposal (a newer recommendation with other values arrived during the pause)", len(evs))
+	}
+	releaseRecompute()
 	q := url.Values{"targetType": {hubapi.TargetAutomation}, "cluster": {cl.Name}}
 	opActor := hubapi.Actor{Type: hubapi.ActorUser, Name: operator, Role: operator}
 	since := func(c hubapi.ConfigChange) bool { return !c.Time.Before(pausedAt.Add(-time.Minute)) }
@@ -330,7 +365,7 @@ func TestApproveOnce(t *testing.T) {
 		return rec.ID != a.RecommendationID, "still the approved recommendation"
 	})
 	t.Logf("next recommendation %s: cpu %s (approved %s)", next.ID, next.Containers[0].Recommended.Requests.CPU, want.String())
-	time.Sleep(time.Minute) // two agent pulls with the new recommendation
+	sleep(t, 2*agentFlag(t, cl, "pull-interval", time.Minute), "two agent pulls with the new recommendation")
 	consistently(t, 45*time.Second, 5*time.Second, "next recommendation not applied", func() (bool, string) {
 		if got := snapshot(t, cl, ns, "web"); fmt.Sprint(got) != fmt.Sprint(pods) {
 			return false, fmt.Sprintf("pods changed: %v -> %v", pods, got)
@@ -480,7 +515,7 @@ func TestApproveOnceArgoCD(t *testing.T) {
 
 	// D-027: the agent holds the approved fields until a newer recommendation with other values
 	// arrives; the suite's recompute requests stay off for the rest of the test.
-	env.Hub.holdRecompute(t)
+	env.Hub.holdRecompute(t, cl.Name)
 	a, ev := approveApplied(t, operator, cl, ns, "web")
 	if ev.Strategy != string(v1alpha1.StrategyRollout) {
 		t.Errorf("approved change applied with strategy %q, want rollout", ev.Strategy)

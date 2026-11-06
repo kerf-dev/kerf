@@ -1,18 +1,56 @@
-# End-to-end suite (WO-09)
+# End-to-end suite (WO-09, WO-24, WO-30)
 
 Go tests (build tag `e2e`) against the running k3d environment (WO-01) with the deployed hub
 (WO-04) and agents (WO-06). Nothing is mocked: test pods burn known amounts of CPU/memory, the spoke
 vmagent ships usage to VictoriaMetrics, the hub's periodic run recommends, the agent applies.
 
 ```bash
-make e2e                         # all scenarios in parallel, 13–20 min
+make e2e                         # full suite, all scenarios in parallel (goal: <= 8 min)
+make e2e-smoke                   # smoke tier: one scenario per area (goal: <= 4 min)
 make e2e E2E_RUN=TestRollout     # one scenario (Go -run regexp)
 make e2e E2E_FLAGS=-short        # (no-op today) extra go test flags
 make e2e-clean                   # remove leftovers of an interrupted run
 make e2e-vet                     # compile/vet the suite without a cluster
 ```
 
-`go test ./...` / `make test` never run it (build tag). The log of the last run is `bin/e2e.log`.
+`go test ./...` / `make test` never run it (build tag). The log of the last run is `bin/e2e.log`
+(`bin/e2e-smoke.log` for the smoke tier), the raw `go test -json` stream `bin/e2e.json`.
+
+## Tiers
+
+| Tier | Target | Tests | Where |
+|---|---|---|---|
+| smoke | `make e2e-smoke` | `E2E_SMOKE_TESTS` = `TestAudit`, `TestInPlaceCPU`, `TestWebhook`, `TestRollback`, `TestAdminPolicy`, `TestReadiness`: audit, in-place apply, webhook, rollback, admin policy, readiness | pull requests touching `cmd/**`, `internal/**`, `deploy/**`, `test/e2e/**` (CI, once a runner can host the fleet) |
+| full | `make e2e` | every test | nightly (CI), and locally before merging suite or timing changes |
+
+At the end of every run the log shows a per-test duration table, the setup time (`make e2e` start
+until the first test starts) and the wall time, and, for the five slowest tests, every wait they
+made (`<what> after <duration>` of `eventually`, `held for` of `consistently`, the spoke-2 lock,
+`slept`). `test/e2e/e2esummary` turns the `go test -json` stream into that log.
+
+## Timing (WO-30)
+
+The suite is fast because the dev charts use short timers and the suite waits for observed signals,
+not fixed durations. Production defaults are unchanged.
+
+| Setting | Production default | Dev/e2e value | Where | Effect |
+|---|---|---|---|---|
+| hub `config.recommender.endAlignment` | the step (5m) | `30s` | `deploy/charts/hub/values-dev.yaml` | a run (and a recompute) sees usage up to 30 s ago instead of the last full 5-minute step: a new workload gets its first recommendation ~1 min after it starts instead of ~5.5 min |
+| agent `pullInterval` | `1m` | `15s` (was 30s) | `deploy/charts/agent/values-dev.yaml` | recommendations, policies, pause and approvals reach the agent sooner |
+| agent `hubStaleAfter` | `5m` | `1m` | same | `TestHubUnreachable` waits 1 min plus the cut-off, not 6.5 min |
+| agent `reportInterval` | `10s` | `5s` (unchanged) | same | events reach the hub |
+| agent `health.checkInterval` | `15s` | `5s` | same | health-watch re-evaluation (pod events act at once anyway) |
+| suite `E2E_RECOMPUTE_EVERY` | – | `30s` | env | per-cluster `POST /v1/admin/recompute?cluster=` at most this often per cluster while a test waits |
+
+- Recompute requests name the cluster: a run of one dev spoke takes a few seconds (all four
+  clusters, with the 30-day synthetic ones, ~40 s). Holds (`holdRecompute`) are per cluster.
+- `TestHubUnreachable` reads `--hub-stale-after` and `--pull-interval` from the agent's Deployment
+  args, waits until the hub stops recording the agent's heartbeats (the token swap is in effect), then
+  `hubStaleAfter` plus the hub's heartbeat granularity (15 s). It nudges the agent pod (annotation
+  `e2e.kerf.getkerf.dev/token-nudge`, removed at the end and by `make e2e-unblock`): a pod update
+  makes the kubelet refresh the mounted token Secret at once instead of at its next periodic sync.
+- `setControl` nudges the test pods the same way, so the ConfigMap that makes them OOM or crash
+  arrives at once.
 
 ## Scenarios
 
@@ -32,7 +70,7 @@ make e2e-vet                     # compile/vet the suite without a cluster
 | 9 | `TestGuardrails/*` | spoke-1 | throttled workload (limit 200m, wants a core): hub flags `throttled` and raises; applied value > current, never below. HPA-coupled (CPU-utilization HPA): RSR reason `HPACoupled`, nothing changed. `maxChangePercent: 20`: applied decrease is within 20% (200m–250m) |
 | 10 | `TestRollback/OOM_after_a_memory_decrease` | spoke-1 | Python workload whose held memory is set through a ConfigMap; memory decrease applied by rollout (in-place memory is refused on swap nodes); raising the held memory past the new limit OOM-kills it → RSR `RolledBack` with `rolledBackAt`, template back at 256Mi, hub `rolled_back` event reason `OOMKills` |
 | 10 | `TestRollback/restarts_after_an_in-place_CPU_change` | spoke-1 | in-place CPU decrease applied; the container is then made to crash-loop (ConfigMap) → ≥ 3 restarts → RSR `RolledBack`, pods resized back to 250m in place, template untouched, hub `rolled_back` event reason `Restarts` |
-| 11 | `TestHubUnreachable` | spoke-2 | with one workload applied and one waiting in audit, the agent is cut off from the hub (invalid hub token) for `hubStaleAfter` + 90 s; switching the waiting workload to auto-patch gives `HubUnreachable` and nothing changes for 60 s; the applied workload is not reverted; after reconnecting, the pending change is applied |
+| 11 | `TestHubUnreachable` | spoke-2 | with one workload applied and one waiting in audit, the agent is cut off from the hub (invalid hub token) until it counts the hub as unreachable (`hubStaleAfter` after its last request, as recorded by the hub); switching the waiting workload to auto-patch gives `HubUnreachable` and nothing changes for 2 agent pulls (at least 30 s); the applied workload is not reverted; after reconnecting, the pending change is applied |
 
 ### Admin area (WO-24, D-022..D-027)
 
@@ -79,9 +117,10 @@ second agent with a stub hub would fight them over the same workloads.
   `guardrails.learningPeriod: 0s` and `minConfidence: "0"` so minutes of data are enough. Other
   value settings stay at the defaults, so the hub's recommendation settings match at once (no
   `RecommendationStale` round).
-- The hub (dev chart) runs every 5 minutes over data aligned to 5-minute steps, so a new workload
-  gets a recommendation 3–15 minutes after it starts; the agent pulls every 30 s. Timeouts are sized
-  for that (`E2E_APPLY_TIMEOUT`, default 18m) and all scenarios run in parallel.
+- The hub (dev chart) runs every 5 minutes; with `endAlignment: 30s` and the suite's per-cluster
+  recomputes a new workload gets a recommendation about a minute after it starts (a hub without
+  `endAlignment` aligns to 5-minute steps: 5–6 minutes). The agent pulls every 15 s. Timeouts
+  (`E2E_APPLY_TIMEOUT`, default 18m) still allow for the slow case; all scenarios run in parallel.
 - The first recommendation can be based on a handful of samples (e.g. "keep 500m"). Scenarios that
   apply therefore start their policy with CPU in audit, wait until the hub recommends a real
   decrease, and only then switch CPU to auto-patch (`armed`). Otherwise an immature first
@@ -94,7 +133,7 @@ second agent with a stub hub would fight them over the same workloads.
   root, non-recursively) and creates its own Application in `argocd`, removed (cascading) at the end,
   together with the git directory.
 - Hub outage (scenario 11): the spoke-2 agent's hub token (`kerf/kerf-agent-token`)
-  is replaced by an invalid one for ~8 minutes. Every pull fails with 401, which the agent treats like
+  is replaced by an invalid one for ~3 minutes (`hubStaleAfter` 1m in the dev values). Every pull fails with 401, which the agent treats like
   an unreachable hub, and it re-reads the token on each request. The original is put back at the end.
   If a run was killed, `make e2e` restores it from the hub's `hub-dev-tokens` Secret before and after
   the run (`make e2e-unblock`). A NetworkPolicy does not work: the k3s policy controller keeps
@@ -103,8 +142,8 @@ second agent with a stub hub would fight them over the same workloads.
 - Webhook down (scenario 8): the webhook Deployment on spoke-1 is scaled to 0 for about a minute,
   with its replicas recorded in annotation `e2e.kerf.getkerf.dev/scaled-from`, then scaled
   back. `make e2e-unblock` scales it back after a killed run.
-- Recompute (D-019): when the hub offers `POST /v1/admin/recompute`, the suite triggers it at most
-  every 2 minutes while it waits, using the admin token from `hub-dev-tokens` (`E2E_HUB_ADMIN_TOKEN`
+- Recompute (D-019): when the hub offers `POST /v1/admin/recompute`, the suite triggers it for the
+  cluster it waits on, at most every `E2E_RECOMPUTE_EVERY` (30 s) per cluster, using the admin token from `hub-dev-tokens` (`E2E_HUB_ADMIN_TOKEN`
   overrides; `E2E_HUB_RECOMPUTE=off` disables it). Without it (404), it waits for the periodic run.
 
 Nothing outside the suite's namespaces is modified, except that temporary token swap, the webhook
@@ -121,7 +160,9 @@ scale-down, the spoke-2 pause and `pods/resize` rule removal (WO-24) and, only w
 | `E2E_HUB_UI_TOKEN` | read from Secret `kerf/hub-dev-tokens` (key `ui`) on ro-hub |
 | `E2E_GIT_URL` / `E2E_GIT_IN_CLUSTER_URL` | `git://localhost:19418/workloads.git` / `git://git-server.git-server.svc.cluster.local/workloads.git` |
 | `E2E_APPLY_TIMEOUT` | `18m` (hub run + data alignment + apply) |
-| `E2E_HUB_STALE_AFTER` | `5m` (the agent's `hubStaleAfter`) |
+| `E2E_HUB_STALE_AFTER` | the agent's `--hub-stale-after` (Deployment args) |
+| `E2E_RECOMPUTE_EVERY` | `30s` (per cluster) |
+| `E2E_AGENT_DEPLOYMENT` | `kerf-agent` (scenario 11 reads its args) |
 | `E2E_INFEASIBLE_CPU` | `16` (scenario 4's CPU floor; must exceed the node's capacity) |
 | `E2E_KEEP` | set to keep namespaces/policies/apps for debugging (`make e2e-clean` later) |
 | `E2E_VIEWER_PASSWORD` / `E2E_OPERATOR_PASSWORD` / `E2E_ADMIN_PASSWORD` | dev users of values-dev.yaml |
@@ -134,6 +175,9 @@ Prerequisites: the agents have their hub token Secret (WO-06 hand-over) and are 
 ## CI
 
 `.github/workflows/e2e.yaml`: creates the clusters
-(`make dev-up`), deploys hub, pricing and agents, creates the agent tokens, runs `make e2e`, and on
-failure uploads `bin/e2e.log`, `kubectl cluster-info dump` of all clusters and the rightsizing
-objects.
+(`make dev-up`), deploys hub, pricing and agents, creates the agent tokens, runs `make e2e`
+(nightly, manual dispatch with tier `full`) or `make e2e-smoke` (pull requests, manual tier
+`smoke`), and on failure uploads the e2e logs, `kubectl cluster-info dump` of all clusters and the
+rightsizing objects. Pull requests run it only when the repository variable
+`E2E_ON_PULL_REQUESTS` is `true` (set it once a runner can host the fleet; `E2E_RUNNER` picks the
+runner label, default `ubuntu-latest`).

@@ -68,6 +68,8 @@ func setControl(t *testing.T, cl cluster, ns, name string, data map[string]strin
 	}
 	cm.Data = data
 	must(t, cl.C.Update(ctx(t), cm))
+	// The program reads the ConfigMap volume: make the kubelet refresh it now (WO-30).
+	nudgePods(t, cl, ns, map[string]string{"app": name}, "e2e.kerf.getkerf.dev/ctl-nudge", time.Now().UTC().Format(time.RFC3339Nano))
 }
 
 // rollbackGuardrails watches every change for 20 minutes with the default thresholds
