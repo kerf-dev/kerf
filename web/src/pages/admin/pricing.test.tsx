@@ -16,9 +16,20 @@ import PricingPage from './pricing'
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
 afterAll(() => server.close())
-beforeEach(() => {
+async function signIn(username: string) {
+  const r = await fetch(`${window.location.origin}/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password: 'dev-password' }),
+  })
+  expect(r.status).toBe(200)
+}
+
+beforeEach(async () => {
   localStorage.clear()
   resetDb()
+  // Sign-in is required: read as a viewer.
+  await signIn('viewer')
 })
 afterEach(cleanup)
 
@@ -40,7 +51,7 @@ const setRates = (r: PricingRates) => {
 describe('Pricing page rate sources', () => {
   it('shows effective rates from the Cost and Usage Report and the sources per cluster', async () => {
     renderPage()
-    const card = await screen.findByTestId('rate-sources-card', {}, { timeout: 15_000 })
+    const card = await screen.findByTestId('rate-sources-card')
     expect(card).toHaveTextContent('Effective rates from the AWS Cost and Usage Report')
     expect(card).toHaveTextContent('11 instance types')
     expect(card).toHaveTextContent("don't enter them as a discount")
@@ -55,12 +66,12 @@ describe('Pricing page rate sources', () => {
     const period = formatPeriod(getAdmin().pricingRates.cur!.period)
     expect(period).not.toBe('')
     expect(chips).toHaveTextContent(period)
-  }, 20_000)
+  })
 
   it('explains list prices when the reader is off', async () => {
     setRates({ clusters: [{ cluster: 'prod-eu-west-1', sources: [{ source: 'list', nodes: 5 }] }] })
     renderPage()
-    const card = await screen.findByTestId('rate-sources-card', {}, { timeout: 15_000 })
+    const card = await screen.findByTestId('rate-sources-card')
     expect(card).toHaveTextContent('List prices')
     expect(card).toHaveTextContent('Turn on the AWS Cost and Usage Report')
     const chips = within(card).getByTestId('rate-sources')
@@ -74,7 +85,7 @@ describe('Pricing page rate sources', () => {
       clusters: [{ cluster: 'prod-eu-west-1', sources: [{ source: 'list', nodes: 5 }] }],
     })
     renderPage()
-    const card = await screen.findByTestId('rate-sources-card', {}, { timeout: 15_000 })
+    const card = await screen.findByTestId('rate-sources-card')
     expect(card).toHaveTextContent('The AWS Cost and Usage Report cannot be read')
     expect(card).toHaveTextContent('priced at list prices again')
   })
@@ -84,7 +95,7 @@ describe('Pricing page rate sources', () => {
     // @ts-expect-error: the hub omits rates when its store is down
     st.pricingRates = undefined
     renderPage()
-    const card = await screen.findByTestId('rate-sources-card', {}, { timeout: 15_000 })
+    const card = await screen.findByTestId('rate-sources-card')
     expect(card).toHaveTextContent('Rate sources are unavailable')
     expect(screen.getByText('Default discount')).toBeInTheDocument()
   })
