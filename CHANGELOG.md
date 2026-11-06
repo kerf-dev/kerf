@@ -4,9 +4,11 @@ All notable changes to Kerf are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
 Until 1.0.0, a minor version may change the chart values or the CRDs; the notes say how to upgrade.
 
-To release: move the `Unreleased` notes under a new `## [X.Y.Z] - YYYY-MM-DD` heading, commit, and push the
-tag `vX.Y.Z` (see [docs/release.md](docs/release.md#releasing-on-github)). The release workflow fails for a final
-version without its section here.
+To release: run `make changelog VERSION=X.Y.Z` for the changes since the previous release, then move the
+`Unreleased` notes under a new `## [X.Y.Z] - YYYY-MM-DD` heading and curate them (this file is written by hand; the
+command only prints a draft), commit, and push the tag `vX.Y.Z` (see
+[docs/release.md](docs/release.md#releasing-on-github)). The release workflow fails for a final version without its
+section here. The GitHub Release lists the same section as its highlights, followed by the changes grouped by type.
 
 ## [Unreleased]
 

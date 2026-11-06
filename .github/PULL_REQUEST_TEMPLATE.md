@@ -1,4 +1,5 @@
 <!-- Thanks for contributing to Kerf. Keep one topic per pull request; small ones get reviewed faster. -->
+<!-- The pull request title becomes the commit and the release-notes line: `type(scope): summary`, e.g. `fix(hub): handle an empty metrics response`. See CONTRIBUTING.md. -->
 
 ## What and why
 

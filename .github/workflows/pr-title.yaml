@@ -1,0 +1,34 @@
+name: pr-title
+
+# Pull request titles follow Conventional Commits: `type(scope)!: summary`. Every pull request is squash-merged and
+# the squash commit keeps the title, so the commits on main are conventional and the release notes can be grouped
+# by type (cliff.toml, tools/release/notes.sh). The rules are in .github/scripts/pr-title.sh and CONTRIBUTING.md.
+#
+# The title is passed through an environment variable, never interpolated into the script (script injection).
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read   # checkout of the validator script
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    name: pr title (conventional commits)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The validator passes its own tests
+        run: .github/scripts/pr-title.sh --self-test
+      - name: The title is a Conventional Commit
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: .github/scripts/pr-title.sh "$PR_TITLE"

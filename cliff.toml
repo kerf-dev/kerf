@@ -1,0 +1,72 @@
+# git-cliff configuration for the release notes (tools/release/notes.sh, `make release-notes`, `make changelog`).
+# https://git-cliff.org/docs/configuration
+#
+# Only Conventional Commits are listed. Every pull request is squash-merged and the commit title is the pull
+# request title, which the pr-title check holds to `type(scope)!: summary` (.github/scripts/pr-title.sh).
+# Older history has no types and is skipped.
+#
+# The template renders the groups only: tools/release/notes.sh adds the headings, the install steps and the links.
+# With a GitHub token (GITHUB_TOKEN) each line also names the author and links the pull request; without one
+# it ends with the short commit hash.
+
+[remote.github]
+owner = "kerf-dev"
+repo = "kerf"
+
+[changelog]
+header = ""
+footer = ""
+trim = true
+# One release per run: notes.sh passes the commit range. Groups are sorted by name, so the group names start
+# with an HTML comment that fixes their order; `striptags` removes it again.
+body = """
+{% for group, commits in commits | group_by(attribute="group") -%}
+### {{ group | striptags | trim }}
+{% set heading = group | striptags | trim -%}
+{% for commit in commits %}
+- {% if commit.scope and heading != "Security" and heading != "Dependencies" %}**{{ commit.scope }}:** {% endif -%}
+{{ commit.message | split(pat="\n") | first | trim -}}
+{% if commit.remote.username %} by @{{ commit.remote.username }}{% endif -%}
+{% if commit.remote.pr_number %} in [#{{ commit.remote.pr_number }}](https://github.com/kerf-dev/kerf/pull/{{ commit.remote.pr_number }})
+{%- else %} ({{ commit.id | truncate(length=7, end="") }}){% endif -%}
+{% endfor %}
+
+{% endfor -%}
+{% if github.contributors -%}
+{% set first_timers = github.contributors | filter(attribute="is_first_time", value=true) -%}
+{% if first_timers | length > 0 -%}
+### New contributors
+{% for contributor in first_timers %}
+- @{{ contributor.username }} made their first contribution
+{%- if contributor.pr_number %} in [#{{ contributor.pr_number }}](https://github.com/kerf-dev/kerf/pull/{{ contributor.pr_number }}){% endif -%}
+{% endfor %}
+{% endif -%}
+{% endif -%}
+"""
+
+[git]
+conventional_commits = true
+filter_unconventional = true      # older commits have no type: not listed
+filter_commits = true             # a conventional commit whose type has no group below is not listed either
+protect_breaking_commits = false
+split_commits = false
+sort_commits = "oldest"
+topo_order = false
+# GitHub appends " (#123)" to a squash commit title; the pull request link comes from the remote data instead.
+commit_preprocessors = [
+  { pattern = '^([^\n]*?) \(#[0-9]+\)', replace = "$1" },
+  # The line shows the description only, so a revert says what it is: "reverts feat(hub): add a savings export".
+  { pattern = '^revert(\([^)]*\))?(!?): ', replace = "revert$1$2: reverts " },
+]
+# The first matching parser wins, so the breaking and scope groups come before the type groups.
+commit_parsers = [
+  { field = "breaking", pattern = "true", group = "<!-- 00 -->Breaking changes" },
+  { field = "scope", pattern = "^security$", group = "<!-- 03 -->Security" },
+  { field = "scope", pattern = "^deps$", group = "<!-- 06 -->Dependencies" },
+  { message = "^feat[(!:]", group = "<!-- 01 -->Features" },
+  { message = "^fix[(!:]", group = "<!-- 02 -->Bug fixes" },
+  { message = "^perf[(!:]", group = "<!-- 04 -->Performance" },
+  { message = "^docs[(!:]", group = "<!-- 05 -->Documentation" },
+  { message = "^(ci|build)[(!:]", group = "<!-- 07 -->CI and build" },
+  { message = "^(refactor|test|chore|revert)[(!:]", group = "<!-- 08 -->Other changes" },
+]

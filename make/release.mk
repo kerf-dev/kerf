@@ -4,6 +4,8 @@
 #   make release       REGISTRY=<acct>.dkr.ecr.<region>.amazonaws.com/kerf VERSION=0.1.0
 #   make release-chart REGISTRY=... VERSION=...      (charts only; `release` runs it too)
 #   make release-dry                                 (build both platforms and package charts, push nothing)
+#   make release-notes VERSION=0.2.0                 (print the GitHub Release notes: highlights, changes by type, install)
+#   make changelog     VERSION=0.2.0                 (print the changes as Keep a Changelog sections, to curate into CHANGELOG.md)
 #
 # Images go to $(REGISTRY)/<name>:$(VERSION), charts to oci://$(REGISTRY)/charts/<chart>:$(VERSION).
 # Results: bin/release/images.txt (`<repository> <tag> <digest>`) and bin/release/charts.txt.
@@ -156,3 +158,18 @@ release-dry: release-builder release-chart-package ## Build every image for $(PL
 	  $(RELEASE_BUILDX) $(RELEASE_CACHE_FLAGS) -f $$df --output type=cacheonly $$ctx; \
 	done
 	@echo "release-dry OK: $(RELEASE_IMAGES) built for $(PLATFORMS); charts in $(RELEASE_DIR)/charts"
+
+# Release notes (tools/release/notes.sh, cliff.toml). The commit list needs git-cliff (an installed one, else the official
+# container image, pinned by digest). VERSION must be given: it names the tag the commit range ends at.
+.PHONY: release-notes changelog
+
+RELEASE_NOTES_VERSION_CHECK = @case "$(origin VERSION)" in "command line"|environment) ;; \
+  *) echo "VERSION is required, e.g. make $@ VERSION=0.2.0"; exit 1 ;; esac
+
+release-notes: ## Print the GitHub Release notes of VERSION=X.Y.Z[-rc.N] (a local run lists the commits without authors).
+	$(RELEASE_NOTES_VERSION_CHECK)
+	@tools/release/notes.sh "$(VERSION)" $(if $(REGISTRY),"$(REGISTRY)")
+
+changelog: ## Print the changes since the previous release as Keep a Changelog sections (VERSION=X.Y.Z), to curate into CHANGELOG.md.
+	$(RELEASE_NOTES_VERSION_CHECK)
+	@tools/release/notes.sh --changelog "$(VERSION)"

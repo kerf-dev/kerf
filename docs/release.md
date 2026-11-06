@@ -31,19 +31,64 @@ a tag `vX.Y.Z` or `vX.Y.Z-rc.N` is pushed.
 | Build and push | `make release REGISTRY=ghcr.io/<owner>/kerf VERSION=X.Y.Z RELEASE_CHART_DEFAULT_REGISTRY=1`: the five images for both platforms with SBOM and provenance, and the six charts |
 | Chart defaults | `RELEASE_CHART_DEFAULT_REGISTRY=1` makes each packaged chart default to this release's GHCR images, so `helm install` needs no registry setting. Explicit values still win (the EKS guide's ECR values) |
 | Sign | `cosign sign` (keyless, the workflow's GitHub OIDC identity) for every image and chart digest |
-| GitHub Release | Title `kerf X.Y.Z`. Notes (`tools/release/notes.sh`): the CHANGELOG section, install steps, every artifact with its digest, the `cosign verify` command, then GitHub's list of merged pull requests by label (`.github/release.yml`). Attached: the chart packages, `images.txt`, `charts.txt`, `SHA256SUMS`. A `-rc.N` version is a pre-release and never "latest" |
+| GitHub Release | Title `Kerf X.Y.Z`. Notes (`tools/release/notes.sh`): see [Release notes](#release-notes). Attached: the chart packages, `images.txt`, `charts.txt`, `SHA256SUMS`. A `-rc.N` version is a pre-release and never "latest" |
 
 To release:
 
 ```bash
-# 1. In CHANGELOG.md, rename "## [Unreleased]" to "## [0.2.0] - 2026-11-20" and add a new empty Unreleased section.
-git commit -am "Release 0.2.0" && git push origin main
-# 2. Tag the commit on main and push the tag.
+# 1. Draft the CHANGELOG section. The changes since the previous final release, as Keep a Changelog sections:
+make changelog VERSION=0.2.0
+# 2. In CHANGELOG.md, rename "## [Unreleased]" to "## [0.2.0] - 2026-11-20", add a new empty Unreleased section,
+#    and curate the section: the printed changes are a starting point, the CHANGELOG stays hand-written.
+git commit -am "docs: release 0.2.0"   # and merge it to main through a pull request
+# 3. Tag the commit on main and push the tag.
 git tag -a v0.2.0 -m "kerf 0.2.0" && git push origin v0.2.0
 ```
 
-For a release candidate, skip step 1 (its notes use the `[0.2.0]` or `[Unreleased]` section) and tag `v0.2.0-rc.1`.
-Preview the notes locally with `tools/release/notes.sh 0.2.0` (after a `make release`, it lists the digests too).
+For a release candidate, skip steps 1 and 2 (its notes use the `[0.2.0]` or `[Unreleased]` section) and tag `v0.2.0-rc.1`.
+Preview the notes locally with `make release-notes VERSION=0.2.0` (after a `make release`, it lists the digests too).
+
+## Release notes
+
+The notes of a GitHub Release are built by `tools/release/notes.sh`, in this order:
+
+| Part | Content |
+|---|---|
+| Pre-release banner | Only for a `-rc.N` version |
+| **Highlights** | The `## [X.Y.Z]` section of `CHANGELOG.md` (a pre-release falls back to `[X.Y.Z]`, then `[Unreleased]`): the hand-written summary. Left out when empty |
+| **What's changed** | The commits since the previous release, grouped by type, from the pull request titles (below) |
+| **Install** and **Artifacts** | The `helm install` command, every image and chart with its digest, and the `cosign verify` command (needs cosign **v3** or newer: v2 reports "no signatures found" for these signatures) |
+| **Full changelog** | The compare link from the previous release to this one |
+
+The groups of *What's changed* come from the Conventional Commit type of each pull request title
+([CONTRIBUTING.md](../CONTRIBUTING.md#pull-request-titles)); `cliff.toml` defines them. They appear in this order,
+and only those with changes:
+
+| Group | Commits |
+|---|---|
+| Breaking changes | a `!` after the type or scope, or a `BREAKING CHANGE:` footer |
+| Features | `feat` |
+| Bug fixes | `fix` |
+| Security | scope `security`, any type |
+| Performance | `perf` |
+| Documentation | `docs` |
+| Dependencies | scope `deps`, any type (Dependabot's pull requests) |
+| CI and build | `ci`, `build` |
+| Other changes | `refactor`, `test`, `chore`, `revert` |
+
+A line reads `- **hub:** summary by @author in #123`: the scope in bold, the author and the pull request.
+The release workflow has the GitHub token for that; without a token (a local run) the line ends with the short commit
+hash instead. First-time contributors are listed under *New contributors*. Commits without a type (the history before
+Conventional Commits) are not listed.
+
+Which commits: a final release (`v0.2.0`) lists everything since the previous **final** tag, not just since the last
+release candidate. A release candidate (`v0.2.0-rc.2`) lists what changed since the previous tag of any kind. The
+first final release has no earlier final tag, so it has no commit list and no compare link: its notes are the highlights.
+
+Git-cliff makes the list. The workflow downloads a pinned version and checks its SHA-256. Locally, `make release-notes`
+and `make changelog` use an installed `git-cliff`, or else the official container image, pinned by digest (Docker needed).
+`make changelog VERSION=X.Y.Z` prints the same changes as Keep a Changelog sections (Added, Changed, Fixed, Security)
+for you to paste into `CHANGELOG.md` and curate; nothing rewrites `CHANGELOG.md` by itself.
 
 GHCR facts to know:
 
