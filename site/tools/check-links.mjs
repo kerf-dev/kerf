@@ -26,6 +26,8 @@ function sitePath(url) {
 }
 
 function check(from, url) {
+  // The documentation is built and checked separately, on the assembled site (tools/docs/check-links.mjs).
+  if (/^(https:\/\/getkerf\.dev)?\/docs(\/|$)/.test(url)) return
   checked++
   const [, fragment] = url.split('#')
   if (REPO_URL.test(url)) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Which parts of the repository does this change touch? Prints `<area>=true|false` lines (to $GITHUB_OUTPUT
-# when set) for the areas the ci workflow gates on: go, openapi, web, charts, images.
+# when set) for the areas the ci workflow gates on: go, openapi, web, charts, images, docs.
 #
 # The change is:
 #   pull_request   the merge commit GitHub checks out, against its first parent (the base branch tip),
@@ -40,11 +40,13 @@ openapi="$common api/openapi"
 web="$common web api/openapi"
 charts="$common deploy api/crds dashboards internal/hub/install tools/release go.mod go.sum"
 images="$common cmd internal web api db deploy go.mod go.sum tools/release"
+docs="$common docs docs-site mkdocs.yml site tools/docs api deploy/charts"
 # The Go tests read db/, deploy/, dev/, dashboards/ and docs/contracts/, and `make verify-generate` checks
 # dashboards/; the charts job runs internal/hub/install's tests; the images copy api/ and db/migrations,
-# and `make release-dry` packages the charts.
+# and `make release-dry` packages the charts. The docs build reads docs/ and publishes it with site/; its
+# reference pages are generated from api/ (CRDs, the OpenAPI contract) and the chart values and schema.
 
-areas=(go openapi web charts images)
+areas=(go openapi web charts images docs)
 out=${GITHUB_OUTPUT:-/dev/stdout}
 summary=${GITHUB_STEP_SUMMARY:-/dev/null}
 

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  <link rel="stylesheet" href="{{ 'assets/kerf/kerf.css' | url }}">
+  <meta name="theme-color" content="#f9fafb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0c0e14" media="(prefers-color-scheme: dark)">
+  {# The development docs (main) are not what a search should send readers to. #}
+  {% if config.extra.noindex %}<meta name="robots" content="noindex">{% endif %}
+{% endblock %}
+
+{% block outdated %}
+  This is not the documentation of the latest release.
+  <a href="{{ '../' ~ base_url }}"><strong>Go to the latest release.</strong></a>
+{% endblock %}

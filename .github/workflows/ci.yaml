@@ -4,7 +4,7 @@ name: ci
 # publishes anything. Actions are pinned by commit SHA (Dependabot updates them).
 #
 # Run only what a change needs. The `changes` job (.github/scripts/changes.sh) decides which areas a change
-# touches; the five jobs below are required checks of the main ruleset, so each one ALWAYS runs and reports.
+# touches; the jobs below (go, openapi, web, charts, images) are required checks of the main ruleset, so each one ALWAYS runs and reports.
 # When its area is untouched it finishes in seconds with success after doing nothing ("no relevant changes").
 # If `changes` itself fails, the five fail too (never a silent skip). Tags (releases) and manual runs run
 # everything. Pull requests build the images for linux/amd64 only; main and tags build both platforms.
@@ -38,6 +38,7 @@ jobs:
       web: ${{ steps.areas.outputs.web }}
       charts: ${{ steps.areas.outputs.charts }}
       images: ${{ steps.areas.outputs.images }}
+      docs: ${{ steps.areas.outputs.docs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -145,6 +146,36 @@ jobs:
       - name: No relevant changes
         if: env.RUN != 'true' && needs.changes.result == 'success'
         run: echo "openapi - no relevant changes, skipped" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  docs:
+    name: docs (reference pages, tests, build)
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUN: ${{ needs.changes.outputs.docs }}
+    steps:
+      - name: The changes job failed
+        if: needs.changes.result != 'success'
+        run: echo "::error::the changes job did not succeed, so nothing can be skipped"; exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.RUN == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: env.RUN == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tools/docs/requirements.txt
+      # The reference pages (chart values, CRDs, hub API) are committed; this fails when they differ from their
+      # sources. The strict build fails on a broken link, anchor or navigation entry in docs/.
+      - run: make docs-verify DOCS_PYTHON=python
+        if: env.RUN == 'true'
+      - name: No relevant changes
+        if: env.RUN != 'true' && needs.changes.result == 'success'
+        run: echo "docs - no relevant changes, skipped" | tee -a "$GITHUB_STEP_SUMMARY"
 
   web:
     name: web (api types, lint, typecheck, test, build)
