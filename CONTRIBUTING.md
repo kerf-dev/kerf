@@ -63,6 +63,14 @@ make e2e           # the end-to-end suite against the local clusters (about 25 m
 ```
 
 Pull requests must pass CI. Add or update tests with your change (table-driven tests for Go).
+
+CI runs only what a change needs: a `changes` job (`.github/scripts/changes.sh`) works out which areas the
+pull request touches (Go, web, OpenAPI, charts, images), and the other jobs finish in seconds, with success,
+when their area is untouched. The five required checks therefore always report, so a docs-only pull request
+is green within a minute. Pull requests build the images for `linux/amd64`; `main` and release tags build
+`linux/amd64` and `linux/arm64`. A new push to a pull request cancels the run in progress. CI also fails
+if internal development documents (`CLAUDE.md`, `.claude/`, `DECISIONS.md`, `roadmap.md`, `docs/work-orders/`,
+`docs/handover/`, `docs/plans/`, `docs/STATUS.md`, `docs/open-source-checklist.md`) are committed.
 Run `make generate` after changing `api/` and commit the result.
 
 ## Pull requests

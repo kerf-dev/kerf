@@ -2,89 +2,245 @@ name: ci
 
 # Every pull request and every push to main. The release workflow runs it too (workflow_call) before it
 # publishes anything. Actions are pinned by commit SHA (Dependabot updates them).
+#
+# Run only what a change needs. The `changes` job (.github/scripts/changes.sh) decides which areas a change
+# touches; the five jobs below are required checks of the main ruleset, so each one ALWAYS runs and reports.
+# When its area is untouched it finishes in seconds with success after doing nothing ("no relevant changes").
+# If `changes` itself fails, the five fail too (never a silent skip). Tags (releases) and manual runs run
+# everything. Pull requests build the images for linux/amd64 only; main and tags build both platforms.
 
 on:
   pull_request:
   push:
     branches: [main]
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A newer push to the same pull request or branch supersedes the run in progress. Release tags never cancel.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   HELM_VERSION: v4.3.1
 
 jobs:
-  go:
-    name: go (build, vet, lint, test, generate)
+  changes:
+    name: changes (which areas need CI)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.areas.outputs.go }}
+      openapi: ${{ steps.areas.outputs.openapi }}
+      web: ${{ steps.areas.outputs.web }}
+      charts: ${{ steps.areas.outputs.charts }}
+      images: ${{ steps.areas.outputs.images }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - name: Internal development documents are not committed
+        run: .github/scripts/internal-docs-guard.sh
+      - name: Which areas changed
+        id: areas
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: .github/scripts/changes.sh
+
+  go:
+    name: go (build, vet, lint, test, generate)
+    needs: changes
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUN: ${{ needs.changes.outputs.go }}
+    steps:
+      - name: The changes job failed
+        if: needs.changes.result != 'success'
+        run: echo "::error::the changes job did not succeed, so nothing can be skipped"; exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.RUN == 'true'
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: env.RUN == 'true'
         with:
           go-version-file: go.mod
+          cache: false   # the Go caches are restored below, and saved on main only
       - name: Cache tools
+        if: env.RUN == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: bin
           key: tools-${{ runner.os }}-${{ hashFiles('make/common.mk', 'go.mod') }}
+      # Go build, module and golangci-lint caches. setup-go's own cache key is go.sum alone, so it is saved once
+      # and goes stale; this one is refreshed by every run on main (the key ends in the commit) and restored
+      # by pull requests from the newest main entry.
+      - name: Restore the Go caches
+        id: gocache
+        if: env.RUN == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.cache/golangci-lint
+          key: go-${{ runner.os }}-${{ hashFiles('go.sum', '.golangci.yml', 'make/common.mk') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ hashFiles('go.sum', '.golangci.yml', 'make/common.mk') }}-
+            go-${{ runner.os }}-
       - run: make build
+        if: env.RUN == 'true'
       - run: make vet
+        if: env.RUN == 'true'
       - run: make lint
+        if: env.RUN == 'true'
       - run: make test
+        if: env.RUN == 'true'
       - name: Generated files up to date
+        if: env.RUN == 'true'
         run: make verify-generate
+      - name: Save the Go caches
+        if: env.RUN == 'true' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.cache/golangci-lint
+          key: ${{ steps.gocache.outputs.cache-primary-key }}
+      - name: No relevant changes
+        if: env.RUN != 'true' && needs.changes.result == 'success'
+        run: echo "go - no relevant changes, skipped" | tee -a "$GITHUB_STEP_SUMMARY"
 
   openapi:
     name: openapi lint
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUN: ${{ needs.changes.outputs.openapi }}
     steps:
+      - name: The changes job failed
+        if: needs.changes.result != 'success'
+        run: echo "::error::the changes job did not succeed, so nothing can be skipped"; exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.RUN == 'true'
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: env.RUN == 'true'
         with:
           node-version: 26
+      - name: Cache npx (Redocly CLI)
+        if: env.RUN == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm/_npx
+          key: npx-${{ runner.os }}-${{ hashFiles('make/common.mk') }}
       - run: make lint-openapi
+        if: env.RUN == 'true'
+      - name: No relevant changes
+        if: env.RUN != 'true' && needs.changes.result == 'success'
+        run: echo "openapi - no relevant changes, skipped" | tee -a "$GITHUB_STEP_SUMMARY"
 
   web:
     name: web (api types, lint, typecheck, test, build)
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUN: ${{ needs.changes.outputs.web }}
     steps:
+      - name: The changes job failed
+        if: needs.changes.result != 'success'
+        run: echo "::error::the changes job did not succeed, so nothing can be skipped"; exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.RUN == 'true'
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: env.RUN == 'true'
         with:
           node-version: 26
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: make web-check-api web-lint web-typecheck web-test web-build
+        if: env.RUN == 'true'
+      - name: No relevant changes
+        if: env.RUN != 'true' && needs.changes.result == 'success'
+        run: echo "web - no relevant changes, skipped" | tee -a "$GITHUB_STEP_SUMMARY"
 
   charts:
     name: charts (lint, render, kubeconform)
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUN: ${{ needs.changes.outputs.charts }}
     steps:
+      - name: The changes job failed
+        if: needs.changes.result != 'success'
+        run: echo "::error::the changes job did not succeed, so nothing can be skipped"; exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.RUN == 'true'
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        if: env.RUN == 'true'
         with:
           version: ${{ env.HELM_VERSION }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: env.RUN == 'true'
         with:
-          go-version-file: go.mod
+          go-version-file: go.mod   # also caches the module and build caches
+      - name: Cache kubeconform, yq and the downloaded schemas
+        if: env.RUN == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            bin/kubeconform-v*
+            bin/yq-v*
+            bin/kubeconform-cache/**
+            !bin/kubeconform-cache/install-snippets/**
+          key: charts-tools-${{ runner.os }}-${{ hashFiles('make/charts.mk') }}
       - run: make charts-lint
+        if: env.RUN == 'true'
       - name: Package the charts as a release would
+        if: env.RUN == 'true'
         run: make release-chart-package VERSION=0.0.0-ci REGISTRY=ghcr.io/example/kerf RELEASE_CHART_DEFAULT_REGISTRY=1
+      - name: No relevant changes
+        if: env.RUN != 'true' && needs.changes.result == 'success'
+        run: echo "charts - no relevant changes, skipped" | tee -a "$GITHUB_STEP_SUMMARY"
 
   images:
     name: images (build, not pushed)
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUN: ${{ needs.changes.outputs.images }}
+      # Both platforms only on main and on release tags; pull requests (and other branches) build amd64.
+      PLATFORMS: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
     steps:
+      - name: The changes job failed
+        if: needs.changes.result != 'success'
+        run: echo "::error::the changes job did not succeed, so nothing can be skipped"; exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.RUN == 'true'
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        if: env.RUN == 'true'
         with:
           version: ${{ env.HELM_VERSION }}
-      # Both platforms: the Go images cross-compile and the web image has no RUN in its runtime stage,
-      # so no QEMU is needed (docs/release.md).
-      - run: make release-dry VERSION=0.0.0-ci
+      # Exposes the Actions cache credentials to later steps, for buildx's type=gha cache (RELEASE_CACHE).
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+        if: env.RUN == 'true'
+      # Both platforms need no QEMU: the Go images cross-compile and the web image has no RUN in its
+      # runtime stage (docs/release.md).
+      - name: Build the images (${{ env.PLATFORMS }})
+        if: env.RUN == 'true'
+        run: make release-dry VERSION=0.0.0-ci PLATFORMS="$PLATFORMS" RELEASE_CACHE=ci
+      - name: No relevant changes
+        if: env.RUN != 'true' && needs.changes.result == 'success'
+        run: echo "images - no relevant changes, skipped" | tee -a "$GITHUB_STEP_SUMMARY"

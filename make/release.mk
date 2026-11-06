@@ -37,6 +37,12 @@ RELEASE_BUILD_ARGS  ?=
 RELEASE_REVISION := $(shell git rev-parse HEAD 2>/dev/null)
 RELEASE_SOURCE   ?= https://github.com/kerf-dev/kerf
 
+# CI (WO-35): RELEASE_CACHE=<name> keeps each image's build cache in the GitHub Actions cache (scope
+# <name>-<image>) for `make release-dry`; needs the Actions runtime env (crazy-max/ghaction-github-runtime).
+RELEASE_CACHE ?=
+comma := ,
+RELEASE_CACHE_FLAGS = $(if $(RELEASE_CACHE),--cache-from type=gha$(comma)scope=$(RELEASE_CACHE)-$$img --cache-to type=gha$(comma)mode=max$(comma)scope=$(RELEASE_CACHE)-$$img)
+
 RELEASE_BUILDX = docker buildx build --builder $(RELEASE_BUILDER) --platform $(PLATFORMS) \
   --build-arg VERSION=$(VERSION) $(RELEASE_BUILD_ARGS) \
   --label org.opencontainers.image.version=$(VERSION) \
@@ -147,6 +153,6 @@ release-dry: release-builder release-chart-package ## Build every image for $(PL
 	@for img in $(RELEASE_IMAGES); do \
 	  case $$img in web) df=web/Dockerfile ctx=web ;; *) df=cmd/$$img/Dockerfile ctx=. ;; esac; \
 	  echo "==> $$img ($(PLATFORMS), not pushed)"; \
-	  $(RELEASE_BUILDX) -f $$df --output type=cacheonly $$ctx; \
+	  $(RELEASE_BUILDX) $(RELEASE_CACHE_FLAGS) -f $$df --output type=cacheonly $$ctx; \
 	done
 	@echo "release-dry OK: $(RELEASE_IMAGES) built for $(PLATFORMS); charts in $(RELEASE_DIR)/charts"

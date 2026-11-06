@@ -1,5 +1,7 @@
-# Weekly dependency updates. Go modules, the web UI's npm packages, the Dockerfiles' base images and the
-# GitHub Actions (pinned by commit SHA in .github/workflows/).
+# Weekly dependency updates, grouped so a week brings a handful of pull requests, not dozens: per ecosystem,
+# one pull request for all minor and patch updates (plus the k8s.io family on its own for Go, which must move
+# together). Major versions stay separate pull requests, since they need a look. Go modules, the web UI's npm
+# packages, the Dockerfiles' base images and the GitHub Actions (pinned by commit SHA in .github/workflows/).
 version: 2
 updates:
   - package-ecosystem: gomod
@@ -7,14 +9,19 @@ updates:
     schedule: {interval: weekly}
     groups:
       k8s: {patterns: ["k8s.io/*", "sigs.k8s.io/*"]}
+      go-minor-and-patch: {update-types: [minor, patch]}
   - package-ecosystem: npm
     directory: /web
     schedule: {interval: weekly}
     groups:
-      minor-and-patch: {update-types: [minor, patch]}
+      npm-minor-and-patch: {update-types: [minor, patch]}
   - package-ecosystem: docker
     directories: [/cmd/hub, /cmd/pricing, /cmd/agent, /cmd/webhook, /web]
     schedule: {interval: weekly}
+    groups:
+      docker-minor-and-patch: {update-types: [minor, patch]}
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: weekly}
+    groups:
+      actions-minor-and-patch: {update-types: [minor, patch]}
