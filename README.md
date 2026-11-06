@@ -12,9 +12,7 @@
   <a href="https://github.com/kerf-dev/kerf/releases"><img alt="Release" src="https://img.shields.io/github/v/release/kerf-dev/kerf?include_prereleases&sort=semver&color=008979"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-008979"></a>
   <a href="https://goreportcard.com/report/github.com/kerf-dev/kerf"><img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/kerf-dev/kerf"></a>
-  <!-- After the Artifact Hub listing:
-  <a href="https://artifacthub.io/packages/search?repo=kerf"><img alt="Artifact Hub" src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kerf"></a>
-  -->
+  <a href="https://artifacthub.io/packages/helm/kerf/kerf"><img alt="Artifact Hub" src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kerf"></a>
 </p>
 
 <p align="center">
