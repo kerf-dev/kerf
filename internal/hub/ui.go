@@ -35,7 +35,7 @@ func (s *Server) getSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	per := map[string]*hubapi.Summary{}
 	out := hubapi.FleetSummary{GeneratedAt: s.now().UTC(), Fleet: newSummary(), Clusters: []hubapi.ClusterSummary{}}
-	clusters = visibleClusters(s, r, clusters, views, func(c store.Cluster) string { return c.Name })
+	clusters = visibleClusters(r, clusters, views, func(c store.Cluster) string { return c.Name })
 	for _, c := range clusters {
 		sum := newSummary()
 		if t, ok := lastRuns[c.Name]; ok {
@@ -74,7 +74,7 @@ func (s *Server) getSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 // visibleClusters drops, for a team-scoped caller, the clusters where it sees no workload.
-func visibleClusters[T any](s *Server, r *http.Request, clusters []T, views []*store.WorkloadView, name func(T) string) []T {
+func visibleClusters[T any](r *http.Request, clusters []T, views []*store.WorkloadView, name func(T) string) []T {
 	if PrincipalFrom(r.Context()).Scope.All() {
 		return clusters
 	}
@@ -219,7 +219,7 @@ func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out := hubapi.ClusterList{Items: []hubapi.ClusterInfo{}}
-	clusters = visibleClusters(s, r, clusters, views, func(c store.ClusterRow) string { return c.Name })
+	clusters = visibleClusters(r, clusters, views, func(c store.ClusterRow) string { return c.Name })
 	for _, c := range clusters {
 		ci := hubapi.ClusterInfo{Name: c.Name, Description: c.Description, AgentVersion: c.AgentVersion, AgentStatus: "never"}
 		created := c.CreatedAt.UTC()
