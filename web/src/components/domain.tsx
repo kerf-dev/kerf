@@ -16,6 +16,7 @@ import {
   LayersIcon,
   Loader2Icon,
   MemoryStickIcon,
+  MoonIcon,
   RefreshCwIcon,
   RotateCcwIcon,
   ShieldAlertIcon,
@@ -23,12 +24,23 @@ import {
   SkipForwardIcon,
   SparklesIcon,
   TimerIcon,
+  TrendingDownIcon,
   TriangleAlertIcon,
   UnlinkIcon,
   XCircleIcon,
   ZapIcon,
 } from 'lucide-react'
-import type { EventType, Mode, ModeSource, Phase, RiskFlag, WorkloadKind } from '@/api/types'
+import type {
+  EventType,
+  GPUFilter,
+  GPUStatus,
+  GPUUsage,
+  Mode,
+  ModeSource,
+  Phase,
+  RiskFlag,
+  WorkloadKind,
+} from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip } from '@/components/ui/tooltip'
 import { delta, formatDelta, formatPercent, formatUSD, type Resource } from '@/lib/format'
@@ -326,6 +338,93 @@ export function RiskFlags({
         </Tooltip>
       ) : null}
     </span>
+  )
+}
+
+// ------------------------------------------------------------------ GPUs
+
+export const GPU_STATUS_INFO: Record<
+  GPUStatus,
+  { label: string; desc: string; variant: 'success' | 'warning' | 'info' | 'muted'; icon: typeof BotIcon }
+> = {
+  idle: {
+    label: 'Idle',
+    desc: 'The 95th percentile of the GPU utilisation is below 5 %.',
+    variant: 'warning',
+    icon: MoonIcon,
+  },
+  'under-used': {
+    label: 'Under-used',
+    desc: 'The 95th percentile of the GPU utilisation is below 40 %, or of the GPU memory below 30 %.',
+    variant: 'info',
+    icon: TrendingDownIcon,
+  },
+  ok: {
+    label: 'OK',
+    desc: 'The GPUs are used well: utilisation and memory are above the under-use thresholds.',
+    variant: 'success',
+    icon: CheckCircle2Icon,
+  },
+  'no-data': {
+    label: 'No data',
+    desc: 'The workload requests GPUs but the NVIDIA DCGM exporter has no series for its pods. See the metrics.dcgm readiness check of the cluster.',
+    variant: 'muted',
+    icon: CircleDashedIcon,
+  },
+}
+
+/** Labels of the `gpu` filter values on the Opportunities page. */
+export const GPU_FILTER_LABEL: Record<GPUFilter, string> = {
+  any: 'Any GPU workload',
+  idle: 'Idle',
+  'under-used': 'Under-used',
+  ok: 'OK',
+  'no-data': 'No data',
+}
+
+export function GPUStatusBadge({ status, compact }: { status: GPUStatus; compact?: boolean }) {
+  const info = GPU_STATUS_INFO[status]
+  const Icon = info.icon
+  return (
+    <Tooltip
+      content={
+        <span>
+          <b className="font-semibold">GPU {info.label.toLowerCase()}.</b> {info.desc}
+        </span>
+      }
+    >
+      <Badge variant={info.variant} data-testid="gpu-status" data-status={status}>
+        <Icon />
+        {compact ? <span className="sr-only">GPU </span> : null}
+        {info.label}
+      </Badge>
+    </Tooltip>
+  )
+}
+
+/** Opportunities cell: status, 95th-percentile utilisation and monthly cost ("–" when no price is known). */
+export function GPUCell({ gpu }: { gpu?: GPUUsage }) {
+  if (!gpu) return <span className="text-xs text-muted-foreground/60">—</span>
+  const util = gpu.utilizationP95
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-0.5 py-0.5" data-testid="gpu-cell">
+      <span className="inline-flex items-center gap-1.5">
+        <GPUStatusBadge status={gpu.status} compact />
+        {util != null ? (
+          <span className="font-mono text-xs tabular whitespace-nowrap text-muted-foreground">
+            p95 {util.toFixed(util < 10 ? 1 : 0)} %
+          </span>
+        ) : null}
+      </span>
+      <span className="text-xs whitespace-nowrap text-muted-foreground tabular">
+        {gpu.gpus} GPU{gpu.gpus === 1 ? '' : 's'} ·{' '}
+        {gpu.priced ? (
+          <span className="font-medium text-foreground">{formatUSD(gpu.monthlyCostUSD)} / mo</span>
+        ) : (
+          <span title="No GPU price known for the nodes of this workload">–</span>
+        )}
+      </span>
+    </div>
   )
 }
 

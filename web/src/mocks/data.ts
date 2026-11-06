@@ -12,6 +12,7 @@ import type {
   ContainerRecommendation,
   EffectiveModes,
   EventType,
+  GPUUsage,
   Mode,
   ModeSource,
   Phase,
@@ -27,6 +28,7 @@ import type {
   WorkloadRow,
   WorkloadStatus,
 } from '@/api/types'
+import { GPU_BY_WORKLOAD } from './gpu'
 import { between, hash, mulberry32, pick, uuid, weighted, type Rng } from './random'
 
 const Mi = 1024 ** 2
@@ -271,6 +273,8 @@ export interface WorkloadModel {
   confidence: number
   savings: { cpu: number; memory: number; total: number }
   shortLived: boolean
+  /** Set on the few workloads that request GPUs (see gpu.ts). */
+  gpu?: GPUUsage
 }
 
 export interface MockDb {
@@ -1027,6 +1031,15 @@ export function buildDb(nowMs: number = Date.now()): MockDb {
     for (const [ns, n, k] of names) workloads.push(buildWorkload(spec, ci, ns, n, k, now, lastRun))
   })
 
+  // GPU workloads: the named fixtures that have a recommendation (the GPU data is part of it).
+  for (const w of workloads) {
+    const gpu = GPU_BY_WORKLOAD.get(w.id)
+    if (!gpu || !w.recommendation) continue
+    w.gpu = gpu
+    w.recommendation = { ...w.recommendation, gpu }
+    if (w.history[0]) w.history[0] = { ...w.history[0], gpu }
+  }
+
   const byId = new Map(workloads.map((w) => [w.id, w]))
   const events = workloads
     .flatMap((w) => buildEvents(w, now))
@@ -1077,6 +1090,7 @@ export function toRow(w: WorkloadModel): WorkloadRow {
     confidence: w.confidence,
     riskFlags: w.riskFlags,
     monthlySavingsUSD: w.savings,
+    ...(w.gpu ? { gpu: w.gpu } : {}),
   }
 }
 

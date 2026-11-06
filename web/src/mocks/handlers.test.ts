@@ -176,4 +176,86 @@ describe('mock responses match hub.yaml', () => {
     const all = await unwrap(api.GET('/v1/audit', { params: { query: { limit: 1000 } } }))
     expectValid('AuditEventList', all)
   })
+  it('GPU workloads: every status, the gpu filter, facets and recommendation.gpu', async () => {
+    const all = await unwrap(api.GET('/v1/workloads', { params: { query: { limit: 500 } } }))
+    const gpuRows = all.items.filter((w) => w.gpu)
+    expect(gpuRows.map((w) => w.gpu!.status).sort()).toEqual([
+      'idle',
+      'no-data',
+      'ok',
+      'under-used',
+      'under-used',
+    ])
+    for (const w of gpuRows) expectValid('GPUUsage', w.gpu)
+
+    // `any` matches every GPU workload, a status only its own
+    const any = await unwrap(api.GET('/v1/workloads', { params: { query: { gpu: ['any'], limit: 500 } } }))
+    expectValid('WorkloadList', any)
+    expect(any.total).toBe(gpuRows.length)
+    const idle = await unwrap(api.GET('/v1/workloads', { params: { query: { gpu: ['idle'] } } }))
+    expect(idle.items.map((w) => w.gpu?.status)).toEqual(['idle'])
+    // several values match if any of them does
+    const two = await unwrap(
+      api.GET('/v1/workloads', { params: { query: { gpu: ['idle', 'no-data'], limit: 500 } } }),
+    )
+    expect(two.items.map((w) => w.gpu?.status).sort()).toEqual(['idle', 'no-data'])
+    // the filter combines with the others
+    const ns = await unwrap(
+      api.GET('/v1/workloads', { params: { query: { gpu: ['any'], namespace: ['kyc'], limit: 500 } } }),
+    )
+    expect(ns.items.length).toBe(2)
+    expect(ns.items.every((w) => w.namespace === 'kyc' && w.gpu)).toBe(true)
+
+    // facets count workloads per status and ignore their own filter
+    const facets = await unwrap(api.GET('/v1/workloads/facets'))
+    expectValid('WorkloadFacets', facets)
+    expect(Object.fromEntries(facets.gpu!.map((f) => [f.value, f.count]))).toEqual({
+      idle: 1,
+      'no-data': 1,
+      ok: 1,
+      'under-used': 2,
+    })
+    const filtered = await unwrap(api.GET('/v1/workloads/facets', { params: { query: { gpu: ['idle'] } } }))
+    expect(filtered.total).toBe(1)
+    expect(filtered.gpu!.reduce((n, f) => n + f.count, 0)).toBe(gpuRows.length)
+
+    // detail: recommendation.gpu, with the suggestions and costs of the contract
+    const detailOf = async (status: string) => {
+      const id = gpuRows.find((w) => w.gpu!.status === status)!.id
+      return unwrap(api.GET('/v1/workloads/{id}', { params: { path: { id } } }))
+    }
+    const d = await detailOf('under-used')
+    expectValid('WorkloadDetail', d)
+    expect(d.recommendation?.gpu?.status).toBe('under-used')
+    const noData = (await detailOf('no-data')).recommendation!.gpu!
+    expect(noData.priced).toBe(false)
+    expect(noData.monthlyCostUSD).toBe(0)
+    const idleGpu = (await detailOf('idle')).recommendation!.gpu!
+    expect(idleGpu.suggestions.find((s) => s.kind === 'scale-to-zero')?.monthlySavingsUSD).toBe(
+      idleGpu.monthlyCostUSD,
+    )
+    const kinds = gpuRows.flatMap((w) => w.gpu!.suggestions.map((s) => s.kind))
+    expect(new Set(kinds)).toEqual(new Set(['time-slicing', 'mig', 'smaller-gpu', 'scale-to-zero']))
+    // workloads without GPUs carry none
+    expect(all.items.filter((w) => !w.gpu).every((w) => w.gpu === undefined)).toBe(true)
+  })
+  it('readiness: metrics.dcgm warns on one cluster and passes on the others', async () => {
+    const login = await fetch(`${window.location.origin}/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'dev-password' }),
+    })
+    expect(login.status).toBe(200)
+    const status = async (cluster: string) => {
+      const r = await unwrap(api.GET('/v1/clusters/{cluster}/readiness', { params: { path: { cluster } } }))
+      expectValid('ClusterReadiness', r)
+      return r.checks.find((c) => c.id === 'metrics.dcgm')
+    }
+    const warn = await status('prod-us-east-1')
+    expect(warn?.status).toBe('warn')
+    expect(warn?.message).toBe(
+      'DCGM exporter series missing: DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED, DCGM_FI_DEV_FB_FREE',
+    )
+    expect((await status('prod-eu-west-1'))?.status).toBe('pass')
+  })
 })
