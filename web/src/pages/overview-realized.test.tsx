@@ -52,9 +52,16 @@ beforeAll(() => {
   } as unknown as typeof ResizeObserver
 })
 afterAll(() => server.close())
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear()
   resetDb()
+  // Sign-in is required: read as a viewer.
+  const r = await fetch(`${window.location.origin}/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'viewer', password: 'dev-password' }),
+  })
+  expect(r.status).toBe(200)
 })
 afterEach(() => {
   cleanup()
