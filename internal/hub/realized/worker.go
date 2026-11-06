@@ -59,8 +59,8 @@ func or[T comparable](v, d T) T {
 
 func (w *Worker) log() *slog.Logger { return or(w.Log, slog.Default()) }
 
-// Run computes every Interval until ctx ends. The first run waits StartDelay, so a new leader's
-// takeover and first recommender run go first.
+// Run computes every Interval, and as soon as an hour becomes complete, until ctx ends. The first
+// run waits StartDelay, so a new leader's takeover and first recommender run go first.
 func (w *Worker) Run(ctx context.Context) {
 	t := time.NewTimer(or(w.StartDelay, 30*time.Second))
 	defer t.Stop()
@@ -73,8 +73,22 @@ func (w *Worker) Run(ctx context.Context) {
 		if err := w.RunOnce(ctx); err != nil && ctx.Err() == nil {
 			w.log().WarnContext(ctx, "realized savings", "err", err)
 		}
-		t.Reset(or(w.Interval, 10*time.Minute))
+		t.Reset(w.nextDelay(w.now()))
 	}
+}
+
+// nextDelay is the wait before the next run: Interval, but no later than the moment the next hour
+// becomes complete (its end plus Settle). A fixed interval alone would let computedThrough trail
+// the clock by up to an hour plus Settle plus Interval; aligned, it trails by at most an hour plus
+// Settle (and the run's own time).
+func (w *Worker) nextDelay(now time.Time) time.Duration {
+	d := or(w.Interval, 10*time.Minute)
+	settle := or(w.Settle, 10*time.Minute)
+	complete := now.Add(-settle).Truncate(time.Hour).Add(time.Hour + settle)
+	if until := complete.Sub(now); until < d {
+		d = until
+	}
+	return d
 }
 
 // RunOnce brings every live cluster up to the last complete hour (within MaxPerRun) and refreshes
@@ -161,6 +175,9 @@ func (w *Worker) cluster(ctx context.Context, cluster string) error {
 			}
 			wrote = true
 			from = to
+		}
+		if st.ComputedThrough != nil && st.ComputedThrough.After(*start) {
+			w.log().InfoContext(ctx, "realized savings computed", "cluster", cluster, "from", *start, "through", *st.ComputedThrough)
 		}
 	}
 
