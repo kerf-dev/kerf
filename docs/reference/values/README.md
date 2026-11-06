@@ -17,7 +17,7 @@ Component sections are the component charts' values; this schema checks what the
 | `agent.image` | object | see the keys below |  |
 | `agent.leaderElection` | boolean | `true` |  |
 | `agent.replicaCount` | integer | `2` | `caBundle: {existingConfigMap: corp-root-ca, key: ca.crt}   # hub certificate from a private CA`<br>Production default here: two replicas with leader election (one works, one waits). |
-| `dev` | boolean | `false` | Development: allows inline secrets, cookieSecure false and an empty global.imageRegistry. |
+| `dev` | boolean | `false` | Development: allows inline secrets, cookieSecure false, an empty global.imageRegistry, quickstart.enabled and webhook.tls.selfSigned. |
 | `global` | object | see the keys below |  |
 | `global.clusterName` | string | `""` | This cluster's name as registered in the hub (required in mode spoke and all). pattern `^([a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)?$` |
 | `global.externalSecrets` | object | see the keys below | Default SecretStore of every ExternalSecret (External Secrets Operator), e.g.<br>`secretStoreRef: {kind: ClusterSecretStore, name: aws-secrets-manager}` |
@@ -35,6 +35,45 @@ Component sections are the component charts' values; this schema checks what the
 | `pricing.hub` | object | see the keys below |  |
 | `pricing.image` | object | see the keys below |  |
 | `pricing.provider` | string | `static` | static (the price file in the image) or aws (Pricing API + spot prices; IAM through EKS Pod Identity for ServiceAccount <pricing name>: docs/install/eks.md). |
+| `quickstart` | object | see the keys below | The laptop quickstart (bundled PostgreSQL, VictoriaMetrics, demo workloads): enabled only with dev: true. |
+| `quickstart.demo` | object | see the keys below | Demo workloads: each requests far more than it uses. `usage` is the generated history (tools/synth: pattern, base, diurnal, peakHour, weekend, spikesPerDay, noise, ...); the pods themselves only run a pause container. |
+| `quickstart.demo.enabled` | boolean | `true` |  |
+| `quickstart.demo.historyDays` | integer | `30` | At least the 28 days of the production profiles' window, so the readiness check for the history passes; at most 35. |
+| `quickstart.demo.image` | string | `registry.k8s.io/pause:3.10` |  |
+| `quickstart.demo.namespace` | string | `kerf-demo` |  |
+| `quickstart.demo.workloads` | array | see values.yaml |  |
+| `quickstart.enabled` | boolean | `false` |  |
+| `quickstart.metrics` | object | see the keys below |  |
+| `quickstart.metrics.image` | string | `victoriametrics/victoria-metrics:v1.155.0` |  |
+| `quickstart.metrics.ksmImage` | string | `registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0` |  |
+| `quickstart.metrics.ksmResources` | object | see the keys below |  |
+| `quickstart.metrics.ksmResources.limits` | object | see the keys below |  |
+| `quickstart.metrics.ksmResources.limits.memory` | string | `192Mi` |  |
+| `quickstart.metrics.ksmResources.requests` | object | see the keys below |  |
+| `quickstart.metrics.ksmResources.requests.cpu` | string | `10m` |  |
+| `quickstart.metrics.ksmResources.requests.memory` | string | `48Mi` |  |
+| `quickstart.metrics.resources` | object | see the keys below |  |
+| `quickstart.metrics.resources.limits` | object | see the keys below |  |
+| `quickstart.metrics.resources.limits.memory` | string | `1Gi` |  |
+| `quickstart.metrics.resources.requests` | object | see the keys below |  |
+| `quickstart.metrics.resources.requests.cpu` | string | `50m` |  |
+| `quickstart.metrics.resources.requests.memory` | string | `256Mi` |  |
+| `quickstart.metrics.retention` | string | `35d` |  |
+| `quickstart.metrics.scrapeInterval` | string | `30s` |  |
+| `quickstart.metrics.storage` | string | `5Gi` |  |
+| `quickstart.node` | object | see the keys below | kind and k3d nodes carry no cloud labels: kube_node_labels is relabelled with this node type, which the static price table prices, so the demo shows dollar amounts. Not a statement about your hardware. |
+| `quickstart.node.instanceType` | string | `m6i.xlarge` |  |
+| `quickstart.node.region` | string | `eu-west-1` |  |
+| `quickstart.node.zone` | string | `eu-west-1a` |  |
+| `quickstart.postgres` | object | see the keys below |  |
+| `quickstart.postgres.image` | string | `postgres:18.6-alpine3.23` |  |
+| `quickstart.postgres.resources` | object | see the keys below |  |
+| `quickstart.postgres.resources.limits` | object | see the keys below |  |
+| `quickstart.postgres.resources.limits.memory` | string | `512Mi` |  |
+| `quickstart.postgres.resources.requests` | object | see the keys below |  |
+| `quickstart.postgres.resources.requests.cpu` | string | `50m` |  |
+| `quickstart.postgres.resources.requests.memory` | string | `128Mi` |  |
+| `quickstart.postgres.storage` | string | `2Gi` |  |
 | `web` | object | see the keys below | web: the UI (nginx, non-root on 8080) (mode hub, all) |
 | `web.hub` | object | see the keys below |  |
 | `web.image` | object | see the keys below |  |

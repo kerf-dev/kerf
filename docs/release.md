@@ -99,6 +99,22 @@ GHCR facts to know:
 - GHCR tags can be overwritten, unlike the ECR setup below. The workflow never re-releases a tag; to fix a
   release, publish a new patch or `-rc.N` version.
 - Every image and chart is signed. Users verify with the `cosign verify` command in the release notes.
+- The umbrella chart's [Artifact Hub](https://artifacthub.io) page shows the chart as signed (see
+  [Verify the signatures](#verify-the-signatures)) and the repository metadata (`artifacthub-repo.yml`) is pushed as
+  the `artifacthub.io` tag of `oci://ghcr.io/<owner>/kerf/charts/kerf` by every release.
+
+### Verify the signatures
+
+The signatures are keyless: there is no public key to download. cosign checks that the signature was made by this
+repository's release workflow, through GitHub's OIDC issuer (cosign **v3** or newer):
+
+```bash
+cosign verify ghcr.io/kerf-dev/kerf/charts/kerf:<version> \
+  --certificate-identity-regexp '^https://github.com/kerf-dev/kerf/.github/workflows/release.yaml@' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+The same command works for every image (`ghcr.io/kerf-dev/kerf/hub:<version>`, ...) and chart.
 
 ## Prerequisites
 

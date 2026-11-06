@@ -425,10 +425,10 @@ func (a VMAdmin) call(ctx context.Context, method, path string, q url.Values) er
 	return nil
 }
 
-// DeleteClusters deletes every series whose cluster label is one of the given (synth-*) names.
+// DeleteClusters deletes every series whose cluster label is one of the given synthetic names (IsSyntheticCluster).
 func (a VMAdmin) DeleteClusters(ctx context.Context, clusters []string) error {
 	for _, c := range clusters {
-		if !strings.HasPrefix(c, "synth-") {
+		if !IsSyntheticCluster(c) {
 			return fmt.Errorf("refusing to delete non-synthetic cluster %q", c)
 		}
 	}

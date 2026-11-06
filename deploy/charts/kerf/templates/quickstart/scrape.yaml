@@ -1,0 +1,82 @@
+{{- if .Values.quickstart.enabled }}
+{{- $m := .Values.quickstart.metrics }}
+{{- $node := .Values.quickstart.node }}
+{{- $cluster := required "global.clusterName is required" .Values.global.clusterName }}
+{{- $vmLabels := include "qs.labels" (dict "ctx" . "name" "kerf-vm") }}
+# Development only: the scrape configuration of VictoriaMetrics.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kerf-vm-scrape
+  labels: {{- $vmLabels | nindent 4 }}
+data:
+  scrape.yml: |
+    global:
+      scrape_interval: {{ $m.scrapeInterval }}
+    scrape_configs:
+      # Container CPU and memory per pod, from every node's kubelet.
+      - job_name: cadvisor
+        scheme: https
+        metrics_path: /metrics/cadvisor
+        honor_timestamps: false
+        tls_config:
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: node
+          - target_label: cluster
+            replacement: {{ $cluster | quote }}
+      # Requests, limits, owners, HPAs and node labels.
+      - job_name: kube-state-metrics
+        honor_labels: true
+        static_configs:
+          - targets: ["kerf-ksm:8080"]
+        relabel_configs:
+          - target_label: cluster
+            replacement: {{ $cluster | quote }}
+        metric_relabel_configs:
+          # kind and k3d nodes carry no cloud labels: price them as one node type of the static price table
+          # (quickstart.node), so the demo has dollar amounts.
+          - source_labels: [__name__, label_node_kubernetes_io_instance_type]
+            regex: "kube_node_labels;(|k3s)"
+            target_label: label_node_kubernetes_io_instance_type
+            replacement: {{ $node.instanceType | quote }}
+          - source_labels: [__name__, label_karpenter_sh_capacity_type]
+            regex: "kube_node_labels;"
+            target_label: label_karpenter_sh_capacity_type
+            replacement: on-demand
+          - source_labels: [__name__, label_topology_kubernetes_io_region]
+            regex: "kube_node_labels;"
+            target_label: label_topology_kubernetes_io_region
+            replacement: {{ $node.region | quote }}
+          - source_labels: [__name__, label_topology_kubernetes_io_zone]
+            regex: "kube_node_labels;"
+            target_label: label_topology_kubernetes_io_zone
+            replacement: {{ $node.zone | quote }}
+      # Services of this release that carry the prometheus.io/scrape annotation (hub, pricing, agent, webhook).
+      - job_name: kerf
+        honor_labels: true
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [{{ .Release.Namespace | quote }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+            target_label: __scheme__
+            regex: (https?)
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            target_label: __address__
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+          - source_labels: [__meta_kubernetes_service_name]
+            target_label: kubernetes_service
+{{- end }}

@@ -4,8 +4,10 @@ kind: MutatingWebhookConfiguration
 metadata:
   name: {{ include "webhook.clusterName" . }}
   labels: {{- include "webhook.labels" . | nindent 4 }}
+  {{- if not .Values.tls.selfSigned.enabled }}
   annotations:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "webhook.certificate" . }}
+  {{- end }}
 webhooks:
   - name: pods.webhook.kerf.getkerf.dev
     admissionReviewVersions: ["v1"]
@@ -15,6 +17,9 @@ webhooks:
     reinvocationPolicy: Never
     matchPolicy: Equivalent
     clientConfig:
+      {{- if .Values.tls.selfSigned.enabled }}
+      caBundle: {{ (include "webhook.selfSigned" . | fromJson).ca }}
+      {{- end }}
       service:
         name: {{ include "webhook.fullname" . }}
         namespace: {{ .Release.Namespace }}

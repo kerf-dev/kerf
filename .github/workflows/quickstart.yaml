@@ -1,0 +1,108 @@
+name: quickstart
+
+# Runs the laptop quickstart (hack/quickstart.sh, docs/quickstart.md) on kind and on k3d: it builds the images
+# of this commit, installs Kerf with values-quickstart.yaml and waits until the demo workloads have priced
+# recommendations. It runs on a pull request only when the script, the chart, the quickstart values or the images
+# change, and every Monday, so a change in kind, k3d or an upstream image shows up even in a quiet week.
+# Run it by hand (workflow_dispatch) with a version to test a published release instead of this commit.
+# Not a required check of the main ruleset: the ci workflow stays the gate.
+
+on:
+  pull_request:
+    paths:
+      - hack/quickstart.sh
+      - deploy/**
+      - cmd/**
+      - internal/**
+      - tools/synth/**
+      - web/**
+      - go.mod
+      - go.sum
+      - .github/workflows/quickstart.yaml
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published release to install (empty: build this commit's images)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quickstart-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HELM_VERSION: v4.3.1
+  # The cluster tools are checked against the SHA-256 of the official release asset before they are installed.
+  KIND_VERSION: v0.33.0
+  KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+  K3D_VERSION: v5.9.0
+  K3D_SHA256: 06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0
+
+jobs:
+  quickstart:
+    name: quickstart (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [kind, k3d]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install kind
+        if: matrix.runtime == 'kind'
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/kind" "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-amd64"
+          echo "$KIND_SHA256  $RUNNER_TEMP/kind" | sha256sum --check --strict -
+          sudo install -m 0755 "$RUNNER_TEMP/kind" /usr/local/bin/kind
+          kind version
+      - name: Install k3d
+        if: matrix.runtime == 'k3d'
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/k3d" "https://github.com/k3d-io/k3d/releases/download/$K3D_VERSION/k3d-linux-amd64"
+          echo "$K3D_SHA256  $RUNNER_TEMP/k3d" | sha256sum --check --strict -
+          sudo install -m 0755 "$RUNNER_TEMP/k3d" /usr/local/bin/k3d
+          k3d version
+
+      - name: Quickstart
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          start=$(date +%s)
+          if [ -n "$VERSION" ]; then source_flag="--version $VERSION"; else source_flag="--local"; fi
+          # shellcheck disable=SC2086
+          hack/quickstart.sh up --runtime "${{ matrix.runtime }}" --name kerf-quickstart-ci $source_flag --timeout 25m
+          echo "quickstart on ${{ matrix.runtime }}: $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: The demo workloads have priced recommendations
+        run: |
+          pw=$(kubectl --context "${{ matrix.runtime == 'kind' && 'kind-kerf-quickstart-ci' || 'k3d-kerf-quickstart-ci' }}" -n kerf \
+            get secret kerf-quickstart-admin -o jsonpath='{.data.password}' | base64 -d)
+          jar=$(mktemp)
+          curl -fsS -c "$jar" -H 'Content-Type: application/json' -d "{\"username\":\"admin\",\"password\":\"$pw\"}" \
+            http://127.0.0.1:8080/v1/auth/login > /dev/null
+          curl -fsS -b "$jar" "http://127.0.0.1:8080/v1/workloads?cluster=quickstart&namespace=kerf-demo" | tee workloads.json | jq .
+          .github/scripts/quickstart-check.sh workloads.json
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          ctx="${{ matrix.runtime == 'kind' && 'kind-kerf-quickstart-ci' || 'k3d-kerf-quickstart-ci' }}"
+          kubectl --context "$ctx" get pods -A -o wide || true
+          kubectl --context "$ctx" -n kerf describe pods | tail -n 200 || true
+          for d in hub pricing kerf-agent; do echo "== $d"; kubectl --context "$ctx" -n kerf logs "deploy/$d" --tail=80 || true; done
+          kubectl --context "$ctx" -n kerf logs job/kerf-quickstart-history --tail=40 || true
+
+      - name: Remove everything
+        if: always()
+        run: |
+          hack/quickstart.sh down --runtime "${{ matrix.runtime }}" --name kerf-quickstart-ci

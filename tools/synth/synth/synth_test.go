@@ -114,8 +114,12 @@ clusters:
 	if _, err := ParseScenario([]byte(ok)); err != nil {
 		t.Fatalf("valid scenario rejected: %v", err)
 	}
+	if _, err := ParseScenario([]byte(strings.Replace(ok, "synth-x", QuickstartCluster, 1))); err != nil {
+		t.Fatalf("quickstart cluster rejected: %v", err)
+	}
 	for _, tc := range []struct{ name, doc, want string }{
 		{"real cluster name", `clusters: [{name: ro-spoke-1}]`, `must start with "synth-"`},
+		{"almost the quickstart cluster", `clusters: [{name: quickstart-2}]`, `must start with "synth-"`},
 		{"instance type", `clusters: [{name: synth-x, nodePools: [{instanceType: t9.huge}]}]`, "unknown instance type"},
 		{"capacity type", `clusters: [{name: synth-x, nodePools: [{instanceType: m6i.xlarge, capacityType: reserved}]}]`, "capacityType"},
 		{"cronjob schedule", `clusters: [{name: synth-x, workloads: [{name: a, namespace: n, kind: CronJob, containers: [{name: c}]}]}]`, "schedule"},
