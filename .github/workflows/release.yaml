@@ -2,7 +2,8 @@ name: release
 
 # Push a tag vX.Y.Z (or vX.Y.Z-rc.N) on main to publish that version (docs/release.md, "Releasing on GitHub"):
 #   1. the ci workflow runs on the tagged commit;
-#   2. `make release` builds the five multi-arch images (SBOM + provenance) and the Helm charts and pushes
+#   2. Trivy scans the five images and fails the release on a CRITICAL or HIGH finding that has a fix;
+#      then `make release` builds the five multi-arch images (SBOM + provenance) and the Helm charts and pushes
 #      them to GitHub Container Registry: ghcr.io/<owner>/kerf/<image>:X.Y.Z and
 #      oci://ghcr.io/<owner>/kerf/charts/<chart>, the charts defaulting to these images;
 #   3. cosign signs every image and chart by digest (keyless, this workflow's GitHub OIDC identity);
@@ -29,6 +30,7 @@ concurrency:
 env:
   HELM_VERSION: v4.3.1
   COSIGN_VERSION: v3.1.4
+  TRIVY_VERSION: v0.76.2
   # git-cliff builds the commit list of the release notes. The archive is checked against this SHA-256 (of the
   # x86_64 Linux musl build of GIT_CLIFF_VERSION, computed from the official release) before it is unpacked.
   ORAS_VERSION: 1.3.6
@@ -94,6 +96,26 @@ jobs:
         run: |
           echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           echo "$TOKEN" | helm registry login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      # The release gate for what is inside the images: OS packages and the Go modules in the binaries. A CRITICAL or
+      # HIGH finding with a fixed version stops the release before anything is pushed; findings without a fix do not
+      # (nothing to upgrade to), and base image updates arrive through Dependabot's docker updates. The images are
+      # built the same way as in `make release`, for the runner's platform (the packages are the same on arm64).
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
+      - name: Scan the images with Trivy (CRITICAL and HIGH with a fix fail the release)
+        run: |
+          failed=0
+          for img in hub pricing agent webhook web; do
+            case $img in web) df=web/Dockerfile ctx=web ;; *) df=cmd/$img/Dockerfile ctx=. ;; esac
+            docker build --quiet --build-arg VERSION="$VERSION" -t "kerf-scan/$img:$VERSION" -f "$df" "$ctx"
+            trivy image --quiet --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 "kerf-scan/$img:$VERSION" || failed=1
+          done
+          if [ "$failed" != 0 ]; then
+            echo "::error::Trivy found CRITICAL or HIGH vulnerabilities that have a fix; nothing was pushed"; exit 1
+          fi
 
       - name: Build and push images and charts
         run: |

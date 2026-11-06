@@ -11,7 +11,7 @@
 #     buffers; see nginx/nginx.conf);
 #   - liveness/readiness: GET /healthz on 8080.
 
-FROM --platform=$BUILDPLATFORM node:22-alpine AS build
+FROM --platform=$BUILDPLATFORM node:22-alpine@sha256:0e1754758c2df4cfa3e68d59e2e1b7374bb7fd9ea6328eaaacf15cc934af8202 AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -20,7 +20,7 @@ COPY . .
 ARG VERSION=dev
 RUN KERF_VERSION=${VERSION} npm run build
 
-FROM nginx:1.29-alpine
+FROM nginx:1.30-alpine-slim@sha256:f65ed258206d1eb6c4eb6141111715a2cf94ac0a4ec9675fc2da186f7aadb163
 # Pick up resolvers from /etc/resolv.conf for the runtime `resolver` directive. Templates render into
 # /tmp/conf.d (writable), which nginx.conf includes; the stock /etc/nginx/conf.d is not read.
 ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1 \
