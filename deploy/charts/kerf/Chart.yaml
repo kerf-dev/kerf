@@ -88,6 +88,10 @@ annotations:
           mode: audit
         apply:
           strategy: in-place
+  # Every chart version is signed with cosign (keyless, the release workflow's GitHub identity), which Artifact Hub
+  # shows as "Signed". There is no key to publish, so the annotation points to how to verify the signature.
+  artifacthub.io/signKey: |
+    url: https://github.com/kerf-dev/kerf/blob/main/docs/release.md#verify-the-signatures
   artifacthub.io/changes: |
     - kind: added
       description: First public version.

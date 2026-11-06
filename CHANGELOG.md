@@ -90,6 +90,14 @@ First public version.
   are generated from `values.schema.json` and the chart values, `api/v1alpha1` and `api/openapi/hub.yaml`
   (`make docs-generate`); CI fails when they are out of date.
 
+- **Sign in with OpenID Connect.** Okta, Microsoft Entra ID, Google, Keycloak, Dex or any OpenID Connect
+  provider (authorization code flow with PKCE). Groups map to roles (`hub.auth.oidc.roleMappings`, a default
+  role or deny); the role is re-read from the provider every `refreshInterval`, so removing someone from a
+  group removes the role. IdP users are created at their first sign-in, and the audit log records their IdP
+  subject and e-mail. `hub.auth.local.enabled: false` keeps passwords only for one break-glass admin. The
+  client secret comes from a Secret; refresh tokens are stored encrypted and no token is ever logged. Settings
+  per provider: [Sign-in and access](docs/auth.md#sign-in-with-openid-connect).
+
 ### Changed
 
 - **Breaking: signing in is always required.** Visitors without a session see only the sign-in page, and the hub
@@ -106,6 +114,16 @@ First public version.
 - **Breaking:** the web chart's `auth.anonymousRead` and `token.*` (`web.auth.anonymousRead`, `web.token.*` in
   the kerf chart), with the token Secret and ExternalSecret. The chart fails with an upgrade message while they
   are set. Revoke the old `ui` token unless a script uses it.
+- **One-command quickstart.** `hack/quickstart.sh` creates a kind or k3d cluster, installs Kerf with demo workloads and
+  a generated usage history, and prints the URL and the admin password of a UI that shows priced recommendations
+  (`hack/quickstart.sh down` removes everything). It uses the new chart values `values-quickstart.yaml`
+  (`quickstart.enabled`: a bundled dev-only PostgreSQL, VictoriaMetrics and kube-state-metrics, the demo workloads
+  and their history) and the new `webhook.tls.selfSigned` (a webhook certificate made by the chart, no cert-manager).
+  The values schema refuses both unless `dev: true`. See [docs/quickstart.md](docs/quickstart.md).
+- **Artifact Hub.** The chart carries the metadata Artifact Hub shows (images, CRDs with examples, the changes of the
+  release and the cosign signature, see [Verify the signatures](docs/release.md#verify-the-signatures)). Every
+  release pushes `artifacthub-repo.yml` as the `artifacthub.io` tag of the chart repository, and CI runs `ah lint`
+  (`make charts-ah-lint`).
 - **Node savings estimate.** The cluster page has a Capacity tab: requested vs allocatable CPU and memory now
   and after the open recommendations, an estimate of the nodes each node pool needs (first-fit-decreasing bin
   packing of pod requests, priced per instance type), and the consolidation blockers that keep nodes from
@@ -120,6 +138,7 @@ First public version.
 
 ### Fixed
 
+- After signing in, the browser tab kept the title "Sign in · Kerf" on every page.
 - Signing in through the web UI kept users read-only: the web proxy looked for the old session cookie name
   and never forwarded `kerf_session`, so every request still went out with the read-only UI token.
 

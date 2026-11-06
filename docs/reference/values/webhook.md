@@ -37,6 +37,10 @@ The values of the `webhook` component chart. In the `kerf` chart they sit under 
 | `certManager.issuerRef` | object | `{}` |  |
 | `certManager.duration` | string | `8760h` | kind: ClusterIssuer name: my-ca |
 | `certManager.renewBefore` | string | `720h` |  |
+| `tls` | object | see the keys below | Development only: the chart makes the serving certificate itself (Helm genCA, kept across upgrades) and writes the CA into the MutatingWebhookConfiguration, so cert-manager is not needed. The certificate is not renewed: helm uninstall and install again after validityDays. The umbrella chart refuses this unless dev: true. |
+| `tls.selfSigned` | object | see the keys below |  |
+| `tls.selfSigned.enabled` | boolean | `false` |  |
+| `tls.selfSigned.validityDays` | integer | `3650` |  |
 | `webhook` | object | see the keys below |  |
 | `webhook.failurePolicy` | string | `Ignore` | Ignore: a webhook outage never blocks pod creation (pods start with template values and the agent resizes them afterwards). |
 | `webhook.timeoutSeconds` | integer | `2` | API server timeout (1-30s; the handler only reads informer caches). |

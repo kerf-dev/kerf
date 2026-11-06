@@ -15,6 +15,12 @@ data:
     {{- if include "hub.bootstrapSecret" . }}
     {{- $_ := set $auth "bootstrapAdmin" (dict "username" .Values.auth.bootstrapAdmin.username "passwordFile" "/etc/hub/bootstrap-admin/password") }}
     {{- end }}
+    {{- $oidc := omit (default (dict) .Values.auth.oidc) "clientSecret" }}
+    {{- if $oidc.enabled }}
+    {{- if not (include "hub.oidcSecret" .) }}{{ fail "auth.oidc.enabled needs the client secret: auth.oidc.clientSecret.existingSecret, .externalSecret or (development) .value" }}{{ end }}
+    {{- $_ := set $oidc "clientSecretFile" "/etc/hub/oidc/client-secret" }}
+    {{- end }}
+    {{- $_ := set $auth "oidc" $oidc }}
     {{- $_ := set $cfg "auth" $auth }}
     {{- $onb := deepCopy (default (dict) .Values.config.onboarding) }}
     {{- if include "hub.datasourceKeyEnabled" . }}

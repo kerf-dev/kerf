@@ -26,6 +26,10 @@ concurrency:
 
 env:
   HELM_VERSION: v4.3.1
+  # Artifact Hub's linter (`ah lint`). The archive is checked against this SHA-256 (of the Linux amd64 build of
+  # AH_VERSION, from the official release's checksums file) before it is unpacked.
+  AH_VERSION: 1.23.0
+  AH_SHA256: 062dbd849d8d6de688627baca9042b3dd2ce4cf6c9767fba1d4d0b4e8476c18c
 
 jobs:
   changes:
@@ -237,6 +241,15 @@ jobs:
           key: charts-tools-${{ runner.os }}-${{ hashFiles('make/charts.mk') }}
       - run: make charts-lint
         if: env.RUN == 'true'
+      - name: Artifact Hub lint (ah lint)
+        if: env.RUN == 'true'
+        run: |
+          archive=ah_${AH_VERSION}_linux_amd64.tar.gz
+          dir=$(mktemp -d)
+          curl -fsSL --retry 3 -o "$dir/$archive" "https://github.com/artifacthub/hub/releases/download/v$AH_VERSION/$archive"
+          echo "$AH_SHA256  $dir/$archive" | sha256sum --check --strict -
+          tar -xzf "$dir/$archive" -C "$dir" ah
+          make charts-ah-lint AH="$dir/ah"
       - name: Package the charts as a release would
         if: env.RUN == 'true'
         run: make release-chart-package VERSION=0.0.0-ci REGISTRY=ghcr.io/example/kerf RELEASE_CHART_DEFAULT_REGISTRY=1

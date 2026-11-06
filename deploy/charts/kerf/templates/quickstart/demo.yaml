@@ -1,0 +1,43 @@
+{{- if and .Values.quickstart.enabled .Values.quickstart.demo.enabled }}
+{{- $demo := .Values.quickstart.demo }}
+# Development only: demo workloads that request far more than they use, so the quickstart has something to
+# recommend. They run a pause container: the history Kerf reads for them is generated (kerf-quickstart-history).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $demo.namespace }}
+  labels: {{- include "qs.labels" (dict "ctx" . "name" "kerf-demo") | nindent 4 }}
+{{- range $demo.workloads }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  namespace: {{ $demo.namespace }}
+  labels:
+    app: {{ .name }}
+    {{- include "qs.labels" (dict "ctx" $ "name" .name) | nindent 4 }}
+spec:
+  replicas: {{ .replicas }}
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+        kerf.getkerf.dev/dev-only: "true"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: app
+          image: {{ $demo.image | quote }}
+          resources:
+            requests: {{- toYaml .requests | nindent 14 }}
+            limits: {{- toYaml .limits | nindent 14 }}
+          securityContext: {{- include "qs.securityContext" $ | nindent 12 }}
+{{- end }}
+{{- end }}

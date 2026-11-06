@@ -32,4 +32,7 @@ app="$(kc ro-spoke-1 -n argocd get application workloads -o jsonpath='{.status.s
 code="$(curl -s -o /dev/null -w '%{http_code}' localhost:13000/api/health)"
 [[ "$code" == 200 ]] && log "ok   Grafana /api/health" || { log "FAIL Grafana /api/health: $code"; fail=1; }
 
+code="$(curl -s -o /dev/null -w '%{http_code}' localhost:15556/dex/.well-known/openid-configuration)"
+[[ "$code" == 200 ]] && log "ok   Dex discovery" || { log "FAIL Dex discovery (http://localhost:15556/dex): $code"; fail=1; }
+
 exit "$fail"

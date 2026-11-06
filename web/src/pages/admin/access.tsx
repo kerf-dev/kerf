@@ -219,6 +219,13 @@ function UsersTab() {
                             </Tooltip>
                           ) : null}
                           {u.mustChangePassword ? <Badge variant="info">must change password</Badge> : null}
+                          {u.source === 'oidc' ? (
+                            <Tooltip content="Signs in with the identity provider; the role comes from its groups">
+                              <Badge variant="info" data-testid="idp-user">
+                                identity provider
+                              </Badge>
+                            </Tooltip>
+                          ) : null}
                         </div>
                       </td>
                       <td className="hidden px-3 py-2.5 text-muted-foreground md:table-cell">
@@ -232,8 +239,9 @@ function UsersTab() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
+                            {/* An IdP user's role comes from its groups and it has no password. */}
                             {(['viewer', 'operator', 'admin'] as UserRole[])
-                              .filter((r) => r !== u.role)
+                              .filter((r) => r !== u.role && u.source !== 'oidc')
                               .map((r) => (
                                 <DropdownMenuItem
                                   key={r}
@@ -242,10 +250,14 @@ function UsersTab() {
                                   Make {r}
                                 </DropdownMenuItem>
                               ))}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => setAct({ kind: 'reset', user: u })}>
-                              <KeyRoundIcon /> Reset password
-                            </DropdownMenuItem>
+                            {u.source === 'oidc' ? null : (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={() => setAct({ kind: 'reset', user: u })}>
+                                  <KeyRoundIcon /> Reset password
+                                </DropdownMenuItem>
+                              </>
+                            )}
                             <DropdownMenuItem
                               onSelect={() => setAct({ kind: u.disabled ? 'enable' : 'disable', user: u })}
                               disabled={u.username === me}

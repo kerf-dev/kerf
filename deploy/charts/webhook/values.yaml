@@ -60,6 +60,14 @@ certManager:
   duration: 8760h
   renewBefore: 720h
 
+# Development only: the chart makes the serving certificate itself (Helm genCA, kept across upgrades) and writes
+# the CA into the MutatingWebhookConfiguration, so cert-manager is not needed. The certificate is not renewed:
+# helm uninstall and install again after validityDays. The umbrella chart refuses this unless dev: true.
+tls:
+  selfSigned:
+    enabled: false
+    validityDays: 3650
+
 webhook:
   # Ignore: a webhook outage never blocks pod creation (pods start with template values and
   # the agent resizes them afterwards).

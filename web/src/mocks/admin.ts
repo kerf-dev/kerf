@@ -38,6 +38,7 @@ import {
   enc,
   forbidden,
   gate,
+  readLocal,
   ifMatch,
   json,
   loginFailures,
@@ -987,6 +988,17 @@ export const adminHandlers = [
       status: 204,
       headers: { 'Set-Cookie': 'kerf_session=; Max-Age=0; HttpOnly; SameSite=Strict; Path=/' },
     })
+  }),
+
+  // `localStorage['ro-mock-oidc']`: `on` offers "Sign in with Okta" (the redirect itself needs a real
+  // hub), `only` also turns password sign-in off but for the break-glass admin.
+  http.get('*/v1/auth/providers', async () => {
+    const g = await gate(undefined, null)
+    if (g instanceof Response) return g
+    const mode = readLocal('ro-mock-oidc')
+    const out: S['AuthProviders'] = { local: mode !== 'only' }
+    if (mode === 'on' || mode === 'only') out.oidc = { name: 'Okta', loginURL: '/v1/auth/oidc/login' }
+    return json(out)
   }),
 
   http.get('*/v1/me', async ({ request }) => {

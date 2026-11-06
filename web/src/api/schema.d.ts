@@ -474,6 +474,77 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/auth/providers': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * How the sign-in page offers to sign in
+     * @description Whether every local user may sign in with a password (`local`; false = only the
+     *     break-glass admin) and the identity provider, when one is configured.
+     */
+    get: operations['getAuthProviders']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/auth/oidc/login': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Start a sign-in with the identity provider
+     * @description Redirects the browser to the provider (OpenID Connect authorization code flow with PKCE,
+     *     `state` and `nonce`) and sets the `kerf_oidc` cookie (`HttpOnly; SameSite=Lax;
+     *     Path=/v1/auth/oidc`, 10 minutes) that binds the sign-in to this browser. When the provider
+     *     cannot be reached it redirects to `/login?error=oidc_unavailable` instead.
+     */
+    get: operations['oidcLogin']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/auth/oidc/callback': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * The provider's redirect back after sign-in
+     * @description Needs the `kerf_oidc` cookie of the browser that started the sign-in and its one-time
+     *     `state`. Exchanges the code (with the PKCE verifier), verifies the ID token and its nonce,
+     *     maps the groups to a role, creates or updates the user and starts a session (cookie
+     *     `kerf_session`, as `POST /v1/auth/login`), then redirects to `next`. On failure it redirects
+     *     to `/login?error=<code>`: `oidc_expired` (unknown, used or expired state; another browser),
+     *     `oidc_failed` (the provider refused or the exchange failed), `oidc_denied` (no mapped group
+     *     and no default role, or a disabled user), `oidc_conflict` (the username belongs to a local
+     *     user), `oidc_unavailable`.
+     */
+    get: operations['oidcCallback']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/me': {
     parameters: {
       query?: never
@@ -2466,7 +2537,12 @@ export interface components {
      * @enum {string}
      */
     TokenRole: 'agent' | 'ui' | 'admin' | 'pricing'
-    /** @example alice */
+    /**
+     * @description Local users: `^[a-z0-9][a-z0-9._-]{1,62}$`. Users of the identity provider are named after
+     *     their e-mail address (lowercased), so they may also contain `@` and `+`.
+     * @example alice
+     * @example alice@example.com
+     */
     Username: string
     /** @description At least 8 characters; at most 72 bytes (bcrypt). */
     Password: string
@@ -2479,8 +2555,9 @@ export interface components {
      */
     Duration: string
     /**
-     * @description Who made a change. `user`: a local user (`name` = username). `token`: an API token
-     *     (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`).
+     * @description Who made a change. `user`: a user (`name` = username). `token`: an API token
+     *     (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc`
+     *     for the users the identity provider creates and the roles it changes).
      */
     Actor: {
       /** @enum {string} */
@@ -2488,6 +2565,10 @@ export interface components {
       name: string
       /** @description The user role or token role at the time of the change. */
       role?: string
+      /** @description A user signed in with the identity provider - its subject (`sub`) there. */
+      subject?: string
+      /** @description A user signed in with the identity provider - its e-mail there. */
+      email?: string
     }
     ChangeReason: {
       reason: components['schemas']['ReasonText']
@@ -2495,6 +2576,23 @@ export interface components {
     LoginRequest: {
       username: string
       password: string
+    }
+    AuthProviders: {
+      /** @description Every local user may sign in with a password; false = only the break-glass admin. */
+      local: boolean
+      oidc?: components['schemas']['OIDCProvider']
+    }
+    OIDCProvider: {
+      /**
+       * @description Shown as "Sign in with <name>".
+       * @example Okta
+       */
+      name: string
+      /**
+       * @description Where the browser starts the sign-in (add `?next=<path>`).
+       * @example /v1/auth/oidc/login
+       */
+      loginURL: string
     }
     Me: {
       /** @enum {string} */
@@ -2535,6 +2633,16 @@ export interface components {
       /** Format: date-time */
       deletedAt?: string
       version: number
+      /**
+       * @description `local`: signs in with a password. `oidc`: signs in with the identity provider, which
+       *     created the user at its first sign-in; its role comes from its groups there
+       *     (`auth.oidc.roleMappings`), so it has no password and its role is not edited here
+       *     (`409` `idp_managed`).
+       * @enum {string}
+       */
+      source?: 'local' | 'oidc'
+      /** @description The e-mail at the identity provider (`oidc` users). */
+      email?: string
     }
     UserList: {
       items: components['schemas']['User'][]
@@ -5001,6 +5109,76 @@ export interface operations {
       403: components['responses']['Forbidden']
     }
   }
+  getAuthProviders: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description The sign-in options. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AuthProviders']
+        }
+      }
+    }
+  }
+  oidcLogin: {
+    parameters: {
+      query?: {
+        /** @description Path to return to after sign-in (same site only; anything else gives `/`). */
+        next?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description To the provider, or to the sign-in page with an error. */
+      302: {
+        headers: {
+          Location?: string
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: components['responses']['NotFound']
+      429: components['responses']['TooManyRequests']
+    }
+  }
+  oidcCallback: {
+    parameters: {
+      query?: {
+        code?: string
+        state?: string
+        /** @description Set by the provider when the sign-in failed there. */
+        error?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description To `next` with a session cookie, or to the sign-in page with an error. */
+      302: {
+        headers: {
+          Location?: string
+          'Set-Cookie'?: string
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: components['responses']['NotFound']
+    }
+  }
   getMe: {
     parameters: {
       query?: never
@@ -5049,6 +5227,7 @@ export interface operations {
       400: components['responses']['BadRequest']
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
       429: components['responses']['TooManyRequests']
     }
   }
@@ -6179,6 +6358,7 @@ export interface operations {
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
       404: components['responses']['UserNotFound']
+      409: components['responses']['Conflict']
     }
   }
   queryConfigAudit: {

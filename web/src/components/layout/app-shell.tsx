@@ -293,9 +293,11 @@ function UserMenu({ auth, onChangePassword }: { auth: Auth; onChangePassword: ()
           ) : null}
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onChangePassword}>
-          <KeyRoundIcon /> Change password
-        </DropdownMenuItem>
+        {u?.source === 'oidc' ? null : (
+          <DropdownMenuItem onSelect={onChangePassword}>
+            <KeyRoundIcon /> Change password
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           data-testid="sign-out"
           onSelect={() =>

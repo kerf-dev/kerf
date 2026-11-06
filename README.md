@@ -154,10 +154,22 @@ flowchart LR
 
 ## Quick start
 
-**See the UI with a sample fleet** (no cluster needed; Node.js 22 and `make`):
+**Try it on your laptop** (Docker, [kind](https://kind.sigs.k8s.io/) or [k3d](https://k3d.io/), kubectl and helm; 4 CPUs
+and 8 GiB free). One command creates a cluster, installs Kerf with demo workloads and a generated usage history,
+and prints the URL and the admin password of a UI that shows priced recommendations:
 
 ```bash
 git clone https://github.com/kerf-dev/kerf && cd kerf
+hack/quickstart.sh          # about 10 minutes the first time
+hack/quickstart.sh down     # removes everything it created
+```
+
+It is for evaluation only: a single PostgreSQL pod, a self-signed webhook certificate and generated data.
+[The quickstart guide](docs/quickstart.md) says what it installs and how to move to a real install.
+
+**See the UI with a sample fleet** (no cluster needed; Node.js 22 and `make`):
+
+```bash
 make web-dev        # open http://localhost:5173
 ```
 

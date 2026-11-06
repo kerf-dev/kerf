@@ -9,6 +9,7 @@ with search and a version switch, at [getkerf.dev/docs](https://getkerf.dev/docs
 
 | Document | What it covers |
 |---|---|
+| [Quickstart on your laptop](quickstart.md) | One command on kind or k3d: Kerf with demo workloads and recommendations in minutes, what it installed, how to remove it and how to move to a real install |
 | [Install on Amazon EKS](install/eks.md) | Prerequisites, AWS resources, the hub and workload clusters, readiness, turning on `auto-patch`, Argo CD, upgrade, uninstall, troubleshooting |
 | [Install on any cluster](install/any-cluster.md) | The same chart on a conformant cluster, with a static price table instead of the AWS price list |
 | [Concepts](concepts/README.md) | Modes, policies and precedence, apply strategies, guardrails, rollback, HPA coordination, JVM, approve once, GitOps and Argo CD |
@@ -26,6 +27,7 @@ with search and a version switch, at [getkerf.dev/docs](https://getkerf.dev/docs
 | [Sign-in and access](auth.md) | Required sign-in, users and roles, sign-in protection, bearer tokens for automation, upgrading from anonymous read access |
 | [Copy a recommendation as a patch](copy-as-patch.md) | Hand a recommendation over as a strategic merge patch, a `kubectl patch` command, a Kustomize patch or Helm values, for one workload or a selection |
 | [GPU visibility](gpu.md) | Idle and under-used NVIDIA GPUs: prerequisites (DCGM exporter), the method, the cost, the readiness check |
+| [Sign-in and access](auth.md) | Required sign-in, users and roles, sign-in with OpenID Connect (Okta, Entra ID, Google, Keycloak, Dex), sign-in protection, bearer tokens for automation, upgrading from anonymous read access |
 | [Node savings](node-savings.md) | Capacity, the node estimate after the recommendations, consolidation blockers with Karpenter and the Cluster Autoscaler |
 | [Maintenance and updates](maintenance.md) | Component versions, the check for a new release, turning it off |
 | [Changelog](../CHANGELOG.md) | What changed in each release and how to upgrade |

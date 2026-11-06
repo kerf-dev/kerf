@@ -113,6 +113,18 @@ describe('auth and session', () => {
     expect((await call('GET', '/v1/summary')).status).toBe(200)
   })
 
+  it('providers: password sign-in, plus the identity provider when configured', async () => {
+    await signOut()
+    const r = await call('GET', '/v1/auth/providers')
+    expect(r.status).toBe(200)
+    expectValid('AuthProviders', r.json)
+    expect(r.json).toEqual({ local: true })
+    localStorage.setItem('ro-mock-oidc', 'only')
+    const o = await call('GET', '/v1/auth/providers')
+    expectValid('AuthProviders', o.json)
+    expect(o.json).toEqual({ local: false, oidc: { name: 'Okta', loginURL: '/v1/auth/oidc/login' } })
+  })
+
   it('login, me, logout with CSRF', async () => {
     await signOut()
     expectProblem(

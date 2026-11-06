@@ -110,6 +110,33 @@ test.describe('login and roles', () => {
     await expect(page.getByTestId('user-menu')).toBeVisible()
   })
 
+  test('with an identity provider: its button first, errors explained, break-glass password', async ({
+    page,
+  }) => {
+    await page.goto('/login')
+    await page.evaluate(() => localStorage.setItem('ro-mock-oidc', 'on'))
+    await page.goto('/login?next=%2Fclusters')
+    const sso = page.getByTestId('oidc-sign-in')
+    await expect(sso).toHaveText(/Sign in with Okta/)
+    await expect(sso).toHaveAttribute('href', '/v1/auth/oidc/login?next=%2Fclusters')
+    await expect(page.getByTestId('password-form')).toBeVisible()
+
+    await page.goto('/login?error=oidc_denied')
+    await expect(page.getByText('No access to Kerf')).toBeVisible()
+    await expect(page.getByText(/none of your groups gives a Kerf role/)).toBeVisible()
+
+    // Local sign-in off: only the break-glass admin, behind a disclosure.
+    await page.evaluate(() => localStorage.setItem('ro-mock-oidc', 'only'))
+    await page.goto('/login')
+    await expect(page.getByTestId('oidc-sign-in')).toBeVisible()
+    await expect(page.getByTestId('password-form')).toHaveCount(0)
+    await page.getByTestId('break-glass-toggle').click()
+    await page.getByLabel('Username').fill('admin')
+    await page.getByLabel('Password', { exact: true }).fill('dev-password')
+    await page.getByTestId('login-submit').click()
+    await expect(page.getByTestId('user-menu')).toBeVisible()
+  })
+
   test('a next= pointing to another origin is ignored', async ({ page }) => {
     for (const next of ['https://evil.example/x', '//evil.example/x', '/\\evil.example/x']) {
       await page.goto(`/login?next=${encodeURIComponent(next)}`)

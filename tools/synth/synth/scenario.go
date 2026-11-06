@@ -41,9 +41,20 @@ type Scenario struct {
 	Clusters      []ClusterSpec `yaml:"clusters"`
 }
 
+// QuickstartCluster is the one cluster name besides synth-* that synth writes: the demo cluster of the laptop
+// quickstart (hack/quickstart.sh), whose workloads are generated history. Any other name, ro-* in particular,
+// is refused.
+const QuickstartCluster = "quickstart"
+
+// IsSyntheticCluster reports whether synth may write or delete the series of a cluster of this name.
+func IsSyntheticCluster(name string) bool {
+	return strings.HasPrefix(name, "synth-") || name == QuickstartCluster
+}
+
 // ClusterSpec describes one synthetic cluster.
 type ClusterSpec struct {
-	// Name is the `cluster` label value. Must start with "synth-" (never ro-*, the real dev clusters).
+	// Name is the `cluster` label value. Must start with "synth-" (never ro-*, the real dev clusters), or be
+	// QuickstartCluster, the demo cluster of the laptop quickstart (see IsSyntheticCluster).
 	Name   string `yaml:"name"`
 	Region string `yaml:"region"`
 	// NodePools; pools with Count 0 are sized automatically so requests fill RequestPacking of
@@ -520,8 +531,8 @@ func (sc *Scenario) Validate() error {
 	seen := map[string]bool{}
 	for ci := range sc.Clusters {
 		c := &sc.Clusters[ci]
-		if !strings.HasPrefix(c.Name, "synth-") {
-			return fmt.Errorf("cluster %q: synthetic cluster names must start with \"synth-\"", c.Name)
+		if !IsSyntheticCluster(c.Name) {
+			return fmt.Errorf("cluster %q: synthetic cluster names must start with \"synth-\" (or be %q)", c.Name, QuickstartCluster)
 		}
 		if seen[c.Name] {
 			return fmt.Errorf("duplicate cluster %q", c.Name)

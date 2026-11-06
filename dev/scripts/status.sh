@@ -16,6 +16,8 @@ cat <<'URLS'
                                                   victoria-metrics.hub.svc:8428 on the spokes)
   Grafana          http://localhost:13000        (anonymous admin; admin/admin)
   Postgres         postgres://kerf:kerf@localhost:15432/kerf
+  Dex (OIDC)       http://localhost:15556/dex    (Sign in with Dex: dex-admin@example.com / ro-dev-dex-admin-pass,
+                                                  dex-operator, dex-viewer, dex-nobody; dev/manifests/hub/dex.yaml)
   Argo CD          http://localhost:18090        (ro-spoke-1; admin/admin123)
   Git server       git://localhost:19418/workloads.git (ro-spoke-1, seeded from dev/workloads/)
   Registry         push localhost:5005/<image>, pull k3d-ro-registry:5005/<image>
