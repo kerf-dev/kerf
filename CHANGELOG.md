@@ -83,6 +83,14 @@ First public version.
   are generated from `values.schema.json` and the chart values, `api/v1alpha1` and `api/openapi/hub.yaml`
   (`make docs-generate`); CI fails when they are out of date.
 
+- **Sign in with OpenID Connect.** Okta, Microsoft Entra ID, Google, Keycloak, Dex or any OpenID Connect
+  provider (authorization code flow with PKCE). Groups map to roles (`hub.auth.oidc.roleMappings`, a default
+  role or deny); the role is re-read from the provider every `refreshInterval`, so removing someone from a
+  group removes the role. IdP users are created at their first sign-in, and the audit log records their IdP
+  subject and e-mail. `hub.auth.local.enabled: false` keeps passwords only for one break-glass admin. The
+  client secret comes from a Secret; refresh tokens are stored encrypted and no token is ever logged. Settings
+  per provider: [Sign-in and access](docs/auth.md#sign-in-with-openid-connect).
+
 ### Changed
 
 - **Breaking: signing in is always required.** Visitors without a session see only the sign-in page, and the hub
@@ -113,6 +121,7 @@ First public version.
 
 ### Fixed
 
+- After signing in, the browser tab kept the title "Sign in · Kerf" on every page.
 - Signing in through the web UI kept users read-only: the web proxy looked for the old session cookie name
   and never forwarded `kerf_session`, so every request still went out with the read-only UI token.
 

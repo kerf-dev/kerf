@@ -19,6 +19,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- /* Secret with the OIDC client secret ("" = none). */ -}}
+{{- define "hub.oidcSecret" -}}
+{{- $cs := .Values.auth.oidc.clientSecret | default dict -}}
+{{- if $cs.existingSecret -}}{{ $cs.existingSecret }}
+{{- else if or $cs.value (dig "externalSecret" "enabled" false $cs) -}}{{ include "hub.fullname" . }}-oidc
+{{- end -}}
+{{- end -}}
+
 {{/* Secret holding the datasource secrets encryption key (D-025). */}}
 {{- define "hub.datasourceKeySecret" -}}{{ default (printf "%s-datasource-key" (include "hub.fullname" .)) .Values.onboarding.secretsKey.existingSecret }}{{- end -}}
 

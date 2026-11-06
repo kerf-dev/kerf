@@ -63,7 +63,8 @@ For chart developers.
   - It requires `global.mode`, plus `global.clusterName` in `spoke` and `all`, and `agent.hub.url` in `spoke`.
   - In `hub` and `all`, the hub needs a database Secret: `existingSecret` or `externalSecret`.
   - Unless `dev: true`, it rejects inline secrets (`hub.database.url`,
-    `{pricing,agent}.hub.tokenSecret.create`/`.token`, `hub.auth.bootstrapAdmin.password`, `hub.devSeed.*`,
+    `{pricing,agent}.hub.tokenSecret.create`/`.token`, `hub.auth.bootstrapAdmin.password`,
+    `hub.auth.oidc.clientSecret.value`, `hub.devSeed.*`,
     passwords in user lists) and `hub.auth.cookieSecure: false`.
   - Sign-in is always required. The web chart fails with an upgrade message when the removed
     `web.auth.anonymousRead` or `web.token` are set ([docs/auth.md](https://github.com/kerf-dev/kerf/blob/main/docs/auth.md)).

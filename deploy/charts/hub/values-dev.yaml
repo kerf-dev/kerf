@@ -32,6 +32,24 @@ devSeed:
 # Plain HTTP on localhost:18080 / the web's nginx: the cookie cannot be Secure.
 auth:
   cookieSecure: false
+  # Sign-in with the fleet's Dex (dev/manifests/hub/dex.yaml; users in dev/README.md). Browsers reach the
+  # issuer at localhost:15556, the hub at the Dex Service (connectAddress). Development only: the client
+  # secret is in Git.
+  oidc:
+    enabled: true
+    name: Dex
+    issuer: http://localhost:15556/dex
+    connectAddress: dex.dex.svc.cluster.local:5556
+    clientID: kerf
+    redirectURL: http://localhost:19090/v1/auth/oidc/callback
+    scopes: [openid, profile, email, groups, offline_access]
+    roleMappings:
+      - {group: kerf-admins, role: admin}
+      - {group: kerf-operators, role: operator}
+      - {group: kerf-viewers, role: viewer}
+    refreshInterval: 1m
+    clientSecret:
+      value: ro-dev-oidc-3f9a6c1e8b2d7054e1a9c6b3
 
 # Notifications: messages link to the web UI on localhost; plain-HTTP receivers are allowed so the e2e
 # suite can run a fake one on the host (test/e2e/notifications_test.go, via host.k3d.internal).

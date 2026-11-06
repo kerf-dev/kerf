@@ -31,6 +31,8 @@ ports:
     nodeFilters: [server:0:direct]
   - port: 127.0.0.1:19090:30090 # web UI (WO-14); pricing is ClusterIP only
     nodeFilters: [server:0:direct]
+  - port: 127.0.0.1:15556:30556 # Dex (OIDC issuer http://localhost:15556/dex)
+    nodeFilters: [server:0:direct]
 options:
   k3d:
     wait: true

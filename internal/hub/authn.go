@@ -44,10 +44,14 @@ type Principal struct {
 	Session *store.Session
 }
 
-// Actor returns the audit actor of the caller.
+// Actor returns the audit actor of the caller. An IdP user carries its subject and e-mail.
 func (p Principal) Actor() hubapi.Actor {
 	if p.Session != nil {
-		return hubapi.Actor{Type: hubapi.ActorUser, Name: p.Session.User.Username, Role: p.Session.User.Role}
+		a := hubapi.Actor{Type: hubapi.ActorUser, Name: p.Session.User.Username, Role: p.Session.User.Role}
+		if p.Session.IsOIDC() {
+			a.Subject, a.Email = p.Session.OIDCSubject, p.Session.User.Email
+		}
+		return a
 	}
 	return hubapi.Actor{Type: hubapi.ActorToken, Name: "token:" + strconv.FormatInt(p.Token.ID, 10), Role: p.Role}
 }
@@ -76,6 +80,8 @@ func (s *Server) authenticate(a access, next http.HandlerFunc) http.Handler {
 		if c, err := r.Cookie(auth.CookieName); err == nil && c.Value != "" && a.session != "" {
 			sess, err := s.Store.LookupSession(r.Context(), auth.SHA256(c.Value), s.now())
 			switch {
+			case err == nil && sess.IsOIDC() && s.refreshOIDC(r.Context(), &sess):
+				// The provider ended the session: treated as no session (401).
 			case err == nil:
 				p = Principal{Method: hubapi.AuthMethodSession, Role: sess.User.Role, Session: &sess}
 			case !errors.Is(err, store.ErrNotFound):
@@ -213,9 +219,9 @@ const (
 	msgTooManySignIns     = "Too many sign-in attempts. Try again later."
 )
 
-func tooMany(w http.ResponseWriter, r *http.Request, code string, retry time.Duration, detail string) {
+func tooMany(w http.ResponseWriter, r *http.Request, retry time.Duration, detail string) {
 	w.Header().Set("Retry-After", auth.RetryAfterSeconds(retry))
-	writeProblem(w, r, http.StatusTooManyRequests, code, detail)
+	writeProblem(w, r, http.StatusTooManyRequests, hubapi.CodeRateLimited, detail)
 }
 
 func (s *Server) me(sess *store.Session, csrf bool) hubapi.Me {
@@ -241,11 +247,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	ipL, userL := s.loginLimiters()
 	// One message for every rate limit: it says nothing about whether the user exists.
 	if ok, retry := ipL.Allow(auth.ClientIP(r), now); !ok {
-		tooMany(w, r, hubapi.CodeRateLimited, retry, msgTooManySignIns)
+		tooMany(w, r, retry, msgTooManySignIns)
 		return
 	}
 	if ok, retry := userL.Allow(username, now); !ok {
-		tooMany(w, r, hubapi.CodeRateLimited, retry, msgTooManySignIns)
+		tooMany(w, r, retry, msgTooManySignIns)
 		return
 	}
 	invalid := func() {
@@ -259,7 +265,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	// Unknown, deleted, disabled and locked users get exactly the answer of a wrong password, after
 	// the same bcrypt work, so a response never tells whether a username exists.
 	locked := err == nil && u.LockedUntil != nil && now.Before(*u.LockedUntil)
-	if err != nil || u.DeletedAt != nil || u.Disabled || locked {
+	// IdP users have no password; with local sign-in off only the break-glass admin has one.
+	noPassword := err == nil && (u.Source == hubapi.UserSourceOIDC || !s.Cfg.Auth.passwordAllowed(username))
+	if err != nil || u.DeletedAt != nil || u.Disabled || locked || noPassword {
 		auth.BurnPasswordCheck(req.Password)
 		if locked {
 			s.Log.InfoContext(r.Context(), "login refused: account locked", "user", username, "until", *u.LockedUntil)
@@ -350,10 +358,14 @@ func (s *Server) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
+	if p.Session.User.Source == hubapi.UserSourceOIDC {
+		writeProblem(w, r, http.StatusConflict, hubapi.CodeIdPManaged, "You sign in with the identity provider: there is no Kerf password to change.")
+		return
+	}
 	now := s.now()
 	_, userL := s.loginLimiters()
 	if ok, retry := userL.Allow(p.Session.User.Username, now); !ok {
-		tooMany(w, r, hubapi.CodeRateLimited, retry, "Too many attempts.")
+		tooMany(w, r, retry, "Too many attempts.")
 		return
 	}
 	if !auth.CheckPassword(p.Session.User.PasswordHash, req.CurrentPassword) {

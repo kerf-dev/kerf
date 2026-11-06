@@ -19,13 +19,13 @@ type UserRow struct {
 }
 
 const userColumns = `username, display_name, role, password_hash, disabled, must_change_password, failed_logins, locked_until,
-	last_login_at, created_at, coalesce(created_by, ''), updated_at, version, deleted_at`
+	last_login_at, created_at, coalesce(created_by, ''), updated_at, version, deleted_at, source, coalesce(email, '')`
 
 func scanUser(r pgx.Row) (UserRow, error) {
 	var u UserRow
 	var updated time.Time
 	err := r.Scan(&u.Username, &u.DisplayName, &u.Role, &u.PasswordHash, &u.Disabled, &u.MustChangePassword, &u.FailedLogins,
-		&u.LockedUntil, &u.LastLoginAt, &u.CreatedAt, &u.CreatedBy, &updated, &u.Version, &u.DeletedAt)
+		&u.LockedUntil, &u.LastLoginAt, &u.CreatedAt, &u.CreatedBy, &updated, &u.Version, &u.DeletedAt, &u.Source, &u.Email)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -88,13 +88,17 @@ func (s *Store) CreateUser(ctx context.Context, u hubapi.UserCreate, hash string
 				password_hash = excluded.password_hash, must_change_password = excluded.must_change_password,
 				password_changed_at = excluded.password_changed_at, created_at = excluded.created_at, created_by = excluded.created_by,
 				updated_at = excluded.updated_at, disabled = false, failed_logins = 0, locked_until = NULL, last_login_at = NULL,
-				deleted_at = NULL, version = users.version + 1
+				deleted_at = NULL, source = 'local', email = NULL, version = users.version + 1
 			WHERE users.deleted_at IS NOT NULL
 			RETURNING `+userColumns, u.Username, u.DisplayName, u.Role, hash, mustChange, c.Time, c.Actor.Name))
 		if errors.Is(err, ErrNotFound) {
 			return ErrAlreadyExists
 		}
 		if err != nil {
+			return err
+		}
+		// A deleted IdP user of the same name keeps no link to the new local user.
+		if _, err := tx.Exec(ctx, `DELETE FROM user_identities WHERE username = $1`, out.Username); err != nil {
 			return err
 		}
 		c.Target = hubapi.ConfigTarget{Type: hubapi.TargetUser, ID: out.Username, Name: out.Username}
@@ -257,7 +261,15 @@ type Session struct {
 	CSRFToken string
 	ExpiresAt time.Time
 	User      UserRow
+	// OIDC sessions: the provider identity, the sealed refresh token (nil: none) and when the role
+	// was last re-read from the provider.
+	OIDCIssuer, OIDCSubject string
+	OIDCRefreshToken        []byte
+	OIDCRefreshedAt         *time.Time
 }
+
+// IsOIDC reports whether the session came from the identity provider.
+func (s Session) IsOIDC() bool { return s.OIDCSubject != "" }
 
 // CreateSession stores a session (only the SHA-256 of its token).
 func (s *Store) CreateSession(ctx context.Context, idHash []byte, username, csrf string, expires time.Time, userAgent, remote string, now time.Time) error {
@@ -275,13 +287,15 @@ func (s *Store) LookupSession(ctx context.Context, idHash []byte, now time.Time)
 	var sess Session
 	var lastSeen time.Time
 	row := s.Pool.QueryRow(ctx, `SELECT s.csrf_token, s.expires_at, s.last_seen_at, u.username, u.display_name, u.role, u.password_hash, u.disabled, u.must_change_password,
-			u.failed_logins, u.locked_until, u.last_login_at, u.created_at, coalesce(u.created_by, ''), u.updated_at, u.version, u.deleted_at
+			u.failed_logins, u.locked_until, u.last_login_at, u.created_at, coalesce(u.created_by, ''), u.updated_at, u.version, u.deleted_at,
+			u.source, coalesce(u.email, ''), coalesce(s.oidc_issuer, ''), coalesce(s.oidc_subject, ''), s.oidc_refresh_token, s.oidc_refreshed_at
 		FROM sessions s JOIN users u ON u.username = s.username
 		WHERE s.id_sha256 = $1 AND s.revoked_at IS NULL AND s.expires_at > $2 AND u.deleted_at IS NULL AND NOT u.disabled`, idHash, now)
 	var u UserRow
 	var updated time.Time
 	err := row.Scan(&sess.CSRFToken, &sess.ExpiresAt, &lastSeen, &u.Username, &u.DisplayName, &u.Role, &u.PasswordHash, &u.Disabled,
-		&u.MustChangePassword, &u.FailedLogins, &u.LockedUntil, &u.LastLoginAt, &u.CreatedAt, &u.CreatedBy, &updated, &u.Version, &u.DeletedAt)
+		&u.MustChangePassword, &u.FailedLogins, &u.LockedUntil, &u.LastLoginAt, &u.CreatedAt, &u.CreatedBy, &updated, &u.Version, &u.DeletedAt,
+		&u.Source, &u.Email, &sess.OIDCIssuer, &sess.OIDCSubject, &sess.OIDCRefreshToken, &sess.OIDCRefreshedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sess, ErrNotFound
 	}

@@ -1,8 +1,18 @@
-import { ClockIcon, EyeIcon, EyeOffIcon, FlaskConicalIcon, Loader2Icon, LockKeyholeIcon } from 'lucide-react'
+import {
+  ChevronDownIcon,
+  ClockIcon,
+  EyeIcon,
+  EyeOffIcon,
+  FlaskConicalIcon,
+  KeyRoundIcon,
+  Loader2Icon,
+  LockKeyholeIcon,
+  LogInIcon,
+} from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { ApiError } from '@/api/client'
-import { safeNext, useAuth, useLogin } from '@/api/auth'
+import { safeNext, useAuth, useAuthProviders, useLogin } from '@/api/auth'
 import { Logo } from '@/components/layout/logo'
 import { Button } from '@/components/ui/button'
 import { Callout, Field } from '@/components/ui/form'
@@ -31,6 +41,37 @@ function loginError(e: unknown): { title: string; detail?: string } | undefined 
   return { title: 'Sign-in failed', detail: String(e) }
 }
 
+/** The sign-in page's `?error=` after a sign-in with the identity provider (hub: oidcFail). */
+function oidcError(code: string | null, provider: string): { title: string; detail?: string } | undefined {
+  switch (code) {
+    case null:
+    case '':
+      return undefined
+    case 'oidc_denied':
+      return {
+        title: 'No access to Kerf',
+        detail: `${provider} signed you in, but none of your groups gives a Kerf role. Ask an admin to add you to a group with access.`,
+      }
+    case 'oidc_expired':
+      return { title: 'The sign-in took too long', detail: 'Start again from this page.' }
+    case 'oidc_conflict':
+      return {
+        title: 'This account name is taken',
+        detail: `A local Kerf user has the name ${provider} gives you. Ask an admin to rename or delete that user.`,
+      }
+    case 'oidc_unavailable':
+      return {
+        title: `Cannot reach ${provider}`,
+        detail: 'The identity provider does not answer. Try again in a moment.',
+      }
+    default:
+      return {
+        title: `Sign-in with ${provider} failed`,
+        detail: 'Try again, or ask an admin to check the hub logs.',
+      }
+  }
+}
+
 const DEMO_USERS = [
   { username: 'admin', role: 'Full access' },
   { username: 'operator', role: 'Workload actions, pause' },
@@ -49,15 +90,25 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [touched, setTouched] = useState(false)
+  const providers = useAuthProviders()
+  const oidc = providers.data?.oidc
+  // Local sign-in off: only the break-glass admin uses a password, behind a disclosure.
+  const localOff = providers.data?.local === false
+  const [showLocal, setShowLocal] = useState(false)
   const id = useId()
 
   useEffect(() => {
     document.title = 'Sign in · Kerf'
+    // The app has one title; leaving the sign-in page must not keep this one.
+    return () => {
+      document.title = 'Kerf'
+    }
   }, [])
 
   if (auth.signedIn && !login.isPending) return <Navigate to={next} replace />
 
-  const err = loginError(login.error)
+  const err = loginError(login.error) ?? oidcError(params.get('error'), oidc?.name ?? 'the identity provider')
+  const passwordForm = !localOff || showLocal
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     setTouched(true)
@@ -84,10 +135,8 @@ export default function LoginPage() {
           <h1 className="mt-5 text-xl font-semibold tracking-tight">Sign in to Kerf</h1>
           <p className="mt-1 text-[13px] text-muted-foreground">Kubernetes rightsizing for your fleet</p>
         </div>
-        <form
-          onSubmit={submit}
+        <div
           className="flex flex-col gap-4 rounded-2xl border bg-card p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_32px_-12px_rgb(0_0_0/0.12)]"
-          noValidate
           data-testid="login-form"
         >
           {err ? (
@@ -101,63 +150,102 @@ export default function LoginPage() {
               </Callout>
             </div>
           ) : null}
-          <Field
-            label="Username"
-            htmlFor={`${id}-u`}
-            error={touched && !username.trim() ? 'Enter your username.' : undefined}
-          >
-            <Input
-              id={`${id}-u`}
-              name="username"
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              autoFocus
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="h-9"
-              aria-invalid={touched && !username.trim()}
-            />
-          </Field>
-          <Field
-            label="Password"
-            htmlFor={`${id}-p`}
-            error={touched && !password ? 'Enter your password.' : undefined}
-          >
-            <div className="relative">
-              <Input
-                id={`${id}-p`}
-                name="password"
-                type={show ? 'text' : 'password'}
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-9 pr-9"
-                aria-invalid={touched && !password}
-              />
-              <button
-                type="button"
-                onClick={() => setShow((s) => !s)}
-                className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
-                aria-label={show ? 'Hide password' : 'Show password'}
+          {oidc ? (
+            <>
+              <Button asChild className="h-9 w-full" data-testid="oidc-sign-in">
+                {/* A full page load: the hub redirects to the provider. */}
+                <a href={`${oidc.loginURL}?next=${encodeURIComponent(next)}`}>
+                  <LogInIcon /> Sign in with {oidc.name}
+                </a>
+              </Button>
+              {passwordForm ? (
+                <div className="flex items-center gap-3 text-xs text-muted-foreground" aria-hidden>
+                  <span className="h-px flex-1 bg-border" />
+                  or with a password
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowLocal(true)}
+                  className="mx-auto inline-flex items-center gap-1 rounded text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                  aria-expanded={false}
+                  data-testid="break-glass-toggle"
+                >
+                  <KeyRoundIcon className="size-3.5" /> Administrator sign-in with a password
+                  <ChevronDownIcon className="size-3.5" />
+                </button>
+              )}
+            </>
+          ) : null}
+          {passwordForm ? (
+            <form onSubmit={submit} className="flex flex-col gap-4" noValidate data-testid="password-form">
+              {localOff ? (
+                <p className="text-xs text-muted-foreground">
+                  Password sign-in is only for the break-glass administrator, when{' '}
+                  {oidc?.name ?? 'the identity provider'} is down.
+                </p>
+              ) : null}
+              <Field
+                label="Username"
+                htmlFor={`${id}-u`}
+                error={touched && !username.trim() ? 'Enter your username.' : undefined}
               >
-                {show ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
-              </button>
-            </div>
-          </Field>
-          <Button
-            type="submit"
-            className="mt-1 h-9 w-full"
-            disabled={login.isPending}
-            data-testid="login-submit"
-          >
-            {login.isPending ? <Loader2Icon className="animate-spin" /> : null}
-            Sign in
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            Forgot your password? Ask an admin to reset it.
-          </p>
-        </form>
+                <Input
+                  id={`${id}-u`}
+                  name="username"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  autoFocus={!oidc || localOff}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="h-9"
+                  aria-invalid={touched && !username.trim()}
+                />
+              </Field>
+              <Field
+                label="Password"
+                htmlFor={`${id}-p`}
+                error={touched && !password ? 'Enter your password.' : undefined}
+              >
+                <div className="relative">
+                  <Input
+                    id={`${id}-p`}
+                    name="password"
+                    type={show ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-9 pr-9"
+                    aria-invalid={touched && !password}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShow((s) => !s)}
+                    className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                    aria-label={show ? 'Hide password' : 'Show password'}
+                  >
+                    {show ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+                  </button>
+                </div>
+              </Field>
+              <Button
+                type="submit"
+                variant={oidc ? 'outline' : 'default'}
+                className="mt-1 h-9 w-full"
+                disabled={login.isPending}
+                data-testid="login-submit"
+              >
+                {login.isPending ? <Loader2Icon className="animate-spin" /> : null}
+                Sign in
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                Forgot your password? Ask an admin to reset it.
+              </p>
+            </form>
+          ) : null}
+        </div>
         {__MOCK_API__ ? (
           <div className="mt-6 rounded-xl border border-dashed bg-card/60 p-3.5 text-xs">
             <div className="mb-2 flex items-center gap-1.5 font-medium text-muted-foreground">

@@ -67,6 +67,22 @@ auth:
     externalSecret:
       enabled: true
       remoteRef: {key: kerf/hub/bootstrap-admin, property: password}
+  local:
+    enabled: false          # only the break-glass admin signs in with a password
+  oidc:
+    enabled: true
+    name: Okta
+    issuer: https://example.okta.com
+    clientID: 0oa1example
+    redirectURL: https://ro.example.com/v1/auth/oidc/callback
+    roleMappings:
+      - {group: platform-admins, role: admin}
+      - {group: platform, role: operator}
+      - {group: engineering, role: viewer}
+    clientSecret:
+      externalSecret:
+        enabled: true
+        remoteRef: {key: kerf/hub/oidc, property: clientSecret}
 
 onboarding:
   secretsKey:

@@ -122,6 +122,14 @@ are unchanged.
   unknown, disabled or locked user. Rate limits (per username and per client address, the last
   `X-Forwarded-For` entry): `429` `rate_limited` with `Retry-After` and one message. A locked user
   gets the `401` until the lock ends (`account_locked` is no longer sent).
+- **OpenID Connect** ([Sign-in and access](../auth.md#sign-in-with-openid-connect)):
+  `GET /v1/auth/providers` (public) says whether passwords are on (`local`) and names the provider;
+  `GET /v1/auth/oidc/login?next=` redirects to the provider (PKCE, `state`, `nonce`, cookie `kerf_oidc`);
+  `GET /v1/auth/oidc/callback` starts a normal session or redirects to `/login?error=oidc_*`. IdP users
+  have `source: oidc`, their e-mail as username and no password; their role comes from the groups
+  (re-read every `refreshInterval`), so role edits and password resets answer `409` `idp_managed`.
+  Their audit actor carries `subject` and `email`. With `auth.local.enabled: false` only the break-glass
+  admin may use a password.
 - **Bootstrap:** the initial admin comes from a Secret. Dev seeds the users `viewer`,
   `operator` and `admin` with passwords from the chart's dev values.
 

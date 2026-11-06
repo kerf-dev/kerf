@@ -1,0 +1,119 @@
+# Dex: the dev OpenID Connect provider for "Sign in with Dex" (docs/auth.md). ro-hub namespace `dex`.
+# Browser and issuer: http://localhost:15556/dex (k3d maps 15556 -> NodePort 30556; on a fleet created before
+# that mapping: kubectl --context k3d-ro-hub -n dex port-forward svc/dex 15556:5556). The hub reaches it at
+# dex.dex.svc.cluster.local:5556 (deploy/charts/hub/values-dev.yaml, auth.oidc.connectAddress).
+# Development only: the users, passwords and the client secret are in Git.
+#
+#   user                      password                  group           Kerf role
+#   dex-admin@example.com     ro-dev-dex-admin-pass     kerf-admins     admin
+#   dex-operator@example.com  ro-dev-dex-operator-pass  kerf-operators  operator
+#   dex-viewer@example.com    ro-dev-dex-viewer-pass    kerf-viewers    viewer
+#   dex-nobody@example.com    ro-dev-dex-nobody-pass    dex-users       none (sign-in denied)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dex
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dex
+  namespace: dex
+data:
+  config.yaml: |
+    issuer: http://localhost:15556/dex
+    # Refresh tokens are lost when Dex restarts: Kerf sessions then end at their next refresh.
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:5556
+    oauth2:
+      skipApprovalScreen: true
+    enablePasswordDB: true
+    staticClients:
+      - id: kerf
+        name: Kerf (dev)
+        secret: ro-dev-oidc-3f9a6c1e8b2d7054e1a9c6b3   # = auth.oidc.clientSecret.value in the hub dev values
+        redirectURIs:
+          - http://localhost:19090/v1/auth/oidc/callback
+    staticPasswords:
+      - email: dex-admin@example.com
+        username: dex-admin
+        userID: 0de70000-0000-4000-8000-000000000001
+        hash: "$2a$10$gl1PjnmLDNuSWti0XxotYeEBMguwK7JovlJO0ZPdUuz9.1Vm93yr6"   # ro-dev-dex-admin-pass
+        groups: [kerf-admins]
+      - email: dex-operator@example.com
+        username: dex-operator
+        userID: 0de70000-0000-4000-8000-000000000002
+        hash: "$2a$10$ndl3dX/WzihdlnygB5qtkurzdcMAZkK66LhaZQTuHvIDlNV/f1vq."   # ro-dev-dex-operator-pass
+        groups: [kerf-operators]
+      - email: dex-viewer@example.com
+        username: dex-viewer
+        userID: 0de70000-0000-4000-8000-000000000003
+        hash: "$2a$10$a7a9s1tiFg3R45s5sUjshuX9.TZLrjp0CszoqePaydthNnI8xJJMW"   # ro-dev-dex-viewer-pass
+        groups: [kerf-viewers]
+      - email: dex-nobody@example.com
+        username: dex-nobody
+        userID: 0de70000-0000-4000-8000-000000000004
+        hash: "$2a$10$Oz2AzbWeEh5CZ0/1AWAGDOcAaTviaYp.kWe7bJ98Xfhcm1P1IJTTe"   # ro-dev-dex-nobody-pass
+        groups: [dex-users]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dex
+  namespace: dex
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: dex}
+  template:
+    metadata:
+      labels: {app: dex}
+      annotations:
+        # Restart when the config changes: kubectl apply alone does not restart the pod.
+        kerf.getkerf.dev/config-version: "1"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: dex
+          # v2.45.1 by digest (DEX_IMAGE in dev/versions.env). Not v2.46.x: a refresh deadlocks its memory
+          # and sqlite3 storages.
+          image: ghcr.io/dexidp/dex:v2.45.1@sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462
+          args: [dex, serve, /etc/dex/config.yaml]
+          ports:
+            - {name: http, containerPort: 5556}
+          readinessProbe:
+            httpGet: {path: /dex/healthz, port: http}
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/dex, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap: {name: dex}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex
+  namespace: dex
+spec:
+  type: NodePort
+  selector: {app: dex}
+  ports:
+    - name: http
+      port: 5556
+      targetPort: http
+      nodePort: 30556

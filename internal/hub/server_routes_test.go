@@ -18,6 +18,11 @@ import (
 var publicRoutes = []string{
 	"POST /v1/auth/login",  // sign-in itself
 	"POST /v1/auth/logout", // clears the cookie; revokes only a live session with its CSRF token
+	// Sign-in with the identity provider: what the sign-in page offers, the redirect to the provider
+	// and its callback (which needs the state cookie of the browser that started it).
+	"GET /v1/auth/providers",
+	"GET /v1/auth/oidc/login",
+	"GET /v1/auth/oidc/callback",
 }
 
 var pathParam = regexp.MustCompile(`\{[^}]+\}`)

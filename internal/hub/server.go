@@ -47,6 +47,8 @@ type Server struct {
 	Started  time.Time
 	// Updates checks for a newer Kerf release (WO-33); nil = off.
 	Updates *UpdateChecker
+	// OIDC is sign-in with an OpenID Connect provider; nil = not configured.
+	OIDC *auth.OIDC
 	// Notify manages notification channels, rules and the digest; its Run is the leader's
 	// notification work. nil answers 501 (InitNotifications).
 	Notify *notify.Service
@@ -122,6 +124,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		// Auth.
 		{"POST /v1/auth/login", nil, s.login},
 		{"POST /v1/auth/logout", nil, s.logout},
+		{"GET /v1/auth/providers", nil, s.authProviders},
+		{"GET /v1/auth/oidc/login", nil, s.oidcLogin},
+		{"GET /v1/auth/oidc/callback", nil, s.oidcCallback},
 		{"GET /v1/me", &accessViewer, s.getMe},
 		{"POST /v1/me/password", &accessSession, s.changeOwnPassword},
 		// Settings.

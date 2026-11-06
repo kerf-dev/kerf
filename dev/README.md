@@ -4,7 +4,7 @@ Three k3s v1.35 clusters on one Docker network (`ro-dev`) that stand in for the 
 
 | Cluster | Role | Runs |
 |---|---|---|
-| `ro-hub` | central hub | VictoriaMetrics single-node, Grafana, Postgres, vmagent for hub components; later the hub and pricing charts (Tilt) |
+| `ro-hub` | central hub | VictoriaMetrics single-node, Grafana, Postgres, Dex (OIDC sign-in), vmagent for hub components; later the hub and pricing charts (Tilt) |
 | `ro-spoke-1` | workload cluster | kube-state-metrics, vmagent → hub, cert-manager, metrics-server, **Argo CD** + in-cluster git server, sample workloads synced by Argo CD; later agent + webhook |
 | `ro-spoke-2` | workload cluster | kube-state-metrics, vmagent → hub, cert-manager, metrics-server, sample workloads applied with kubectl; later agent + webhook |
 
@@ -18,7 +18,7 @@ workload). Every chart and image version is pinned in [`versions.env`](versions.
   "Footprint" below) and ~10 GB free disk.
 - `k3d` ≥ 5.9, `kubectl` ≥ 1.35, `helm` ≥ 4 (3.x works), `tilt` ≥ 0.37 for the inner loop.
   The scripts add `~/.local/bin` to `PATH`.
-- Host ports `5005`, `13000`, `15432`, `16443-16445`, `18080`, `18090`, `18428`, `19090`, `19418` free on 127.0.0.1.
+- Host ports `5005`, `13000`, `15432`, `15556`, `16443-16445`, `18080`, `18090`, `18428`, `19090`, `19418` free on 127.0.0.1.
 
 ## Commands
 
@@ -43,6 +43,7 @@ The root `Makefile` includes `make/*.mk`; until it exists use `make -f make/dev.
 | VictoriaMetrics (query, `/api/v1/import`, `/api/v1/write`) | http://localhost:18428 | `victoria-metrics.monitoring.svc:8428` (hub), `victoria-metrics.hub.svc:8428` (spokes) |
 | Grafana | http://localhost:13000 (anonymous admin, or `admin`/`admin`) | `grafana.monitoring.svc:80` (hub) |
 | Postgres | `postgres://kerf:kerf@localhost:15432/kerf?sslmode=disable` | `postgres.postgres.svc:5432` (hub), Secret `postgres/postgres` has `DATABASE_URL` |
+| Dex (OIDC provider for "Sign in with Dex") | issuer http://localhost:15556/dex; users `dex-admin@example.com`, `dex-operator@`, `dex-viewer@`, `dex-nobody@` (password `ro-dev-dex-<name>-pass`; groups map to admin, operator, viewer, none) | `dex.dex.svc.cluster.local:5556` (the hub's `auth.oidc.connectAddress`) |
 | Hub API (reserved for WO-04, NodePort 30080 on the hub) | http://localhost:18080 | `hub-api.hub.svc:8080` (spokes) |
 | Web UI (WO-14, NodePort 30090 on the hub) | http://localhost:19090 | – |
 | Argo CD (spoke-1) | http://localhost:18090 (`admin`/`admin123`) | `argocd-server.argocd.svc` |
