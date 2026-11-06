@@ -38,8 +38,8 @@ common='.github/workflows/ci.yaml .github/scripts Makefile make .golangci.yml'
 go="$common :(glob)**/*.go go.mod go.sum api cmd internal tools db deploy dev dashboards docs/contracts test testdata"
 openapi="$common api/openapi"
 web="$common web api/openapi"
-charts="$common deploy api/crds dashboards internal/hub/install tools/release go.mod go.sum"
-images="$common cmd internal web api db deploy go.mod go.sum tools/release"
+charts="$common deploy hack artifacthub-repo.yml api/crds dashboards internal/hub/install tools/release go.mod go.sum"
+images="$common cmd internal web api db deploy go.mod go.sum tools/release tools/synth"
 docs="$common docs docs-site mkdocs.yml site tools/docs api deploy/charts"
 # The Go tests read db/, deploy/, dev/, dashboards/ and docs/contracts/, and `make verify-generate` checks
 # dashboards/; the charts job runs internal/hub/install's tests; the images copy api/ and db/migrations,

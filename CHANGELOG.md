@@ -73,6 +73,10 @@ First public version.
 - **Breaking:** the web chart's `auth.anonymousRead` and `token.*` (`web.auth.anonymousRead`, `web.token.*` in
   the kerf chart), with the token Secret and ExternalSecret. The chart fails with an upgrade message while they
   are set. Revoke the old `ui` token unless a script uses it.
+- **Artifact Hub.** The chart carries the metadata Artifact Hub shows (images, CRDs with examples, the changes of the
+  release and the cosign signature, see [Verify the signatures](docs/release.md#verify-the-signatures)). Every
+  release pushes `artifacthub-repo.yml` as the `artifacthub.io` tag of the chart repository, and CI runs `ah lint`
+  (`make charts-ah-lint`).
 
 ### Fixed
 
