@@ -267,11 +267,89 @@ export interface paths {
      * Estimated monthly savings over time
      * @description At each step: the sum of the estimated monthly savings of the recommendation that was
      *     latest at that time, over the workloads live at that time. Estimated, not realized
-     *     (realized savings are WO-17). Points are aligned to multiples of `step` (UTC); a point at
+     *     (realized savings: `GET /v1/savings/realized`). Points are aligned to multiples of `step` (UTC); a point at
      *     time `t` holds the value at the end of its bucket, `min(t + step, to)`, so with the default
      *     `to` (now) the last point equals the current `GET /v1/summary` totals.
      */
     get: operations['getSavingsTrend']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/savings/realized': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Realized savings from applied changes
+     * @description What the changes Kerf applied (auto-patch or approve once) actually saved: per workload and
+     *     hour, the requests released (the `from` minus `to` requests of every `applied` and
+     *     `rolled_back` event, cumulative, so rollbacks and later increases subtract; a `released`
+     *     event ends the claim) times the replicas that ran in that hour (kube-state-metrics) times
+     *     the cluster's rates of that hour (as stored by the recommender run of the time). The hub
+     *     leader computes it hourly from the stored history, including changes applied before this
+     *     endpoint existed. Realized, not estimated: never add these amounts to `Savings`
+     *     (estimated, if applied). Method and SQL/PromQL: docs/realized-savings.md.
+     *
+     *     Buckets are aligned to UTC days or months; the first bucket starts at `from` truncated to
+     *     its bucket. Hours at or after `computedThrough` are not computed yet.
+     */
+    get: operations['getRealizedSavings']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/savings/realized/node-cost': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Node cost trend of a cluster, next to the released requests
+     * @description Per bucket: the average hourly cost of the cluster's priced nodes (`kerf_node_hourly_cost_usd`),
+     *     their number, and the ratio of the scheduled pods' requests to the nodes' allocatable
+     *     capacity, next to the requests Kerf's applied changes released (times replicas). The
+     *     relation is `correlated`: if the node autoscaler turned released requests into fewer
+     *     nodes, the lines show it, but Kerf does not claim one caused the other.
+     */
+    get: operations['getNodeCostTrend']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/workloads/{id}/savings/realized': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. */
+        id: components['parameters']['WorkloadID']
+      }
+      cookie?: never
+    }
+    /**
+     * Realized savings of one workload
+     * @description As `GET /v1/savings/realized`, for one workload. Also answers for a deleted workload that
+     *     has realized history.
+     */
+    get: operations['getWorkloadRealizedSavings']
     put?: never
     post?: never
     delete?: never
@@ -1421,8 +1499,9 @@ export interface components {
       explanation?: components['schemas']['ContainerExplanation']
     }
     /**
-     * @description Estimated monthly savings in USD: (current - recommended request) x hourly rate x average
-     *     replicas x 730 h. Negative for increases.
+     * @description Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x
+     *     hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized
+     *     amounts (`RealizedAmount`).
      */
     Savings: {
       cpu: number
@@ -1934,6 +2013,107 @@ export interface components {
         cluster?: components['schemas']['ClusterName']
         points: components['schemas']['SavingsPoint'][]
       }[]
+    }
+    /**
+     * @description Bucket size of a realized series (UTC).
+     * @enum {string}
+     */
+    RealizedStep: 'day' | 'month'
+    /**
+     * @description Bucket size of a node cost trend (UTC).
+     * @enum {string}
+     */
+    NodeCostStep: 'hour' | 'day'
+    /**
+     * @description Realized USD: requests released by applied changes x replicas that ran x the cluster's rates
+     *     of the time. Not an estimate; never added to `Savings`. Negative when Kerf's changes raised
+     *     requests above where they were.
+     */
+    RealizedAmount: {
+      cpu: number
+      memory: number
+      total: number
+    }
+    /** @description Requests released by applied changes, times the replicas that ran. */
+    ReleasedRequests: {
+      cpuCores: number
+      memoryBytes: number
+    }
+    /** @description One bucket of a realized series; `time` is the bucket start. */
+    RealizedPoint: {
+      /** Format: date-time */
+      time: string
+      cpu: number
+      memory: number
+      total: number
+      /** @description Average released requests over the computed hours of the bucket. */
+      released: components['schemas']['ReleasedRequests']
+    }
+    /**
+     * @description Workload-hours with released requests in the range, by how they were computed.
+     *     `replicasFromRecommendations`: the metrics had no data for the cluster in that hour, so the
+     *     replicas of the workload's stored recommendation were used. `withoutReplicas`: neither
+     *     existed; those hours count zero. `defaultPricing`: no stored rates, the default rates.
+     */
+    RealizedCoverage: {
+      workloadHours: number
+      replicasFromRecommendations: number
+      withoutReplicas: number
+      defaultPricing: number
+    }
+    RealizedSavings: {
+      /**
+       * Format: date-time
+       * @description First hour with released requests in the scope; absent while nothing was applied.
+       */
+      since?: string
+      /**
+       * Format: date-time
+       * @description Hours before this are computed for every cluster of the scope.
+       */
+      computedThrough?: string
+      /** Format: date-time */
+      from: string
+      /** Format: date-time */
+      to: string
+      step: components['schemas']['RealizedStep']
+      /** @description Everything realized since `since` (all time, not only the range). */
+      total: components['schemas']['RealizedAmount']
+      /** @description Realized in [`from`, `to`). */
+      inRange: components['schemas']['RealizedAmount']
+      /** @description Requests released in the last computed hour, times replicas. */
+      releasedNow: components['schemas']['ReleasedRequests']
+      points: components['schemas']['RealizedPoint'][]
+      coverage: components['schemas']['RealizedCoverage']
+    }
+    /** @description One bucket (hourly averages); a field is absent when the metrics had no data. */
+    NodeCostPoint: {
+      /** Format: date-time */
+      time: string
+      /** @description Cost of the cluster's priced nodes, USD per hour. */
+      nodeCostUSDPerHour?: number
+      nodes?: number
+      /** @description Scheduled pods' CPU requests / nodes' allocatable CPU. */
+      cpuRequestedRatio?: number
+      memoryRequestedRatio?: number
+      /** @description Requests released by Kerf's applied changes, times replicas. */
+      released: components['schemas']['ReleasedRequests']
+    }
+    NodeCostTrend: {
+      cluster: components['schemas']['ClusterName']
+      /** Format: date-time */
+      from: string
+      /** Format: date-time */
+      to: string
+      step: components['schemas']['NodeCostStep']
+      /**
+       * @description Always `correlated`; the two are shown side by side, not as cause and effect.
+       * @enum {string}
+       */
+      relation: 'correlated'
+      /** Format: date-time */
+      computedThrough?: string
+      points: components['schemas']['NodeCostPoint'][]
     }
     RecomputeAccepted: {
       /**
@@ -3820,6 +4000,110 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['SavingsTrend']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  getRealizedSavings: {
+    parameters: {
+      query?: {
+        cluster?: components['schemas']['ClusterName'][]
+        namespace?: string[]
+        /** @description Inclusive start. Default 12 months before `to` (`step=month`) or 30 days (`step=day`). */
+        from?: string
+        /** @description Exclusive end. Default now. */
+        to?: components['parameters']['To']
+        step?: components['schemas']['RealizedStep']
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Realized savings. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RealizedSavings']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  getNodeCostTrend: {
+    parameters: {
+      query: {
+        cluster: components['schemas']['ClusterName']
+        /** @description Inclusive start. Default 30 days before `to`. */
+        from?: string
+        /** @description Exclusive end. Default now. */
+        to?: components['parameters']['To']
+        /** @description Default `hour` up to 7 days, `day` beyond. */
+        step?: components['schemas']['NodeCostStep']
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Node cost trend. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NodeCostTrend']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      /** @description Unknown cluster. */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/problem+json': components['schemas']['Problem']
+        }
+      }
+    }
+  }
+  getWorkloadRealizedSavings: {
+    parameters: {
+      query?: {
+        /** @description Inclusive start. Default 30 days before `to` (`step=day`) or 12 months (`step=month`). */
+        from?: string
+        /** @description Exclusive end. Default now. */
+        to?: components['parameters']['To']
+        /** @description Default `day`. */
+        step?: components['schemas']['RealizedStep']
+      }
+      header?: never
+      path: {
+        /** @description Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. */
+        id: components['parameters']['WorkloadID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Realized savings. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RealizedSavings']
         }
       }
       400: components['responses']['BadRequest']

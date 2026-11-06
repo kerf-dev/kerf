@@ -607,7 +607,7 @@ paths:
       description: |
         At each step: the sum of the estimated monthly savings of the recommendation that was
         latest at that time, over the workloads live at that time. Estimated, not realized
-        (realized savings are WO-17). Points are aligned to multiples of `step` (UTC); a point at
+        (realized savings: `GET /v1/savings/realized`). Points are aligned to multiples of `step` (UTC); a point at
         time `t` holds the value at the end of its bucket, `min(t + step, to)`, so with the default
         `to` (now) the last point equals the current `GET /v1/summary` totals.
       parameters:
@@ -636,6 +636,157 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SavingsTrend'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/savings/realized:
+    get:
+      tags: [ui]
+      operationId: getRealizedSavings
+      security:
+        - bearerAuth: [ui]
+        - sessionAuth: [viewer]
+      summary: Realized savings from applied changes
+      description: |
+        What the changes Kerf applied (auto-patch or approve once) actually saved: per workload and
+        hour, the requests released (the `from` minus `to` requests of every `applied` and
+        `rolled_back` event, cumulative, so rollbacks and later increases subtract; a `released`
+        event ends the claim) times the replicas that ran in that hour (kube-state-metrics) times
+        the cluster's rates of that hour (as stored by the recommender run of the time). The hub
+        leader computes it hourly from the stored history, including changes applied before this
+        endpoint existed. Realized, not estimated: never add these amounts to `Savings`
+        (estimated, if applied). Method and SQL/PromQL: docs/realized-savings.md.
+
+        Buckets are aligned to UTC days or months; the first bucket starts at `from` truncated to
+        its bucket. Hours at or after `computedThrough` are not computed yet.
+      parameters:
+        - name: cluster
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ClusterName'
+        - name: namespace
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+        - name: from
+          in: query
+          description: Inclusive start. Default 12 months before `to` (`step=month`) or 30 days (`step=day`).
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/To'
+        - name: step
+          in: query
+          schema:
+            $ref: '#/components/schemas/RealizedStep'
+      responses:
+        '200':
+          description: Realized savings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealizedSavings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/savings/realized/node-cost:
+    get:
+      tags: [ui]
+      operationId: getNodeCostTrend
+      security:
+        - bearerAuth: [ui]
+        - sessionAuth: [viewer]
+      summary: Node cost trend of a cluster, next to the released requests
+      description: |
+        Per bucket: the average hourly cost of the cluster's priced nodes (`kerf_node_hourly_cost_usd`),
+        their number, and the ratio of the scheduled pods' requests to the nodes' allocatable
+        capacity, next to the requests Kerf's applied changes released (times replicas). The
+        relation is `correlated`: if the node autoscaler turned released requests into fewer
+        nodes, the lines show it, but Kerf does not claim one caused the other.
+      parameters:
+        - name: cluster
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/ClusterName'
+        - name: from
+          in: query
+          description: Inclusive start. Default 30 days before `to`.
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/To'
+        - name: step
+          in: query
+          description: Default `hour` up to 7 days, `day` beyond.
+          schema:
+            $ref: '#/components/schemas/NodeCostStep'
+      responses:
+        '200':
+          description: Node cost trend.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeCostTrend'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Unknown cluster.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/workloads/{id}/savings/realized:
+    parameters:
+      - $ref: '#/components/parameters/WorkloadID'
+    get:
+      tags: [ui]
+      operationId: getWorkloadRealizedSavings
+      security:
+        - bearerAuth: [ui]
+        - sessionAuth: [viewer]
+      summary: Realized savings of one workload
+      description: |
+        As `GET /v1/savings/realized`, for one workload. Also answers for a deleted workload that
+        has realized history.
+      parameters:
+        - name: from
+          in: query
+          description: Inclusive start. Default 30 days before `to` (`step=day`) or 12 months (`step=month`).
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/To'
+        - name: step
+          in: query
+          description: Default `day`.
+          schema:
+            $ref: '#/components/schemas/RealizedStep'
+      responses:
+        '200':
+          description: Realized savings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealizedSavings'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -3069,8 +3220,9 @@ components:
     Savings:
       type: object
       description: |
-        Estimated monthly savings in USD: (current - recommended request) x hourly rate x average
-        replicas x 730 h. Negative for increases.
+        Estimated monthly savings in USD (estimated, if applied): (current - recommended request) x
+        hourly rate x average replicas x 730 h. Negative for increases. Never added to the realized
+        amounts (`RealizedAmount`).
       required: [cpu, memory, total]
       properties:
         cpu:
@@ -3989,6 +4141,161 @@ components:
                 type: array
                 items:
                   $ref: '#/components/schemas/SavingsPoint'
+    RealizedStep:
+      type: string
+      description: Bucket size of a realized series (UTC).
+      enum: [day, month]
+    NodeCostStep:
+      type: string
+      description: Bucket size of a node cost trend (UTC).
+      enum: [hour, day]
+    RealizedAmount:
+      type: object
+      description: |
+        Realized USD: requests released by applied changes x replicas that ran x the cluster's rates
+        of the time. Not an estimate; never added to `Savings`. Negative when Kerf's changes raised
+        requests above where they were.
+      required: [cpu, memory, total]
+      properties:
+        cpu:
+          type: number
+        memory:
+          type: number
+        total:
+          type: number
+    ReleasedRequests:
+      type: object
+      description: Requests released by applied changes, times the replicas that ran.
+      required: [cpuCores, memoryBytes]
+      properties:
+        cpuCores:
+          type: number
+        memoryBytes:
+          type: number
+    RealizedPoint:
+      type: object
+      description: One bucket of a realized series; `time` is the bucket start.
+      required: [time, cpu, memory, total, released]
+      properties:
+        time:
+          type: string
+          format: date-time
+        cpu:
+          type: number
+        memory:
+          type: number
+        total:
+          type: number
+        released:
+          description: Average released requests over the computed hours of the bucket.
+          allOf:
+            - $ref: '#/components/schemas/ReleasedRequests'
+    RealizedCoverage:
+      type: object
+      description: |
+        Workload-hours with released requests in the range, by how they were computed.
+        `replicasFromRecommendations`: the metrics had no data for the cluster in that hour, so the
+        replicas of the workload's stored recommendation were used. `withoutReplicas`: neither
+        existed; those hours count zero. `defaultPricing`: no stored rates, the default rates.
+      required: [workloadHours, replicasFromRecommendations, withoutReplicas, defaultPricing]
+      properties:
+        workloadHours:
+          type: integer
+          minimum: 0
+        replicasFromRecommendations:
+          type: integer
+          minimum: 0
+        withoutReplicas:
+          type: integer
+          minimum: 0
+        defaultPricing:
+          type: integer
+          minimum: 0
+    RealizedSavings:
+      type: object
+      required: [from, to, step, total, inRange, releasedNow, points, coverage]
+      properties:
+        since:
+          type: string
+          format: date-time
+          description: First hour with released requests in the scope; absent while nothing was applied.
+        computedThrough:
+          type: string
+          format: date-time
+          description: Hours before this are computed for every cluster of the scope.
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        step:
+          $ref: '#/components/schemas/RealizedStep'
+        total:
+          description: Everything realized since `since` (all time, not only the range).
+          allOf:
+            - $ref: '#/components/schemas/RealizedAmount'
+        inRange:
+          description: Realized in [`from`, `to`).
+          allOf:
+            - $ref: '#/components/schemas/RealizedAmount'
+        releasedNow:
+          description: Requests released in the last computed hour, times replicas.
+          allOf:
+            - $ref: '#/components/schemas/ReleasedRequests'
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/RealizedPoint'
+        coverage:
+          $ref: '#/components/schemas/RealizedCoverage'
+    NodeCostPoint:
+      type: object
+      description: One bucket (hourly averages); a field is absent when the metrics had no data.
+      required: [time, released]
+      properties:
+        time:
+          type: string
+          format: date-time
+        nodeCostUSDPerHour:
+          type: number
+          description: Cost of the cluster's priced nodes, USD per hour.
+        nodes:
+          type: number
+        cpuRequestedRatio:
+          type: number
+          description: Scheduled pods' CPU requests / nodes' allocatable CPU.
+        memoryRequestedRatio:
+          type: number
+        released:
+          description: Requests released by Kerf's applied changes, times replicas.
+          allOf:
+            - $ref: '#/components/schemas/ReleasedRequests'
+    NodeCostTrend:
+      type: object
+      required: [cluster, from, to, step, relation, points]
+      properties:
+        cluster:
+          $ref: '#/components/schemas/ClusterName'
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        step:
+          $ref: '#/components/schemas/NodeCostStep'
+        relation:
+          type: string
+          description: Always `correlated`; the two are shown side by side, not as cause and effect.
+          enum: [correlated]
+        computedThrough:
+          type: string
+          format: date-time
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeCostPoint'
     RecomputeAccepted:
       type: object
       required: [runId, requestedAt, coalesced]

@@ -71,6 +71,7 @@ not fixed durations. Production defaults are unchanged.
 | 10 | `TestRollback/OOM_after_a_memory_decrease` | spoke-1 | Python workload whose held memory is set through a ConfigMap; memory decrease applied by rollout (in-place memory is refused on swap nodes); raising the held memory past the new limit OOM-kills it → RSR `RolledBack` with `rolledBackAt`, template back at 256Mi, hub `rolled_back` event reason `OOMKills` |
 | 10 | `TestRollback/restarts_after_an_in-place_CPU_change` | spoke-1 | in-place CPU decrease applied; the container is then made to crash-loop (ConfigMap) → ≥ 3 restarts → RSR `RolledBack`, pods resized back to 250m in place, template untouched, hub `rolled_back` event reason `Restarts` |
 | 11 | `TestHubUnreachable` | spoke-2 | with one workload applied and one waiting in audit, the agent is cut off from the hub (invalid hub token) until it counts the hub as unreachable (`hubStaleAfter` after its last request, as recorded by the hub); switching the waiting workload to auto-patch gives `HubUnreachable` and nothing changes for 2 agent pulls (at least 30 s); the applied workload is not reverted; after reconnecting, the pending change is applied |
+| 12 | `TestRealizedSavings` | spoke-1 | in-place CPU decrease applied (2 replicas); the hub's realized savings for ro-spoke-1 are computed up to the last hour or so; applied changes of earlier runs older than two hours have a realized saving by workload id (also for deleted namespaces); the node cost trend (`relation: correlated`) has hourly points with node cost and requested/allocatable CPU. With `E2E_REALIZED_WAIT` (e.g. `75m`; the hub counts complete hours only): the CPU released now is (250m − applied) × 2 replicas, within 5 % |
 
 ### Admin area (WO-24, D-022..D-027)
 
@@ -163,6 +164,7 @@ scale-down, the spoke-2 pause and `pods/resize` rule removal (WO-24) and, only w
 | `E2E_APPLY_TIMEOUT` | `18m` (hub run + data alignment + apply) |
 | `E2E_HUB_STALE_AFTER` | the agent's `--hub-stale-after` (Deployment args) |
 | `E2E_RECOMPUTE_EVERY` | `30s` (per cluster) |
+| `E2E_REALIZED_WAIT` | `0` = off; how long `TestRealizedSavings` may wait for the applied change's first complete hour |
 | `E2E_AGENT_DEPLOYMENT` | `kerf-agent` (scenario 11 reads its args) |
 | `E2E_INFEASIBLE_CPU` | `16` (scenario 4's CPU floor; must exceed the node's capacity) |
 | `E2E_KEEP` | set to keep namespaces/policies/apps for debugging (`make e2e-clean` later) |
