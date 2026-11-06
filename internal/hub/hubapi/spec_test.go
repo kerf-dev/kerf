@@ -92,6 +92,8 @@ var schemaTypes = map[string]any{
 	"SavingsTrend":         SavingsTrend{},
 	"RecomputeAccepted":    RecomputeAccepted{},
 	"Problem":              Problem{},
+	"GPUUsage":             GPUUsage{},
+	"GPUSuggestion":        GPUSuggestion{},
 
 	// Realized savings
 	"RealizedAmount":   RealizedAmount{},
@@ -250,6 +252,9 @@ var enumLists = map[string][]string{
 	"ModeSource":         ModeSources,
 	"WorkloadKind":       WorkloadKinds,
 	"RiskFlag":           AllRiskFlags,
+	"GPUStatus":          GPUStatuses,
+	"GPUFilter":          GPUFilterValues,
+	"GPUSuggestionKind":  GPUSuggestionKinds,
 	"HubPolicyType": {v1alpha1.HubPolicyTypeGlobalDefault, v1alpha1.HubPolicyTypeClusterDefault,
 		v1alpha1.HubPolicyTypePolicy, v1alpha1.HubPolicyTypeWorkloadOverride},
 	"ClusterPolicySource":        {PolicySourceHub, PolicySourceGit, PolicySourceBoth},

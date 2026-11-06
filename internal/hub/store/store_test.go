@@ -599,3 +599,41 @@ func TestRecordPull(t *testing.T) {
 		t.Errorf("unknown cluster: %v %v", rec, err)
 	}
 }
+
+func TestRecommendationGPU(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	if err := st.EnsureCluster(ctx, "c1", ""); err != nil {
+		t.Fatal(err)
+	}
+	a, b := wkey("c1", "gpu"), wkey("c1", "cpu")
+	ids, err := st.UpsertInventory(ctx, "c1", inventory(a, b), now, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withGPU := result(a, now, "100m", 1)
+	p95 := 3.5
+	withGPU.Recommendation.GPU = &hubapi.GPUUsage{
+		Status: hubapi.GPUIdle, GPUsPerPod: 1, GPUs: 2, Pods: 2, Model: "NVIDIA A10G", Samples: 100, UtilizationP95: &p95, Priced: true,
+		MonthlyCostUSD: 1642.5, PerPodMonthlyCostUSD: 821.25,
+		Suggestions: []hubapi.GPUSuggestion{{Kind: hubapi.GPUSuggestScaleToZero, Message: "scale to zero"}},
+	}
+	insert(t, st, "c1", ids, withGPU, result(b, now, "100m", 1))
+	views, err := st.LoadWorkloads(ctx, WorkloadFilter{Cluster: "c1"})
+	if err != nil || len(views) != 2 {
+		t.Fatalf("%v %v", views, err)
+	}
+	for _, v := range views {
+		switch v.Key {
+		case a:
+			g := v.Rec.GPU
+			if g == nil || g.Status != hubapi.GPUIdle || g.GPUs != 2 || *g.UtilizationP95 != 3.5 || g.MonthlyCostUSD != 1642.5 || len(g.Suggestions) != 1 || g.Suggestions[0].Kind != hubapi.GPUSuggestScaleToZero {
+				t.Errorf("gpu workload: %+v", g)
+			}
+		default:
+			if v.Rec.GPU != nil {
+				t.Errorf("workload without GPUs has GPU data: %+v", v.Rec.GPU)
+			}
+		}
+	}
+}

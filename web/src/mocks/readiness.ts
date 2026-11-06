@@ -164,6 +164,13 @@ export const CATALOG: CatalogEntry[] = [
     source: 'hub',
     title: 'Node allocatable series',
   },
+  {
+    id: 'metrics.dcgm',
+    category: 'metrics',
+    severity: 'warning',
+    source: 'hub',
+    title: 'NVIDIA DCGM GPU series',
+  },
   { id: 'pricing.coverage', category: 'pricing', severity: 'warning', source: 'hub', title: 'Nodes priced' },
   {
     id: 'metrics.recommendations',
@@ -373,6 +380,12 @@ function remediationFor(
           'kube-state-metrics:\n  metricLabelsAllowlist:\n    - nodes=[node.kubernetes.io/instance-type,karpenter.sh/capacity-type,topology.kubernetes.io/zone,topology.kubernetes.io/region]',
         remediationType: 'yaml',
       }
+    case 'metrics.dcgm':
+      return {
+        remediation:
+          'Run the NVIDIA DCGM exporter on the GPU nodes and scrape it (job "dcgm-exporter", port 9400):\nhelm upgrade --install dcgm-exporter gpu-helm-charts/dcgm-exporter -n gpu-operator\n# GPU workloads show "No data" until the series reach the datasource.',
+        remediationType: 'command',
+      }
     case 'metrics.history':
       return {
         remediation: 'Nothing to do: the check passes once the metrics cover the profile window.',
@@ -460,6 +473,10 @@ function healthy(id: string, workloads: number): CheckResult {
       return PASS('Instance type, capacity type, zone and region labels present.')
     case 'metrics.node-allocatable':
       return PASS('kube_node_status_allocatable present for every node.')
+    case 'metrics.dcgm':
+      return PASS(
+        'DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE present for every GPU pod.',
+      )
     case 'pricing.coverage':
       return PASS('All nodes priced from the pricing service.')
     case 'metrics.recommendations':
@@ -547,6 +564,11 @@ export function buildReadiness(
         'kube_node_labels has no label_node_kubernetes_io_instance_type or label_karpenter_sh_capacity_type: pricing falls back to default rates.',
       details: { missing: 'instance-type,capacity-type' },
     }
+    results['metrics.dcgm'] = {
+      status: 'warn',
+      message: 'DCGM exporter series missing: DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED, DCGM_FI_DEV_FB_FREE',
+      details: { missing: 'DCGM_FI_DEV_GPU_UTIL,DCGM_FI_DEV_FB_USED,DCGM_FI_DEV_FB_FREE' },
+    }
     results['pricing.coverage'] = {
       status: 'warn',
       message: '6 of 18 nodes priced with default rates (unknown instance type).',
@@ -625,6 +647,7 @@ export function buildReadiness(
         'metrics.hpa',
         'metrics.node-labels',
         'metrics.node-allocatable',
+        'metrics.dcgm',
       ])
         results[id] = { status: 'unknown', message: 'Not checked: the cluster label matches no series.' }
       results['metrics.cluster-label'] = {

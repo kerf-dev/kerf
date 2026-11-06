@@ -33,17 +33,32 @@ export function workloadsToCsv(items: WorkloadRow[]): string {
     'risk_flags',
     'container_savings_usd_month',
     'workload_savings_usd_month',
+    'gpu_status',
+    'gpus',
+    'gpu_utilization_p95_percent',
+    'gpu_monthly_cost_usd',
+    'gpu_unused_monthly_cost_usd',
     'recommendation_id',
     'generated_at',
   ]
   const rows: unknown[][] = []
   for (const w of items) {
     const base = [w.cluster, w.namespace, w.kind, w.name]
+    // GPU data belongs to the workload, so it repeats on every container row like the workload savings.
+    // Costs stay empty when no GPU price is known (0 would read as free).
+    const gpu = [
+      w.gpu?.status,
+      w.gpu?.gpus,
+      w.gpu?.utilizationP95,
+      w.gpu?.priced ? w.gpu.monthlyCostUSD : undefined,
+      w.gpu?.priced ? w.gpu.unusedMonthlyCostUSD : undefined,
+    ]
     const tail = [
       w.confidence,
       (w.riskFlags ?? []).join(' '),
       undefined,
       w.monthlySavingsUSD?.total,
+      ...gpu,
       w.recommendationID,
       w.generatedAt,
     ]
@@ -70,6 +85,7 @@ export function workloadsToCsv(items: WorkloadRow[]): string {
         (c.riskFlags ?? []).join(' '),
         c.monthlySavingsUSD?.total,
         w.monthlySavingsUSD?.total,
+        ...gpu,
         w.recommendationID,
         w.generatedAt,
       ])

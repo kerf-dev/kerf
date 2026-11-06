@@ -38,6 +38,13 @@ First public version.
   dashboards. The hub runs highly available (leader election on Postgres).
 - **Release.** Multi-arch images (`linux/amd64`, `linux/arm64`) with SBOM and provenance, signed with cosign,
   and OCI Helm charts, published to GitHub Container Registry.
+- **GPU visibility.** Workloads that request `nvidia.com/gpu` show their GPU utilisation and memory (from the
+  NVIDIA DCGM exporter), what the GPUs cost (the price of each GPU node times the workload's share of its GPUs) and a
+  status: idle (95th percentile utilisation under 5 %) or under-used (under 40 %, or under 30 % of the GPU memory),
+  with a direction: time-slicing or MIG, a smaller GPU type, or scale to zero. Opportunities has a GPU filter, the
+  workload page a GPU panel, and the new readiness check `metrics.dcgm` says exactly which DCGM series are missing.
+  Visibility only: Kerf changes no GPU request. Needs database migration `0020` (the hub applies it) and, for GPU
+  prices, the pricing service on a version that exports `kerf_gpu_hourly_cost_usd`. See [docs/gpu.md](docs/gpu.md).
 - **Maintenance page and update check.** Admin → Maintenance lists the version of every component (each hub
   replica, the web UI, the pricing service, and the agent and webhook pods of every cluster) and flags
   mismatches. Once a day the hub checks the public GitHub releases of kerf-dev/kerf for a newer stable version

@@ -752,7 +752,7 @@ describe('clusters, automation, readiness', () => {
         )
         expect(r.json.checks.map((x: { id: string }) => x.id)).not.toContain('agent.version')
         expect(r.json.summary.unknown).toBeGreaterThan(0)
-      } else expect(r.json.checks).toHaveLength(33)
+      } else expect(r.json.checks).toHaveLength(34)
       states[c] = r.json.state
       const h = await call('GET', `/v1/clusters/${c}/readiness/history`)
       expectValid('ReadinessHistory', h.json)

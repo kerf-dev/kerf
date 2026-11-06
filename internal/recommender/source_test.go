@@ -248,6 +248,14 @@ func sourceFixture(cfg Config) (*fakeQuerier, sourceQueries) {
 	f.instant[sq.priceSources] = []VectorSample{vs(Labels{"source": "list"}, 1), vs(Labels{"source": "cur"}, 4)}
 	f.instant[sq.curStart] = []VectorSample{vs(Labels{}, float64(curPeriodStart.Unix()))}
 	f.instant[sq.curEnd] = []VectorSample{vs(Labels{}, float64(curPeriodEnd.Unix()))}
+	// GPU: ns1/StatefulSet/db holds two GPUs on node gpu-1 (one pod); web has none.
+	gq := Queries{Cluster: "c1", RateWindow: cfg.RateWindow}
+	gpuL := func(extra ...string) Labels { return wl("ns1", hubapi.KindStatefulSet, "db", "", extra...) }
+	f.instant[gq.GPUPods()] = []VectorSample{vs(gpuL("pod", "db-0", "node", "gpu-1"), 2), vs(wl("ns1", hubapi.KindDeployment, "web", "", "pod", "web-1", "node", "n1"), 0)}
+	f.instant[gq.GPUMemoryTotal(cfg.InventoryLookback)] = []VectorSample{vs(gpuL("modelName", "NVIDIA A10G"), 23028)}
+	f.instant[gq.GPUPrice(time.Hour)] = []VectorSample{vs(Labels{"cluster": "c1", "node": "gpu-1"}, 1.5), vs(Labels{"cluster": "c1", "node": "n1"}, 0)}
+	f.rng[gq.GPUUtilization()] = []Series{{Labels: gpuL(), Samples: flat(14, 12, 0, 70)}}
+	f.rng[gq.GPUMemoryUsed()] = []Series{{Labels: gpuL(), Samples: flat(14, 4096, 0, 71)}}
 	return f, sq
 }
 
@@ -553,7 +561,8 @@ func TestSourceLoadQueries(t *testing.T) {
 	wantRange := map[string]time.Time{
 		sq.cpu: testEnd.Add(-window), sq.mem: testEnd.Add(-window), sq.pods: testEnd.Add(-window),
 		sq.cpu24h: testEnd.Add(-24 * time.Hour), sq.mem24h: testEnd.Add(-24 * time.Hour),
-		sq.throttle: testEnd.Add(-cfg.RiskWindow),
+		sq.throttle:        testEnd.Add(-cfg.RiskWindow),
+		q.GPUUtilization(): testEnd.Add(-window), q.GPUMemoryUsed(): testEnd.Add(-window),
 	}
 	for q, from := range wantRange {
 		if got, ok := f.called[q]; !ok || !got.Equal(from) {
@@ -567,8 +576,8 @@ func TestSourceLoadQueries(t *testing.T) {
 	for q := range f.instant {
 		instants = append(instants, q)
 	}
-	if len(instants) != 23 {
-		t.Errorf("fixture has %d instant queries, want 23", len(instants))
+	if len(instants) != 26 {
+		t.Errorf("fixture has %d instant queries, want 26", len(instants))
 	}
 	for _, q := range instants {
 		if got, ok := f.called[q]; !ok || !got.Equal(testEnd) {
@@ -894,5 +903,48 @@ func TestConfigEndAlignmentValidate(t *testing.T) {
 		if err := cfg.Validate(); (err == nil) != tc.ok {
 			t.Errorf("endAlignment %s: err %v, want ok=%v", tc.align, err, tc.ok)
 		}
+	}
+}
+
+func TestSourceLoadGPU(t *testing.T) {
+	cfg := DefaultConfig()
+	f, _ := sourceFixture(cfg)
+	src := &Source{Q: f, Cfg: cfg}
+	d, err := src.Load(context.Background(), "c1", testEnd, 14*24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.unknown) > 0 {
+		t.Errorf("unrecognised queries:\n%s", strings.Join(f.unknown, "\n---\n"))
+	}
+	g := d.Workloads[keyDB].GPU
+	if g == nil || len(g.Pods) != 1 || g.Pods[0] != (GPUPod{Name: "db-0", Node: "gpu-1", GPUs: 2}) {
+		t.Fatalf("db GPU = %+v", g)
+	}
+	if g.Model != "NVIDIA A10G" || g.MemTotalMiB != 23028 || len(g.Util) == 0 || len(g.MemUsedMiB) == 0 {
+		t.Errorf("db GPU data = %v %v %d %d", g.Model, g.MemTotalMiB, len(g.Util), len(g.MemUsedMiB))
+	}
+	if d.Workloads[keyWeb].GPU != nil {
+		t.Errorf("web has GPU data: %+v", d.Workloads[keyWeb].GPU)
+	}
+	if len(d.GPUPrices) != 1 || d.GPUPrices["gpu-1"] != 1.5 {
+		t.Errorf("GPU prices = %v", d.GPUPrices)
+	}
+}
+
+// A failing GPU query never fails the load: the workloads keep what was loaded.
+func TestSourceLoadGPUQueryFails(t *testing.T) {
+	cfg := DefaultConfig()
+	f, _ := sourceFixture(cfg)
+	gq := Queries{Cluster: "c1", RateWindow: cfg.RateWindow}
+	f.fail[gq.GPUUtilization()] = errors.New("boom")
+	src := &Source{Q: f, Cfg: cfg}
+	d, err := src.Load(context.Background(), "c1", testEnd, 14*24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := d.Workloads[keyDB].GPU
+	if g == nil || len(g.Util) != 0 || len(g.MemUsedMiB) == 0 {
+		t.Errorf("db GPU = %v", g)
 	}
 }

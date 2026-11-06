@@ -20,6 +20,9 @@ var (
 	FixtureBucket   = 5 * time.Minute
 	FixtureCluster  = "synth-a"
 	FixtureScenario = "tools/synth/scenarios/fleet-small.yaml"
+	// The GPU fixtures come from the workloads of FixtureGPUScenario that name a `fixture:`.
+	FixtureGPUScenario = "tools/synth/scenarios/fleet-gpu.yaml"
+	FixtureGPUCluster  = "synth-gpu"
 )
 
 // Fixture is a compact, pre-aggregated history of one workload for unit tests (WO-04
@@ -41,6 +44,49 @@ type Fixture struct {
 	// Replicas is the desired replica count (spec or HPA current); for CronJobs, running pods.
 	Replicas   Values             `json:"replicas"`
 	Containers []FixtureContainer `json:"containers"`
+	// GPU is set for workloads whose pods request GPUs.
+	GPU *FixtureGPU `json:"gpu,omitempty"`
+}
+
+// FixtureGPU is the GPU part of a fixture: what the NVIDIA DCGM exporter reports for the GPUs of
+// the workload's pods, per bucket, aggregated over all GPUs of all running pods. The arrays have
+// Fixture.Points elements; null means no pod (or no DCGM series) in that bucket. Without DCGM
+// series (DCGM false) they are absent.
+type FixtureGPU struct {
+	Container  string  `json:"container"`  // the container that requests the GPUs
+	PerPod     int     `json:"perPod"`     // nvidia.com/gpu requested by one pod
+	Model      string  `json:"model"`      // DCGM modelName
+	MemoryMiB  float64 `json:"memoryMiB"`  // framebuffer of one GPU
+	LabelStyle string  `json:"labelStyle"` // pod | exported
+	DCGM       bool    `json:"dcgm"`       // false: the exporter has no series for the pods
+	// Node is the GPU node of the first pod: the inputs of the GPU price.
+	Node FixtureGPUNode `json:"node"`
+	// Devices is the number of GPU series reporting in the bucket (running pods x PerPod).
+	Devices Values `json:"devices,omitempty"`
+	// Util is DCGM_FI_DEV_GPU_UTIL in percent: per GPU the mean over the bucket, then the
+	// minimum, maximum and mean across GPUs (avg is what the hub averages over a workload's GPUs).
+	Util *GPUAgg `json:"util,omitempty"`
+	// FBUsedMiB is DCGM_FI_DEV_FB_USED: per GPU the maximum over the bucket, then across GPUs.
+	FBUsedMiB *GPUAgg `json:"fbUsedMiB,omitempty"`
+	// FBFreeMiB is DCGM_FI_DEV_FB_FREE: per GPU the minimum over the bucket, then across GPUs.
+	FBFreeMiB *GPUAgg `json:"fbFreeMiB,omitempty"`
+	// Expect is the GPU status and suggestion kinds a correct recommender reaches.
+	Expect *GPUExpectation `json:"expect,omitempty"`
+}
+
+// FixtureGPUNode describes the node of a GPU pod.
+type FixtureGPUNode struct {
+	InstanceType string `json:"instanceType"` // e.g. g5.xlarge
+	CapacityType string `json:"capacityType"` // on-demand | spot
+	Region       string `json:"region"`
+	GPUs         int    `json:"gpus"` // GPUs of the node
+}
+
+// GPUAgg holds min, max and mean across the GPUs of a workload.
+type GPUAgg struct {
+	Min Values `json:"min"`
+	Max Values `json:"max"`
+	Avg Values `json:"avg"`
 }
 
 // FixtureContainer is one container of the workload. Init containers are listed with
@@ -209,7 +255,76 @@ func (g *Generator) BuildFixture(wt *WorkloadTrace, step time.Duration) (*Fixtur
 		}
 		f.Containers = append(f.Containers, fc)
 	}
+	f.GPU = g.gpuFixture(wt, m, nb)
 	return f, nil
+}
+
+// gpuFixture aggregates the DCGM series of the workload's first GPU container, nil without GPUs.
+func (g *Generator) gpuFixture(wt *WorkloadTrace, m, nb int) *FixtureGPU {
+	idx := wt.Spec.gpuContainers()
+	if len(idx) == 0 || len(wt.Pods) == 0 {
+		return nil
+	}
+	ci := idx[0]
+	spec := &wt.Spec.Containers[ci]
+	gs := spec.GPU
+	node := wt.Pods[0].Node
+	out := &FixtureGPU{Container: spec.Name, PerPod: gs.PerPod, Model: gs.Model, MemoryMiB: gs.MemoryMiB,
+		LabelStyle: gs.LabelStyle, DCGM: gs.DCGMEnabled(), Expect: gs.Expect,
+		Node: FixtureGPUNode{InstanceType: node.InstanceType, CapacityType: node.CapacityType, Region: node.Region, GPUs: node.Type.GPUs}}
+	if !out.DCGM {
+		return out
+	}
+	newAgg := func() *GPUAgg { return &GPUAgg{Min: nanValues(nb), Max: nanValues(nb), Avg: nanValues(nb)} }
+	out.Devices = make(Values, nb)
+	out.Util, out.FBUsedMiB, out.FBFreeMiB = newAgg(), newAgg(), newAgg()
+	cnt := make([]float64, nb)
+	add := func(a *GPUAgg, b int, v float64) {
+		a.Min[b] = nanMin(a.Min[b], v)
+		a.Max[b] = nanMax(a.Max[b], v)
+		a.Avg[b] = nanAdd(a.Avg[b], v)
+	}
+	for _, p := range wt.Pods {
+		ct := p.Containers[ci]
+		for d := range ct.GPUUtil {
+			for b := p.Start / m; b < nb && b*m < p.End; b++ {
+				lo, hi := max(b*m, p.Start), min((b+1)*m, p.End)
+				if lo >= hi {
+					continue
+				}
+				var u float64
+				used, free := 0.0, math.Inf(1)
+				for i := lo; i < hi; i++ {
+					k := i - p.Start
+					u += ct.GPUUtil[d][k]
+					used = math.Max(used, ct.GPUUsedMiB[d][k])
+					free = math.Min(free, gs.MemoryMiB-ct.GPUUsedMiB[d][k])
+				}
+				add(out.Util, b, u/float64(hi-lo))
+				add(out.FBUsedMiB, b, used)
+				add(out.FBFreeMiB, b, free)
+				cnt[b]++
+			}
+		}
+	}
+	for b := range cnt {
+		out.Devices[b] = cnt[b]
+		if cnt[b] > 0 {
+			out.Util.Avg[b] /= cnt[b]
+			out.FBUsedMiB.Avg[b] /= cnt[b]
+			out.FBFreeMiB.Avg[b] /= cnt[b]
+		} else {
+			out.Devices[b] = math.NaN()
+		}
+	}
+	return out
+}
+
+func nanMin(a, b float64) float64 {
+	if math.IsNaN(a) {
+		return b
+	}
+	return math.Min(a, b)
 }
 
 func resMap(r Resources) map[string]float64 {

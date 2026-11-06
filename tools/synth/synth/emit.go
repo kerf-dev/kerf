@@ -1,6 +1,7 @@
 package synth
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"strconv"
@@ -71,6 +72,9 @@ const (
 	ksmJob      = "kube-state-metrics"
 	ksmInstance = "kube-state-metrics.monitoring.svc:8080"
 	cadvisorJob = "cadvisor"
+	dcgmJob     = "nvidia-dcgm-exporter"
+	// gpuResource is how kube-state-metrics names the nvidia.com/gpu resource.
+	gpuResource = "nvidia_com_gpu"
 )
 
 type labels []Label
@@ -141,6 +145,11 @@ func (g *Generator) EmitNodes(cm *ClusterModel, emit Emit) error {
 				constSeries(nl.with("__name__", m.name, "resource", "cpu", "unit", "core"), 0, n, m.cpu),
 				constSeries(nl.with("__name__", m.name, "resource", "memory", "unit", "byte"), 0, n, m.mem),
 				constSeries(nl.with("__name__", m.name, "resource", "pods", "unit", "integer"), 0, n, nd.Type.Pods))
+		}
+		if nd.Type.GPUs > 0 {
+			for _, m := range []string{"kube_node_status_allocatable", "kube_node_status_capacity"} {
+				out = append(out, constSeries(nl.with("__name__", m, "resource", gpuResource, "unit", "integer"), 0, n, float64(nd.Type.GPUs)))
+			}
 		}
 		for _, s := range out {
 			if err := emit(s); err != nil {
@@ -221,6 +230,24 @@ func (e *emitter) workload() {
 			{"__name__", "synth_workload_info"}, {"workload_kind", w.Kind}, {"workload", w.Name}, {"profile", w.Profile},
 			{"cpu_expect", exp.CPU}, {"memory_expect", exp.Memory}, {"risk_flags", strings.Join(exp.RiskFlags, ",")}},
 			wt.Created, n, 1))
+		e.gpuGroundTruth()
+	}
+}
+
+// gpuGroundTruth emits synth_gpu_workload_info for workloads with GPUs (not part of the contract).
+func (e *emitter) gpuGroundTruth() {
+	w, wt := e.wt.Spec, e.wt
+	for _, ci := range w.gpuContainers() {
+		gs := w.Containers[ci].GPU
+		var status, suggestions string
+		if gs.Expect != nil {
+			status, suggestions = gs.Expect.Status, strings.Join(gs.Expect.Suggestions, ",")
+		}
+		e.out(constSeries(labels{{"cluster", wt.Cluster.Spec.Name}, {"job", "synth"}, {"namespace", w.Namespace},
+			{"__name__", "synth_gpu_workload_info"}, {"workload_kind", w.Kind}, {"workload", w.Name}, {"container", w.Containers[ci].Name},
+			{"gpus_per_pod", strconv.Itoa(gs.PerPod)}, {"model", gs.Model}, {"label_style", gs.LabelStyle},
+			{"dcgm", strconv.FormatBool(gs.DCGMEnabled())}, {"gpu_status", status}, {"gpu_suggestions", suggestions}},
+			wt.Created, e.g.Timeline.N, 1))
 	}
 }
 
@@ -257,6 +284,9 @@ func (e *emitter) pod(p *PodTrace) {
 			}
 			if x.r.Memory > 0 {
 				e.out(constSeries(cl.with("__name__", x.metric, "resource", "memory", "unit", "byte"), p.Start, p.End, float64(x.r.Memory)))
+			}
+			if c.GPU != nil { // extended resources: requests equal limits
+				e.out(constSeries(cl.with("__name__", x.metric, "resource", gpuResource, "unit", "integer"), p.Start, p.End, float64(c.GPU.PerPod)))
 			}
 		}
 	}
@@ -355,6 +385,11 @@ func (e *emitter) pod(p *PodTrace) {
 			e.out(valueSeries(il.with("__name__", "container_oom_events_total"), in.Start, oom))
 		}
 	}
+	for _, ct := range p.Containers {
+		if gs := ct.Spec.GPU; gs != nil && gs.DCGMEnabled() {
+			e.dcgm(p, ct)
+		}
+	}
 	// Pod-level cgroup (no container label), as real cAdvisor reports it.
 	podl := cad.with("id", qos+"/pod"+p.UID)
 	for i := range podCPU {
@@ -379,4 +414,48 @@ func imageID(img string) string {
 func hash64(s string) string {
 	r := newRand(0, s)
 	return r.hex(64)
+}
+
+// dcgmDriver and dcgmBusIDs are what the exporter reports on g5 nodes (the PCI bus of GPU i of n
+// is the last n of dcgmBusIDs, offset by i).
+const dcgmDriver = "550.127.05"
+
+var dcgmBusIDs = []string{"00000000:00:1B.0", "00000000:00:1C.0", "00000000:00:1D.0", "00000000:00:1E.0"}
+
+// GPUUUID is the DCGM `UUID` label of GPU idx of a node: GPU-<8-4-4-4-12 hex>, derived from the
+// seed, the cluster and the node, so it is the same for every pod that runs there.
+func (g *Generator) GPUUUID(cluster string, nd *Node, idx int) string {
+	r := newRand(g.Scenario.Seed, cluster, "gpu-uuid", nd.Name, strconv.Itoa(idx))
+	return "GPU-" + r.hex(8) + "-" + r.hex(4) + "-" + r.hex(4) + "-" + r.hex(4) + "-" + r.hex(12)
+}
+
+// dcgm emits DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE of every GPU of a
+// container of a pod, the way the NVIDIA DCGM exporter reports them: one series per GPU, with the
+// pod it is allocated to, plus the target labels the scrape adds.
+func (e *emitter) dcgm(p *PodTrace, ct *ContainerTrace) {
+	cluster := e.wt.Cluster.Spec.Name
+	gs, w := ct.Spec.GPU, e.wt.Spec
+	er := newRand(e.g.Scenario.Seed, cluster, "dcgm-exporter", p.Node.Name)
+	exporterPod := "nvidia-dcgm-exporter-" + er.suffix(5)
+	exporterIP := fmt.Sprintf("10.%d.%d.%d", 100+er.IntN(100), er.IntN(256), 1+er.IntN(254))
+	base := labels{{"cluster", cluster}, {"job", dcgmJob}, {"instance", exporterIP + ":9400"},
+		{"modelName", gs.Model}, {"Hostname", p.Node.Name}, {"DCGM_FI_DRIVER_VERSION", dcgmDriver}}
+	if gs.LabelStyle == GPULabelExported {
+		base = base.with("namespace", dcgmNamespace, "pod", exporterPod, "container", "nvidia-dcgm-exporter",
+			"exported_namespace", w.Namespace, "exported_pod", p.Name, "exported_container", ct.Spec.Name)
+	} else {
+		base = base.with("namespace", w.Namespace, "pod", p.Name, "container", ct.Spec.Name)
+	}
+	nGPU := p.Node.Type.GPUs
+	for d := 0; d < gs.PerPod; d++ {
+		gl := base.with("gpu", strconv.Itoa(d), "UUID", e.g.GPUUUID(cluster, p.Node, d), "device", "nvidia"+strconv.Itoa(d),
+			"pci_bus_id", dcgmBusIDs[len(dcgmBusIDs)-nGPU+d])
+		free := make([]float64, len(ct.GPUUsedMiB[d]))
+		for k, u := range ct.GPUUsedMiB[d] {
+			free[k] = gs.MemoryMiB - u
+		}
+		e.out(valueSeries(gl.with("__name__", "DCGM_FI_DEV_GPU_UTIL"), p.Start, ct.GPUUtil[d]))
+		e.out(valueSeries(gl.with("__name__", "DCGM_FI_DEV_FB_USED"), p.Start, ct.GPUUsedMiB[d]))
+		e.out(valueSeries(gl.with("__name__", "DCGM_FI_DEV_FB_FREE"), p.Start, free))
+	}
 }

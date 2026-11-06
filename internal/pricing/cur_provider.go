@@ -113,7 +113,7 @@ func (c *CUR) Price(ctx context.Context, k Key) (Price, error) {
 		return fb, fbErr
 	}
 	// The shape comes from the list price when there is one; the rate does not need it.
-	return Price{HourlyUSD: r.HourlyUSD, Shape: fb.Shape, Source: SourceCUR, PeriodStart: rates.Start, PeriodEnd: rates.End}, nil
+	return Price{HourlyUSD: r.HourlyUSD, Shape: fb.Shape, GPUs: fb.GPUs, Source: SourceCUR, PeriodStart: rates.Start, PeriodEnd: rates.End}, nil
 }
 
 // Status is the state of the report reads, for logs and tests.

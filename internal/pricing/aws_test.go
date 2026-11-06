@@ -140,6 +140,11 @@ func TestAWSPrice(t *testing.T) {
 			want: Price{HourlyUSD: (0.0798 + 0.0817) / 2, Shape: Shape{VCPU: 4, MemoryGiB: 16}, Source: SourceSpot},
 		},
 		{
+			name: "GPU instance reports its GPU count",
+			key:  Key{Region: "eu-west-1", InstanceType: "g5.xlarge", CapacityType: OnDemand},
+			want: Price{HourlyUSD: 1.123, Shape: Shape{VCPU: 4, MemoryGiB: 16}, GPUs: 1},
+		},
+		{
 			name: "paginated GetProducts",
 			key:  Key{Region: "eu-west-1", InstanceType: "m7i.large", CapacityType: OnDemand},
 			want: Price{HourlyUSD: 0.1124, Shape: Shape{VCPU: 2, MemoryGiB: 8}, Source: SourceList},

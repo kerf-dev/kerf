@@ -97,6 +97,15 @@ type wlSpec struct {
 	replicas   float64
 	days       float64 // days of samples before end
 	hpa        *recommender.HPA
+	gpu        *gpuSpec
+}
+
+// gpuSpec gives a workload GPUs: constant DCGM series over the whole history.
+type gpuSpec struct {
+	pods                       []recommender.GPUPod
+	util, memUsedMiB, totalMiB float64
+	model                      string
+	noDCGM                     bool
 }
 
 // fakeLoader returns synthetic cluster data. Current requests grow by 50 % per day before
@@ -113,6 +122,7 @@ type fakeLoader struct {
 	noPricing  bool
 	pricingNow *recommender.Pricing
 	pricingAt  []time.Time
+	gpuPrices  map[string]float64 // USD per GPU-hour by node
 	calls      int
 }
 
@@ -188,8 +198,17 @@ func (l *fakeLoader) Load(_ context.Context, cluster string, end time.Time, wind
 			}
 			rw.Containers[c.name] = rc
 		}
+		if g := w.gpu; g != nil {
+			rw.GPU = &recommender.RawGPU{Pods: g.pods, MemTotalMiB: g.totalMiB, Model: g.model}
+			for i := 0; i < n && !g.noDCGM; i++ {
+				ts := end.Add(-time.Duration(n-1-i) * fakeStep)
+				rw.GPU.Util = append(rw.GPU.Util, recommender.Sample{T: ts, V: g.util})
+				rw.GPU.MemUsedMiB = append(rw.GPU.MemUsedMiB, recommender.Sample{T: ts, V: g.memUsedMiB})
+			}
+		}
 		d.Workloads[w.key] = rw
 	}
+	d.GPUPrices = l.gpuPrices
 	return d, nil
 }
 

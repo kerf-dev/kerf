@@ -118,6 +118,7 @@ const (
 	CheckHPASeries             = "metrics.hpa"
 	CheckNodeLabels            = "metrics.node-labels"
 	CheckNodeAllocatable       = "metrics.node-allocatable"
+	CheckDCGM                  = "metrics.dcgm"
 	CheckFreshness             = "metrics.freshness"
 	CheckPricingCoverage       = "pricing.coverage"
 	CheckRecommendations       = "metrics.recommendations"
@@ -174,6 +175,7 @@ var Catalog = []Check{
 	{ID: CheckHPASeries, Category: CategoryMetrics, Severity: SeverityWarning, Source: SourceHub, Title: "HPA series"},
 	{ID: CheckNodeLabels, Category: CategoryMetrics, Severity: SeverityWarning, Source: SourceHub, Title: "Node labels allowlisted in kube-state-metrics"},
 	{ID: CheckNodeAllocatable, Category: CategoryMetrics, Severity: SeverityWarning, Source: SourceHub, Title: "Node allocatable series"},
+	{ID: CheckDCGM, Category: CategoryMetrics, Severity: SeverityWarning, Source: SourceHub, Title: "NVIDIA DCGM exporter series for GPUs"},
 	{ID: CheckPricingCoverage, Category: CategoryPricing, Severity: SeverityWarning, Source: SourceHub, Title: "Nodes priced"},
 	{ID: CheckRecommendations, Category: CategoryMetrics, Severity: SeverityBlocking, Source: SourceHub, Gates: StateReadyAudit, Title: "Recommendations produced"},
 

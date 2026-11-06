@@ -112,6 +112,7 @@ func (c *MetricsChecker) Run(ctx context.Context) Report {
 	r.hpa()
 	r.nodeLabels()
 	r.nodeAllocatable()
+	r.dcgm()
 	r.pricingCoverage()
 	return *rep
 }
@@ -120,7 +121,7 @@ func (c *MetricsChecker) Run(ctx context.Context) Report {
 var metricsCheckIDs = []string{
 	rd.CheckDatasourceReachable, rd.CheckClusterLabel, rd.CheckCAdvisor, rd.CheckKSMOwners, rd.CheckKSMResources,
 	rd.CheckFreshness, rd.CheckOwnerJoin, rd.CheckScrapeInterval, rd.CheckHistory, rd.CheckThrottling,
-	rd.CheckRestartsOOM, rd.CheckHPASeries, rd.CheckNodeLabels, rd.CheckNodeAllocatable, rd.CheckPricingCoverage,
+	rd.CheckRestartsOOM, rd.CheckHPASeries, rd.CheckNodeLabels, rd.CheckNodeAllocatable, rd.CheckDCGM, rd.CheckPricingCoverage,
 }
 
 // MetricsCheckIDs lists the checks a MetricsChecker run produces.

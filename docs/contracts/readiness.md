@@ -97,6 +97,7 @@ When they run:
 | `metrics.hpa` | hub | warning | – | `kube_horizontalpodautoscaler_*` missing. |
 | `metrics.node-labels` | hub | warning | – | `kube_node_labels` lacks instance type, capacity type, zone or region (KSM `--metric-labels-allowlist`). |
 | `metrics.node-allocatable` | hub | warning | – | `kube_node_status_allocatable` missing. |
+| `metrics.dcgm` | hub | warning | – | Only for a cluster with GPU nodes (`kube_node_status_allocatable` of `nvidia_com_gpu`) or pods that request GPUs: the NVIDIA DCGM exporter series `DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`, `DCGM_FI_DEV_FB_FREE` are missing (`details.missing` names them), or none carries the namespace and pod of a pod that requests GPUs (the exporter's Kubernetes pod mapping). `pass` when the cluster has no GPUs. See [GPU visibility](../gpu.md). |
 | `pricing.coverage` | hub | warning | – | Priced nodes / all nodes below 100 % (`kerf_pricing_nodes{status="skipped"}`), or the AWS Cost and Usage Report reader's last read failed (`kerf_pricing_cur_last_read_ok` 0). `details`: `priced`, `nodes`, `source.<cur\|list\|spot\|static>` (nodes per rate source), `curLastReadOK` (when the reader is on). |
 | `metrics.recommendations` | hub | blocking | ReadyAudit | No recommendation produced yet for the cluster's live workloads. |
 | `rbac.read` | agent | blocking | AgentConnected | Missing list/watch on pods, workloads, HPAs, nodes. |

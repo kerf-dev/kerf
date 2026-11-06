@@ -20,6 +20,8 @@ type StaticFile struct {
 type StaticShape struct {
 	VCPU      float64 `yaml:"vcpu"`
 	MemoryGiB float64 `yaml:"memoryGiB"`
+	// GPUs is the number of GPUs of the instance type; omitted or 0 for instances without GPUs.
+	GPUs float64 `yaml:"gpus"`
 }
 
 // StaticPrice holds USD/hour prices for one instance type in one region.
@@ -51,6 +53,9 @@ func ParseStatic(b []byte) (*Static, error) {
 	for name, s := range f.InstanceTypes {
 		if s.VCPU <= 0 || s.MemoryGiB <= 0 {
 			return nil, fmt.Errorf("instance type %s: vcpu and memoryGiB must be > 0", name)
+		}
+		if s.GPUs < 0 {
+			return nil, fmt.Errorf("instance type %s: gpus must be >= 0", name)
 		}
 	}
 	for region, types := range f.Regions {
@@ -92,5 +97,5 @@ func (s *Static) Price(_ context.Context, k Key) (Price, error) {
 	if usd <= 0 {
 		return Price{}, fmt.Errorf("%s: %w", k, ErrNotFound)
 	}
-	return Price{HourlyUSD: usd, Shape: Shape(shape), Source: SourceStatic}, nil
+	return Price{HourlyUSD: usd, Shape: Shape{VCPU: shape.VCPU, MemoryGiB: shape.MemoryGiB}, GPUs: shape.GPUs, Source: SourceStatic}, nil
 }
