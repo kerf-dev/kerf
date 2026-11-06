@@ -73,8 +73,8 @@ func TestExporter(t *testing.T) {
 	want := `
 # HELP kerf_node_hourly_cost_usd Hourly price of the whole node in USD.
 # TYPE kerf_node_hourly_cost_usd gauge
-kerf_node_hourly_cost_usd{capacity_type="on-demand",cluster="ro-spoke-1",instance_type="m6i.xlarge",node="n1",provider="static",region="eu-west-1",zone="eu-west-1a"} 0.214
-kerf_node_hourly_cost_usd{capacity_type="spot",cluster="ro-spoke-2",instance_type="c6a.2xlarge",node="n2",provider="static",region="eu-west-1",zone="eu-west-1b"} 0.1356
+kerf_node_hourly_cost_usd{capacity_type="on-demand",cluster="ro-spoke-1",instance_type="m6i.xlarge",node="n1",provider="static",region="eu-west-1",source="static",zone="eu-west-1a"} 0.214
+kerf_node_hourly_cost_usd{capacity_type="spot",cluster="ro-spoke-2",instance_type="c6a.2xlarge",node="n2",provider="static",region="eu-west-1",source="static",zone="eu-west-1b"} 0.1356
 # HELP kerf_pricing_nodes Nodes seen in the last refresh by status (priced|skipped) and skip reason.
 # TYPE kerf_pricing_nodes gauge
 kerf_pricing_nodes{cluster="ro-hub",reason="",status="priced"} 2
@@ -173,5 +173,31 @@ func TestExporterGPUCost(t *testing.T) {
 	}
 	if n := testutil.CollectAndCount(e, "kerf_node_hourly_cost_usd"); n != 2 {
 		t.Errorf("kerf_node_hourly_cost_usd series: %d, want 2", n)
+	}
+}
+
+// The GPU share follows the rate source: a CUR rate for a GPU instance type is split over its GPUs.
+func TestExporterGPUCostFromCUR(t *testing.T) {
+	static, err := LoadStatic("../../dev/prices.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	c := NewCUR(&fakeReader{}, static, nil)
+	c.Now = func() time.Time { return now }
+	c.rates = &CURRates{Rates: map[Key]CURRate{
+		{Region: "eu-west-1", InstanceType: "g5.12xlarge", CapacityType: OnDemand}: {HourlyUSD: 4.0},
+	}, Start: now.Add(-24 * time.Hour), End: now}
+	c.readAt = now
+	nodes := &fakeNodes{nodes: []Node{
+		{Cluster: "synth-gpu", Name: "gpu-1", InstanceType: "g5.12xlarge", CapacityType: OnDemand, Region: "eu-west-1", AllocatableCores: 47, AllocatableGiB: 180},
+	}}
+	e := NewExporter(nodes, c, &Splitter{Provider: c}, nil)
+	if err := e.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	costs := e.Costs()
+	if len(costs) != 1 || costs[0].Source != SourceCUR || costs[0].GPUs != 4 || math.Abs(costs[0].GPURate-1.0) > 1e-9 {
+		t.Fatalf("costs = %+v, want one CUR-priced node with 4 GPUs at 1.0 per GPU-hour", costs)
 	}
 }

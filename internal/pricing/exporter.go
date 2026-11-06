@@ -19,10 +19,12 @@ type NodeLister interface {
 type NodeCost struct {
 	Node
 	Provider string
-	NodeUSD  float64
-	CPURate  float64 // USD per allocatable vCPU-hour
-	MemRate  float64 // USD per allocatable GiB-hour
-	Weight   float64
+	// Source is the rate's source (Source* constants), the `source` label.
+	Source  string
+	NodeUSD float64
+	CPURate float64 // USD per allocatable vCPU-hour
+	MemRate float64 // USD per allocatable GiB-hour
+	Weight  float64
 	// GPUs is the number of GPUs of the instance type and GPURate the node price per GPU-hour
 	// (the whole node price over its GPUs, so a pod's GPU cost is its share of the node's GPUs); both
 	// are 0 for nodes without GPUs.
@@ -40,7 +42,7 @@ const (
 	ReasonProviderError       = "provider-error"
 )
 
-var costLabels = []string{"cluster", "node", "instance_type", "capacity_type", "region", "zone", "provider"}
+var costLabels = []string{"cluster", "node", "instance_type", "capacity_type", "region", "zone", "provider", "source"}
 
 var (
 	nodeCostDesc = prometheus.NewDesc("kerf_node_hourly_cost_usd",
@@ -210,7 +212,7 @@ func (e *Exporter) price(ctx context.Context, n Node) (NodeCost, string) {
 		log.WarnContext(ctx, "cannot split node price", "err", err)
 		return NodeCost{}, ReasonNoAllocatable
 	}
-	nc := NodeCost{Node: n, Provider: e.Provider.Name(), NodeUSD: p.HourlyUSD, CPURate: cpu, MemRate: mem, Weight: w}
+	nc := NodeCost{Node: n, Provider: e.Provider.Name(), Source: p.Source, NodeUSD: p.HourlyUSD, CPURate: cpu, MemRate: mem, Weight: w}
 	if p.GPUs > 0 {
 		nc.GPUs, nc.GPURate = p.GPUs, p.HourlyUSD/p.GPUs
 	}
@@ -229,7 +231,7 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 // Collect implements prometheus.Collector.
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	for _, c := range e.Costs() {
-		lv := []string{c.Cluster, c.Name, c.InstanceType, string(c.CapacityType), c.Region, c.Zone, c.Provider}
+		lv := []string{c.Cluster, c.Name, c.InstanceType, string(c.CapacityType), c.Region, c.Zone, c.Provider, c.Source}
 		ch <- prometheus.MustNewConstMetric(nodeCostDesc, prometheus.GaugeValue, c.NodeUSD, lv...)
 		ch <- prometheus.MustNewConstMetric(cpuCostDesc, prometheus.GaugeValue, c.CPURate, lv...)
 		ch <- prometheus.MustNewConstMetric(memCostDesc, prometheus.GaugeValue, c.MemRate, lv...)

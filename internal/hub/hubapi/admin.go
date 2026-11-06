@@ -372,6 +372,31 @@ type PricingSettingsDoc struct {
 	UpdatedBy *Actor          `json:"updatedBy,omitempty"`
 	Reason    string          `json:"reason,omitempty"`
 	Value     PricingSettings `json:"value"`
+	// Rates is where the pricing service's rates come from now (read-only; GET only).
+	Rates *PricingRates `json:"rates,omitempty"`
+}
+
+// PricingRates is the state of the pricing service's rates, from its series in the hub's store.
+type PricingRates struct {
+	// CUR is the Cost and Usage Report reader's state; nil when it is off.
+	CUR      *PricingCURStatus     `json:"cur,omitempty"`
+	Clusters []ClusterPricingRates `json:"clusters"`
+}
+
+// PricingCURStatus is the state of the AWS Cost and Usage Report reads.
+type PricingCURStatus struct {
+	// LastReadOK is false while the last read failed.
+	LastReadOK  bool       `json:"lastReadOK"`
+	LastSuccess *time.Time `json:"lastSuccess,omitempty"`
+	// Rates is the number of instance type, region and capacity type keys with an effective rate.
+	Rates  int            `json:"rates"`
+	Period *PricingPeriod `json:"period,omitempty"`
+}
+
+// ClusterPricingRates counts a cluster's priced nodes by rate source.
+type ClusterPricingRates struct {
+	Cluster string              `json:"cluster"`
+	Sources []PricingRateSource `json:"sources"`
 }
 
 // PricingSettingsUpdate is the body of PUT /v1/admin/settings/pricing.

@@ -762,7 +762,16 @@ function buildWorkload(
     confidence: conf,
     riskFlags,
     monthlySavingsUSD: s,
-    pricing: { source: 'metrics', cpuCoreHourUSD: spec.cpuPrice, memoryGiBHourUSD: spec.memPrice },
+    pricing: {
+      source: 'metrics',
+      cpuCoreHourUSD: spec.cpuPrice,
+      memoryGiBHourUSD: spec.memPrice,
+      rateSources: [
+        { source: 'cur', nodes: 9 },
+        { source: 'list', nodes: 2 },
+      ],
+      curPeriod: { start: iso(lastRun - 31 * 86400_000), end: iso(lastRun - 86400_000) },
+    },
     dataCoverage: {
       ratio: round2(coverage),
       window: '336h0m0s',

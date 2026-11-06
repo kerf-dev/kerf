@@ -8,6 +8,7 @@ import type {
   WorkloadRecommendation,
 } from '@/api/types'
 import { RISK_INFO } from '@/components/domain'
+import { RateSourceChips } from '@/components/rate-source'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tooltip } from '@/components/ui/tooltip'
 import {
@@ -146,7 +147,7 @@ function PricingWhy({ pricing, replicas }: { pricing?: RecommendationPricing; re
         Savings estimate
         {pricing ? (
           pricing.source === 'metrics' ? (
-            <Tooltip content="Average of the cluster's kerf_*_hourly_cost_usd pricing series (WO-03).">
+            <Tooltip content="Average of the cluster's kerf_*_hourly_cost_usd pricing series, over its priced nodes.">
               <span className="ml-auto rounded-md bg-success/12 px-1.5 py-0.5 text-[11px] font-medium text-success">
                 pricing metrics
               </span>
@@ -160,6 +161,12 @@ function PricingWhy({ pricing, replicas }: { pricing?: RecommendationPricing; re
           )
         ) : null}
       </div>
+      {pricing?.source === 'metrics' && pricing.rateSources?.length ? (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          Rates from
+          <RateSourceChips sources={pricing.rateSources} period={pricing.curPeriod} />
+        </div>
+      ) : null}
       {pricing ? (
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-lg border bg-muted/40 px-2.5 py-1.5">

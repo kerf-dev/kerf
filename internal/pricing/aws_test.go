@@ -122,22 +122,22 @@ func TestAWSPrice(t *testing.T) {
 		{
 			name: "on-demand m6i.xlarge",
 			key:  Key{Region: "eu-west-1", Zone: "eu-west-1a", InstanceType: "m6i.xlarge", CapacityType: OnDemand},
-			want: Price{HourlyUSD: 0.214, Shape: Shape{VCPU: 4, MemoryGiB: 16}},
+			want: Price{HourlyUSD: 0.214, Shape: Shape{VCPU: 4, MemoryGiB: 16}, Source: SourceList},
 		},
 		{
 			name: "spot c6a.2xlarge uses the zone's latest price",
 			key:  Key{Region: "eu-west-1", Zone: "eu-west-1b", InstanceType: "c6a.2xlarge", CapacityType: Spot},
-			want: Price{HourlyUSD: 0.1356, Shape: Shape{VCPU: 8, MemoryGiB: 16}},
+			want: Price{HourlyUSD: 0.1356, Shape: Shape{VCPU: 8, MemoryGiB: 16}, Source: SourceSpot},
 		},
 		{
 			name: "spot without zone averages zones",
 			key:  Key{Region: "eu-west-1", InstanceType: "c6a.2xlarge", CapacityType: Spot},
-			want: Price{HourlyUSD: (0.1329 + 0.1356 + 0.1386) / 3, Shape: Shape{VCPU: 8, MemoryGiB: 16}},
+			want: Price{HourlyUSD: (0.1329 + 0.1356 + 0.1386) / 3, Shape: Shape{VCPU: 8, MemoryGiB: 16}, Source: SourceSpot},
 		},
 		{
 			name: "spot in a zone AWS does not report averages the others",
 			key:  Key{Region: "eu-west-1", Zone: "eu-west-1b", InstanceType: "m6i.xlarge", CapacityType: Spot},
-			want: Price{HourlyUSD: (0.0798 + 0.0817) / 2, Shape: Shape{VCPU: 4, MemoryGiB: 16}},
+			want: Price{HourlyUSD: (0.0798 + 0.0817) / 2, Shape: Shape{VCPU: 4, MemoryGiB: 16}, Source: SourceSpot},
 		},
 		{
 			name: "GPU instance reports its GPU count",
@@ -147,7 +147,7 @@ func TestAWSPrice(t *testing.T) {
 		{
 			name: "paginated GetProducts",
 			key:  Key{Region: "eu-west-1", InstanceType: "m7i.large", CapacityType: OnDemand},
-			want: Price{HourlyUSD: 0.1124, Shape: Shape{VCPU: 2, MemoryGiB: 8}},
+			want: Price{HourlyUSD: 0.1124, Shape: Shape{VCPU: 2, MemoryGiB: 8}, Source: SourceList},
 		},
 		{
 			name:    "unknown instance type",

@@ -532,6 +532,12 @@ avg by (cluster) (max by (cluster, node) (last_over_time(kerf_cpu_core_hourly_co
 ## Pricing/count
 count by (cluster) (max by (cluster, node) (last_over_time(kerf_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}[1h])))
 
+## PricingSources
+count by (source) (max by (cluster, node, source) (last_over_time(kerf_cpu_core_hourly_cost_usd{cluster="ro-spoke-1"}[10m])))
+
+## PricingCURPeriod/start
+max(last_over_time(kerf_pricing_cur_period_start_timestamp_seconds[10m]))
+
 ## GPUPods
 max by (cluster, namespace, pod, node, workload_kind, workload) (
 sum by (cluster, namespace, pod, node) (kube_pod_container_resource_requests{cluster="ro-spoke-1", resource="nvidia_com_gpu"})

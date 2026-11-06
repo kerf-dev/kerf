@@ -46,6 +46,8 @@ func allQueries(q Queries) string {
 	avg, count := q.Pricing("kerf_cpu_core_hourly_cost_usd", time.Hour)
 	add("Pricing/avg", avg)
 	add("Pricing/count", count)
+	add("PricingSources", q.PricingSources())
+	add("PricingCURPeriod/start", PricingCURPeriod("start"))
 	add("GPUPods", q.GPUPods())
 	add("GPUUtilization", q.GPUUtilization())
 	add("GPUMemoryUsed", q.GPUMemoryUsed())

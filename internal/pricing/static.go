@@ -97,5 +97,5 @@ func (s *Static) Price(_ context.Context, k Key) (Price, error) {
 	if usd <= 0 {
 		return Price{}, fmt.Errorf("%s: %w", k, ErrNotFound)
 	}
-	return Price{HourlyUSD: usd, Shape: Shape{VCPU: shape.VCPU, MemoryGiB: shape.MemoryGiB}, GPUs: shape.GPUs}, nil
+	return Price{HourlyUSD: usd, Shape: Shape{VCPU: shape.VCPU, MemoryGiB: shape.MemoryGiB}, GPUs: shape.GPUs, Source: SourceStatic}, nil
 }

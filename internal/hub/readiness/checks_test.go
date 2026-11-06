@@ -231,6 +231,59 @@ func TestMetricsCheckerPartial(t *testing.T) {
 	}
 }
 
+func TestPricingCoverageCUR(t *testing.T) {
+	src := func(source string, v float64) recommender.VectorSample {
+		return recommender.VectorSample{Labels: recommender.Labels{"source": source}, Sample: recommender.Sample{V: v}}
+	}
+	tests := []struct {
+		name       string
+		local      *fakeQ
+		wantStatus string
+		wantMsg    string
+		wantDetail map[string]string
+	}{
+		{
+			name: "cur off",
+			local: (&fakeQ{}).onSamples([]recommender.VectorSample{src("list", 2)}, "count by (source)").
+				on(2, "kerf_node_hourly_cost_usd"),
+			wantStatus: "pass", wantMsg: "all 2 nodes priced",
+			wantDetail: map[string]string{"source.list": "2", "curLastReadOK": ""},
+		},
+		{
+			name: "cur in use",
+			local: (&fakeQ{}).onSamples([]recommender.VectorSample{src("cur", 1), src("list", 1)}, "count by (source)").
+				on(1, "kerf_pricing_cur_last_read_ok").on(2, "kerf_node_hourly_cost_usd"),
+			wantStatus: "pass", wantMsg: "all 2 nodes priced",
+			wantDetail: map[string]string{"source.cur": "1", "source.list": "1", "curLastReadOK": "true"},
+		},
+		{
+			name: "cur unreadable",
+			local: (&fakeQ{}).onSamples([]recommender.VectorSample{src("list", 2)}, "count by (source)").
+				on(0, "kerf_pricing_cur_last_read_ok").on(2, "kerf_node_hourly_cost_usd"),
+			wantStatus: "warn", wantMsg: "Cost and Usage Report cannot be read",
+			wantDetail: map[string]string{"curLastReadOK": "false"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q := healthy() // two nodes with labels
+			rep := (&MetricsChecker{Q: q, M: datasource.DefaultMatcher("c"), Local: tt.local, Now: func() time.Time { return now }}).Run(context.Background())
+			c := byID(rep)[rd.CheckPricingCoverage]
+			if c.Status != tt.wantStatus || !strings.Contains(c.Message, tt.wantMsg) {
+				t.Fatalf("pricing.coverage = %s %q, want %s %q", c.Status, c.Message, tt.wantStatus, tt.wantMsg)
+			}
+			if tt.wantStatus == "warn" && !strings.Contains(c.Remediation, "Cost and Usage Report") {
+				t.Errorf("remediation %q", c.Remediation)
+			}
+			for k, v := range tt.wantDetail {
+				if c.Details[k] != v {
+					t.Errorf("details[%s] = %q, want %q (%v)", k, c.Details[k], v, c.Details)
+				}
+			}
+		})
+	}
+}
+
 func TestMetricsCheckerUnreachableAndLabel(t *testing.T) {
 	// datasource down
 	q := &fakeQ{err: errors.New("dial tcp: connection refused")}

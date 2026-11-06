@@ -1,7 +1,8 @@
 // Package pricing prices Kubernetes nodes and splits each node's hourly price into per-vCPU-hour and
-// per-GiB-hour rates (WO-03, D-008). Nodes are discovered from spoke metrics in the hub's
-// VictoriaMetrics, priced by a Provider (AWS or a static file) and exported as the
-// kerf_*_hourly_cost_usd series defined in docs/contracts/metrics.md.
+// per-GiB-hour rates. Nodes are discovered from spoke metrics in the hub's VictoriaMetrics, priced by
+// a Provider (the AWS price list, a static file, and optionally the effective rates of the AWS Cost
+// and Usage Report on top) and exported as the kerf_*_hourly_cost_usd series defined in
+// docs/contracts/metrics.md.
 package pricing
 
 import (
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // CapacityType follows Karpenter's karpenter.sh/capacity-type values.
@@ -61,10 +63,28 @@ type Shape struct {
 	MemoryGiB float64
 }
 
+// Rate sources: the `source` label of the cost series.
+const (
+	// SourceCUR is the effective rate paid over a past period, from the AWS Cost and Usage Report
+	// (Savings Plans and Reserved Instances amortised).
+	SourceCUR = "cur"
+	// SourceList is the on-demand list price from the AWS Price List API.
+	SourceList = "list"
+	// SourceSpot is the current spot price from the EC2 spot price history.
+	SourceSpot = "spot"
+	// SourceStatic is a price from the static price file.
+	SourceStatic = "static"
+)
+
 // Price is the hourly price of one instance.
 type Price struct {
 	HourlyUSD float64
 	Shape     Shape
+	// Source is one of the Source* constants.
+	Source string
+	// PeriodStart and PeriodEnd bound the usage a SourceCUR rate was computed from; zero for
+	// current prices.
+	PeriodStart, PeriodEnd time.Time
 	// GPUs is the number of GPUs of the instance type; 0 for instances without GPUs.
 	GPUs float64
 }

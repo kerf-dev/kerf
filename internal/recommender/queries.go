@@ -233,6 +233,23 @@ func (q Queries) Pricing(metric string, lookback time.Duration) (avg, count stri
 	return fmt.Sprintf("avg by (cluster) (%s)", inner), fmt.Sprintf("count by (cluster) (%s)", inner)
 }
 
+// PricingSourceLookback is the lookback of PricingSources: short, so a node whose rate source just
+// changed is not counted under both sources for long.
+const PricingSourceLookback = 10 * time.Minute
+
+// PricingSources counts the cluster's priced nodes by rate source (label `source` of the pricing
+// series: cur, list, spot or static).
+func (q Queries) PricingSources() string {
+	inner := fmt.Sprintf("max by (cluster, node, source) (%s)", lastOver(PricingSourceLookback)("kerf_cpu_core_hourly_cost_usd"+datasource.DefaultMatcher(q.Cluster).Sel()))
+	return fmt.Sprintf("count by (source) (%s)", inner)
+}
+
+// PricingCURPeriod returns the start or end ("start"|"end") of the usage the pricing service's
+// effective rates were computed from (the pricing service's own series; 0 when none are in use).
+func PricingCURPeriod(bound string) string {
+	return fmt.Sprintf("max(last_over_time(kerf_pricing_cur_period_%s_timestamp_seconds[%s]))", bound, promDuration(PricingSourceLookback))
+}
+
 func lastOver(d time.Duration) func(string) string {
 	if d <= 0 {
 		return func(s string) string { return s }
