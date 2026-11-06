@@ -1,4 +1,4 @@
-// Package configsync is the agent side of the hub-managed configuration (D-022, D-024, WO-21):
+// Package configsync is the agent side of the hub-managed configuration:
 // it pulls GET /v1/clusters/{c}/config, materialises the hub policies as RightsizingPolicy CRs
 // labelled managed-by=hub, keeps the cluster flags (pause) and approve-once grants for the
 // reconciler, persists them so a restart without the hub keeps them, and builds the policy
@@ -23,7 +23,7 @@ type State struct {
 	// consumed holds approvals the agent applied (id -> when), until the hub stops sending them.
 	consumed map[string]time.Time
 	// held holds approvals whose change is in flight (id -> approval), until it is consumed or
-	// expires: a recommender run may supersede them in the hub meanwhile (WO-29).
+	// expires: a recommender run may supersede them in the hub meanwhile.
 	held  map[string]hubclient.ConfigApproval
 	dirty bool
 }
@@ -188,6 +188,6 @@ type persisted struct {
 	ETag     string                   `json:"etag,omitempty"`
 	Config   *hubclient.ClusterConfig `json:"config,omitempty"`
 	Consumed map[string]time.Time     `json:"consumed,omitempty"`
-	// Held: approvals whose change is in flight (WO-29).
+	// Held: approvals whose change is in flight.
 	Held []hubclient.ConfigApproval `json:"held,omitempty"`
 }

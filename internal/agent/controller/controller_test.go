@@ -179,7 +179,7 @@ func memReq(d *appsv1.Deployment) string {
 
 // TestRolloutFieldManagerAndRelease: rollout takes the fields from Argo CD's manager with
 // force, release gives them up without deleting them, and Argo CD can then restore Git values
-// without a conflict (D-006).
+// without a conflict.
 func TestRolloutFieldManagerAndRelease(t *testing.T) {
 	needEnv(t)
 	const name = "web-rollout"
@@ -667,7 +667,7 @@ func TestDedupD017(t *testing.T) {
 	})
 }
 
-// TestRolledBackStays: after a rollback (WO-08) the phase stays RolledBack while the next
+// TestRolledBackStays: after a rollback the phase stays RolledBack while the next
 // recommendation is blocked by the rollback cooldown.
 func TestRolledBackStays(t *testing.T) {
 	needEnv(t)
@@ -792,7 +792,7 @@ func windowPolicy(name string, labels map[string]string, apply *v1alpha1.ApplyPo
 	}
 }
 
-// TestDeferredWindow (WO-10): a deferred change waits in phase Deferred with nextWindow, and is
+// TestDeferredWindow: a deferred change waits in phase Deferred with nextWindow, and is
 // applied as a rollout once the maintenance window opens.
 func TestDeferredWindow(t *testing.T) {
 	needEnv(t)
@@ -855,7 +855,7 @@ func TestDeferredWindow(t *testing.T) {
 	}
 }
 
-// TestFreezeBlocksInPlace (WO-10): a freeze window blocks an in-place change.
+// TestFreezeBlocksInPlace: a freeze window blocks an in-place change.
 func TestFreezeBlocksInPlace(t *testing.T) {
 	needEnv(t)
 	const name = "frozen-inplace"
@@ -891,7 +891,7 @@ func TestFreezeBlocksInPlace(t *testing.T) {
 	})
 }
 
-// TestFreezePostponesRelease (WO-10): leaving auto-patch during a freeze keeps field ownership
+// TestFreezePostponesRelease: leaving auto-patch during a freeze keeps field ownership
 // (no change through Argo CD) until the freeze ends; then released is emitted once.
 func TestFreezePostponesRelease(t *testing.T) {
 	needEnv(t)

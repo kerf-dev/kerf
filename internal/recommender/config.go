@@ -34,7 +34,7 @@ func (p Profile) PeakWindow() time.Duration {
 	return p.MemoryPeakWindow
 }
 
-// DefaultProfiles are the built-in profiles. Every value is configurable (D-010).
+// DefaultProfiles are the built-in profiles. Every value is configurable.
 func DefaultProfiles() map[string]Profile {
 	return map[string]Profile{
 		hubapi.ProfileDev: {
@@ -103,7 +103,7 @@ type Config struct {
 
 	Profiles map[string]Profile `json:"profiles"`
 
-	// JVM configures JVM-aware memory recommendations (WO-12).
+	// JVM configures JVM-aware memory recommendations.
 	JVM JVMConfig `json:"jvm"`
 }
 

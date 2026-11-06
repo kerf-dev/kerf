@@ -18,12 +18,12 @@ const (
 	PhaseApplied Phase = "Applied"
 	// PhaseBlocked: a guardrail prevents the change; see the Blocked condition for the reason.
 	PhaseBlocked Phase = "Blocked"
-	// PhaseRolledBack: the health watch reverted the change (WO-08).
+	// PhaseRolledBack: the health watch reverted the change.
 	PhaseRolledBack Phase = "RolledBack"
-	// PhaseReleased: the workload left auto-patch and field ownership was released (D-006).
+	// PhaseReleased: the workload left auto-patch and field ownership was released.
 	PhaseReleased Phase = "Released"
 	// PhaseDeferred: strategy deferred; the change is queued until the next maintenance window
-	// (status.nextWindow) and then applied as a rollout (WO-10).
+	// (status.nextWindow) and then applied as a rollout.
 	PhaseDeferred Phase = "Deferred"
 )
 
@@ -35,7 +35,7 @@ const (
 	ConditionApplied = "Applied"
 	// ConditionBlocked is True when a guardrail blocks the change. Reason is one of the Reason* constants.
 	ConditionBlocked = "Blocked"
-	// ConditionHealthWatch is True while the health watch after a change is running (WO-08).
+	// ConditionHealthWatch is True while the health watch after a change is running.
 	ConditionHealthWatch = "HealthWatch"
 )
 
@@ -91,13 +91,13 @@ type RightsizingRecommendationSpec struct {
 	// Source is the hub recommendation this was built from.
 	// +required
 	Source RecommendationSource `json:"source"`
-	// HPA is the HPA utilization target applied together with the containers (WO-11): set when
+	// HPA is the HPA utilization target applied together with the containers: set when
 	// the workload's HPA scales on the utilization of a resource whose requests change.
 	// +optional
 	HPA *HPATarget `json:"hpa,omitempty"`
 }
 
-// HPATarget is an HorizontalPodAutoscaler's averageUtilization target for one resource (WO-11).
+// HPATarget is an HorizontalPodAutoscaler's averageUtilization target for one resource.
 type HPATarget struct {
 	// Name of the HPA, in the same namespace.
 	// +required
@@ -114,7 +114,7 @@ type HPATarget struct {
 	AverageUtilization int32 `json:"averageUtilization"`
 }
 
-// EffectivePolicy is the result of policy resolution for a workload (D-005).
+// EffectivePolicy is the result of policy resolution for a workload.
 type EffectivePolicy struct {
 	// Policy is the name of the winning RightsizingPolicy, empty if none matched.
 	// +optional
@@ -156,7 +156,7 @@ type RightsizingRecommendationStatus struct {
 	// +listType=map
 	// +listMapKey=name
 	Previous []ContainerResources `json:"previous,omitempty"`
-	// PreviousHPATarget is the HPA target that was live before the most recent apply (WO-11),
+	// PreviousHPATarget is the HPA target that was live before the most recent apply,
 	// restored by a rollback together with the containers.
 	// +optional
 	// +kubebuilder:validation:Minimum=1

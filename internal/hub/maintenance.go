@@ -22,7 +22,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/update"
 )
 
-// Admin -> Maintenance (WO-33): the versions of every component and the check for a newer Kerf
+// Admin -> Maintenance: the versions of every component and the check for a newer Kerf
 // release. Hub replicas record themselves in component_versions (RunReplicaHeartbeat), the pricing
 // service through its User-Agent (recordPricing), agents report their webhook pods with the
 // status batch. The leader checks for a release every updateCheck.interval (RunMaintenance).

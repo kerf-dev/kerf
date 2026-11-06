@@ -1,12 +1,12 @@
 package controller
 
-// HPA coordination (WO-11, lifts D-011): the reconciler side. The math and the writes are in
+// HPA coordination: the reconciler side. The math and the writes are in
 // internal/agent/apply/hpa.go.
 //
 // For a workload whose HPA scales on the utilization of a resource in auto-patch:
 //   - without spec.hpa.coordinate in the effective policy, or with an HPA that cannot be
 //     coordinated (several or other metrics, ContainerResource, at maxReplicas), the workload is
-//     blocked with reason HPACoupled, as before (D-011);
+//     blocked with reason HPACoupled, as before;
 //   - otherwise the change is applied with the rollout strategy (never in-place), and when the
 //     requests of the HPA's resource change, the HPA target changes with them in the same
 //     reconcile so that sum(requests) x target stays constant. A target outside the policy's
@@ -58,7 +58,7 @@ func (w *run) planHPA() (*hpaState, error) {
 	}
 	switch {
 	case !w.eff.HPACoordinate:
-		s.block = "workload has a CPU/memory-utilization HPA and HPA coordination is off (RightsizingPolicy spec.hpa.coordinate); audit-only (D-011)"
+		s.block = "workload has a CPU/memory-utilization HPA and HPA coordination is off (RightsizingPolicy spec.hpa.coordinate); audit-only"
 	case c.Problem != "":
 		s.block = "HPA " + c.HPA.Name + " cannot be coordinated: " + c.Problem
 	case w.rec != nil && w.rec.HPA != nil && w.rec.HPA.SkipReason != "":
@@ -140,7 +140,7 @@ func (w *run) keepHPA(own map[corev1.ResourceName]bool) error {
 }
 
 // releaseHPA gives up ownership of the HPA target when its resource is no longer owned on the
-// template (D-006: values stay; Argo CD restores Git values on its next sync).
+// template (values stay; Argo CD restores Git values on its next sync).
 func (w *run) releaseHPA(want map[corev1.ResourceName]bool) error {
 	if w.r.Cfg.ReadOnly {
 		return nil

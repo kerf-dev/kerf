@@ -62,7 +62,7 @@ func Recommend(req Request, strategy Strategy, cfg Config) (Result, bool) {
 	if len(rec.Containers) == 0 {
 		return Result{}, false
 	}
-	// HPA coordination may adjust requests (and savings) of the coupled resource (WO-11).
+	// HPA coordination may adjust requests (and savings) of the coupled resource.
 	rec.HPA = coordinateHPA(&rec, w, req, cfg)
 	for _, c := range rec.Containers {
 		rec.MonthlySavingsUSD = rec.MonthlySavingsUSD.Add(*c.MonthlySavingsUSD)

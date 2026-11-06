@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 /**
- * Admin area flows (WO-22) against the MSW mock hub: login per role, defaults with impact preview,
+ * Admin area flows against the MSW mock hub: login per role, defaults with impact preview,
  * create a policy, pause a cluster, approve once, revert, bulk exclude, onboarding, conflicts.
  * Mock users: admin, operator, viewer (password dev-password).
  */
@@ -326,7 +326,7 @@ test.describe('operator writes', () => {
   })
 })
 
-test.describe('maintenance (WO-33)', () => {
+test.describe('maintenance', () => {
   test('versions by component, the update and Check now', async ({ page }) => {
     await login(page, 'admin')
     await page.getByTestId('admin-nav').getByRole('link', { name: 'Maintenance' }).click()
@@ -360,7 +360,7 @@ test.describe('readiness', () => {
   })
 })
 
-test.describe('WO-22b polish', () => {
+test.describe('admin layout', () => {
   test('mode controls fit at ~800 px content width', async ({ page }) => {
     await page.setViewportSize({ width: 1060, height: 900 })
     await login(page, 'admin', '/admin/defaults')
@@ -399,7 +399,7 @@ test.describe('WO-22b polish', () => {
   })
 })
 
-test.describe('WO-22c readiness alignment', () => {
+test.describe('readiness alignment', () => {
   test('checks without a result show as pending, not failures', async ({ page }) => {
     await login(page, 'viewer')
     await expect(page.getByTestId('readiness-banner-pending').first()).toContainText(

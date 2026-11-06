@@ -1,4 +1,4 @@
-# Mutating admission webhook (WO-07) targets. Included by the root Makefile.
+# Mutating admission webhook targets. Included by the root Makefile.
 
 WEBHOOK_IMAGE         ?= localhost:5005/kerf/webhook
 WEBHOOK_IMAGE_PULL    ?= k3d-ro-registry:5005/kerf/webhook
@@ -11,7 +11,7 @@ WEBHOOK_CLUSTERS      ?= ro-spoke-1 ro-spoke-2
 WEBHOOK_ENVTEST_K8S   ?= 1.35.0
 WEBHOOK_SETUP_ENVTEST ?= $(LOCALBIN)/setup-envtest
 
-##@ Webhook (WO-07)
+##@ Webhook
 
 .PHONY: build-webhook
 build-webhook: ## Build the webhook binary into ./bin/webhook.

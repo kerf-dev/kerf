@@ -15,7 +15,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
-// ---- hub-managed policies (D-022; docs/contracts/admin.md "Policies") ----
+// ---- hub-managed policies (docs/contracts/admin.md "Policies") ----
 
 var policyTypes = []string{v1alpha1.HubPolicyTypeGlobalDefault, v1alpha1.HubPolicyTypeClusterDefault, v1alpha1.HubPolicyTypePolicy, v1alpha1.HubPolicyTypeWorkloadOverride}
 
@@ -230,7 +230,7 @@ func (s *Server) revertPolicy(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &in) || !validReason(w, r, in.Reason) {
 		return
 	}
-	// Readiness gating (D-025): a revert that newly enables auto-patch is gated like an update.
+	// Readiness gating: a revert that newly enables auto-patch is gated like an update.
 	change := s.change(r, hubapi.ActionPolicyReverted, in.Reason)
 	if cur, err := s.Store.GetPolicy(r.Context(), r.PathValue("policyId")); err == nil && in.Version >= 1 && in.Version < cur.Version {
 		vs, _, err := s.Store.PolicyVersions(r.Context(), cur.ID, in.Version+1, 1)
@@ -522,7 +522,7 @@ func (s *Server) normaliseOverride(w http.ResponseWriter, r *http.Request, k hub
 }
 
 // newAutoPatch reports whether an update enables auto-patch: next sets it and cur did not, or
-// next reaches clusters cur did not (readiness gating, D-025).
+// next reaches clusters cur did not (readiness gating).
 func newAutoPatch(cur, next hubapi.AdminPolicy) bool {
 	if !setsAutoPatch(next.Spec) {
 		return false
@@ -549,7 +549,7 @@ func setsAutoPatch(spec v1alpha1.RightsizingPolicySpec) bool {
 }
 
 // prodGuard answers 403 admin_required when a non-admin sets auto-patch on a prod cluster or
-// sends overrideReadiness (an admin-only flag, D-025).
+// sends overrideReadiness (an admin-only flag).
 func (s *Server) prodGuard(w http.ResponseWriter, r *http.Request, cluster string, autoPatch, overrideReadiness bool) bool {
 	p := PrincipalFrom(r.Context())
 	if p.IsAdmin() {
@@ -669,7 +669,7 @@ func (s *Server) deleteWorkloadOverride(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// approveRecommendation serves POST /v1/workloads/{id}/approve (D-024).
+// approveRecommendation serves POST /v1/workloads/{id}/approve.
 func (s *Server) approveRecommendation(w http.ResponseWriter, r *http.Request) {
 	v := s.workloadFromPath(w, r)
 	if v == nil {

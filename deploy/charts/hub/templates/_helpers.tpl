@@ -27,10 +27,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
-{{/* Secret holding the datasource secrets encryption key (D-025). */}}
+{{/* Secret holding the datasource secrets encryption key. */}}
 {{- define "hub.datasourceKeySecret" -}}{{ default (printf "%s-datasource-key" (include "hub.fullname" .)) .Values.onboarding.secretsKey.existingSecret }}{{- end -}}
 
-{{/* "true" when the hub gets a datasource secrets key (D-025). */}}
+{{/* "true" when the hub gets a datasource secrets key. */}}
 {{- define "hub.datasourceKeyEnabled" -}}
 {{- $k := .Values.onboarding.secretsKey -}}
 {{- if or $k.create $k.existingSecret (dig "externalSecret" "enabled" false $k) -}}true{{- end -}}

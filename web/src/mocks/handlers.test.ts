@@ -1,6 +1,6 @@
 /**
  * Contract test: every mock response must validate against api/openapi/hub.yaml, so the UI built on
- * the mocks works unchanged against the real hub (WO-04).
+ * the mocks works unchanged against the real hub.
  */
 import { readFileSync } from 'node:fs'
 import path from 'node:path'

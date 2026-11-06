@@ -4,7 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Mode controls what Kerf does for one resource (CPU or memory) of a workload (D-005).
+// Mode controls what Kerf does for one resource (CPU or memory) of a workload.
 // +kubebuilder:validation:Enum=off;audit;auto-patch
 type Mode string
 
@@ -16,11 +16,11 @@ const (
 	// ModeAutoPatch: the agent applies recommendations, subject to guardrails.
 	ModeAutoPatch Mode = "auto-patch"
 
-	// DefaultMode is the global default mode (lowest precedence, D-005).
+	// DefaultMode is the global default mode (lowest precedence).
 	DefaultMode = ModeAudit
 )
 
-// ModeSource says which precedence level produced an effective mode (D-005).
+// ModeSource says which precedence level produced an effective mode.
 // +kubebuilder:validation:Enum=global-default;cluster-default;policy;annotation
 type ModeSource string
 
@@ -31,7 +31,7 @@ const (
 	ModeSourceAnnotation     ModeSource = "annotation"
 )
 
-// Strategy is how a change is applied to a workload (D-007).
+// Strategy is how a change is applied to a workload.
 // +kubebuilder:validation:Enum=in-place;rollout;deferred
 type Strategy string
 
@@ -40,7 +40,7 @@ const (
 	StrategyInPlace Strategy = "in-place"
 	// StrategyRollout patches the pod template (rolling restart).
 	StrategyRollout Strategy = "rollout"
-	// StrategyDeferred patches only inside maintenance windows (phase 3, WO-10).
+	// StrategyDeferred patches only inside maintenance windows (phase 3).
 	StrategyDeferred Strategy = "deferred"
 
 	// DefaultStrategy is used when no policy or annotation sets one.
@@ -58,7 +58,7 @@ const (
 	KindCronJob     WorkloadKind = "CronJob"
 )
 
-// Profile selects the recommender's window, percentiles, headroom and buffer (WO-04).
+// Profile selects the recommender's window, percentiles, headroom and buffer.
 // +kubebuilder:validation:Enum=dev;production;high-availability
 type Profile string
 
@@ -84,7 +84,7 @@ const (
 	CPULimitRatio CPULimitPolicy = "ratio"
 )
 
-// RiskFlag is a property of a recommendation the hub computed (WO-04). Values match the hub API.
+// RiskFlag is a property of a recommendation the hub computed. Values match the hub API.
 type RiskFlag string
 
 const (
@@ -95,7 +95,7 @@ const (
 	RiskSidecar       RiskFlag = "sidecar"
 	RiskShortLived    RiskFlag = "short-lived"
 	RiskLowConfidence RiskFlag = "low-confidence"
-	// RiskJVMFixedHeap: JVM with a fixed maximum heap; memory is audit-only (WO-12).
+	// RiskJVMFixedHeap: JVM with a fixed maximum heap; memory is audit-only.
 	RiskJVMFixedHeap RiskFlag = "jvm-fixed-heap"
 )
 

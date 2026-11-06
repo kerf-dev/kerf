@@ -2,13 +2,13 @@ openapi: 3.1.0
 info:
   title: Kerf hub API
   version: 0.1.0
-  summary: Contract between the hub, the per-cluster agents and the web UI (WO-00).
+  summary: Contract between the hub, the per-cluster agents and the web UI.
   description: |
     The hub computes recommendations for every workload in every cluster; each cluster's agent
-    pulls them, applies them according to its local policy and reports status and events back
-    (D-004). The hub never calls the agents. The web UI reads through the `ui` endpoints.
+    pulls them, applies them according to its local policy and reports status and events back.
+    The hub never calls the agents. The web UI reads through the `ui` endpoints.
 
-    **Authentication** (D-012): every request carries `Authorization: Bearer <token>`. Each token
+    **Authentication**: every request carries `Authorization: Bearer <token>`. Each token
     has one role; the roles an operation accepts are listed in its `security` requirement.
     - `agent`: bound to exactly one cluster. It may only use the `/v1/clusters/{cluster}/...`
       endpoints of that cluster (otherwise `403`), and `GET /v1/audit` restricted to that cluster.
@@ -16,7 +16,7 @@ info:
     - `admin`: may use every endpoint for every cluster (satisfies every role).
     A token without an accepted role gets `403`. The hub stores only a SHA-256 hash of each token.
 
-    **Sessions** (D-023, admin area `docs/contracts/admin.md`): a local user logs in with
+    **Sessions** (admin area `docs/contracts/admin.md`): a local user logs in with
     `POST /v1/auth/login` and gets the HttpOnly cookie `kerf_session` (`sessionAuth`). Users have one
     role, `viewer` < `operator` < `admin`; each includes the ones before it. An operation lists the
     lowest user role it accepts as `sessionAuth: [role]`, next to the token roles it accepts. For
@@ -49,7 +49,7 @@ info:
     identifier: LicenseRef-Proprietary
 servers:
   - url: '{baseURL}'
-    description: Hub base URL. Local development (WO-01) uses http://localhost:8080.
+    description: Hub base URL. Local development uses http://localhost:8080.
     variables:
       baseURL:
         default: http://localhost:8080
@@ -63,11 +63,11 @@ tags:
   - name: ui
     description: Read-only endpoints for the web UI.
   - name: admin
-    description: Administration (admin area, D-022). Roles per operation.
+    description: Administration (admin area). Roles per operation.
   - name: auth
-    description: Login, logout and the caller's identity (D-023).
+    description: Login, logout and the caller's identity.
   - name: internal
-    description: Service endpoints for the pricing service (token role `pricing`, D-026).
+    description: Service endpoints for the pricing service (token role `pricing`).
 paths:
   /v1/clusters/{cluster}/recommendations:
     parameters:
@@ -439,7 +439,7 @@ paths:
       security:
         - bearerAuth: [ui]
         - sessionAuth: [viewer]
-      summary: Filter values with workload counts (D-016)
+      summary: Filter values with workload counts
       description: |
         Counts of live workloads per filter value, for building the filters of the workload list.
         Like every read, only the workloads of the caller's teams are counted (docs/teams.md).
@@ -868,7 +868,7 @@ paths:
         - sessionAuth: [admin]
       summary: Run the recommender now
       description: |
-        Queues a recommender run (D-019) for one cluster (`cluster`) or for all registered
+        Queues a recommender run for one cluster (`cluster`) or for all registered
         clusters, and returns at once with the run id. The run starts as soon as no other run is
         in progress; it uses usage data up to the last full recommender step (5 minutes by
         default) before it starts, like a scheduled run. A request for the same scope that
@@ -907,7 +907,7 @@ paths:
       operationId: getClusterConfig
       security:
         - bearerAuth: [agent]
-      summary: Hub-managed configuration of a cluster (D-022)
+      summary: Hub-managed configuration of a cluster
       description: |
         What the agent materialises on its cluster (`docs/contracts/admin.md`):
         - `policies`: every hub-managed policy for this cluster, as `RightsizingPolicy` specs. The
@@ -917,7 +917,7 @@ paths:
           never touched. With `policySource: git` the list is empty.
         - `flags`: pause. While `paused`, the agent applies nothing new (event `blocked`, reason
           `Paused`); rollbacks still run.
-        - `approvals`: approve-once grants (D-024).
+        - `approvals`: approve-once grants.
 
         The agent pulls it on every pull interval. Conditional requests: the response carries an
         `ETag` (equal to `configVersion` in quotes); `If-None-Match` returns `304` when nothing
@@ -953,7 +953,7 @@ paths:
       tags: [auth]
       operationId: login
       security: []
-      summary: Log in with a local user (D-023)
+      summary: Log in with a local user
       description: |
         Checks the username and password and starts a session. The response sets the session
         cookie `kerf_session` (`HttpOnly; SameSite=Strict; Path=/`, plus `Secure` behind TLS) and
@@ -1380,7 +1380,7 @@ paths:
         the CRD (code `invalid_policy`, `detail` lists the fields). Records a `config_changed`
         audit event (`PolicyCreated`).
         Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
-        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true`.
       parameters:
         - $ref: '#/components/parameters/CSRFToken'
       requestBody:
@@ -1445,7 +1445,7 @@ paths:
         Stores a new version; `type` cannot change (`400`, code `type_immutable`). Agents pick the
         change up on their next config pull. Records `PolicyUpdated`.
         Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
-        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true`.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
         - $ref: '#/components/parameters/CSRFToken'
@@ -1560,7 +1560,7 @@ paths:
         Stores a new version whose content equals version `version` (operation `revert`); reverting
         to a version of a deleted policy undeletes it. Records `PolicyReverted`.
         A revert that newly enables `auto-patch` on a cluster that is not `AutomationReady` answers
-        `409` `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+        `409` `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true`.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
         - $ref: '#/components/parameters/CSRFToken'
@@ -1917,7 +1917,7 @@ paths:
         (Git policies), the agent's reported cluster defaults and the workload's annotations and
         labels as last reported. Layers from lowest to highest precedence: built-in defaults →
         global default → cluster default (chart value) → cluster default (hub) → the winning
-        policy (highest priority, ties by name) → workload override (hub) → annotations (D-005).
+        policy (highest priority, ties by name) → workload override (hub) → annotations.
         `fields` lists every field with its value and the layer that set it. `agentModes` is what
         the agent last reported, so the UI can show a difference (e.g. before the next pull).
       responses:
@@ -1979,7 +1979,7 @@ paths:
         code `admin_required`). "Exclude" is an override with both modes `off`. Records
         `OverrideSet`.
         Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
-        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+        `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true`.
       parameters:
         - $ref: '#/components/parameters/IfMatchOptional'
         - $ref: '#/components/parameters/CSRFToken'
@@ -2054,7 +2054,7 @@ paths:
       security:
         - sessionAuth: [operator]
         - bearerAuth: [admin]
-      summary: Approve the current recommendation once (D-024)
+      summary: Approve the current recommendation once
       description: |
         Records an approval for `recommendationID`, which must be the workload's latest
         recommendation (`409`, code `recommendation_stale`). Only for a workload whose effective
@@ -2063,7 +2063,7 @@ paths:
         `auto-patch`, and emits `applied` with reason `ApprovedOnce`; the workload stays in
         `audit`. A new approval replaces an earlier unconsumed one. Records `WorkloadApproved`.
         On a cluster that is not `AutomationReady`: `409`, code `cluster_not_automation_ready`,
-        unless an admin sends `overrideReadiness: true` (D-025).
+        unless an admin sends `overrideReadiness: true`.
       parameters:
         - $ref: '#/components/parameters/CSRFToken'
       requestBody:
@@ -2655,7 +2655,7 @@ paths:
       security:
         - sessionAuth: [viewer]
         - bearerAuth: [ui]
-      summary: Metrics datasources (D-025)
+      summary: Metrics datasources
       description: Includes the built-in `local` datasource. Secrets are never returned.
       responses:
         '200':
@@ -2855,7 +2855,7 @@ paths:
         - bearerAuth: [pricing]
       summary: Metrics binding of every registered cluster (pricing service)
       description: |
-        The binding of every registered, not deleted cluster (D-025, D-026). `bound` is false for a
+        The binding of every registered, not deleted cluster. `bound` is false for a
         cluster without a stored binding: its metrics are in datasource `local` with label `cluster`
         = its name. Never contains datasource secrets. An `admin` token may call it too.
       responses:
@@ -2880,7 +2880,7 @@ paths:
       summary: Instant PromQL query against a datasource (pricing service)
       description: |
         Runs the query against the datasource with the datasource's auth and headers, which never
-        leave the hub (D-026), and returns the datasource's response unchanged (the Prometheus
+        leave the hub, and returns the datasource's response unchanged (the Prometheus
         HTTP API `/api/v1/query` format, including its errors and status code). Only `query`,
         `time` and `timeout` are forwarded. POST with a form body is accepted too.
       parameters:
@@ -3008,7 +3008,7 @@ paths:
       security:
         - sessionAuth: [viewer]
         - bearerAuth: [ui]
-      summary: Readiness state and check results of a cluster (D-025)
+      summary: Readiness state and check results of a cluster
       description: |
         The latest result of every check (hub metrics checks and agent self-checks), the state they
         imply and what blocks the next state. Checks never run yet have status `unknown`.
@@ -3129,7 +3129,7 @@ paths:
         Rendered for this cluster and hub URL. The token value is never included: the snippet
         references the Secret `kerf-agent-token` (key `token`); the value is shown
         once when the token is created. Also returns the Argo CD `ignoreDifferences` snippet for
-        `argocd-cm` (D-006).
+        `argocd-cm`.
       parameters:
         - name: format
           in: query
@@ -3172,7 +3172,7 @@ paths:
         - bearerAuth: [ui]
       summary: Component versions and the update check
       description: |
-        The versions of every Kerf component the hub knows of (WO-33): each hub replica (seen in the
+        The versions of every Kerf component the hub knows of: each hub replica (seen in the
         last 10 minutes), the pricing service (reported with its requests to the hub, seen in the last
         hour), and per registered cluster the agent (status batch) and webhook pods (agent self-check).
         `compat` compares each with the hub version of the replica that answered. `update` is the
@@ -3677,13 +3677,13 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      description: Opaque token with role `agent` (per cluster), `ui`, `admin` (D-012) or `pricing` (D-026).
+      description: Opaque token with role `agent` (per cluster), `ui`, `admin` or `pricing`.
     sessionAuth:
       type: apiKey
       in: cookie
       name: kerf_session
       description: |
-        Session of a local user (D-023), set by `POST /v1/auth/login`. The requirement lists the
+        Session of a local user, set by `POST /v1/auth/login`. The requirement lists the
         lowest user role accepted (`viewer` < `operator` < `admin`). Writes also need `X-CSRF-Token`.
   headers:
     ETag:
@@ -3955,10 +3955,10 @@ components:
       type: string
       description: |
         `throttled`, `oom-killed`: the workload is under-provisioned; the recommendation is never
-        a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only
-        (D-011). `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
+        a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only.
+        `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
         container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`); its memory is audit-only,
-        the agent never changes it (WO-12).
+        the agent never changes it.
       enum: [throttled, oom-killed, restarting, hpa-coupled, sidecar, short-lived, low-confidence, jvm-fixed-heap]
     GPUFilter:
       type: string
@@ -4247,7 +4247,7 @@ components:
     HPACoordination:
       type: object
       description: |
-        HPA coordination (WO-11, lifts D-011). Present when the workload has a CPU- or
+        HPA coordination. Present when the workload has a CPU- or
         memory-utilization HPA (risk flag `hpa-coupled`). The HPA's utilization is the pod's usage
         over the sum of its containers' requests of `metric`, so changing those requests changes
         when it scales. With `recommendedTarget`, the recommended requests of `metric` and that
@@ -4288,7 +4288,7 @@ components:
     RecommendationPricing:
       type: object
       description: |
-        Rates used for `monthlySavingsUSD` (D-016). `source` is `metrics` when they come from the
+        Rates used for `monthlySavingsUSD`. `source` is `metrics` when they come from the
         pricing series (`kerf_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when
         the cluster had no pricing series and the hub's configured fallback rate was used.
         Absent on recommendations computed before the field existed.
@@ -4374,7 +4374,7 @@ components:
         override:
           type: string
           description: |
-            Name of the hub workload-override policy layered on top of `policy` (D-022), if any.
+            Name of the hub workload-override policy layered on top of `policy`, if any.
             Modes it sets are reported with source `policy`.
         modes:
           $ref: '#/components/schemas/EffectiveModes'
@@ -4404,14 +4404,14 @@ components:
         nextWindow:
           type: string
           format: date-time
-          description: When the next maintenance window opens; set while the phase is `Deferred` (WO-10).
+          description: When the next maintenance window opens; set while the phase is `Deferred`.
         observedAt:
           type: string
           format: date-time
         jvm:
           type: array
           description: |
-            JVM containers detected by the agent with their heap settings (WO-12). Absent when JVM
+            JVM containers detected by the agent with their heap settings. Absent when JVM
             detection is off (`RightsizingPolicy.spec.jvm.detect: false`) or no container is a JVM.
           items:
             $ref: '#/components/schemas/JVMContainer'
@@ -4474,7 +4474,7 @@ components:
         configVersion:
           type: string
           description: |
-            `configVersion` of the last cluster config the agent materialised (D-022). Absent for
+            `configVersion` of the last cluster config the agent materialised. Absent for
             agents without config pull.
         policyInventory:
           type: array
@@ -4487,7 +4487,7 @@ components:
         capabilities:
           type: array
           description: |
-            Agent self-check of its RBAC per capability (D-025). Absent = unchanged; present = all
+            Agent self-check of its RBAC per capability. Absent = unchanged; present = all
             capabilities.
           items:
             $ref: '#/components/schemas/AgentCapability'
@@ -4502,7 +4502,7 @@ components:
         components:
           type: array
           description: |
-            Kerf components the agent found in its cluster (WO-33, today the webhook pods). Sent with
+            Kerf components the agent found in its cluster (today the webhook pods). Sent with
             the self-checks; absent = unchanged, an empty array = none running.
           items:
             $ref: '#/components/schemas/AgentComponent'
@@ -4656,7 +4656,7 @@ components:
     JVMExplanation:
       type: object
       description: |
-        How the JVM heap shaped the memory recommendation (WO-12), only on `memory` of JVM
+        How the JVM heap shaped the memory recommendation, only on `memory` of JVM
         containers. `heapSizing`: `fixed` (`-Xmx`; memory audit-only, flag `jvm-fixed-heap`),
         `percentage` (`-XX:MaxRAMPercentage`, max heap follows the memory limit), `default` (no heap
         flags: the JVM default of 25 % of the limit). `heapNeed` is the observed peak working set
@@ -4721,7 +4721,7 @@ components:
     ConfidenceFactors:
       type: object
       description: |
-        How this container's confidence was computed (D-016): `confidence` = sum of score x weight.
+        How this container's confidence was computed: `confidence` = sum of score x weight.
         The workload's `confidence` is the minimum over its containers.
         `coverage`: fraction of the window's steps with usage data. `samples`: number of samples
         relative to the hub's full-confidence sample count. `variance`: stability of CPU usage,
@@ -4860,7 +4860,7 @@ components:
           $ref: '#/components/schemas/ClusterPolicySource'
         paused:
           type: boolean
-          description: Automation paused (cluster or fleet, D-022).
+          description: Automation paused (cluster or fleet).
         automation:
           description: The cluster's own pause state.
           allOf:
@@ -5033,11 +5033,11 @@ components:
           allOf:
             - $ref: '#/components/schemas/WorkloadStatus'
         approval:
-          description: The latest approve-once grant (D-024), if any.
+          description: The latest approve-once grant, if any.
           allOf:
             - $ref: '#/components/schemas/Approval'
         override:
-          description: The workload's hub override policy (D-022), if any.
+          description: The workload's hub override policy, if any.
           allOf:
             - $ref: '#/components/schemas/AdminPolicy'
     Point:
@@ -5499,7 +5499,7 @@ components:
     UserRole:
       type: string
       description: |
-        Role of a local user (D-023). `viewer`: everything the read-only UI shows. `operator`:
+        Role of a local user. `viewer`: everything the read-only UI shows. `operator`:
         additionally workload actions (override, exclude, approve-once) and pausing automation.
         `admin`: additionally defaults, policies, settings, clusters, tokens and users. Each role
         includes the ones before it.
@@ -5507,7 +5507,7 @@ components:
     TokenRole:
       type: string
       description: |
-        Role of an API (machine) token (D-012). `pricing` (D-026) is the pricing service: only
+        Role of an API (machine) token. `pricing` is the pricing service: only
         `/v1/internal/*` (metrics bindings and the datasource query proxy); no cluster.
       enum: [agent, ui, admin, pricing]
     Username:
@@ -5835,7 +5835,7 @@ components:
       enum: [recommender, pricing]
     RecommenderProfileSettings:
       type: object
-      description: One recommender profile (WO-04). Fractions are 0.15 for +15 %.
+      description: One recommender profile. Fractions are 0.15 for +15 %.
       required: [name, window, cpuPercentile, memoryPercentile, cpuHeadroom, memoryBuffer]
       properties:
         name:
@@ -6051,12 +6051,12 @@ components:
         `global-default` (`ro-global-defaults`, priority 0, every cluster), `cluster-default`
         (`ro-cluster-defaults`, priority 10, one cluster), `policy` (named, priority 1-899999),
         `workload-override` (`ro-override-…`, priority 900000, one workload). The agent layers the
-        default types under the winning policy and the override above it (D-022).
+        default types under the winning policy and the override above it.
       enum: [global-default, cluster-default, policy, workload-override]
     ClusterPolicySource:
       type: string
       description: |
-        Where a cluster's policies come from (D-022). `hub`: hub-managed policies only (Git CRs are
+        Where a cluster's policies come from. `hub`: hub-managed policies only (Git CRs are
         still reported). `git`: no hub-managed policies are sent and the admin pages are read-only
         for that cluster. `both`: both.
       enum: [hub, git, both]
@@ -6278,7 +6278,7 @@ components:
         overrideReadiness:
           type: boolean
           description: |
-            Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+            Admin only: allow `auto-patch` on clusters that are not `AutomationReady`;
             audited with the change.
         reason:
           $ref: '#/components/schemas/ReasonText'
@@ -6415,7 +6415,7 @@ components:
         overrideReadiness:
           type: boolean
           description: |
-            Admin only (D-025): allow a revert that enables `auto-patch` on clusters that are not
+            Admin only: allow a revert that enables `auto-patch` on clusters that are not
             `AutomationReady`. Without it such a revert answers `409 cluster_not_automation_ready`.
     PolicyInventoryItem:
       type: object
@@ -6840,7 +6840,7 @@ components:
         recheck:
           type: boolean
           description: |
-            A readiness re-check is pending (D-025): the agent re-runs its self-checks if
+            A readiness re-check is pending: the agent re-runs its self-checks if
             `recheckRequestedAt` is newer than its last run, and reports them in the next batch.
         recheckRequestedAt:
           type: string
@@ -6848,7 +6848,7 @@ components:
     ConfigApproval:
       type: object
       description: |
-        An approve-once grant (D-024). The agent applies the recommendation `recommendationID` of the
+        An approve-once grant. The agent applies the recommendation `recommendationID` of the
         workload once, treating its `audit` resources as `auto-patch`, with every guardrail, if that
         is still the latest recommendation and `expiresAt` has not passed. It then emits `applied`
         with reason `ApprovedOnce` and `details.approvalId`; the hub marks the approval consumed and
@@ -6888,7 +6888,7 @@ components:
         overrideReadiness:
           type: boolean
           description: |
-            Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+            Admin only: allow `auto-patch` on clusters that are not `AutomationReady`;
             audited with the change.
     Approval:
       type: object
@@ -6938,7 +6938,7 @@ components:
         overrideReadiness:
           type: boolean
           description: |
-            Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+            Admin only: allow `auto-patch` on clusters that are not `AutomationReady`;
             audited with the change.
         reason:
           $ref: '#/components/schemas/ReasonText'
@@ -6948,7 +6948,7 @@ components:
         A precedence layer, lowest first: `built-in` (documented global defaults), `global-default`
         (hub `ro-global-defaults`), `cluster-default-chart` (agent chart value `clusterDefaults`),
         `cluster-default` (hub `ro-cluster-defaults`), `policy` (the winning RightsizingPolicy, hub
-        or Git), `workload-override` (hub), `annotation` (workload annotations, D-005).
+        or Git), `workload-override` (hub), `annotation` (workload annotations).
       enum: [built-in, global-default, cluster-default-chart, cluster-default, policy, workload-override, annotation]
     PolicyLayer:
       type: object
@@ -7299,7 +7299,7 @@ components:
             type: string
     ClusterMetricsBinding:
       type: object
-      description: A cluster's metrics binding for the pricing service (D-026).
+      description: A cluster's metrics binding for the pricing service.
       required: [cluster, binding, bound]
       properties:
         cluster:
@@ -7352,7 +7352,7 @@ components:
     MetricsBinding:
       type: object
       description: |
-        Where a cluster's metrics are (D-025). Every query uses
+        Where a cluster's metrics are. Every query uses
         `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the
         registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster
         Prometheus). Defaults: `local`, `cluster`, the cluster name.
@@ -7613,7 +7613,7 @@ components:
           examples: [install.sh, values.yaml, application.yaml]
         argocdIgnoreDifferences:
           type: string
-          description: Snippet for `argocd-cm` so Argo CD ignores fields owned by `kerf` (D-006).
+          description: Snippet for `argocd-cm` so Argo CD ignores fields owned by `kerf`.
         notes:
           type: array
           items:
@@ -7621,7 +7621,7 @@ components:
     AgentComponent:
       type: object
       description: |
-        A Kerf component the agent found running in its cluster (WO-33). Today: the pods behind the
+        A Kerf component the agent found running in its cluster. Today: the pods behind the
         webhook Service (`component: webhook`), with the tag of their `webhook` container image as
         `version` (`sha256:<12 hex>` for an image pinned only by digest).
       required: [component, instance, version]

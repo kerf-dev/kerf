@@ -1,4 +1,4 @@
-# WO-18e staging: the "hub cluster" of docs/install/eks.md. Two nodes in two zones (spread), traefik +
+# Staging: the "hub cluster" of docs/install/eks.md. Two nodes in two zones (spread), traefik +
 # servicelb stand in for the AWS Load Balancer Controller (HTTPS on 127.0.0.1:19443).
 apiVersion: k3d.io/v1alpha5
 kind: Simple

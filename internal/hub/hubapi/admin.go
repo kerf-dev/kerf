@@ -7,7 +7,7 @@ import (
 	"github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
-// Admin area (WO-19, D-022/D-023/D-024): types of the admin, auth and config endpoints.
+// Admin area: types of the admin, auth and config endpoints.
 // Flow and examples: docs/contracts/admin.md. Policy specs use the CRD types of api/v1alpha1
 // (their JSON is the RightsizingPolicySpec schema); validate them with api/v1alpha1/validate.
 
@@ -46,7 +46,7 @@ func TokenUserRole(tokenRole string) string {
 	return ""
 }
 
-// Session and CSRF (D-023).
+// Session and CSRF.
 const (
 	SessionCookie = "kerf_session"
 	CSRFHeader    = "X-CSRF-Token"
@@ -488,7 +488,7 @@ type PolicyInput struct {
 	Clusters    []string                       `json:"clusters,omitempty"`
 	Spec        v1alpha1.RightsizingPolicySpec `json:"spec"`
 	Reason      string                         `json:"reason"`
-	// OverrideReadiness (admin only) allows auto-patch on clusters that are not AutomationReady (D-025).
+	// OverrideReadiness (admin only) allows auto-patch on clusters that are not AutomationReady.
 	OverrideReadiness bool `json:"overrideReadiness,omitempty"`
 }
 
@@ -552,7 +552,7 @@ type PolicyRevert struct {
 	Version int    `json:"version"`
 	Reason  string `json:"reason"`
 	// OverrideReadiness (admin only) allows a revert that enables auto-patch on clusters that are
-	// not AutomationReady (D-025).
+	// not AutomationReady.
 	OverrideReadiness bool `json:"overrideReadiness,omitempty"`
 }
 
@@ -732,7 +732,7 @@ type ClusterConfig struct {
 	Policies      []ConfigPolicy   `json:"policies"`
 	Flags         ConfigFlags      `json:"flags"`
 	Approvals     []ConfigApproval `json:"approvals"`
-	// HubVersion and MinAgentVersion feed the agent's agent.version check (D-025).
+	// HubVersion and MinAgentVersion feed the agent's agent.version check.
 	HubVersion      string `json:"hubVersion,omitempty"`
 	MinAgentVersion string `json:"minAgentVersion,omitempty"`
 }
@@ -774,7 +774,7 @@ type ApprovalRequest struct {
 	RecommendationID string     `json:"recommendationID"`
 	Reason           string     `json:"reason"`
 	ExpiresAt        *time.Time `json:"expiresAt,omitempty"`
-	// OverrideReadiness (admin only) allows auto-patch on clusters that are not AutomationReady (D-025).
+	// OverrideReadiness (admin only) allows auto-patch on clusters that are not AutomationReady.
 	OverrideReadiness bool `json:"overrideReadiness,omitempty"`
 }
 
@@ -797,7 +797,7 @@ type WorkloadOverrideInput struct {
 	Description string                         `json:"description,omitempty"`
 	Spec        v1alpha1.RightsizingPolicySpec `json:"spec"`
 	Reason      string                         `json:"reason"`
-	// OverrideReadiness (admin only) allows auto-patch on clusters that are not AutomationReady (D-025).
+	// OverrideReadiness (admin only) allows auto-patch on clusters that are not AutomationReady.
 	OverrideReadiness bool `json:"overrideReadiness,omitempty"`
 }
 

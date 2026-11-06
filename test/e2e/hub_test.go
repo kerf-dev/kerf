@@ -16,7 +16,7 @@ import (
 )
 
 // hubAPI reads the hub's UI endpoints (role `ui`, api/openapi/hub.yaml) and, when an admin token
-// is available, triggers recommender runs (D-019, POST /v1/admin/recompute).
+// is available, triggers recommender runs (POST /v1/admin/recompute).
 type hubAPI struct {
 	Base       string
 	Token      string
@@ -81,7 +81,7 @@ func (h *hubAPI) maybeRecompute(ctx context.Context, cluster string, logf func(s
 
 // recomputeNow asks for a recommender run of the cluster now, outside the rate limit. It first
 // waits (up to holdWait) until no other scenario holds the cluster's recomputes: theirs would
-// survive a run (approvals are re-approved, the D-027 self-heal check ends early), but they would
+// survive a run (approvals are re-approved, the approve-once self-heal check ends early), but they would
 // check less. It reports false when the hub has no recompute trigger.
 func (h *hubAPI) recomputeNow(ctx context.Context, cluster string, logf func(string, ...any)) bool {
 	start := time.Now()

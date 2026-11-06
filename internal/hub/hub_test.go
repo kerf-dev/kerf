@@ -1413,7 +1413,7 @@ func TestRerunSameAsOf(t *testing.T) {
 	}
 }
 
-// TestDeferredStatus (WO-10): an agent reports phase Deferred with the next maintenance window;
+// TestDeferredStatus: an agent reports phase Deferred with the next maintenance window;
 // the hub stores both and returns them on the workload.
 func TestDeferredStatus(t *testing.T) {
 	e := newEnv(t)

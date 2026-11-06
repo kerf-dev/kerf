@@ -36,7 +36,7 @@ type Change struct {
 	Version  int
 	Before   any
 	After    any
-	// AfterExtra adds keys to the stored after object (e.g. overrideReadiness, D-025).
+	// AfterExtra adds keys to the stored after object (e.g. overrideReadiness).
 	AfterExtra map[string]any
 }
 

@@ -1,4 +1,4 @@
-# Kerf: one chart for the hub cluster and every workload cluster (WO-18d, D-028).
+# Kerf: one chart for the hub cluster and every workload cluster.
 # Install guide: docs/install/eks.md. Examples: deploy/examples/eks/values-{hub,spoke}.yaml.
 #
 # Each component's settings live under its name (hub, web, pricing, agent, webhook) and are the
@@ -128,9 +128,9 @@ hub:
     tag: ""                  # default: the chart appVersion (= the release VERSION)
     digest: ""               # optional sha256:... from bin/release/images.txt
   # 2 replicas, RollingUpdate, PDB minAvailable 1 and node/zone spread are the chart defaults
-  # (leader election on Postgres, WO-18a).
+  # (leader election on Postgres).
 
-  # The database. Production: RDS through the External Secrets Operator (D-028, verify-full):
+  # The database. Production: RDS through the External Secrets Operator (verify-full):
   #   database:
   #     host: ro-hub.xxxxxxxx.eu-west-1.rds.amazonaws.com
   #     caBundle: {existingConfigMap: rds-ca-bundle, key: global-bundle.pem}
@@ -148,12 +148,12 @@ hub:
   auth:
     cookieSecure: true       # false: dev: true only (plain-HTTP development)
 
-  # Datasource secrets key (D-025). The chart generates it once (Helm lookup) unless it comes from
+  # Datasource secrets key. The chart generates it once (Helm lookup) unless it comes from
   # Secrets Manager. With Argo CD (no lookup) use the ExternalSecret, or every sync makes a new key:
   #   onboarding.secretsKey.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/datasource-key}}
 
   # Ingress for the hub API (agents of other clusters, pricing over HTTPS). AWS Load Balancer
-  # Controller, internal ALB (D-028):
+  # Controller, internal ALB:
   #   ingress:
   #     enabled: true
   #     className: alb
@@ -266,7 +266,7 @@ agent:
   leaderElection: true
   health:
     # Prometheus-compatible endpoint with this cluster's container_cpu_cfs_* series, for the
-    # throttling rollback (WO-08). Empty: no throttling-based rollback.
+    # throttling rollback. Empty: no throttling-based rollback.
     metricsURL: ""
   #   networkPolicy:  {enabled: true}
   #   serviceMonitor: {enabled: true}

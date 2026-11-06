@@ -11,7 +11,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// listMetricsBindings serves GET /v1/internal/metrics-bindings (pricing service, D-026): the
+// listMetricsBindings serves GET /v1/internal/metrics-bindings (pricing service): the
 // metrics binding of every registered cluster, never datasource secrets.
 func (s *Server) listMetricsBindings(w http.ResponseWriter, r *http.Request) {
 	s.recordPricing(r)
@@ -48,7 +48,7 @@ func (s *Server) listMetricsBindings(w http.ResponseWriter, r *http.Request) {
 var proxyParams = []string{"query", "time", "start", "end", "step", "timeout"}
 
 // proxyQuery serves /v1/internal/datasources/{datasourceId}/api/v1/query[_range] (pricing
-// service, D-026): it runs the query against the datasource with the datasource's auth and
+// service): it runs the query against the datasource with the datasource's auth and
 // returns the datasource's answer unchanged. Credentials never leave the hub.
 func (s *Server) proxyQuery(w http.ResponseWriter, r *http.Request) {
 	s.recordPricing(r)

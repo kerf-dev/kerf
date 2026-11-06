@@ -235,7 +235,7 @@ func ownedBy(refs []metav1.OwnerReference, uid types.UID) bool {
 var heapRuntime = regexp.MustCompile(`(?i)(^|[/:_.-])(java|jdk|jre|openjdk|temurin|corretto|zulu|graalvm|jvm|python[0-9.]*|pypy[0-9.]*)($|[/:_.@-])`)
 
 // HeapBound reports whether a container looks like a JVM or Python process, whose memory is
-// bound at start-up (heap sizing), so a memory change only takes effect after a restart (D-007).
+// bound at start-up (heap sizing), so a memory change only takes effect after a restart.
 func HeapBound(c corev1.Container) bool {
 	if heapRuntime.MatchString(c.Image) || JVMImage(c.Image) {
 		return true

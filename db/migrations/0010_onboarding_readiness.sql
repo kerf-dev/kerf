@@ -1,4 +1,4 @@
--- WO-19 (contract for WO-25, D-025): metrics datasources, per-cluster metrics bindings, and
+-- Onboarding and readiness: metrics datasources, per-cluster metrics bindings, and
 -- cluster readiness (current check results, state, history). docs/contracts/readiness.md.
 -- Idempotent: safe to re-run on a database that already has it.
 
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS datasources (
 CREATE UNIQUE INDEX IF NOT EXISTS datasources_name_live_idx ON datasources (name) WHERE deleted_at IS NULL;
 
 -- Metrics binding per cluster (MetricsBinding). No row = datasource 'local', label 'cluster' =
--- the cluster name (behaviour before D-025). cluster_label '' = no cluster matcher.
+-- the cluster name (behaviour without a binding). cluster_label '' = no cluster matcher.
 CREATE TABLE IF NOT EXISTS cluster_metrics_bindings (
     cluster              text        PRIMARY KEY REFERENCES clusters (name) ON DELETE CASCADE,
     datasource_id        text        NOT NULL REFERENCES datasources (id),

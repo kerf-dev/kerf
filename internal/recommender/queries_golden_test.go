@@ -98,7 +98,7 @@ func itoa(i int) string {
 }
 
 // TestQueriesDefaultGolden pins the queries of a cluster without a metrics binding: they must stay
-// byte-identical to the queries before D-025.
+// byte-identical to the queries without a binding.
 func TestQueriesDefaultGolden(t *testing.T) {
 	golden(t, "testdata/queries-default.golden", allQueries(Queries{Cluster: "ro-spoke-1", RateWindow: 5 * time.Minute}))
 }

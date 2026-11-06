@@ -40,7 +40,7 @@ function overrideBase(w: WorkloadDetail): RightsizingPolicySpec {
 }
 
 /**
- * Operator actions on one workload (D-022, D-024): override modes/strategy/profile, Exclude (both
+ * Operator actions on one workload: override modes/strategy/profile, Exclude (both
  * modes off), Clear override, Approve once. Writes go through the hub; the agent applies them on its
  * next pull, so modes here change once it reports back (the hub serves the intent immediately).
  */
@@ -50,7 +50,7 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
   const clusters = useClusters()
   const cluster = clusters.data?.items.find((c) => c.name === w.cluster)
   const prod = cluster?.environment === 'prod'
-  // Git-only clusters get no hub policies (D-022), so a hub override would never apply there.
+  // Git-only clusters get no hub policies, so a hub override would never apply there.
   const gitOnly = cluster?.policySource === 'git'
   const ready = !cluster?.readiness || cluster.readiness.state === 'AutomationReady'
   const [open, setOpen] = useState<Kind | null>(null)
@@ -281,7 +281,7 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
         description={
           open === 'exclude'
             ? 'Sets CPU and memory to off for this workload: the agent ignores it. Annotations on the workload still win.'
-            : 'Applies to this workload only, on top of its policy. Unset fields inherit. Annotations on the workload still win (D-005).'
+            : 'Applies to this workload only, on top of its policy. Unset fields inherit. Annotations on the workload still win.'
         }
         prodClusters={prod ? [w.cluster] : []}
         confirmLabel={open === 'exclude' ? 'Exclude workload' : 'Save override'}
@@ -389,7 +389,7 @@ export function AutomationActions({ w }: { w: WorkloadDetail }) {
         onOpenChange={(o) => !o && setOpen(null)}
         testId="approve-dialog"
         title={`Approve the current recommendation for ${w.name} once`}
-        description="The agent applies this recommendation once, as if the mode were auto-patch, with every guardrail. The workload stays in audit; the next recommendation is not applied (D-024)."
+        description="The agent applies this recommendation once, as if the mode were auto-patch, with every guardrail. The workload stays in audit; the next recommendation is not applied."
         prodClusters={prod ? [w.cluster] : []}
         confirmLabel="Approve once"
         reasonPlaceholder="e.g. reviewed with the owner"

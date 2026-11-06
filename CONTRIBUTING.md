@@ -69,12 +69,13 @@ pull request touches (Go, web, OpenAPI, charts, images), and the other jobs fini
 when their area is untouched. The five required checks therefore always report, so a docs-only pull request
 is green within a minute. Pull requests build the images for `linux/amd64`; `main` and release tags build
 `linux/amd64` and `linux/arm64`. A new push to a pull request cancels the run in progress. CI also fails
-if internal development documents (`CLAUDE.md`, `.claude/`, `DECISIONS.md`, `roadmap.md`, `docs/work-orders/`,
-`docs/handover/`, `docs/plans/`, `docs/STATUS.md`, `docs/open-source-checklist.md`) are committed.
+if internal development notes are committed.
 Run `make generate` after changing `api/` and commit the result.
 CodeQL runs as its own workflow (`.github/workflows/codeql.yaml`) and scans only the languages a pull request changes
 (Go, JavaScript/TypeScript, Python, GitHub Actions; `.github/scripts/codeql-languages.sh` decides). Pushes to `main` and
 a weekly run scan all of them. It is not a required check.
+
+CI also fails if a tracked file contains an internal tracking label (`WO-` or `D-0` followed by digits) or is larger than 5 MB: describe the change in words, and keep build outputs out of the tree.
 
 ## Pull request titles
 

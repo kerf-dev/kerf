@@ -126,7 +126,7 @@ func TestWorkloadFacets(t *testing.T) {
 	e.problem(e.do("GET", "/v1/workloads/facets", "", nil), 401, "unauthorized")
 }
 
-// TestPricingAndConfidenceFactors checks the D-016 fields: pricing on every recommendation shape,
+// TestPricingAndConfidenceFactors checks the pricing and confidence fields: pricing on every recommendation shape,
 // confidence factors only in the detail explanation, and that the factors add up.
 func TestPricingAndConfidenceFactors(t *testing.T) {
 	e := newEnv(t)
@@ -174,7 +174,7 @@ func TestPricingAndConfidenceFactors(t *testing.T) {
 		t.Errorf("workload confidence %v, min container confidence %v", d.Recommendation.Confidence, minConf)
 	}
 
-	// Rows before D-016 (pricing '{}' in the database) have no pricing field.
+	// Older rows (pricing '{}' in the database) have no pricing field.
 	if _, err := e.st.Pool.Exec(e.ctx, `UPDATE recommendations SET pricing = '{}'`); err != nil {
 		t.Fatal(err)
 	}

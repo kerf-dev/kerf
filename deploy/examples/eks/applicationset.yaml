@@ -14,7 +14,7 @@
 #                                                                  (kerf/values-hub.yaml, values-spoke.yaml)
 #   0.1.0                                                       the chart version (make release VERSION=)
 #
-# Argo CD itself, on every Argo CD instance that syncs workloads the agent patches (D-006), needs in
+# Argo CD itself, on every Argo CD instance that syncs workloads the agent patches, needs in
 # argocd-cm:
 #   resource.customizations.ignoreDifferences.all: |
 #     managedFieldsManagers:
@@ -77,7 +77,7 @@ spec:
         - repoURL: https://git.example.com/platform/kerf-config.git
           targetRevision: main
           ref: values
-      # D-006: fields other controllers own on these objects.
+      # Fields other controllers own on these objects.
       ignoreDifferences:
         # The agent rightsizes workloads with server-side apply (field manager kerf),
         # these components included when a policy covers this namespace.

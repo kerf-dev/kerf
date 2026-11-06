@@ -75,7 +75,7 @@ spec:
             {{- with $pr.additionalLabels }}{{ toYaml . | nindent 12 }}{{ end }}
           annotations:
             summary: "No Kerf hub replica is the leader"
-            description: "No hub replica holds the leader lock: the recommender, readiness checks and sweeps are not running (D-028)."
+            description: "No hub replica holds the leader lock: the recommender, readiness checks and sweeps are not running."
         {{- end }}
         {{- if $a.webhookErrors.enabled }}
         - alert: KerfWebhookErrors

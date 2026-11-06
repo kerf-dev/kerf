@@ -9,7 +9,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// TestMaintenance (WO-33, smoke tier): Admin -> Maintenance lists the hub replicas (one leader)
+// TestMaintenance (smoke tier): Admin -> Maintenance lists the hub replicas (one leader)
 // and, for both spokes, the agent's version and the webhook pods the agent found. A readiness
 // recheck makes each agent run its self-checks, which carry the webhook versions.
 func TestMaintenance(t *testing.T) {

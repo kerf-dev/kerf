@@ -88,7 +88,7 @@ function UserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
       open={open}
       onOpenChange={onOpenChange}
       title="Add a user"
-      description="A local user (D-023). OIDC sign-in comes later with the same roles."
+      description="A local user. OIDC sign-in comes later with the same roles."
       confirmLabel="Add user"
       onConfirm={(o) => {
         setTouched(true)
@@ -468,7 +468,7 @@ function TokenDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="New API token"
-      description="Machine tokens (D-012): agent tokens are per cluster; ui tokens are read-only; admin tokens can do everything an admin can; the pricing token only reaches the metrics bindings and the datasource query proxy (D-026)."
+      description="Machine tokens: agent tokens are per cluster; ui tokens are read-only; admin tokens can do everything an admin can; the pricing token only reaches the metrics bindings and the datasource query proxy."
       confirmLabel="Create token"
       confirmDisabled={bad}
       onConfirm={async (o) => onCreated((await write.mutateAsync(o)) as TokenCreated)}
@@ -479,7 +479,7 @@ function TokenDialog({
             <option value="ui">ui (read-only)</option>
             <option value="agent">agent</option>
             <option value="admin">admin</option>
-            <option value="pricing">pricing (pricing service, D-026)</option>
+            <option value="pricing">pricing (pricing service)</option>
           </NativeSelect>
         </Field>
         {f.role === 'agent' ? (

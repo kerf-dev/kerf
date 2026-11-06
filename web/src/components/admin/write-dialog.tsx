@@ -21,7 +21,7 @@ export interface WriteOptions {
  * - asks for the required `reason` (stored in the audit log);
  * - for clusters labelled `prod`, asks the user to type the cluster name;
  * - shows a version conflict (`412`) with a reload option instead of overwriting;
- * - offers admins the audited readiness override on `409 cluster_not_automation_ready` (D-025).
+ * - offers admins the audited readiness override on `409 cluster_not_automation_ready`.
  */
 export function WriteDialog({
   open,

@@ -14,7 +14,7 @@ const (
 	JVMHeapDefault    = "default"
 )
 
-// JVMContainer are the heap settings of one JVM container, as detected by the agent (WO-12).
+// JVMContainer are the heap settings of one JVM container, as detected by the agent.
 // Empty values mean "not set" (JVM default).
 type JVMContainer struct {
 	Name       string   `json:"name"`
@@ -30,7 +30,7 @@ type JVMContainer struct {
 	Unresolved []string `json:"unresolved,omitempty"`
 }
 
-// JVMExplanation explains how the JVM heap shaped a memory recommendation (WO-12).
+// JVMExplanation explains how the JVM heap shaped a memory recommendation.
 type JVMExplanation struct {
 	HeapSizing       string   `json:"heapSizing"`
 	DetectedBy       []string `json:"detectedBy"`

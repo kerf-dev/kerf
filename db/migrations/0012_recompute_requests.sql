@@ -1,4 +1,4 @@
--- WO-18a (D-028): "Recompute now" requests (POST /v1/admin/recompute) are stored here instead of in
+-- Hub HA: "Recompute now" requests (POST /v1/admin/recompute) are stored here instead of in
 -- the memory of the replica that got the request, so any hub replica can accept one and the leader
 -- runs it. Additive: nothing else changes.
 

@@ -8,14 +8,14 @@ import (
 )
 
 // Queries builds the canonical PromQL of the hub (docs/contracts/metrics.md, section 4). Every
-// query is plain PromQL that runs on Prometheus and VictoriaMetrics (D-003).
+// query is plain PromQL that runs on Prometheus and VictoriaMetrics.
 type Queries struct {
 	// Cluster restricts every selector to one cluster.
 	Cluster string
 	// RateWindow is the range of rate() and increase().
 	RateWindow time.Duration
-	// Binding selects the cluster's series in its datasource and relabels results to Cluster
-	// (D-025). nil = label cluster = Cluster, the queries before D-025 (byte-identical).
+	// Binding selects the cluster's series in its datasource and relabels results to Cluster.
+	// nil = label cluster = Cluster, the queries without a binding (byte-identical).
 	Binding *datasource.Matcher
 }
 
@@ -217,7 +217,7 @@ func (q Queries) HPAReplicaBounds(bound string, lookback time.Duration) string {
 		q.rel(lastOver(lookback)("kube_horizontalpodautoscaler_spec_"+bound+"_replicas"+q.sel())))
 }
 
-// HPAPeakReplicas returns the highest current replica count of each HPA over window (WO-11: an HPA
+// HPAPeakReplicas returns the highest current replica count of each HPA over window (an HPA
 // at maxReplicas is not coordinated).
 func (q Queries) HPAPeakReplicas(window time.Duration) string {
 	return fmt.Sprintf("max by (cluster, namespace, horizontalpodautoscaler) (%s)",
@@ -228,7 +228,7 @@ func (q Queries) HPAPeakReplicas(window time.Duration) string {
 // service exports its series to the hub's own metrics store (datasource local) with label cluster
 // = the registered name, so these queries ignore the binding and must run against local.
 func (q Queries) Pricing(metric string, lookback time.Duration) (avg, count string) {
-	// max by node first: a pricing rollout briefly exposes two series per node (WO-03 hand-over).
+	// max by node first: a pricing rollout briefly exposes two series per node.
 	inner := fmt.Sprintf("max by (cluster, node) (%s)", lastOver(lookback)(metric+datasource.DefaultMatcher(q.Cluster).Sel()))
 	return fmt.Sprintf("avg by (cluster) (%s)", inner), fmt.Sprintf("count by (cluster) (%s)", inner)
 }

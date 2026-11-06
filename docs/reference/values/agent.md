@@ -51,7 +51,7 @@ The values of the `agent` component chart. In the `kerf` chart they sit under `a
 | `freeze.now` | boolean | `false` |  |
 | `freeze.windows` | array | `[]` |  |
 | `readOnly` | boolean | `false` | eadOnly caps every mode at audit and drops every write verb on workloads and pods from the ClusterRole. Use it for clusters where every policy is audit. |
-| `configSync` | object | see the keys below | Hub-managed configuration: on every pull the agent fetches the cluster config, makes the RightsizingPolicy CRs labelled kerf.getkerf.dev/managed-by=hub equal to the hub's policies (never touching other CRs), applies the hub's pause flag like a cluster-wide freeze and applies approve-once grants. The last config is kept in the ConfigMap <fullname>-config-state, so a restart without the hub keeps the pause flag and approvals. With readOnly the CRs are not written; the inventory is still reported. Before downgrading the agent below, delete the hub CRs:<br>`kubectl delete rsp -l kerf.getkerf.dev/managed-by=hub` |
+| `configSync` | object | see the keys below | Hub-managed configuration: on every pull the agent fetches the cluster config, makes the RightsizingPolicy CRs labelled kerf.getkerf.dev/managed-by=hub equal to the hub's policies (never touching other CRs), applies the hub's pause flag like a cluster-wide freeze and applies approve-once grants. The last config is kept in the ConfigMap <fullname>-config-state, so a restart without the hub keeps the pause flag and approvals. With readOnly the CRs are not written; the inventory is still reported. Before downgrading the agent below the release that added hub-managed configuration, delete the hub CRs:<br>`kubectl delete rsp -l kerf.getkerf.dev/managed-by=hub` |
 | `configSync.enabled` | boolean | `true` |  |
 | `pullInterval` | string | `1m` |  |
 | `hubStaleAfter` | string | `5m` |  |
@@ -133,7 +133,7 @@ The values of the `agent` component chart. In the `kerf` chart they sit under `a
 | `affinity` | object | `{}` |  |
 | `metrics` | object | see the keys below |  |
 | `metrics.port` | integer | `8080` |  |
-| `metrics.scrape` | boolean | `true` | Adds prometheus.io/* scrape annotations to the metrics Service ( vmagent convention). |
+| `metrics.scrape` | boolean | `true` | Adds prometheus.io/* scrape annotations to the metrics Service (vmagent convention). |
 | `serviceMonitor` | object | see the keys below | Prometheus Operator ServiceMonitor or VictoriaMetrics VMServiceScrape for the metrics Service. |
 | `serviceMonitor.enabled` | boolean | `false` |  |
 | `serviceMonitor.kind` | string | `ServiceMonitor` | or VMServiceScrape |

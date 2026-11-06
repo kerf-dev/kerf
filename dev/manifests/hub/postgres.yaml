@@ -1,4 +1,4 @@
-# Postgres for hub state and audit log (D-009), ro-hub namespace `postgres`.
+# Postgres for hub state and audit log, ro-hub namespace `postgres`.
 # In-cluster: postgres.postgres.svc:5432   From the host: localhost:15432   (dev credentials: kerf / kerf)
 apiVersion: v1
 kind: Namespace

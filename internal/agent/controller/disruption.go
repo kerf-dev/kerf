@@ -1,6 +1,6 @@
 package controller
 
-// Single-replica protection and StatefulSet OnDelete handling (WO-13).
+// Single-replica protection and StatefulSet OnDelete handling.
 
 import (
 	"fmt"
@@ -137,7 +137,7 @@ func (w *run) rollOnDelete() (ctrl.Result, bool, error) {
 		wait = w.healthGate()
 	}
 	if wait == "" && w.frozen && phase == v1alpha1.PhaseApplied {
-		// A rollback's pod replacement goes on during a freeze; a change's does not (WO-10).
+		// A rollback's pod replacement goes on during a freeze; a change's does not.
 		wait = "inside a freeze window: replacing the remaining pods afterwards"
 	}
 	if wait == "" && w.rsr.Spec.Strategy == v1alpha1.StrategyDeferred {
@@ -187,7 +187,7 @@ func (w *run) rollOnDelete() (ctrl.Result, bool, error) {
 	return requeue, true, nil
 }
 
-// healthGate returns why the next pod must wait for the health watch (WO-08), or "".
+// healthGate returns why the next pod must wait for the health watch, or "".
 func (w *run) healthGate() string {
 	c := meta.FindStatusCondition(w.prev.Conditions, v1alpha1.ConditionHealthWatch)
 	if c == nil {

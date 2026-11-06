@@ -2,7 +2,7 @@
 //
 // The package is split in three layers:
 //   - Source (prom.go): reads inventory and per-container usage statistics from Prometheus or
-//     VictoriaMetrics with PromQL only (D-003).
+//     VictoriaMetrics with PromQL only.
 //   - Strategy (strategy.go, percentile.go): turns usage statistics into unrounded per-pod requests.
 //   - Recommend (recommend.go): applies risk rules, rounding, limit policy, confidence and savings,
 //     and produces the hub API shape.
@@ -61,7 +61,7 @@ type ContainerData struct {
 	Current  Current
 	// Used24h is the 24 h average usage summed over all pods (cores, bytes).
 	Used24hCPU, Used24hMemory float64
-	// JVM is set for JVM containers (WO-12).
+	// JVM is set for JVM containers.
 	JVM *JVMInfo
 }
 
@@ -79,7 +79,7 @@ type HPA struct {
 	PeakReplicas float64 `json:"peakReplicas,omitempty"`
 }
 
-// Coupled reports whether the HPA scales on CPU or memory utilization (D-011).
+// Coupled reports whether the HPA scales on CPU or memory utilization.
 func (h *HPA) Coupled() bool {
 	if h == nil {
 		return false
@@ -125,7 +125,7 @@ type Pricing struct {
 	Sources []hubapi.PricingRateSource `json:"sources,omitempty"`
 	// CURPeriod is the usage the effective (cur) rates were computed from; nil without cur nodes.
 	CURPeriod *hubapi.PricingPeriod `json:"curPeriod,omitempty"`
-	// Adjustment records the hub's pricing settings applied to the rates (WO-20); nil = none.
+	// Adjustment records the hub's pricing settings applied to the rates; nil = none.
 	// CPUCoreHour and MemoryGiBHour are then the adjusted rates.
 	Adjustment *PricingAdjustment `json:"adjustment,omitempty"`
 }

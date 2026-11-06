@@ -11,7 +11,7 @@ import (
 )
 
 // TestSourceBinder: a bound cluster's data queries go to its datasource with its matcher and are
-// relabelled; pricing stays on the hub's own store (D-025).
+// relabelled; pricing stays on the hub's own store.
 func TestSourceBinder(t *testing.T) {
 	cfg := DefaultConfig()
 	local := newFakeQuerier()

@@ -21,14 +21,14 @@ type Engine struct {
 	// longest of these and the default profile. nil means every configured profile.
 	ProfilesInUse func(cluster string) []string
 	// JVM returns the JVM containers the agent reported for a workload; reported is false when the
-	// agent never reported it (JVMs are then detected by image). nil: no agent reports (WO-12).
+	// agent never reported it (JVMs are then detected by image). nil: no agent reports.
 	JVM func(hubapi.WorkloadKey) (containers []hubapi.JVMContainer, reported bool)
 	// PricingFallback is asked for the cluster's rates when it has no pricing series at the end of
 	// the window (a backfill before the series existed, or a gap); ok false keeps the configured
-	// default rates (WO-04d).
+	// default rates.
 	PricingFallback func(ctx context.Context, cluster string, end time.Time) (p Pricing, ok bool)
 	// AdjustPricing applies the hub's pricing settings (discounts, fixed rates) to the cluster's
-	// rates before savings are computed (WO-20); nil leaves them unchanged.
+	// rates before savings are computed; nil leaves them unchanged.
 	AdjustPricing func(cluster string, p Pricing) Pricing
 	// GPU holds the thresholds of the GPU view; the zero value means DefaultGPUConfig.
 	GPU GPUConfig

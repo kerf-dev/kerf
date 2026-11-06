@@ -1,5 +1,5 @@
 # Throttled: wants a full core but is capped at 200m, so most CFS periods are throttled.
-# Guardrail case: must never be decreased (WO-06/WO-09).
+# Guardrail case: must never be decreased.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

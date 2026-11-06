@@ -273,7 +273,7 @@ export default function OpportunitiesPage() {
   const query = { ...filterQuery, limit: s.size, ...(cursor ? { continue: cursor } : {}) }
   const list = useWorkloads(query)
   const clusters = useClusters()
-  // Facet options with counts from GET /v1/workloads/facets (D-016). Each facet is counted without its
+  // Facet options with counts from GET /v1/workloads/facets. Each facet is counted without its
   // own filter, so a multi-select keeps showing the other values. Hubs without the endpoint fall back
   // to static values and the namespaces of one large page.
   const { sort: _sort, order: _order, ...facetQuery } = filterQuery

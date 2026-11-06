@@ -64,7 +64,7 @@ export function HistoryCard({ id }: { id: string }) {
         time: run.latest.time,
         run,
       })),
-      // Overrides and approvals made in the admin area (D-022, D-024).
+      // Overrides and approvals made in the admin area.
       ...(history.data.configChanges ?? []).map((change) => ({
         kind: 'config' as const,
         time: change.time,

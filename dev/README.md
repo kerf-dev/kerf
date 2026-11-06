@@ -1,6 +1,6 @@
 # Local dev environment (k3d)
 
-Three k3s v1.35 clusters on one Docker network (`ro-dev`) that stand in for the EKS fleet (D-010):
+Three k3s v1.35 clusters on one Docker network (`ro-dev`) that stand in for the EKS fleet:
 
 | Cluster | Role | Runs |
 |---|---|---|
@@ -31,7 +31,7 @@ The root `Makefile` includes `make/*.mk`; until it exists use `make -f make/dev.
 | `make dev-reset` | `dev-down` + `dev-up`. |
 | `make dev-purge` | `dev-down` and also delete the docker.io pull cache and the `ro-dev` network. |
 | `make dev-status` | Pod counts per cluster and the URLs below. |
-| `make dev-verify` | WO-01 checks: both spokes' cAdvisor/KSM series in the hub, no failing pods (except `memory-leak`), Argo CD synced, Grafana healthy. |
+| `make dev-verify` | Fleet checks: both spokes' cAdvisor/KSM series in the hub, no failing pods (except `memory-leak`), Argo CD synced, Grafana healthy. |
 | `make dev-dashboards` | Re-provision Grafana from `dashboards/` (Tilt resource `dashboards` does this on change). |
 | `make dev-workloads` | Push `dev/workloads/` to the spokes (Tilt resource `workloads` does this on change). |
 | `tilt up [resource...]` | Inner loop, see below. |
@@ -44,8 +44,8 @@ The root `Makefile` includes `make/*.mk`; until it exists use `make -f make/dev.
 | Grafana | http://localhost:13000 (anonymous admin, or `admin`/`admin`) | `grafana.monitoring.svc:80` (hub) |
 | Postgres | `postgres://kerf:kerf@localhost:15432/kerf?sslmode=disable` | `postgres.postgres.svc:5432` (hub), Secret `postgres/postgres` has `DATABASE_URL` |
 | Dex (OIDC provider for "Sign in with Dex") | issuer http://localhost:15556/dex; users `dex-admin@example.com`, `dex-operator@`, `dex-viewer@`, `dex-nobody@` (password `ro-dev-dex-<name>-pass`; groups map to admin, operator, viewer, none) | `dex.dex.svc.cluster.local:5556` (the hub's `auth.oidc.connectAddress`) |
-| Hub API (reserved for WO-04, NodePort 30080 on the hub) | http://localhost:18080 | `hub-api.hub.svc:8080` (spokes) |
-| Web UI (WO-14, NodePort 30090 on the hub) | http://localhost:19090 | – |
+| Hub API (NodePort 30080 on the hub) | http://localhost:18080 | `hub-api.hub.svc:8080` (spokes) |
+| Web UI (NodePort 30090 on the hub) | http://localhost:19090 | – |
 | Argo CD (spoke-1) | http://localhost:18090 (`admin`/`admin123`) | `argocd-server.argocd.svc` |
 | Git server (spoke-1) | `git://localhost:19418/workloads.git` | `git://git-server.git-server.svc.cluster.local/workloads.git` |
 | Image registry | push `localhost:5005/<repo>:<tag>` | pull `k3d-ro-registry:5005/<repo>:<tag>` |
@@ -60,7 +60,7 @@ pass `--context`. The WO verification also works through a port-forward:
 Every spoke has a namespace `hub` with selector-less Services (`victoria-metrics`, `hub-api`) whose
 EndpointSlices point at the hub node's IP on `ro-dev` (k3d keeps node IPs stable across restarts;
 `make dev-up` refreshes them). Spoke components use these stable names the way they would use a real
-hub endpoint in EKS. Spoke → hub only; the hub never talks to the spokes' API servers (D-004).
+hub endpoint in EKS. Spoke → hub only; the hub never talks to the spokes' API servers.
 
 ## Metrics
 
@@ -73,10 +73,10 @@ vmagent on each spoke scrapes every 30 s and remote-writes to the hub with the e
   `karpenter.sh/capacity-type`, `topology.kubernetes.io/region|zone`, and the `app` label on pods and workloads.
 - `annotated-services` – any Service annotated `prometheus.io/scrape: "true"` (+ `prometheus.io/port`,
   optional `prometheus.io/path`, `prometheus.io/scheme`), with `honor_labels: true`. This is how the agent
-  and webhook (WO-06/07) get scraped: annotate the chart's Service, nothing to change in `dev/`.
+  and webhook get scraped: annotate the chart's Service, nothing to change in `dev/`.
 
 The hub runs its own vmagent with only the `annotated-services` job and **no** external `cluster` label,
-writing to the local VictoriaMetrics. Pricing and the hub (WO-03/04) get scraped the same way, and
+writing to the local VictoriaMetrics. Pricing and the hub get scraped the same way, and
 `honor_labels: true` keeps the `cluster` label their series carry (`docs/contracts/metrics.md`).
 VictoriaMetrics' own Service is annotated, so `up{job="annotated-services"}` is non-empty from the start.
 Discovery metadata goes to `kubernetes_namespace` / `kubernetes_service` / `kubernetes_pod`, never to
@@ -85,7 +85,7 @@ Discovery metadata goes to `kubernetes_namespace` / `kubernetes_service` / `kube
 Fake EKS/Karpenter node labels: spoke-1 `m6i.xlarge` / `on-demand` / `eu-west-1a`, spoke-2 `c6a.2xlarge` / `spot` / `eu-west-1b`.
 
 VictoriaMetrics retention is 35 days: it rejects samples older than the retention period, and the
-synthetic backfill (WO-02) writes 30 days.
+synthetic backfill writes 30 days.
 
 ## Grafana dashboards
 
@@ -97,7 +97,7 @@ VictoriaMetrics (Prometheus type, uid `victoriametrics`) as the default datasour
 
 ## Argo CD and the git server (spoke-1)
 
-Argo CD is installed without dex, notifications or the ApplicationSet controller. Per D-006 it ignores
+Argo CD is installed without dex, notifications or the ApplicationSet controller. It ignores
 fields owned by field manager `kerf`, globally (`resource.customizations.ignoreDifferences.all`
 in `argocd-cm`) and on the Application `argocd/workloads` (`ignoreDifferences.managedFieldsManagers`
 plus `RespectIgnoreDifferences=true`, automated sync with prune and self-heal, 60 s reconciliation).

@@ -1,4 +1,4 @@
-# WO-18e: staging install that follows docs/install/eks.md on two fresh k3d clusters
+# Staging install that follows docs/install/eks.md on two fresh k3d clusters
 # (ro-stg-hub, ro-stg-spoke). AWS pieces are replaced by local stand-ins; see test/install/lib.sh.
 # Uses about 3 GiB of memory next to the dev fleet.
 
@@ -16,7 +16,7 @@ install-staging: ## Staging: clusters, prerequisites, release STAGING_VERSION, t
 install-staging-verify: ## Staging: leader, HTTPS, AutomationReady, one auto-patch, hub failover.
 	$(STAGING) verify
 
-install-staging-wizard: ## Staging (WO-18f): a third cluster ro-stg-spoke-2, registered via the API and installed with the wizard's Helm snippet.
+install-staging-wizard: ## Staging: a third cluster ro-stg-spoke-2, registered via the API and installed with the wizard's Helm snippet.
 	$(STAGING) wizard
 
 install-staging-upgrade: ## Staging: upgrade to STAGING_UPGRADE_VERSION (released first) with a no-5xx probe.

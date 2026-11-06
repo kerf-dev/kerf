@@ -1,5 +1,5 @@
 /**
- * Admin-area state of the mock hub (D-022..D-025, docs/contracts/admin.md): users, tokens, settings,
+ * Admin-area state of the mock hub (docs/contracts/admin.md): users, tokens, settings,
  * hub policies and their versions, Git policies (inventory), cluster metadata and automation,
  * datasources, readiness, approvals and the config audit. Seeded consistently with `data.ts`: the
  * layering below (admin.md §2) reproduces the modes the fleet was generated with.
@@ -90,7 +90,7 @@ export interface ApprovalRec extends Approval {
   autoConsume: boolean
 }
 
-/** Component versions and the update check (Admin → Maintenance, WO-33). */
+/** Component versions and the update check (Admin → Maintenance). */
 export interface MaintenanceModel {
   hubVersion: string
   chartVersion: string

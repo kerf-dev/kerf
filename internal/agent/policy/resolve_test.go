@@ -46,7 +46,7 @@ const (
 	srcAnn     = v1alpha1.ModeSourceAnnotation
 )
 
-// TestPrecedenceMatrix covers D-005: global < cluster default < policy < annotation, per resource.
+// TestPrecedenceMatrix covers the precedence order: global < cluster default < policy < annotation, per resource.
 func TestPrecedenceMatrix(t *testing.T) {
 	web := Workload{Namespace: "shop", Kind: v1alpha1.KindDeployment, Name: "web", Labels: map[string]string{"tier": "web"}}
 	all := v1alpha1.PolicySelector{}
@@ -215,7 +215,7 @@ func hubPol(p v1alpha1.RightsizingPolicy, typ string) v1alpha1.RightsizingPolicy
 	return p
 }
 
-// TestHubLayers covers the D-022 layering: hub defaults and overrides are layers around the
+// TestHubLayers covers the hub layering: hub defaults and overrides are layers around the
 // winning policy, not competitors.
 func TestHubLayers(t *testing.T) {
 	web := Workload{Namespace: "shop", Kind: v1alpha1.KindDeployment, Name: "web"}

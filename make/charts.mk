@@ -1,4 +1,4 @@
-# Component Helm charts (WO-18b): lint, render checks and copies kept in sync. Included by the root Makefile.
+# Component Helm charts: lint, render checks and copies kept in sync. Included by the root Makefile.
 
 CHARTS_DIR          := deploy/charts
 CHARTS              := hub web pricing agent webhook
@@ -19,7 +19,7 @@ CHART_REQUIRED_pricing :=
 CHART_REQUIRED_agent   := --set-string clusterName=lint
 CHART_REQUIRED_webhook := --set-string clusterName=lint
 
-# The umbrella chart (WO-18d): rendered per mode with the values each mode requires ("defaults") and
+# The umbrella chart: rendered per mode with the values each mode requires ("defaults") and
 # with the EKS examples (deploy/examples/eks).
 UMBRELLA            := kerf
 UMBRELLA_DIR        := $(CHARTS_DIR)/$(UMBRELLA)
@@ -49,7 +49,7 @@ CHART_DEV_pricing := pricing -f values-dev.yaml --set-string clusterName=ro-hub
 CHART_DEV_agent   := agent   -f values-dev.yaml -f values-ro-spoke-1.yaml --set-string clusterName=ro-spoke-1 --include-crds
 CHART_DEV_webhook := webhook -f values-dev.yaml --set-string clusterName=ro-spoke-1 --include-crds
 
-##@ Charts (WO-18b)
+##@ Charts
 
 .PHONY: charts-sync
 charts-sync: ## Copy api/crds, dashboards/*.json and the shared _common.tpl into the charts.
@@ -126,7 +126,7 @@ charts-lint-umbrella: kubeconform yq ## helm lint + kubeconform of the umbrella 
 	  -schema-location default -schema-location '$(CRDS_CATALOG)' \
 	  $(UMBRELLA_EXAMPLES)/applicationset.yaml $(UMBRELLA_EXAMPLES)/argocd-ecr-repo.yaml $(UMBRELLA_EXAMPLES)/external-secrets/*.yaml; \
 	for f in $(UMBRELLA_EXAMPLES)/iam/*.json; do jq -e '.Version and .Statement' $$f >/dev/null || { echo "$$f: not an IAM policy"; exit 1; }; done; \
-	echo "== the cluster wizard's install snippets (internal/hub/install, WO-18f) with this chart"; \
+	echo "== the cluster wizard's install snippets (internal/hub/install) with this chart"; \
 	mkdir -p $(INSTALL_SNIPPETS); rm -f $(INSTALL_SNIPPETS)/*.yaml; \
 	INSTALL_TEST_REQUIRE_HELM=1 INSTALL_SNIPPET_DIR=$(abspath $(INSTALL_SNIPPETS)) $(GO) test -count=1 \
 	  -run 'TestSnippetsRenderWithChart|TestValuesMatchSpokeExample|TestInstallConfigFromCharts' ./internal/hub/install ./internal/hub; \

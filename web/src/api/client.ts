@@ -6,7 +6,7 @@ import type { Problem } from './types'
  * Typed hub client. The browser always talks to its own origin: in production nginx proxies `/v1/`
  * to the hub; in `live` dev mode Vite does the same; in `mock` mode MSW answers.
  *
- * Authentication (D-023): after `POST /v1/auth/login` the hub sets the HttpOnly `kerf_session` cookie,
+ * Authentication: after `POST /v1/auth/login` the hub sets the HttpOnly `kerf_session` cookie,
  * which the browser sends with every same-origin request; writes add the `X-CSRF-Token` from
  * `GET /v1/me` (see `setCsrfToken`). Without a session, nginx may add the read-only `ui` bearer token
  * (anonymous viewer). The browser never holds a bearer token.

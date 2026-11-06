@@ -173,7 +173,7 @@ export interface paths {
       cookie?: never
     }
     /**
-     * Filter values with workload counts (D-016)
+     * Filter values with workload counts
      * @description Counts of live workloads per filter value, for building the filters of the workload list.
      *     Like every read, only the workloads of the caller's teams are counted (docs/teams.md).
      *     Takes the same filters as `GET /v1/workloads`. Each facet is counted with every filter
@@ -373,7 +373,7 @@ export interface paths {
     put?: never
     /**
      * Run the recommender now
-     * @description Queues a recommender run (D-019) for one cluster (`cluster`) or for all registered
+     * @description Queues a recommender run for one cluster (`cluster`) or for all registered
      *     clusters, and returns at once with the run id. The run starts as soon as no other run is
      *     in progress; it uses usage data up to the last full recommender step (5 minutes by
      *     default) before it starts, like a scheduled run. A request for the same scope that
@@ -402,7 +402,7 @@ export interface paths {
       cookie?: never
     }
     /**
-     * Hub-managed configuration of a cluster (D-022)
+     * Hub-managed configuration of a cluster
      * @description What the agent materialises on its cluster (`docs/contracts/admin.md`):
      *     - `policies`: every hub-managed policy for this cluster, as `RightsizingPolicy` specs. The
      *       agent creates, updates and deletes `RightsizingPolicy` CRs labelled
@@ -411,7 +411,7 @@ export interface paths {
      *       never touched. With `policySource: git` the list is empty.
      *     - `flags`: pause. While `paused`, the agent applies nothing new (event `blocked`, reason
      *       `Paused`); rollbacks still run.
-     *     - `approvals`: approve-once grants (D-024).
+     *     - `approvals`: approve-once grants.
      *
      *     The agent pulls it on every pull interval. Conditional requests: the response carries an
      *     `ETag` (equal to `configVersion` in quotes); `If-None-Match` returns `304` when nothing
@@ -436,7 +436,7 @@ export interface paths {
     get?: never
     put?: never
     /**
-     * Log in with a local user (D-023)
+     * Log in with a local user
      * @description Checks the username and password and starts a session. The response sets the session
      *     cookie `kerf_session` (`HttpOnly; SameSite=Strict; Path=/`, plus `Secure` behind TLS) and
      *     returns the CSRF token the client sends as `X-CSRF-Token` on every write made with the
@@ -703,7 +703,7 @@ export interface paths {
      *     the CRD (code `invalid_policy`, `detail` lists the fields). Records a `config_changed`
      *     audit event (`PolicyCreated`).
      *     Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
-     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true`.
      */
     post: operations['createPolicy']
     delete?: never
@@ -731,7 +731,7 @@ export interface paths {
      * @description Stores a new version; `type` cannot change (`400`, code `type_immutable`). Agents pick the
      *     change up on their next config pull. Records `PolicyUpdated`.
      *     Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
-     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true`.
      */
     put: operations['updatePolicy']
     post?: never
@@ -784,7 +784,7 @@ export interface paths {
      * @description Stores a new version whose content equals version `version` (operation `revert`); reverting
      *     to a version of a deleted policy undeletes it. Records `PolicyReverted`.
      *     A revert that newly enables `auto-patch` on a cluster that is not `AutomationReady` answers
-     *     `409` `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+     *     `409` `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true`.
      */
     post: operations['revertPolicy']
     delete?: never
@@ -953,7 +953,7 @@ export interface paths {
      *     (Git policies), the agent's reported cluster defaults and the workload's annotations and
      *     labels as last reported. Layers from lowest to highest precedence: built-in defaults →
      *     global default → cluster default (chart value) → cluster default (hub) → the winning
-     *     policy (highest priority, ties by name) → workload override (hub) → annotations (D-005).
+     *     policy (highest priority, ties by name) → workload override (hub) → annotations.
      *     `fields` lists every field with its value and the layer that set it. `agentModes` is what
      *     the agent last reported, so the UI can show a difference (e.g. before the next pull).
      */
@@ -988,7 +988,7 @@ export interface paths {
      *     code `admin_required`). "Exclude" is an override with both modes `off`. Records
      *     `OverrideSet`.
      *     Setting a mode to `auto-patch` for a cluster that is not `AutomationReady` gives `409`, code
-     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true` (D-025).
+     *     `cluster_not_automation_ready`, unless an admin sends `overrideReadiness: true`.
      */
     put: operations['putWorkloadOverride']
     post?: never
@@ -1015,7 +1015,7 @@ export interface paths {
     get?: never
     put?: never
     /**
-     * Approve the current recommendation once (D-024)
+     * Approve the current recommendation once
      * @description Records an approval for `recommendationID`, which must be the workload's latest
      *     recommendation (`409`, code `recommendation_stale`). Only for a workload whose effective
      *     mode for at least one resource is `audit` (`409`, code `not_in_audit`). The agent applies
@@ -1023,7 +1023,7 @@ export interface paths {
      *     `auto-patch`, and emits `applied` with reason `ApprovedOnce`; the workload stays in
      *     `audit`. A new approval replaces an earlier unconsumed one. Records `WorkloadApproved`.
      *     On a cluster that is not `AutomationReady`: `409`, code `cluster_not_automation_ready`,
-     *     unless an admin sends `overrideReadiness: true` (D-025).
+     *     unless an admin sends `overrideReadiness: true`.
      */
     post: operations['approveRecommendation']
     delete?: never
@@ -1243,7 +1243,7 @@ export interface paths {
       cookie?: never
     }
     /**
-     * Metrics datasources (D-025)
+     * Metrics datasources
      * @description Includes the built-in `local` datasource. Secrets are never returned.
      */
     get: operations['listDatasources']
@@ -1325,7 +1325,7 @@ export interface paths {
     }
     /**
      * Metrics binding of every registered cluster (pricing service)
-     * @description The binding of every registered, not deleted cluster (D-025, D-026). `bound` is false for a
+     * @description The binding of every registered, not deleted cluster. `bound` is false for a
      *     cluster without a stored binding: its metrics are in datasource `local` with label `cluster`
      *     = its name. Never contains datasource secrets. An `admin` token may call it too.
      */
@@ -1351,7 +1351,7 @@ export interface paths {
     /**
      * Instant PromQL query against a datasource (pricing service)
      * @description Runs the query against the datasource with the datasource's auth and headers, which never
-     *     leave the hub (D-026), and returns the datasource's response unchanged (the Prometheus
+     *     leave the hub, and returns the datasource's response unchanged (the Prometheus
      *     HTTP API `/api/v1/query` format, including its errors and status code). Only `query`,
      *     `time` and `timeout` are forwarded. POST with a form body is accepted too.
      */
@@ -1401,7 +1401,7 @@ export interface paths {
       cookie?: never
     }
     /**
-     * Readiness state and check results of a cluster (D-025)
+     * Readiness state and check results of a cluster
      * @description The latest result of every check (hub metrics checks and agent self-checks), the state they
      *     imply and what blocks the next state. Checks never run yet have status `unknown`.
      */
@@ -1505,7 +1505,7 @@ export interface paths {
      * @description Rendered for this cluster and hub URL. The token value is never included: the snippet
      *     references the Secret `kerf-agent-token` (key `token`); the value is shown
      *     once when the token is created. Also returns the Argo CD `ignoreDifferences` snippet for
-     *     `argocd-cm` (D-006).
+     *     `argocd-cm`.
      */
     get: operations['getClusterInstall']
     put?: never
@@ -1525,7 +1525,7 @@ export interface paths {
     }
     /**
      * Component versions and the update check
-     * @description The versions of every Kerf component the hub knows of (WO-33): each hub replica (seen in the
+     * @description The versions of every Kerf component the hub knows of: each hub replica (seen in the
      *     last 10 minutes), the pricing service (reported with its requests to the hub, seen in the last
      *     hour), and per registered cluster the agent (status batch) and webhook pods (agent self-check).
      *     `compat` compares each with the hub version of the replica that answered. `update` is the
@@ -1786,10 +1786,10 @@ export interface components {
     Phase: 'Pending' | 'Applying' | 'Applied' | 'Blocked' | 'RolledBack' | 'Released' | 'Deferred'
     /**
      * @description `throttled`, `oom-killed`: the workload is under-provisioned; the recommendation is never
-     *     a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only
-     *     (D-011). `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
+     *     a decrease for that resource. `hpa-coupled`: CPU/memory-utilization HPA, audit-only.
+     *     `low-confidence`: confidence below the hub threshold. `jvm-fixed-heap`: a JVM
      *     container with a fixed maximum heap (`-Xmx` / `-XX:MaxHeapSize`); its memory is audit-only,
-     *     the agent never changes it (WO-12).
+     *     the agent never changes it.
      * @enum {string}
      */
     RiskFlag:
@@ -1977,7 +1977,7 @@ export interface components {
       gpu?: components['schemas']['GPUUsage']
     }
     /**
-     * @description HPA coordination (WO-11, lifts D-011). Present when the workload has a CPU- or
+     * @description HPA coordination. Present when the workload has a CPU- or
      *     memory-utilization HPA (risk flag `hpa-coupled`). The HPA's utilization is the pod's usage
      *     over the sum of its containers' requests of `metric`, so changing those requests changes
      *     when it scales. With `recommendedTarget`, the recommended requests of `metric` and that
@@ -2007,7 +2007,7 @@ export interface components {
       skipReason?: 'max-replicas-reached' | 'unsupported-metrics' | 'missing-request' | 'target-out-of-bounds'
     }
     /**
-     * @description Rates used for `monthlySavingsUSD` (D-016). `source` is `metrics` when they come from the
+     * @description Rates used for `monthlySavingsUSD`. `source` is `metrics` when they come from the
      *     pricing series (`kerf_*_hourly_cost_usd`, average over the cluster's nodes) and `default` when
      *     the cluster had no pricing series and the hub's configured fallback rate was used.
      *     Absent on recommendations computed before the field existed.
@@ -2058,7 +2058,7 @@ export interface components {
       /** @description Winning RightsizingPolicy name; empty when none matched. */
       policy?: string
       /**
-       * @description Name of the hub workload-override policy layered on top of `policy` (D-022), if any.
+       * @description Name of the hub workload-override policy layered on top of `policy`, if any.
        *     Modes it sets are reported with source `policy`.
        */
       override?: string
@@ -2080,13 +2080,13 @@ export interface components {
       appliedAt?: string
       /**
        * Format: date-time
-       * @description When the next maintenance window opens; set while the phase is `Deferred` (WO-10).
+       * @description When the next maintenance window opens; set while the phase is `Deferred`.
        */
       nextWindow?: string
       /** Format: date-time */
       observedAt?: string
       /**
-       * @description JVM containers detected by the agent with their heap settings (WO-12). Absent when JVM
+       * @description JVM containers detected by the agent with their heap settings. Absent when JVM
        *     detection is off (`RightsizingPolicy.spec.jvm.detect: false`) or no container is a JVM.
        */
       jvm?: components['schemas']['JVMContainer'][]
@@ -2125,7 +2125,7 @@ export interface components {
     WorkloadStatusBatch: {
       agentVersion?: string
       /**
-       * @description `configVersion` of the last cluster config the agent materialised (D-022). Absent for
+       * @description `configVersion` of the last cluster config the agent materialised. Absent for
        *     agents without config pull.
        */
       configVersion?: string
@@ -2136,7 +2136,7 @@ export interface components {
        */
       policyInventory?: components['schemas']['PolicyInventoryItem'][]
       /**
-       * @description Agent self-check of its RBAC per capability (D-025). Absent = unchanged; present = all
+       * @description Agent self-check of its RBAC per capability. Absent = unchanged; present = all
        *     capabilities.
        */
       capabilities?: components['schemas']['AgentCapability'][]
@@ -2147,7 +2147,7 @@ export interface components {
        */
       checks?: components['schemas']['ReadinessCheck'][]
       /**
-       * @description Kerf components the agent found in its cluster (WO-33, today the webhook pods). Sent with
+       * @description Kerf components the agent found in its cluster (today the webhook pods). Sent with
        *     the self-checks; absent = unchanged, an empty array = none running.
        */
       components?: components['schemas']['AgentComponent'][]
@@ -2230,7 +2230,7 @@ export interface components {
       jvm?: components['schemas']['JVMExplanation']
     }
     /**
-     * @description How the JVM heap shaped the memory recommendation (WO-12), only on `memory` of JVM
+     * @description How the JVM heap shaped the memory recommendation, only on `memory` of JVM
      *     containers. `heapSizing`: `fixed` (`-Xmx`; memory audit-only, flag `jvm-fixed-heap`),
      *     `percentage` (`-XX:MaxRAMPercentage`, max heap follows the memory limit), `default` (no heap
      *     flags: the JVM default of 25 % of the limit). `heapNeed` is the observed peak working set
@@ -2270,7 +2270,7 @@ export interface components {
       weight: components['schemas']['Decimal']
     }
     /**
-     * @description How this container's confidence was computed (D-016): `confidence` = sum of score x weight.
+     * @description How this container's confidence was computed: `confidence` = sum of score x weight.
      *     The workload's `confidence` is the minimum over its containers.
      *     `coverage`: fraction of the window's steps with usage data. `samples`: number of samples
      *     relative to the hub's full-confidence sample count. `variance`: stability of CPU usage,
@@ -2352,7 +2352,7 @@ export interface components {
       environment?: components['schemas']['Environment']
       owner?: string
       policySource?: components['schemas']['ClusterPolicySource']
-      /** @description Automation paused (cluster or fleet, D-022). */
+      /** @description Automation paused (cluster or fleet). */
       paused?: boolean
       /** @description The cluster's own pause state. */
       automation?: components['schemas']['Automation']
@@ -2431,9 +2431,9 @@ export interface components {
       recommendation?: components['schemas']['WorkloadRecommendation']
       /** @description Latest status reported by the agent. Absent if never reported. */
       status?: components['schemas']['WorkloadStatus']
-      /** @description The latest approve-once grant (D-024), if any. */
+      /** @description The latest approve-once grant, if any. */
       approval?: components['schemas']['Approval']
-      /** @description The workload's hub override policy (D-022), if any. */
+      /** @description The workload's hub override policy, if any. */
       override?: components['schemas']['AdminPolicy']
     }
     /** @description [unix seconds, value] */
@@ -2698,7 +2698,7 @@ export interface components {
       displayName: string
     }
     /**
-     * @description Role of a local user (D-023). `viewer`: everything the read-only UI shows. `operator`:
+     * @description Role of a local user. `viewer`: everything the read-only UI shows. `operator`:
      *     additionally workload actions (override, exclude, approve-once) and pausing automation.
      *     `admin`: additionally defaults, policies, settings, clusters, tokens and users. Each role
      *     includes the ones before it.
@@ -2706,7 +2706,7 @@ export interface components {
      */
     UserRole: 'viewer' | 'operator' | 'admin'
     /**
-     * @description Role of an API (machine) token (D-012). `pricing` (D-026) is the pricing service: only
+     * @description Role of an API (machine) token. `pricing` is the pricing service: only
      *     `/v1/internal/*` (metrics bindings and the datasource query proxy); no cluster.
      * @enum {string}
      */
@@ -2911,7 +2911,7 @@ export interface components {
     }
     /** @enum {string} */
     SettingsSection: 'recommender' | 'pricing'
-    /** @description One recommender profile (WO-04). Fractions are 0.15 for +15 %. */
+    /** @description One recommender profile. Fractions are 0.15 for +15 %. */
     RecommenderProfileSettings: {
       name: components['schemas']['Profile']
       window: components['schemas']['Duration']
@@ -3020,12 +3020,12 @@ export interface components {
      * @description `global-default` (`ro-global-defaults`, priority 0, every cluster), `cluster-default`
      *     (`ro-cluster-defaults`, priority 10, one cluster), `policy` (named, priority 1-899999),
      *     `workload-override` (`ro-override-…`, priority 900000, one workload). The agent layers the
-     *     default types under the winning policy and the override above it (D-022).
+     *     default types under the winning policy and the override above it.
      * @enum {string}
      */
     HubPolicyType: 'global-default' | 'cluster-default' | 'policy' | 'workload-override'
     /**
-     * @description Where a cluster's policies come from (D-022). `hub`: hub-managed policies only (Git CRs are
+     * @description Where a cluster's policies come from. `hub`: hub-managed policies only (Git CRs are
      *     still reported). `git`: no hub-managed policies are sent and the admin pages are read-only
      *     for that cluster. `both`: both.
      * @enum {string}
@@ -3139,7 +3139,7 @@ export interface components {
       clusters?: components['schemas']['ClusterName'][]
       spec: components['schemas']['RightsizingPolicySpec']
       /**
-       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady`;
        *     audited with the change.
        */
       overrideReadiness?: boolean
@@ -3209,7 +3209,7 @@ export interface components {
       version: number
       reason: components['schemas']['ReasonText']
       /**
-       * @description Admin only (D-025): allow a revert that enables `auto-patch` on clusters that are not
+       * @description Admin only: allow a revert that enables `auto-patch` on clusters that are not
        *     `AutomationReady`. Without it such a revert answers `409 cluster_not_automation_ready`.
        */
       overrideReadiness?: boolean
@@ -3457,7 +3457,7 @@ export interface components {
        */
       resumeAt?: string
       /**
-       * @description A readiness re-check is pending (D-025): the agent re-runs its self-checks if
+       * @description A readiness re-check is pending: the agent re-runs its self-checks if
        *     `recheckRequestedAt` is newer than its last run, and reports them in the next batch.
        */
       recheck?: boolean
@@ -3465,7 +3465,7 @@ export interface components {
       recheckRequestedAt?: string
     }
     /**
-     * @description An approve-once grant (D-024). The agent applies the recommendation `recommendationID` of the
+     * @description An approve-once grant. The agent applies the recommendation `recommendationID` of the
      *     workload once, treating its `audit` resources as `auto-patch`, with every guardrail, if that
      *     is still the latest recommendation and `expiresAt` has not passed. It then emits `applied`
      *     with reason `ApprovedOnce` and `details.approvalId`; the hub marks the approval consumed and
@@ -3494,7 +3494,7 @@ export interface components {
        */
       expiresAt?: string
       /**
-       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady`;
        *     audited with the change.
        */
       overrideReadiness?: boolean
@@ -3532,7 +3532,7 @@ export interface components {
       description?: string
       spec: components['schemas']['RightsizingPolicySpec']
       /**
-       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady` (D-025);
+       * @description Admin only: allow `auto-patch` on clusters that are not `AutomationReady`;
        *     audited with the change.
        */
       overrideReadiness?: boolean
@@ -3542,7 +3542,7 @@ export interface components {
      * @description A precedence layer, lowest first: `built-in` (documented global defaults), `global-default`
      *     (hub `ro-global-defaults`), `cluster-default-chart` (agent chart value `clusterDefaults`),
      *     `cluster-default` (hub `ro-cluster-defaults`), `policy` (the winning RightsizingPolicy, hub
-     *     or Git), `workload-override` (hub), `annotation` (workload annotations, D-005).
+     *     or Git), `workload-override` (hub), `annotation` (workload annotations).
      * @enum {string}
      */
     LayerSource:
@@ -3787,7 +3787,7 @@ export interface components {
       cadvisor?: string[]
       kubeStateMetrics?: string[]
     }
-    /** @description A cluster's metrics binding for the pricing service (D-026). */
+    /** @description A cluster's metrics binding for the pricing service. */
     ClusterMetricsBinding: {
       cluster: string
       binding: components['schemas']['MetricsBinding']
@@ -3818,7 +3818,7 @@ export interface components {
       [key: string]: unknown
     }
     /**
-     * @description Where a cluster's metrics are (D-025). Every query uses
+     * @description Where a cluster's metrics are. Every query uses
      *     `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the
      *     registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster
      *     Prometheus). Defaults: `local`, `cluster`, the cluster name.
@@ -3978,12 +3978,12 @@ export interface components {
        * @example application.yaml
        */
       filename: string
-      /** @description Snippet for `argocd-cm` so Argo CD ignores fields owned by `kerf` (D-006). */
+      /** @description Snippet for `argocd-cm` so Argo CD ignores fields owned by `kerf`. */
       argocdIgnoreDifferences: string
       notes?: string[]
     }
     /**
-     * @description A Kerf component the agent found running in its cluster (WO-33). Today: the pods behind the
+     * @description A Kerf component the agent found running in its cluster. Today: the pods behind the
      *     webhook Service (`component: webhook`), with the tag of their `webhook` container image as
      *     `version` (`sha256:<12 hex>` for an image pinned only by digest).
      */

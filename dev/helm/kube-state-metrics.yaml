@@ -11,7 +11,7 @@ resources:
   limits:
     memory: 128Mi
 
-# Expose the node labels pricing (WO-03) needs on kube_node_labels, and the workload `app` label.
+# Expose the node labels pricing needs on kube_node_labels, and the workload `app` label.
 metricLabelsAllowlist:
   - nodes=[node.kubernetes.io/instance-type,karpenter.sh/capacity-type,topology.kubernetes.io/region,topology.kubernetes.io/zone]
   - pods=[app]

@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils'
 import { workloadPath } from '@/lib/workload-id'
 import { ResourceDiff } from './workload/history'
 
-// Everything by default: with D-017 agents emit `skipped` once per (workload, reason), and on a fleet
+// Everything by default: agents emit `skipped` once per (workload, reason), and on a fleet
 // in audit mode those are the only events, so hiding them would make the page look empty.
 const DEFAULT_TYPES: EventType[] = EVENT_TYPES
 const ACTION_TYPES: EventType[] = EVENT_TYPES.filter((t) => t !== 'skipped')

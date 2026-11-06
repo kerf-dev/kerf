@@ -1,5 +1,5 @@
 {{- /*
-Object names inside this chart (WO-18d). The component charts name their objects after the release
+Object names inside this chart. The component charts name their objects after the release
 (release "hub" -> Deployment "hub"), which would make the five components of one release collide.
 These definitions replace the components' "<name>.fullname": Helm parses a parent chart's templates
 after its subcharts', so a parent's `define` of the same name wins (one template namespace).

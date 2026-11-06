@@ -2,8 +2,8 @@
 
 package e2e
 
-// Admin-area client (WO-24): the scenarios drive the hub API like the web UI does, as a logged-in
-// user with the session cookie and the CSRF token (docs/contracts/admin.md, D-023).
+// Admin-area client: the scenarios drive the hub API like the web UI does, as a logged-in
+// user with the session cookie and the CSRF token (docs/contracts/admin.md).
 
 import (
 	"bytes"
@@ -360,7 +360,7 @@ func approve(t *testing.T, user string, cl cluster, ns, name string) hubapi.Appr
 // event for it (the event names the approved recommendation). A recommender run between the
 // approval and the agent's next pull supersedes the approval (only the latest recommendation can
 // be approved): then it approves the new one, up to 3 times. The applied event of a superseded
-// approval may still arrive (the agent had applied it, WO-29); it is not the one waited for. The
+// approval may still arrive (the agent had applied it); it is not the one waited for. The
 // suite's own recompute requests are held off meanwhile.
 func approveApplied(t *testing.T, user string, cl cluster, ns, name string) (hubapi.Approval, auditEvent) {
 	t.Helper()

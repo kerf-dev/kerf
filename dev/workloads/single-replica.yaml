@@ -1,4 +1,4 @@
-# Single-replica Deployment with a PDB that blocks voluntary eviction (zero-downtime case, WO-13).
+# Single-replica Deployment with a PDB that blocks voluntary eviction (zero-downtime case).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
