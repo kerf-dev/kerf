@@ -22,3 +22,10 @@ repositoryID: e400746d-fe1b-4900-ad87-d04beea21bb2
 owners:
   - name: Kerf admin
     email: admin@getkerf.dev
+
+# Hide the release candidates: Artifact Hub skips every pre-release `X.Y.Z-rc.N` version of the `kerf` package, the
+# ones published now and the ones of future releases. `version` is a regular expression (not anchored by default)
+# tested against the version as Artifact Hub shows it. Final versions never contain `-rc.`, so they stay listed.
+ignore:
+  - name: kerf
+    version: '^\d+\.\d+\.\d+-rc\.'
