@@ -35,10 +35,8 @@ securityContext:
   readOnlyRootFilesystem: true
   capabilities: {drop: [ALL]}
 
-token:
-  externalSecret:
-    enabled: true
-    remoteRef: {key: kerf/web/hub-token, property: token}
+# The ALB's subnets: the hub rate-limits sign-ins per real client.
+trustedProxies: [10.0.0.0/16]
 
 ingress:
   enabled: true

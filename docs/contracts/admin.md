@@ -5,9 +5,9 @@ Covers policies from the UI and from Git, local users, and approve-once
 and the `ui`/`agent`/`audit` operations). Changing anything here is a contract change (see
 [CONTRIBUTING.md](../../CONTRIBUTING.md#before-you-start)).
 
-Everything is **additive**: agents and UIs that predate it keep working unchanged. Old agents never
-pull `/config`, so they never see hub policies; the nginx of the web chart keeps injecting the `ui`
-token, so the read-only UI keeps working without a login.
+Everything is **additive** for agents: old agents never pull `/config`, so they never see hub policies.
+Browsers always need a session: without one the API answers `401` to everything but sign-in
+([Sign-in and access](../auth.md)).
 
 ## 1. Flow: the hub stores intent, the agent materialises it
 
@@ -112,12 +112,16 @@ are unchanged.
   `csrfToken`.
 - **CSRF:** every session write needs `X-CSRF-Token: <csrfToken>`; bearer requests need none.
   Missing or wrong: `403` `csrf_invalid`.
-- **Both credentials present:** the session wins. The web nginx can keep injecting the `ui` token:
-  an anonymous browser is a `viewer`, a logged-in one has its role. The web UI passes the `Cookie`
-  header through and sends `credentials: 'include'`. The hub's CORS allows
-  credentials and the headers `X-CSRF-Token`, `If-Match` and the methods `PUT`, `PATCH`, `DELETE`.
-- **Lockout:** `401` `invalid_credentials` for wrong user or password (same answer for both).
-  `429` `rate_limited` / `account_locked` with `Retry-After`.
+- **Sign-in is required.** Every `/v1` operation needs a session or a bearer token except
+  `POST /v1/auth/login` and `POST /v1/auth/logout` (a route-inventory test in the hub enforces it).
+  The web nginx forwards only the `kerf_session` cookie and never a bearer token, so a browser
+  without a session gets `401` and no data.
+- **Both credentials present:** the session wins. The hub's CORS allows credentials and the headers
+  `X-CSRF-Token`, `If-Match` and the methods `PUT`, `PATCH`, `DELETE`.
+- **Failed sign-ins:** `401` `invalid_credentials` with the same body for a wrong password and an
+  unknown, disabled or locked user. Rate limits (per username and per client address, the last
+  `X-Forwarded-For` entry): `429` `rate_limited` with `Retry-After` and one message. A locked user
+  gets the `401` until the lock ends (`account_locked` is no longer sent).
 - **Bootstrap:** the initial admin comes from a Secret. Dev seeds the users `viewer`,
   `operator` and `admin` with passwords from the chart's dev values.
 
@@ -153,10 +157,11 @@ Headers in the examples: `C` = `Cookie: kerf_session=…`, `X` = `X-CSRF-Token: 
  "user": {"username": "alice", "displayName": "Alice", "role": "admin", "disabled": false,
           "mustChangePassword": false, "createdAt": "2026-11-04T09:00:00Z", "version": 3}}
 ```
-`POST /v1/auth/logout` (C, X) → `204`, cookie cleared.
+`POST /v1/auth/logout` (C, X) → `204`, session revoked, cookie cleared. Without a live session
+(none, expired or revoked) → `204`, cookie cleared; a live session without X → `403` `csrf_invalid`.
 
-`GET /v1/me` (C, or a `ui`/`admin` bearer token) → `Me`. With a bearer `ui` token:
-`{"authMethod": "token", "role": "viewer", "tokenId": "2"}`.
+`GET /v1/me` (C, or a `ui`/`admin` bearer token) → `Me`; without either → `401`. With a bearer `ui`
+token (automation): `{"authMethod": "token", "role": "viewer", "tokenId": "2"}`.
 
 `POST /v1/me/password` (C, X) `{"currentPassword": "…", "newPassword": "…"}` → `204`.
 

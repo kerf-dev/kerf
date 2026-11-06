@@ -88,111 +88,130 @@ func (s *Server) now() time.Time {
 	return time.Now()
 }
 
+// apiRoute is one /v1 endpoint. access nil = public: only sign-in and sign-out (route inventory test,
+// server_routes_test.go). Every /v1 route is registered through apiRoutes, never on the mux directly.
+type apiRoute struct {
+	pattern string
+	access  *access
+	handler http.HandlerFunc
+}
+
+// apiRoutes lists every /v1 endpoint and who may call it.
+func (s *Server) apiRoutes() []apiRoute {
+	return []apiRoute{
+		// Agent.
+		{"GET /v1/clusters/{cluster}/recommendations", &accessAgent, s.listRecommendations},
+		{"POST /v1/clusters/{cluster}/workload-status", &accessAgent, s.reportWorkloadStatus},
+		{"POST /v1/clusters/{cluster}/events", &accessAgent, s.reportEvents},
+		{"GET /v1/clusters/{cluster}/config", &accessAgent, s.getClusterConfig},
+		{"GET /v1/audit", &accessAudit, s.queryAudit},
+		// UI (read).
+		{"GET /v1/summary", &accessViewer, s.getSummary},
+		{"GET /v1/clusters", &accessViewer, s.listClusters},
+		{"GET /v1/workloads", &accessViewer, s.listWorkloads},
+		{"GET /v1/workloads/facets", &accessViewer, s.getWorkloadFacets},
+		{"GET /v1/workloads/{id}", &accessViewer, s.getWorkload},
+		{"GET /v1/workloads/{id}/usage", &accessViewer, s.getWorkloadUsage},
+		{"GET /v1/workloads/{id}/history", &accessViewer, s.getWorkloadHistory},
+		{"GET /v1/savings/trend", &accessViewer, s.getSavingsTrend},
+		{"POST /v1/admin/recompute", &accessAdmin, s.recompute},
+		// Auth.
+		{"POST /v1/auth/login", nil, s.login},
+		{"POST /v1/auth/logout", nil, s.logout},
+		{"GET /v1/me", &accessViewer, s.getMe},
+		{"POST /v1/me/password", &accessSession, s.changeOwnPassword},
+		// Settings.
+		{"GET /v1/admin/settings", &accessViewer, s.getSettings},
+		{"GET /v1/admin/settings/recommender", &accessViewer, s.getRecommenderSettings},
+		{"PUT /v1/admin/settings/recommender", &accessAdmin, s.putRecommenderSettings},
+		{"GET /v1/admin/settings/pricing", &accessViewer, s.getPricingSettings},
+		{"PUT /v1/admin/settings/pricing", &accessAdmin, s.putPricingSettings},
+		{"GET /v1/admin/settings/{section}/versions", &accessViewer, s.listSettingsVersions},
+		// Policies.
+		{"GET /v1/admin/policies", &accessViewer, s.listPolicies},
+		{"POST /v1/admin/policies", &accessAdmin, s.createPolicy},
+		{"GET /v1/admin/policies/{policyId}", &accessViewer, s.getPolicy},
+		{"PUT /v1/admin/policies/{policyId}", &accessAdmin, s.updatePolicy},
+		{"DELETE /v1/admin/policies/{policyId}", &accessAdmin, s.deletePolicy},
+		{"GET /v1/admin/policies/{policyId}/versions", &accessViewer, s.listPolicyVersions},
+		{"POST /v1/admin/policies/{policyId}/revert", &accessAdmin, s.revertPolicy},
+		{"GET /v1/admin/policy-inventory", &accessViewer, s.getPolicyInventory},
+		{"POST /v1/admin/preview", &accessOperator, s.previewPolicyChange},
+		{"GET /v1/workloads/{id}/effective-policy", &accessViewer, s.getEffectivePolicy},
+		{"GET /v1/workloads/{id}/override", &accessViewer, s.getWorkloadOverride},
+		{"PUT /v1/workloads/{id}/override", &accessOperator, s.putWorkloadOverride},
+		{"DELETE /v1/workloads/{id}/override", &accessOperator, s.deleteWorkloadOverride},
+		{"POST /v1/workloads/{id}/approve", &accessOperator, s.approveRecommendation},
+		// Clusters and automation.
+		{"POST /v1/admin/clusters", &accessAdmin, s.createCluster},
+		{"GET /v1/admin/clusters/{cluster}", &accessViewer, s.getClusterAdmin},
+		{"PATCH /v1/admin/clusters/{cluster}", &accessAdmin, s.updateCluster},
+		{"DELETE /v1/admin/clusters/{cluster}", &accessAdmin, s.deleteCluster},
+		{"PUT /v1/clusters/{cluster}/automation", &accessOperator, s.setClusterAutomation},
+		{"GET /v1/admin/automation", &accessViewer, s.getFleetAutomation},
+		{"PUT /v1/admin/automation", &accessOperator, s.setFleetAutomation},
+		// Tokens and users.
+		{"GET /v1/admin/tokens", &accessAdmin, s.listTokens},
+		{"POST /v1/admin/tokens", &accessAdmin, s.createToken},
+		{"DELETE /v1/admin/tokens/{tokenId}", &accessAdmin, s.revokeToken},
+		{"GET /v1/admin/users", &accessAdmin, s.listUsers},
+		{"POST /v1/admin/users", &accessAdmin, s.createUser},
+		{"GET /v1/admin/users/{username}", &accessAdmin, s.getUser},
+		{"PATCH /v1/admin/users/{username}", &accessAdmin, s.updateUser},
+		{"DELETE /v1/admin/users/{username}", &accessAdmin, s.deleteUser},
+		{"POST /v1/admin/users/{username}/reset-password", &accessAdmin, s.resetUserPassword},
+		{"GET /v1/audit/config", &accessViewer, s.queryConfigAudit},
+		// Onboarding and readiness.
+		{"GET /v1/admin/datasources", &accessViewer, s.listDatasources},
+		{"POST /v1/admin/datasources", &accessAdmin, s.createDatasource},
+		{"GET /v1/admin/datasources/{datasourceId}", &accessViewer, s.getDatasource},
+		{"PUT /v1/admin/datasources/{datasourceId}", &accessAdmin, s.updateDatasource},
+		{"DELETE /v1/admin/datasources/{datasourceId}", &accessAdmin, s.deleteDatasource},
+		{"POST /v1/admin/datasources/{datasourceId}/test", &accessAdmin, s.testDatasource},
+		{"GET /v1/clusters/{cluster}/readiness", &accessViewer, s.getClusterReadiness},
+		{"POST /v1/clusters/{cluster}/readiness/recheck", &accessOperator, s.recheckClusterReadiness},
+		{"GET /v1/clusters/{cluster}/readiness/history", &accessViewer, s.getClusterReadinessHistory},
+		{"GET /v1/admin/clusters/{cluster}/install", &accessAdmin, s.getClusterInstall},
+		// Maintenance.
+		{"GET /v1/admin/maintenance", &accessViewer, s.getMaintenance},
+		{"POST /v1/admin/maintenance/update-check", &accessAdmin, s.checkForUpdate},
+		// Notifications.
+		{"GET /v1/admin/notifications/status", &accessViewer, s.getNotificationStatus},
+		{"GET /v1/admin/notifications/channels", &accessViewer, s.listNotificationChannels},
+		{"POST /v1/admin/notifications/channels", &accessAdmin, s.createNotificationChannel},
+		{"GET /v1/admin/notifications/channels/{channelId}", &accessViewer, s.getNotificationChannel},
+		{"PUT /v1/admin/notifications/channels/{channelId}", &accessAdmin, s.updateNotificationChannel},
+		{"DELETE /v1/admin/notifications/channels/{channelId}", &accessAdmin, s.deleteNotificationChannel},
+		{"POST /v1/admin/notifications/channels/{channelId}/test", &accessAdmin, s.testNotificationChannel},
+		{"GET /v1/admin/notifications/rules", &accessViewer, s.listNotificationRules},
+		{"POST /v1/admin/notifications/rules", &accessAdmin, s.createNotificationRule},
+		{"PUT /v1/admin/notifications/rules/{ruleId}", &accessAdmin, s.updateNotificationRule},
+		{"DELETE /v1/admin/notifications/rules/{ruleId}", &accessAdmin, s.deleteNotificationRule},
+		{"GET /v1/admin/notifications/digest", &accessViewer, s.getNotificationDigest},
+		{"PUT /v1/admin/notifications/digest", &accessAdmin, s.updateNotificationDigest},
+		{"POST /v1/admin/notifications/digest/send", &accessAdmin, s.sendNotificationDigest},
+		{"GET /v1/admin/notifications/deliveries", &accessViewer, s.listNotificationDeliveries},
+		// Pricing service.
+		{"GET /v1/internal/metrics-bindings", &accessPricing, s.listMetricsBindings},
+		{"GET /v1/internal/datasources/{datasourceId}/api/v1/query", &accessPricing, s.proxyQuery},
+		{"POST /v1/internal/datasources/{datasourceId}/api/v1/query", &accessPricing, s.proxyQuery},
+		{"GET /v1/internal/datasources/{datasourceId}/api/v1/query_range", &accessPricing, s.proxyQuery},
+		{"POST /v1/internal/datasources/{datasourceId}/api/v1/query_range", &accessPricing, s.proxyQuery},
+	}
+}
+
 // Handler returns the HTTP handler.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	route := func(pattern string, a access, h http.HandlerFunc) {
-		mux.Handle(pattern, s.instrument(pattern, s.authenticate(a, h)))
+	for _, rt := range s.apiRoutes() {
+		var h http.Handler = rt.handler
+		if rt.access != nil {
+			h = s.authenticate(*rt.access, rt.handler)
+		}
+		mux.Handle(rt.pattern, s.instrument(rt.pattern, h))
 	}
-	// Agent.
-	route("GET /v1/clusters/{cluster}/recommendations", accessAgent, s.listRecommendations)
-	route("POST /v1/clusters/{cluster}/workload-status", accessAgent, s.reportWorkloadStatus)
-	route("POST /v1/clusters/{cluster}/events", accessAgent, s.reportEvents)
-	route("GET /v1/clusters/{cluster}/config", accessAgent, s.getClusterConfig)
-	route("GET /v1/audit", accessAudit, s.queryAudit)
-	// UI (read).
-	route("GET /v1/summary", accessViewer, s.getSummary)
-	route("GET /v1/clusters", accessViewer, s.listClusters)
-	route("GET /v1/workloads", accessViewer, s.listWorkloads)
-	route("GET /v1/workloads/facets", accessViewer, s.getWorkloadFacets)
-	route("GET /v1/workloads/{id}", accessViewer, s.getWorkload)
-	route("GET /v1/workloads/{id}/usage", accessViewer, s.getWorkloadUsage)
-	route("GET /v1/workloads/{id}/history", accessViewer, s.getWorkloadHistory)
-	route("GET /v1/savings/trend", accessViewer, s.getSavingsTrend)
-	route("POST /v1/admin/recompute", accessAdmin, s.recompute)
-	// Auth (D-023).
-	mux.Handle("POST /v1/auth/login", s.instrument("POST /v1/auth/login", http.HandlerFunc(s.login)))
-	route("POST /v1/auth/logout", accessSession, s.logout)
-	route("GET /v1/me", accessViewer, s.getMe)
-	route("POST /v1/me/password", accessSession, s.changeOwnPassword)
-	// Settings.
-	route("GET /v1/admin/settings", accessViewer, s.getSettings)
-	route("GET /v1/admin/settings/recommender", accessViewer, s.getRecommenderSettings)
-	route("PUT /v1/admin/settings/recommender", accessAdmin, s.putRecommenderSettings)
-	route("GET /v1/admin/settings/pricing", accessViewer, s.getPricingSettings)
-	route("PUT /v1/admin/settings/pricing", accessAdmin, s.putPricingSettings)
-	route("GET /v1/admin/settings/{section}/versions", accessViewer, s.listSettingsVersions)
-	// Policies (D-022).
-	route("GET /v1/admin/policies", accessViewer, s.listPolicies)
-	route("POST /v1/admin/policies", accessAdmin, s.createPolicy)
-	route("GET /v1/admin/policies/{policyId}", accessViewer, s.getPolicy)
-	route("PUT /v1/admin/policies/{policyId}", accessAdmin, s.updatePolicy)
-	route("DELETE /v1/admin/policies/{policyId}", accessAdmin, s.deletePolicy)
-	route("GET /v1/admin/policies/{policyId}/versions", accessViewer, s.listPolicyVersions)
-	route("POST /v1/admin/policies/{policyId}/revert", accessAdmin, s.revertPolicy)
-	route("GET /v1/admin/policy-inventory", accessViewer, s.getPolicyInventory)
-	route("POST /v1/admin/preview", accessOperator, s.previewPolicyChange)
-	route("GET /v1/workloads/{id}/effective-policy", accessViewer, s.getEffectivePolicy)
-	route("GET /v1/workloads/{id}/override", accessViewer, s.getWorkloadOverride)
-	route("PUT /v1/workloads/{id}/override", accessOperator, s.putWorkloadOverride)
-	route("DELETE /v1/workloads/{id}/override", accessOperator, s.deleteWorkloadOverride)
-	route("POST /v1/workloads/{id}/approve", accessOperator, s.approveRecommendation)
-	// Clusters and automation.
-	route("POST /v1/admin/clusters", accessAdmin, s.createCluster)
-	route("GET /v1/admin/clusters/{cluster}", accessViewer, s.getClusterAdmin)
-	route("PATCH /v1/admin/clusters/{cluster}", accessAdmin, s.updateCluster)
-	route("DELETE /v1/admin/clusters/{cluster}", accessAdmin, s.deleteCluster)
-	route("PUT /v1/clusters/{cluster}/automation", accessOperator, s.setClusterAutomation)
-	route("GET /v1/admin/automation", accessViewer, s.getFleetAutomation)
-	route("PUT /v1/admin/automation", accessOperator, s.setFleetAutomation)
-	// Tokens and users.
-	route("GET /v1/admin/tokens", accessAdmin, s.listTokens)
-	route("POST /v1/admin/tokens", accessAdmin, s.createToken)
-	route("DELETE /v1/admin/tokens/{tokenId}", accessAdmin, s.revokeToken)
-	route("GET /v1/admin/users", accessAdmin, s.listUsers)
-	route("POST /v1/admin/users", accessAdmin, s.createUser)
-	route("GET /v1/admin/users/{username}", accessAdmin, s.getUser)
-	route("PATCH /v1/admin/users/{username}", accessAdmin, s.updateUser)
-	route("DELETE /v1/admin/users/{username}", accessAdmin, s.deleteUser)
-	route("POST /v1/admin/users/{username}/reset-password", accessAdmin, s.resetUserPassword)
-	route("GET /v1/audit/config", accessViewer, s.queryConfigAudit)
-	// Onboarding and readiness (D-025).
-	route("GET /v1/admin/datasources", accessViewer, s.listDatasources)
-	route("POST /v1/admin/datasources", accessAdmin, s.createDatasource)
-	route("GET /v1/admin/datasources/{datasourceId}", accessViewer, s.getDatasource)
-	route("PUT /v1/admin/datasources/{datasourceId}", accessAdmin, s.updateDatasource)
-	route("DELETE /v1/admin/datasources/{datasourceId}", accessAdmin, s.deleteDatasource)
-	route("POST /v1/admin/datasources/{datasourceId}/test", accessAdmin, s.testDatasource)
-	route("GET /v1/clusters/{cluster}/readiness", accessViewer, s.getClusterReadiness)
-	route("POST /v1/clusters/{cluster}/readiness/recheck", accessOperator, s.recheckClusterReadiness)
-	route("GET /v1/clusters/{cluster}/readiness/history", accessViewer, s.getClusterReadinessHistory)
-	route("GET /v1/admin/clusters/{cluster}/install", accessAdmin, s.getClusterInstall)
-	// Maintenance (WO-33).
-	route("GET /v1/admin/maintenance", accessViewer, s.getMaintenance)
-	route("POST /v1/admin/maintenance/update-check", accessAdmin, s.checkForUpdate)
-	// Notifications.
-	route("GET /v1/admin/notifications/status", accessViewer, s.getNotificationStatus)
-	route("GET /v1/admin/notifications/channels", accessViewer, s.listNotificationChannels)
-	route("POST /v1/admin/notifications/channels", accessAdmin, s.createNotificationChannel)
-	route("GET /v1/admin/notifications/channels/{channelId}", accessViewer, s.getNotificationChannel)
-	route("PUT /v1/admin/notifications/channels/{channelId}", accessAdmin, s.updateNotificationChannel)
-	route("DELETE /v1/admin/notifications/channels/{channelId}", accessAdmin, s.deleteNotificationChannel)
-	route("POST /v1/admin/notifications/channels/{channelId}/test", accessAdmin, s.testNotificationChannel)
-	route("GET /v1/admin/notifications/rules", accessViewer, s.listNotificationRules)
-	route("POST /v1/admin/notifications/rules", accessAdmin, s.createNotificationRule)
-	route("PUT /v1/admin/notifications/rules/{ruleId}", accessAdmin, s.updateNotificationRule)
-	route("DELETE /v1/admin/notifications/rules/{ruleId}", accessAdmin, s.deleteNotificationRule)
-	route("GET /v1/admin/notifications/digest", accessViewer, s.getNotificationDigest)
-	route("PUT /v1/admin/notifications/digest", accessAdmin, s.updateNotificationDigest)
-	route("POST /v1/admin/notifications/digest/send", accessAdmin, s.sendNotificationDigest)
-	route("GET /v1/admin/notifications/deliveries", accessViewer, s.listNotificationDeliveries)
-	// Pricing service (D-026).
-	route("GET /v1/internal/metrics-bindings", accessPricing, s.listMetricsBindings)
-	route("GET /v1/internal/datasources/{datasourceId}/api/v1/query", accessPricing, s.proxyQuery)
-	route("POST /v1/internal/datasources/{datasourceId}/api/v1/query", accessPricing, s.proxyQuery)
-	route("GET /v1/internal/datasources/{datasourceId}/api/v1/query_range", accessPricing, s.proxyQuery)
-	route("POST /v1/internal/datasources/{datasourceId}/api/v1/query_range", accessPricing, s.proxyQuery)
 
+	// Probes and metrics: outside /v1, no credentials.
 	mux.Handle("GET /metrics", promhttp.HandlerFor(s.Metrics.Registry, promhttp.HandlerOpts{}))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {

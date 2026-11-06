@@ -31,12 +31,19 @@ afterAll(() => server.close())
 
 const DEFAULT_TIMING = { ...timing }
 let csrf: string | undefined
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear()
   resetDb()
   Object.assign(timing, DEFAULT_TIMING)
   csrf = undefined
+  // Sign-in is required: every test starts as a signed-in viewer (signOut() for none).
+  await login('viewer')
 })
+
+async function signOut() {
+  expect((await call('POST', '/v1/auth/logout')).status).toBe(204)
+  csrf = undefined
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface Res<T = any> {
@@ -97,19 +104,17 @@ function approvable() {
 }
 
 describe('auth and session', () => {
-  it('anonymous browser is the ui-token viewer; login required mode answers 401', async () => {
-    const me = await call('GET', '/v1/me')
-    expect(me.status).toBe(200)
-    expectValid('Me', me.json)
-    expect(me.json).toEqual({ authMethod: 'token', role: 'viewer', tokenId: '2' })
-    localStorage.setItem('ro-mock-anonymous', 'none')
+  it('without a session everything but sign-in answers 401', async () => {
+    await signOut()
     expectProblem(await call('GET', '/v1/me'), 401, 'unauthorized')
     expectProblem(await call('GET', '/v1/summary'), 401, 'unauthorized')
+    expectProblem(await call('GET', '/v1/workloads'), 401, 'unauthorized')
     await login('viewer')
     expect((await call('GET', '/v1/summary')).status).toBe(200)
   })
 
   it('login, me, logout with CSRF', async () => {
+    await signOut()
     expectProblem(
       await call('POST', '/v1/auth/login', { body: { username: 'admin', password: 'nope' } }),
       401,
@@ -124,29 +129,26 @@ describe('auth and session', () => {
     expect(again.json.csrfToken).toBe(me.csrfToken)
     expectProblem(await call('POST', '/v1/auth/logout', { noCsrf: true }), 403, 'csrf_invalid')
     expect((await call('POST', '/v1/auth/logout')).status).toBe(204)
-    expect((await call('GET', '/v1/me')).json.authMethod).toBe('token')
+    expectProblem(await call('GET', '/v1/me'), 401, 'unauthorized')
+    // Signing out again (no session left) still answers 204.
+    expect((await call('POST', '/v1/auth/logout')).status).toBe(204)
   })
 
-  it('locks the account after 5 failures and rejects disabled users', async () => {
-    for (let i = 0; i < 4; i++)
-      expectProblem(
-        await call('POST', '/v1/auth/login', { body: { username: 'bob', password: 'x' } }),
-        401,
-        'invalid_credentials',
-      )
-    const r = await call('POST', '/v1/auth/login', { body: { username: 'bob', password: 'x' } })
-    expectProblem(r, 429, 'account_locked')
-    expect(Number(r.headers.get('Retry-After'))).toBeGreaterThan(0)
-    expectProblem(
-      await call('POST', '/v1/auth/login', { body: { username: 'bob', password: 'dev-password' } }),
-      429,
-      'account_locked',
-    )
-    expectProblem(
-      await call('POST', '/v1/auth/login', { body: { username: 'dana', password: 'dev-password' } }),
-      401,
-      'invalid_credentials',
-    )
+  it('locks after 5 failures with answers that never reveal whether a user exists', async () => {
+    const attempt = (username: string, password: string) =>
+      call('POST', '/v1/auth/login', { body: { username, password } })
+    for (const username of ['bob', 'nobody-at-all']) {
+      for (let i = 0; i < 5; i++) expectProblem(await attempt(username, 'x'), 401, 'invalid_credentials')
+      const r = await attempt(username, 'dev-password')
+      expectProblem(r, 429, 'rate_limited')
+      expect(Number(r.headers.get('Retry-After'))).toBeGreaterThan(0)
+      expect(r.json.detail).toBe('Too many sign-in attempts. Try again later.')
+    }
+    // A disabled user gets the answer of a wrong password.
+    const dana = await attempt('dana', 'dev-password')
+    const ghost = await attempt('ghost', 'dev-password')
+    expectProblem(dana, 401, 'invalid_credentials')
+    expect(dana.json).toEqual(ghost.json)
   })
 
   it('forced password change', async () => {
@@ -460,8 +462,7 @@ describe('preview and effective policy', () => {
     })
     expect(labels.json.warnings?.[0]).toContain('matchLabels')
     // viewers cannot preview
-    await call('POST', '/v1/auth/logout')
-    csrf = undefined
+    await login('viewer')
     expectProblem(await call('POST', '/v1/admin/preview', { body: req }), 403, 'forbidden')
   })
 
@@ -1098,7 +1099,9 @@ describe('maintenance (WO-33)', () => {
   })
 
   it('check now needs admin and CSRF, and 409 when the check is off', async () => {
-    // anonymous = the read-only ui token (viewer)
+    await signOut()
+    expectProblem(await call('POST', '/v1/admin/maintenance/update-check'), 401, 'unauthorized')
+    await login('viewer')
     expectProblem(await call('POST', '/v1/admin/maintenance/update-check'), 403, 'forbidden')
     await login('operator')
     expectProblem(await call('POST', '/v1/admin/maintenance/update-check'), 403, 'forbidden')

@@ -10,11 +10,11 @@ import {
   KeyRoundIcon,
   LayoutDashboardIcon,
   Loader2Icon,
-  LogInIcon,
   LogOutIcon,
   MonitorIcon,
   MoonIcon,
   PiggyBankIcon,
+  RotateCwIcon,
   ScrollTextIcon,
   SearchIcon,
   ServerIcon,
@@ -25,9 +25,10 @@ import {
   UsersIcon,
   WrenchIcon,
 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { useAuth, useLogout, type Auth } from '@/api/auth'
+import { loginPath, ME_KEY, useAuth, useLogout, type Auth } from '@/api/auth'
 import { useSummary } from '@/api/queries'
 import type { UserRole } from '@/api/types'
 import { RoleBadge } from '@/components/admin/common'
@@ -252,23 +253,11 @@ function initials(name: string) {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || name.slice(0, 2).toUpperCase()
 }
 
-/** Signed-in user (name, role, change password, sign out) or a Sign in button. */
+/** The signed-in user: name, role, change password, sign out. */
 function UserMenu({ auth, onChangePassword }: { auth: Auth; onChangePassword: () => void }) {
   const logout = useLogout()
   const navigate = useNavigate()
-  const loc = useLocation()
-  if (auth.loading) return <div className="size-8 animate-pulse rounded-full bg-muted" aria-hidden />
-  if (!auth.signedIn) {
-    // A hub without the admin API (404 on /v1/me) has no sign-in to offer.
-    if (auth.error) return null
-    return (
-      <Button asChild variant="outline" size="sm" data-testid="sign-in">
-        <Link to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`}>
-          <LogInIcon /> Sign in
-        </Link>
-      </Button>
-    )
-  }
+  if (!auth.signedIn) return null
   const u = auth.me?.user
   const name = u?.displayName || u?.username || 'Signed in'
   return (
@@ -364,13 +353,6 @@ function MockMenu() {
       return 'normal'
     }
   })
-  const [anonymous, setAnonymous] = useState(() => {
-    try {
-      return localStorage.getItem('ro-mock-anonymous') ?? 'viewer'
-    } catch {
-      return 'viewer'
-    }
-  })
   if (!__MOCK_API__) return null
   return (
     <DropdownMenu>
@@ -404,23 +386,6 @@ function MockMenu() {
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Without a session</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={anonymous}
-          onValueChange={(v) => {
-            try {
-              localStorage.setItem('ro-mock-anonymous', v)
-            } catch {
-              /* ignore */
-            }
-            setAnonymous(v)
-            window.location.reload()
-          }}
-        >
-          <DropdownMenuRadioItem value="viewer">Read-only viewer (ui token)</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="none">Login required</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-        <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
           Data is generated in the browser by MSW from the hub OpenAPI contract. Users: admin, operator,
           viewer (password dev-password).
@@ -430,11 +395,46 @@ function MockMenu() {
   )
 }
 
+/** Neutral screen while the session is checked: no app chrome and no data before it answers. */
 function Splash() {
   return (
-    <div className="flex min-h-dvh items-center justify-center" aria-busy="true">
+    <div className="flex min-h-dvh items-center justify-center" aria-busy="true" data-testid="auth-splash">
       <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
       <span className="sr-only">Loading</span>
+    </div>
+  )
+}
+
+/** The session check failed for another reason than a missing session (hub down, network). */
+function HubUnavailable({ error }: { error: unknown }) {
+  const qc = useQueryClient()
+  const [retrying, setRetrying] = useState(false)
+  return (
+    <div
+      className="flex min-h-dvh items-center justify-center bg-background px-4"
+      data-testid="auth-unavailable"
+    >
+      <div className="flex w-full max-w-[400px] flex-col items-center text-center">
+        <Logo size="lg" />
+        <h1 className="mt-5 text-lg font-semibold tracking-tight">Cannot reach the hub</h1>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          {error instanceof Error ? error.message : 'The session check failed.'} Kerf shows nothing until it
+          knows who you are.
+        </p>
+        <Button
+          className="mt-5"
+          variant="outline"
+          size="sm"
+          disabled={retrying}
+          onClick={() => {
+            setRetrying(true)
+            void qc.refetchQueries({ queryKey: ME_KEY }).finally(() => setRetrying(false))
+          }}
+        >
+          {retrying ? <Loader2Icon className="animate-spin" /> : <RotateCwIcon />}
+          Try again
+        </Button>
+      </div>
     </div>
   )
 }
@@ -458,10 +458,20 @@ export function AppShell() {
     window.scrollTo({ top: 0 })
   }, [loc.pathname])
 
-  // No session and no anonymous read access: everything needs a login (D-023).
-  if (auth.loginRequired)
-    return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
+  // Sign-in is required: nothing of the app renders, and no page asks for data, until /v1/me
+  // answers with a session. An ended session goes back to sign-in, which returns here afterwards.
   if (auth.loading) return <Splash />
+  // window.location, not the router's: during a lazy page's load the router still renders the page
+  // being left, while the address bar already shows the one asked for.
+  if (auth.loginRequired)
+    return (
+      <Navigate
+        to={loginPath(window.location)}
+        replace
+        state={auth.expired ? { expired: true } : undefined}
+      />
+    )
+  if (auth.error || !auth.me) return <HubUnavailable error={auth.error} />
   const mustChange = !!auth.me?.user?.mustChangePassword
 
   return (

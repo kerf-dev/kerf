@@ -434,17 +434,6 @@
             }
           }
         },
-        "web": {
-          "properties": {
-            "token": {
-              "properties": {
-                "value": {
-                  "$ref": "#/definitions/empty"
-                }
-              }
-            }
-          }
-        },
         "pricing": {
           "properties": {
             "hub": {

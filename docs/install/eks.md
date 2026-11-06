@@ -234,7 +234,6 @@ Every secret is a JSON object. The charts read one property of each.
 | `kerf/hub/db` | `{"username": "kerf", "password": "…"}` (the RDS-managed secret's format) | hub (Secret `hub-db`, built into `DATABASE_URL` with `sslmode=verify-full`) | now |
 | `kerf/hub/bootstrap-admin` | `{"password": "…"}` | hub: the first admin, user `admin`, created on an empty database | now |
 | `kerf/hub/datasource-key` | `{"key": "<32 random bytes, base64>"}` | hub: encrypts the stored datasource credentials. **Never lose or change it.** | now |
-| `kerf/hub/ui-token` | `{"token": "…"}` | web: the read-only `ui` token for visitors without a session | step 4.5 |
 | `kerf/hub/pricing-token` | `{"token": "…"}` | pricing: the `pricing` token (the hub's query proxy) | step 4.5 |
 | `kerf/clusters/<cluster>/agent-token` | `{"token": "…"}` | that cluster's agent | step 5.2 |
 
@@ -403,8 +402,8 @@ migrations before it reports ready (the startup probe allows 10 minutes).
 kubectl --context $HUB_CTX -n $NS get externalsecrets
 kubectl --context $HUB_CTX -n $NS get pods -l app.kubernetes.io/instance=kerf
 ```
-Expected: `hub-db`, `hub-bootstrap-admin` and `hub-datasource-key` show `SecretSynced  True`. `web-hub-token` and
-`pricing-hub-token` show `SecretSyncedError` until step 4.5. Two `hub-…` and two `web-…` pods are `Running 1/1`, and
+Expected: `hub-db`, `hub-bootstrap-admin` and `hub-datasource-key` show `SecretSynced  True`. `pricing-hub-token`
+shows `SecretSyncedError` until step 4.5. Two `hub-…` and two `web-…` pods are `Running 1/1`, and
 `pricing-…` is `ContainerCreating` until step 4.5, because it waits for its token Secret. That is expected.
 
 Hub readiness and the leader (exactly one replica leads):
@@ -439,7 +438,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://$UI_HOST/
 ```
 Expected: `ok`, then `200`.
 
-### 4.5 First sign-in, the UI and pricing tokens
+### 4.5 First sign-in and the pricing token
 
 The first admin is `admin`, with the password from Secrets Manager:
 ```bash
@@ -451,31 +450,29 @@ echo $CSRF
 **Check:** `echo` prints a token, not `null`. You can also sign in at `https://$UI_HOST` in a browser.
 Change the password there (the user menu, top right → *Change password*).
 
-Next, create the read-only `ui` token and the `pricing` token, store them in Secrets Manager, and
-let ESO pick them up. You can also create them in the UI under *Admin → Access → Tokens*. A token
-is shown once.
+Signing in is always required: give everyone who uses Kerf a user under *Admin → Access → Users*
+(at least `viewer`). See [Sign-in and access](../auth.md).
+
+Next, create the `pricing` token, store it in Secrets Manager, and let ESO pick it up. You can also
+create it in the UI under *Admin → Access → Tokens*. A token is shown once.
 
 ```bash
-for role in ui pricing; do
-  val=$(curl -sS -b $WORK/cookies -H "X-CSRF-Token: $CSRF" -H 'Content-Type: application/json' \
-    -d "$(jq -cn --arg r $role '{role: $r, description: ("kerf " + $r), reason: "install"}')" \
-    https://$UI_HOST/v1/admin/tokens | jq -r .value)
-  aws secretsmanager create-secret --name kerf/hub/$role-token \
-    --secret-string "$(jq -cn --arg t "$val" '{token: $t}')" --query Name --output text
-done
-kubectl --context $HUB_CTX -n $NS annotate externalsecret web-hub-token pricing-hub-token force-sync=$(date +%s) --overwrite
-sleep 10
-kubectl --context $HUB_CTX -n $NS rollout restart deploy/web   # nginx reads the token at start
+val=$(curl -sS -b $WORK/cookies -H "X-CSRF-Token: $CSRF" -H 'Content-Type: application/json' \
+  -d '{"role": "pricing", "description": "kerf pricing", "reason": "install"}' \
+  https://$UI_HOST/v1/admin/tokens | jq -r .value)
+aws secretsmanager create-secret --name kerf/hub/pricing-token \
+  --secret-string "$(jq -cn --arg t "$val" '{token: $t}')" --query Name --output text
+kubectl --context $HUB_CTX -n $NS annotate externalsecret pricing-hub-token force-sync=$(date +%s) --overwrite
 ```
 
 **Check:**
 ```bash
 kubectl --context $HUB_CTX -n $NS get externalsecrets
 kubectl --context $HUB_CTX -n $NS rollout status deploy/pricing --timeout=5m
-curl -sS https://$UI_HOST/v1/me | jq -c '{authMethod, role}'
+curl -sS -o /dev/null -w '%{http_code}\n' https://$UI_HOST/v1/workloads
 ```
-Expected: all five `SecretSynced True`, then `deployment "pricing" successfully rolled out`, then
-`{"authMethod":"token","role":"viewer"}`. That last line means an anonymous visitor reads with the `ui` token.
+Expected: all four `SecretSynced True`, then `deployment "pricing" successfully rolled out`, then
+`401`: without a session the UI and the API show nothing.
 
 Pricing (provider `aws`, Pod Identity):
 ```bash
@@ -854,7 +851,7 @@ means pricing has not refreshed: check `kubectl -n $NS logs deploy/pricing` on t
   started before the association (`kubectl -n external-secrets rollout restart deploy/external-secrets`).
   A customer-managed KMS key also needs `kms:Decrypt`.
 - `ResourceNotFoundException` / `Secret does not exist`: the Secrets Manager name (3.3) is wrong or not created yet
-  (the `ui`/`pricing` tokens before 4.5, an agent token before 5.2).
+  (the `pricing` token before 4.5, an agent token before 5.2).
 - `key … does not exist` / property errors: the secret is not the JSON from the table in 3.3.
 - `ClusterSecretStore … not ready`: check its region and ESO's credentials (`kubectl describe clustersecretstore aws-secrets-manager`).
 

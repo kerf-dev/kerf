@@ -15,6 +15,7 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest",
+    "test:patch-dry-run": "bash scripts/patch-dry-run.sh",
     "e2e": "playwright test",
     "gen:api": "openapi-typescript ../api/openapi/hub.yaml -o src/api/schema.d.ts && prettier --write src/api/schema.d.ts --log-level warn",
     "gen:api:check": "node scripts/check-api-types.mjs",

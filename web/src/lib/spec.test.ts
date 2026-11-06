@@ -27,19 +27,6 @@ describe('spec helpers', () => {
 })
 
 describe('policy helpers', () => {
-  it('safeNext keeps same-app paths only', async () => {
-    const { safeNext } = await import('./policy')
-    expect(safeNext('/admin?tab=x')).toBe('/admin?tab=x')
-    for (const bad of [
-      null,
-      '',
-      'https://evil.example',
-      '//evil.example',
-      '/\\evil.example',
-      '/login?next=/',
-    ])
-      expect(safeNext(bad)).toBe('/')
-  })
   it('changedPaths and withoutSelector', async () => {
     const { changedPaths, withoutSelector } = await import('./policy')
     expect(changedPaths({ cpu: { mode: 'audit' } }, { cpu: { mode: 'off' }, profile: 'dev' })).toEqual([

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { seedSession } from './session'
 
 async function open(page: Page, path: string) {
   await page.goto(path)
@@ -6,6 +7,9 @@ async function open(page: Page, path: string) {
 }
 
 test.describe('smoke', () => {
+  // Signed in as a viewer: every page needs a session.
+  test.beforeEach(({ page }) => seedSession(page, 'viewer'))
+
   test('overview renders KPIs, charts and top opportunities', async ({ page }) => {
     await open(page, '/')
     await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()

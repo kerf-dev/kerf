@@ -10,10 +10,13 @@ with the [README](../README.md) for the overview; this page lists everything els
 |---|---|
 | [Install on Amazon EKS](install/eks.md) | Prerequisites, AWS resources, the hub and workload clusters, readiness, turning on `auto-patch`, Argo CD, upgrade, uninstall, troubleshooting |
 | [Example values](../deploy/examples/eks) | `values-hub.yaml`, `values-spoke.yaml`, IAM policies, External Secrets, an Argo CD ApplicationSet |
+| [The `kerf` command-line tool](cli.md) | `kerf report`: recommendations and savings from your existing Prometheus, without installing the hub; install, authentication (including Amazon Managed Service for Prometheus), prices |
 | [Helm chart reference](../deploy/charts/kerf/README.md) | `global.mode`, the umbrella values, opt-in features |
 | [Component charts](../deploy/charts) | Values of `hub`, `web`, `pricing`, `agent`, `webhook` ([hub](../deploy/charts/hub/README.md), [agent](../deploy/charts/agent/README.md)) |
 | [Grafana dashboards](../dashboards/README.md) | Overview, opportunities, automation and workload dashboards |
 | [Notifications](notifications.md) | Slack, Teams and signed webhook channels, rules, the weekly digest, retries and metrics |
+| [Sign-in and access](auth.md) | Required sign-in, users and roles, sign-in protection, bearer tokens for automation, upgrading from anonymous read access |
+| [Copy a recommendation as a patch](copy-as-patch.md) | Hand a recommendation over as a strategic merge patch, a `kubectl patch` command, a Kustomize patch or Helm values, for one workload or a selection |
 | [Maintenance and updates](maintenance.md) | Component versions, the check for a new release, turning it off |
 | [Changelog](../CHANGELOG.md) | What changed in each release and how to upgrade |
 | [Security policy](../SECURITY.md) | How to report a vulnerability |
