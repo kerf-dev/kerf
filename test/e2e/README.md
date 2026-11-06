@@ -20,7 +20,7 @@ make e2e-vet                     # compile/vet the suite without a cluster
 
 | Tier | Target | Tests | Where |
 |---|---|---|---|
-| smoke | `make e2e-smoke` | `E2E_SMOKE_TESTS` = `TestAudit`, `TestInPlaceCPU`, `TestWebhook`, `TestRollback`, `TestAdminPolicy`, `TestReadiness`, `TestMaintenance`: audit, in-place apply, webhook, rollback, admin policy, readiness, component versions | pull requests touching `cmd/**`, `internal/**`, `deploy/**`, `test/e2e/**` (CI, once a runner can host the fleet) |
+| smoke | `make e2e-smoke` | `E2E_SMOKE_TESTS` = `TestAudit`, `TestInPlaceCPU`, `TestWebhook`, `TestRollback`, `TestAdminPolicy`, `TestReadiness`, `TestMaintenance`, `TestWebSignIn`: audit, in-place apply, webhook, rollback, admin policy, readiness, component versions, sign-in through the web proxy | pull requests touching `cmd/**`, `internal/**`, `deploy/**`, `test/e2e/**` (CI, once a runner can host the fleet) |
 | full | `make e2e` | every test | nightly (CI), and locally before merging suite or timing changes |
 
 At the end of every run the log shows a per-test duration table, the setup time (`make e2e` start
@@ -157,6 +157,7 @@ scale-down, the spoke-2 pause and `pods/resize` rule removal (WO-24) and, only w
 | `E2E_SPOKE1_CONTEXT` / `E2E_SPOKE2_CONTEXT` / `E2E_HUB_CONTEXT` | `k3d-ro-spoke-1` / `k3d-ro-spoke-2` / `k3d-ro-hub` |
 | `E2E_SPOKE1` / `E2E_SPOKE2` | hub cluster names `ro-spoke-1` / `ro-spoke-2` |
 | `E2E_HUB_URL` | `http://localhost:18080` |
+| `E2E_WEB_URL` | `http://localhost:19090` (the web UI's nginx; `TestWebSignIn`) |
 | `E2E_HUB_UI_TOKEN` | read from Secret `kerf/hub-dev-tokens` (key `ui`) on ro-hub |
 | `E2E_GIT_URL` / `E2E_GIT_IN_CLUSTER_URL` | `git://localhost:19418/workloads.git` / `git://git-server.git-server.svc.cluster.local/workloads.git` |
 | `E2E_APPLY_TIMEOUT` | `18m` (hub run + data alignment + apply) |

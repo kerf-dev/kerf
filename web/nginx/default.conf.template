@@ -3,7 +3,7 @@
 # Variables: HUB_UPSTREAM (host:port of the hub API), HUB_ANON_AUTHORIZATION (set by
 # /docker-entrypoint.d/05-hub-token.envsh: "Bearer <ui token>" when anonymous read access is on, else
 # empty), NGINX_LOCAL_RESOLVERS (from /etc/resolv.conf). Only variables defined in the environment are
-# substituted, so nginx variables like $cookie_ro_session stay as they are.
+# substituted, so nginx variables like $cookie_kerf_session stay as they are.
 
 # Authentication (D-023, docs/contracts/admin.md §3):
 # - With a session cookie the browser is a logged-in user: forward only `kerf_session` and send no
@@ -11,13 +11,13 @@
 # - Without one, add the read-only `ui` token (anonymous viewer) if ANONYMOUS_READ is on; otherwise
 #   send nothing and the hub answers 401, which sends the UI to its login page.
 # Whatever the browser sends in Authorization is never forwarded.
-map $cookie_ro_session $hub_authorization {
+map $cookie_kerf_session $hub_authorization {
     ""      "${HUB_ANON_AUTHORIZATION}";
     default "";
 }
-map $cookie_ro_session $hub_cookie {
+map $cookie_kerf_session $hub_cookie {
     ""      "";
-    default "kerf_session=$cookie_ro_session";
+    default "kerf_session=$cookie_kerf_session";
 }
 
 server_tokens off;

@@ -37,3 +37,8 @@ First public version.
   and shows the release notes and `helm upgrade` commands; "Check now" runs it at once. It is on by default and
   sends nothing about the installation; turn it off with `hub.updateCheck.enabled: false`. Metric
   `kerf_update_available{current,latest}` and the alert `KerfUpdateAvailable` (severity `info`).
+
+### Fixed
+
+- Signing in through the web UI kept users read-only: the web proxy looked for the old session cookie name
+  and never forwarded `kerf_session`, so every request still went out with the read-only UI token.
