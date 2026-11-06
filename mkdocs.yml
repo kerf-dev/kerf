@@ -123,6 +123,7 @@ nav:
       - pricing.md
       - realized-savings.md
       - cli.md
+      - copy-as-patch.md
   - Reference:
       - reference/README.md
       - Chart values:
