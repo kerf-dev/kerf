@@ -27,3 +27,7 @@ Kerf changes pod resources in your clusters. Reports about these areas are espec
 
 Every image and chart is signed with cosign by the release workflow; the release notes show the
 `cosign verify` command. Images carry an SPDX SBOM and SLSA provenance.
+
+The release workflow also scans every image with Trivy before it pushes anything, and fails on any critical or
+high finding that has a fix. Between releases, Dependabot opens a pull request when a base image is rebuilt:
+the Dockerfiles pin their base images by digest.

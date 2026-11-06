@@ -157,6 +157,12 @@ First public version.
 
 ### Security
 
+- The web image now runs on `nginx:1.30-alpine-slim` (the stable nginx line) instead of `nginx:1.29-alpine`, which no
+  longer receives fixes. This removes about fifty high-severity and one critical finding in OS packages that nginx does
+  not need. Every image's base is pinned by digest, so Dependabot proposes the update when a base image is rebuilt.
+- Updated `golang.org/x/net` to 0.62.0, which fixes a high-severity vulnerability in the Go images.
+- The release workflow scans every image with Trivy and stops before publishing when it finds a critical or high
+  vulnerability that has a fix.
 - Sign-in rate limits per client address can no longer be dodged with a forged `X-Forwarded-For`: the web proxy
   sends the client it sees, and the hub uses the last entry. Behind an ALB or ingress controller, set
   `web.trustedProxies` so the limits count real clients.
