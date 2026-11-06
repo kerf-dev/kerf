@@ -6,8 +6,9 @@ name: release
 #      them to GitHub Container Registry: ghcr.io/<owner>/kerf/<image>:X.Y.Z and
 #      oci://ghcr.io/<owner>/kerf/charts/<chart>, the charts defaulting to these images;
 #   3. cosign signs every image and chart by digest (keyless, this workflow's GitHub OIDC identity);
-#   4. a GitHub Release vX.Y.Z is created: CHANGELOG.md's section, install steps, the digests, the merged
-#      pull requests; the chart packages and digest lists are attached. A -suffix makes it a pre-release.
+#   4. a GitHub Release vX.Y.Z is created: CHANGELOG.md's section as the highlights, the Conventional Commits
+#      since the previous release grouped by type (git-cliff, cliff.toml), install steps and the digests; the chart
+#      packages and digest lists are attached. A -suffix makes it a pre-release.
 
 on:
   push:
@@ -23,6 +24,10 @@ concurrency:
 env:
   HELM_VERSION: v4.3.1
   COSIGN_VERSION: v3.1.4
+  # git-cliff builds the commit list of the release notes. The archive is checked against this SHA-256 (of the
+  # x86_64 Linux musl build of GIT_CLIFF_VERSION, computed from the official release) before it is unpacked.
+  GIT_CLIFF_VERSION: 2.14.2
+  GIT_CLIFF_SHA256: fa21e2fc70046fcfd0e43e5e4613873ab799aff3d9dc8559c00d31b270e417d0
 
 jobs:
   changelog:
@@ -46,13 +51,25 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0   # tags, for the release notes' compare link
+          fetch-depth: 0   # all commits and tags, for the release notes' commit list and compare link
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: ${{ env.HELM_VERSION }}
       - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Install git-cliff (pinned, checksum verified)
+        run: |
+          archive=git-cliff-$GIT_CLIFF_VERSION-x86_64-unknown-linux-musl.tar.gz
+          dir=$(mktemp -d)
+          curl -fsSL --retry 3 -o "$dir/$archive" \
+            "https://github.com/orhun/git-cliff/releases/download/v$GIT_CLIFF_VERSION/$archive"
+          echo "$GIT_CLIFF_SHA256  $dir/$archive" | sha256sum --check --strict -
+          tar -xzf "$dir/$archive" -C "$dir"
+          install -m 0755 "$dir/git-cliff-$GIT_CLIFF_VERSION/git-cliff" "$RUNNER_TEMP/git-cliff"
+          echo "GIT_CLIFF=$RUNNER_TEMP/git-cliff" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/git-cliff" --version
 
       - name: Version and registry
         run: |
@@ -87,10 +104,12 @@ jobs:
           done < <(cat bin/release/images.txt bin/release/charts.txt)
 
       - name: Release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # git-cliff: the author and pull request of every commit
         run: |
           tools/release/notes.sh "$VERSION" "$REGISTRY" > bin/release/notes.md
           cat bin/release/notes.md >> "$GITHUB_STEP_SUMMARY"
-          (cd bin/release/charts && sha256sum *.tgz) > bin/release/SHA256SUMS
+          (cd bin/release/charts && sha256sum -- *.tgz) > bin/release/SHA256SUMS
 
       - name: GitHub Release
         env:
@@ -101,5 +120,5 @@ jobs:
           # shellcheck disable=SC2086
           gh release create "$GITHUB_REF_NAME" --verify-tag $pre \
             --title "Kerf $VERSION" \
-            --notes-file bin/release/notes.md --generate-notes \
+            --notes-file bin/release/notes.md \
             bin/release/charts/*.tgz bin/release/images.txt bin/release/charts.txt bin/release/SHA256SUMS
