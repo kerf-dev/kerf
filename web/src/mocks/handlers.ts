@@ -27,6 +27,7 @@ import {
 } from './data'
 import { adminHandlers, decorateClusters, decorateDetail, decorateHistory } from './admin'
 import { capacityHandlers } from './capacity'
+import { nodeCostTrend, realizedSavings } from './realized'
 import { dec, enc, gate, problem } from './core'
 
 export { currentScenario, getDb, getAdmin, resetDb, timing, type Scenario } from './core'
@@ -288,6 +289,47 @@ export const handlers = [
       series,
     }
     return HttpResponse.json(body)
+  }),
+
+  http.get('*/v1/savings/realized/node-cost', async ({ request }) => {
+    const g = await gate()
+    if (g instanceof Response) return g
+    const url = new URL(request.url)
+    const cluster = url.searchParams.get('cluster')
+    if (!cluster) return problem(400, 'invalid_cluster', 'Bad Request', 'cluster is required')
+    if (!g.db.clusters.some((c) => c.name === cluster))
+      return problem(404, 'cluster_not_found', 'Not Found', `Unknown cluster ${cluster}.`)
+    const { from, to } = range(url, g.db, 30)
+    const step = (url.searchParams.get('step') ?? (to - from <= 7 * 86400_000 ? 'hour' : 'day')) as
+      'hour' | 'day'
+    return HttpResponse.json(nodeCostTrend(g.db, cluster, from, to, step))
+  }),
+
+  http.get('*/v1/savings/realized', async ({ request }) => {
+    const g = await gate()
+    if (g instanceof Response) return g
+    const url = new URL(request.url)
+    const step = (url.searchParams.get('step') ?? 'month') as 'day' | 'month'
+    if (step !== 'day' && step !== 'month')
+      return problem(400, 'invalid_step', 'Bad Request', 'step must be day or month.')
+    const { from, to } = range(url, g.db, step === 'month' ? 365 : 30)
+    const scope = {
+      clusters: url.searchParams.getAll('cluster'),
+      namespaces: url.searchParams.getAll('namespace'),
+    }
+    return HttpResponse.json(realizedSavings(g.db, scope, from, to, step))
+  }),
+
+  http.get('*/v1/workloads/:id/savings/realized', async ({ params, request }) => {
+    const g = await gate()
+    if (g instanceof Response) return g
+    const w = findWorkload(g.db, params.id)
+    if (w instanceof Response) return w
+    const url = new URL(request.url)
+    const step = (url.searchParams.get('step') ?? 'day') as 'day' | 'month'
+    const { from, to } = range(url, g.db, step === 'month' ? 365 : 30)
+    const scope = { workload: { cluster: w.cluster, namespace: w.namespace, kind: w.kind, name: w.name } }
+    return HttpResponse.json(realizedSavings(g.db, scope, from, to, step))
   }),
 
   http.get('*/v1/audit', async ({ request }) => {

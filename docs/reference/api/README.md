@@ -47,7 +47,7 @@ ETag `"<version>"`: missing gives `428` (code `precondition_required`), stale gi
 | Area | Endpoints | What it covers |
 |---|---|---|
 | [Agent](agent.md) | 4 | Endpoints used by the per-cluster agent. |
-| [Web UI](ui.md) | 17 | Read-only endpoints for the web UI. |
+| [Web UI](ui.md) | 20 | Read-only endpoints for the web UI. |
 | [Audit](audit.md) | 2 | Audit log queries. |
 | [Admin](admin.md) | 41 | Administration (admin area). Roles per operation. |
 | [Authentication](auth.md) | 4 | Login, logout and the caller's identity. |
