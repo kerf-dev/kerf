@@ -63,6 +63,11 @@ func TestTeamScopedAccess(t *testing.T) {
 	t.Cleanup(func() { deleteUserQuiet(user, "e2e cleanup") })
 	s, err := login(user, password)
 	must(t, err)
+	// Team-scoped: no fleet role; the effective role is the highest team role.
+	if s.Me.Role != operator || s.Me.Scope != hubapi.ScopeTeams || s.Me.User == nil || s.Me.User.Role != operator ||
+		!slices.Equal(s.Me.TeamRoles, []hubapi.TeamRole{{Team: nsA, Role: operator}}) {
+		t.Errorf("login of the team-scoped operator: %+v", s.Me)
+	}
 	t.Cleanup(func() { _, _ = s.raw(context.Background(), http.MethodPost, "/v1/auth/logout", nil, nil) })
 
 	// Lists, counts and totals hold team A only.

@@ -388,3 +388,42 @@ func TestDigestSavingsByTeam(t *testing.T) {
 		t.Errorf("digest teams: %+v", got)
 	}
 }
+
+// TestUserRoleWithTeams: a fleet user's stored role stays what the admin set; a team-scoped user's
+// is derived; moving a team-scoped user to the fleet needs the fleet role.
+func TestUserRoleWithTeams(t *testing.T) {
+	e := newTeamEnv(t)
+	var u hubapi.User
+	e.getJSON("/v1/admin/users/webop", tokAdmin, &u)
+	if u.Role != hubapi.UserRoleViewer || u.Scope != hubapi.ScopeFleet {
+		t.Errorf("fleet viewer with a team operator role: stored %+v", u)
+	}
+	var me hubapi.Me
+	mustJSON(t, e.sdo(e.webop, http.MethodGet, "/v1/me", nil).body, &me)
+	if me.Role != hubapi.UserRoleOperator || me.User.Role != hubapi.UserRoleViewer {
+		t.Errorf("me: role %q, user.role %q", me.Role, me.User.Role)
+	}
+	// Changing its team roles leaves the fleet role alone.
+	r := e.do(http.MethodPatch, "/v1/admin/users/webop", tokAdmin, hubapi.UserUpdate{
+		TeamRoles: &[]hubapi.TeamRole{{Team: "pay", Role: "operator"}}, Reason: "x"}, ifMatchHdr(u.Version)...)
+	expectCode(t, "patch webop", r, 200)
+	mustJSON(t, r.body, &u)
+	if u.Role != hubapi.UserRoleViewer {
+		t.Errorf("fleet role changed to %q", u.Role)
+	}
+	// Team-scoped: derived; to the fleet only with an explicit role.
+	e.getJSON("/v1/admin/users/payop", tokAdmin, &u)
+	if u.Role != hubapi.UserRoleOperator {
+		t.Errorf("team-scoped operator: stored role %q", u.Role)
+	}
+	fleet := hubapi.ScopeFleet
+	e.problem(e.do(http.MethodPatch, "/v1/admin/users/payop", tokAdmin, hubapi.UserUpdate{Scope: &fleet, Reason: "x"},
+		ifMatchHdr(u.Version)...), 400, "role_required")
+	r = e.do(http.MethodPatch, "/v1/admin/users/payop", tokAdmin, hubapi.UserUpdate{Scope: &fleet, Role: strPtr(hubapi.UserRoleViewer), Reason: "x"},
+		ifMatchHdr(u.Version)...)
+	expectCode(t, "payop to the fleet", r, 200)
+	mustJSON(t, r.body, &u)
+	if u.Role != hubapi.UserRoleViewer || u.Scope != hubapi.ScopeFleet || len(u.TeamRoles) != 1 {
+		t.Errorf("payop after moving to the fleet: %+v", u)
+	}
+}

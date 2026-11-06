@@ -821,8 +821,11 @@ One bucket (hourly averages); a field is absent when the metrics had no data.
 ## UserScope { #userscope }
 
 `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some
-teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role`
-is the highest of them. Admins are always `fleet` (docs/teams.md).
+teams); it is stored as given and team roles never change it. `teams`: the user sees and acts
+only on the workloads of its `teamRoles`; it has no fleet-wide role, so its `role` is derived
+(the highest team role) and a `role` sent with it is ignored. Moving a `teams` user to
+`fleet` needs `role` in the same request (`400` `role_required`). Admins are always `fleet`
+(docs/teams.md).
 
 Type: string. one of `fleet`, `teams`.
 
@@ -1010,7 +1013,7 @@ for the users the identity provider creates and the roles it changes).
 | `tokenId` | string |  | Only with `authMethod = token`. |
 | `csrfToken` | string |  | Send as `X-CSRF-Token` on writes; only with `authMethod = session`. |
 | `sessionExpiresAt` | string (date-time) |  |  |
-| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role` is the highest of them. Admins are always `fleet` (docs/teams.md). |
+| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams); it is stored as given and team roles never change it. `teams`: the user sees and acts only on the workloads of its `teamRoles`; it has no fleet-wide role, so its `role` is derived (the highest team role) and a `role` sent with it is ignored. Moving a `teams` user to `fleet` needs `role` in the same request (`400` `role_required`). Admins are always `fleet` (docs/teams.md). |
 | `teamRoles` | array of [TeamRole](schemas.md#teamrole) |  | The caller's roles on teams (docs/teams.md). `role` is the highest role anywhere. |
 
 ## PasswordChange { #passwordchange }
@@ -1038,7 +1041,7 @@ for the users the identity provider creates and the roles it changes).
 | `version` | integer, required | min 1 |  |
 | `source` | string | one of `local`, `oidc` | `local`: signs in with a password. `oidc`: signs in with the identity provider, which created the user at its first sign-in; its role comes from its groups there (`auth.oidc.roleMappings`), so it has no password and its role is not edited here (`409` `idp_managed`). |
 | `email` | string |  | The e-mail at the identity provider (`oidc` users). |
-| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role` is the highest of them. Admins are always `fleet` (docs/teams.md). |
+| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams); it is stored as given and team roles never change it. `teams`: the user sees and acts only on the workloads of its `teamRoles`; it has no fleet-wide role, so its `role` is derived (the highest team role) and a `role` sent with it is ignored. Moving a `teams` user to `fleet` needs `role` in the same request (`400` `role_required`). Admins are always `fleet` (docs/teams.md). |
 | `teamRoles` | array of [TeamRole](schemas.md#teamrole) |  | Roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the fleet-wide `role` on those teams; with `scope: teams` they are all the user has. |
 
 ## UserList { #userlist }
@@ -1056,7 +1059,7 @@ for the users the identity provider creates and the roles it changes).
 | `role` | UserRole (enum), required | one of `viewer`, `operator`, `admin` | Role of a local user. `viewer`: everything the read-only UI shows. `operator`: additionally workload actions (override, exclude, approve-once) and pausing automation. `admin`: additionally defaults, policies, settings, clusters, tokens and users. Each role includes the ones before it. |
 | `password` | string, required | min length 8; max length 72 | At least 8 characters; at most 72 bytes (bcrypt). |
 | `mustChangePassword` | boolean | default `True` |  |
-| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role` is the highest of them. Admins are always `fleet` (docs/teams.md). |
+| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams); it is stored as given and team roles never change it. `teams`: the user sees and acts only on the workloads of its `teamRoles`; it has no fleet-wide role, so its `role` is derived (the highest team role) and a `role` sent with it is ignored. Moving a `teams` user to `fleet` needs `role` in the same request (`400` `role_required`). Admins are always `fleet` (docs/teams.md). |
 | `teamRoles` | array of [TeamRole](schemas.md#teamrole) |  | Roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the fleet-wide `role` on those teams; with `scope: teams` they are all the user has. |
 | `reason` | string, required | min length 1; max length 1024 | Why the change is made; stored in the audit log. |
 
@@ -1067,7 +1070,7 @@ for the users the identity provider creates and the roles it changes).
 | `displayName` | string | max length 128 |  |
 | `role` | UserRole (enum) | one of `viewer`, `operator`, `admin` | Role of a local user. `viewer`: everything the read-only UI shows. `operator`: additionally workload actions (override, exclude, approve-once) and pausing automation. `admin`: additionally defaults, policies, settings, clusters, tokens and users. Each role includes the ones before it. |
 | `disabled` | boolean |  |  |
-| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role` is the highest of them. Admins are always `fleet` (docs/teams.md). |
+| `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams); it is stored as given and team roles never change it. `teams`: the user sees and acts only on the workloads of its `teamRoles`; it has no fleet-wide role, so its `role` is derived (the highest team role) and a `role` sent with it is ignored. Moving a `teams` user to `fleet` needs `role` in the same request (`400` `role_required`). Admins are always `fleet` (docs/teams.md). |
 | `teamRoles` | array of [TeamRole](schemas.md#teamrole) |  | Replaces the roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the fleet-wide `role` on those teams; with `scope: teams` they are all the user has. |
 | `reason` | string, required | min length 1; max length 1024 | Why the change is made; stored in the audit log. |
 

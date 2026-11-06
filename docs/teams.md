@@ -45,6 +45,13 @@ A user has a **scope**:
 `admin` is always fleet-wide and has no team roles. A user may hold several team roles. Local users get their
 scope and team roles in **Admin → Access**.
 
+**The `role` field.** For a `fleet` user, `role` is the fleet-wide role the admin set; team roles never change it,
+and only the role on the API's `GET /v1/me` (the highest role anywhere) reflects them. A fleet `viewer` with
+`operator` on `payments` stays `viewer` in Admin → Access. A `teams` user has no fleet-wide role, so its stored
+`role` is derived from its team roles (the highest of them) and a role sent with it is ignored. Moving a `teams`
+user back to the whole fleet needs the fleet-wide role in the same change (`400 role_required` otherwise), so a team
+operator never becomes a fleet operator by accident.
+
 Team-scoped users use Overview, Opportunities, the workload pages, Activity and **Admin → Teams** (their own teams).
 Everything else, such as policies, settings changes, clusters, datasources, users, tokens, node capacity and the
 node cost trend, covers the whole fleet and needs a fleet-wide role: the API answers `403` with code

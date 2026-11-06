@@ -5340,8 +5340,11 @@ components:
       type: string
       description: |
         `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some
-        teams). `teams`: the user sees and acts only on the workloads of its `teamRoles`; its `role`
-        is the highest of them. Admins are always `fleet` (docs/teams.md).
+        teams); it is stored as given and team roles never change it. `teams`: the user sees and acts
+        only on the workloads of its `teamRoles`; it has no fleet-wide role, so its `role` is derived
+        (the highest team role) and a `role` sent with it is ignored. Moving a `teams` user to
+        `fleet` needs `role` in the same request (`400` `role_required`). Admins are always `fleet`
+        (docs/teams.md).
       enum: [fleet, teams]
     TeamID:
       type: string

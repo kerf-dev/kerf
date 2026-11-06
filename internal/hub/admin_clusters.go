@@ -540,6 +540,13 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 		if in.TeamRoles != nil {
 			roles = *in.TeamRoles
 		}
+		// A team-scoped user's stored role is derived from its team roles: it is no fleet-wide role.
+		// Moving it to the whole fleet therefore needs the fleet role spelled out, or a team operator
+		// would silently become a fleet operator.
+		if cmp.Or(cur.Scope, hubapi.ScopeFleet) == hubapi.ScopeTeams && scope == hubapi.ScopeFleet && in.Role == nil {
+			badRequest(w, r, "role_required", "Give the fleet-wide role when moving a team-scoped user to the whole fleet.")
+			return
+		}
 		if scope == hubapi.ScopeTeams {
 			role = highestTeamRole(roles)
 		}
