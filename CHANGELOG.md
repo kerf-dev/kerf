@@ -107,7 +107,7 @@ First public version.
   filters and groups by team, the Overview shows savings by team, the workload page shows its team, and the weekly
   digest has a savings-by-team section. New API `/v1/admin/teams`, `team` filters and `groupBy=team` on workloads,
   facets, the savings trend and realized savings. The agent reports workload and namespace labels and now reads
-  namespaces (RBAC). Database migration `0018_teams`. See [Teams](docs/teams.md).
+  namespaces (RBAC). Database migration `0021_teams`. See [Teams](docs/teams.md).
 
 ### Changed
 
