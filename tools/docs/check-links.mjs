@@ -15,7 +15,9 @@ if (!existsSync(root)) {
   process.exit(2)
 }
 const ORIGIN = 'https://getkerf.dev'
-const REPO_URL = /^https:\/\/github\.com\/kerf-dev\/kerf\/(blob|tree)\/([^/]+)\/([^#?]*)/
+const GITHUB = 'https://github.com'
+const LOCAL = 'http://local.invalid' // base that turns every relative link into an absolute site path
+const REPO_PATH = /^\/kerf-dev\/kerf\/(blob|tree)\/([^/]+)\/(.*)$/
 
 function* htmlFiles(dir) {
   for (const name of readdirSync(dir)) {
@@ -65,21 +67,27 @@ let checked = 0
 
 function check(from, url) {
   checked++
-  if (/^(mailto:|tel:|javascript:|data:)/.test(url)) return
-  const gh = url.match(REPO_URL)
-  if (gh) {
+  let u
+  try {
+    // Relative links resolve against the page's own place in the site.
+    u = new URL(url, new URL(relative(root, from).split(sep).join('/'), LOCAL))
+  } catch {
+    problems.push(`${relative(root, from)}: ${url} -> not a valid URL`)
+    return
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return // mailto:, tel:, javascript:, data:
+  if (u.origin === GITHUB) {
+    const gh = u.pathname.match(REPO_PATH)
+    if (!gh) return
     const [, , ref, path] = gh
     const p = decodeURIComponent(path).replace(/\/$/, '')
     const ok = ref === 'main' ? existsSync(join(repo, p)) : inGit(ref, p)
     if (!ok) problems.push(`${relative(root, from)}: ${url} -> no ${p} at ${ref}`)
     return
   }
-  if (/^https?:\/\//.test(url) && !url.startsWith(ORIGIN)) return
-  if (url.startsWith('//')) return
-  if (url.startsWith(ORIGIN)) url = url.slice(ORIGIN.length) || '/'
-  const [rest, fragment] = url.split('#')
-  const [pathPart] = rest.split('?')
-  const target = pathPart === '' ? from : targetFile(pathPart, from)
+  if (u.origin !== ORIGIN && u.origin !== LOCAL) return // other external links are not checked offline
+  const fragment = u.hash.slice(1)
+  const target = targetFile(u.pathname, from)
   if (!target) {
     problems.push(`${relative(root, from)}: ${url} -> not found in the site`)
     return
@@ -89,12 +97,22 @@ function check(from, url) {
   }
 }
 
+// Removes every match, repeatedly, so that removing one cannot join the pieces around it into a new match.
+function stripAll(text, pattern) {
+  let previous
+  do {
+    previous = text
+    text = text.replace(pattern, '')
+  } while (text !== previous)
+  return text
+}
+
 let pages = 0
 for (const file of htmlFiles(root)) {
   // GitHub Pages serves only the 404 page at the root of the site; the ones MkDocs writes per version are never shown.
   if (/\/docs\/[^/]+\/404\.html$/.test(file.split(sep).join('/'))) continue
   pages++
-  const html = readFileSync(file, 'utf8').replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style)[\s\S]*?<\/\1>/g, '')
+  const html = stripAll(stripAll(readFileSync(file, 'utf8'), /<!--[\s\S]*?-->/g), /<(script|style)\b[\s\S]*?<\/\1\s*>/gi)
   for (const [, attr, value] of html.matchAll(/\s(href|src)="([^"]+)"/g)) {
     // Navigation of the version selector is filled in by script; the redirect pages of aliases point at siblings.
     check(file, value.replace(/&amp;/g, '&'))
