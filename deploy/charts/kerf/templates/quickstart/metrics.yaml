@@ -1,0 +1,203 @@
+{{- if .Values.quickstart.enabled }}
+{{- $m := .Values.quickstart.metrics }}
+{{- $node := .Values.quickstart.node }}
+{{- $cluster := required "global.clusterName is required" .Values.global.clusterName }}
+{{- $vmLabels := include "qs.labels" (dict "ctx" . "name" "kerf-vm") }}
+{{- $ksmLabels := include "qs.labels" (dict "ctx" . "name" "kerf-ksm") }}
+# Development only: VictoriaMetrics (single node) scrapes the kubelets' cAdvisor, kube-state-metrics and the Kerf
+# services, and stores the demo history. One pod, no replication.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kerf-vm
+  labels: {{- $vmLabels | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Namespace }}-kerf-vm
+  labels: {{- $vmLabels | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [nodes, nodes/metrics, nodes/proxy]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Namespace }}-kerf-vm
+  labels: {{- $vmLabels | nindent 4 }}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: {{ .Release.Namespace }}-kerf-vm}
+subjects:
+  - {kind: ServiceAccount, name: kerf-vm, namespace: {{ .Release.Namespace }}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kerf-vm
+  labels: {{- $vmLabels | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [endpoints, services, pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kerf-vm
+  labels: {{- $vmLabels | nindent 4 }}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: kerf-vm}
+subjects:
+  - {kind: ServiceAccount, name: kerf-vm, namespace: {{ .Release.Namespace }}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kerf-vm
+  labels: {{- $vmLabels | nindent 4 }}
+spec:
+  selector: {{- include "qs.selector" (dict "ctx" . "name" "kerf-vm") | nindent 4 }}
+  ports:
+    - {name: http, port: 8428, targetPort: http}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kerf-vm
+  labels: {{- $vmLabels | nindent 4 }}
+spec:
+  serviceName: kerf-vm
+  replicas: 1
+  selector:
+    matchLabels: {{- include "qs.selector" (dict "ctx" . "name" "kerf-vm") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $vmLabels | nindent 8 }}
+      annotations:
+        checksum/scrape: {{ include (print $.Template.BasePath "/quickstart/scrape.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: kerf-vm
+      {{- include "hub.c.imagePullSecrets" (dict "ctx" . "indent" 6) }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: victoria-metrics
+          image: {{ $m.image | quote }}
+          args:
+            - -storageDataPath=/storage
+            - -retentionPeriod={{ $m.retention }}
+            - -httpListenAddr=:8428
+            - -promscrape.config=/etc/vm/scrape.yml
+            - -promscrape.dropOriginalLabels
+            # Backfilled samples (the demo history) must be searchable at once.
+            - -search.latencyOffset=5s
+            - -search.maxUniqueTimeseries=1000000
+            - -loggerFormat=json
+          ports:
+            - {name: http, containerPort: 8428}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources: {{- toYaml $m.resources | nindent 12 }}
+          securityContext: {{- include "qs.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /storage}
+            - {name: scrape, mountPath: /etc/vm, readOnly: true}
+      volumes:
+        - name: scrape
+          configMap: {name: kerf-vm-scrape}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ $m.storage }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kerf-ksm
+  labels: {{- $ksmLabels | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Namespace }}-kerf-ksm
+  labels: {{- $ksmLabels | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods]
+    verbs: [list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [list, watch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Namespace }}-kerf-ksm
+  labels: {{- $ksmLabels | nindent 4 }}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: {{ .Release.Namespace }}-kerf-ksm}
+subjects:
+  - {kind: ServiceAccount, name: kerf-ksm, namespace: {{ .Release.Namespace }}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kerf-ksm
+  labels: {{- $ksmLabels | nindent 4 }}
+spec:
+  selector: {{- include "qs.selector" (dict "ctx" . "name" "kerf-ksm") | nindent 4 }}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kerf-ksm
+  labels: {{- $ksmLabels | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "qs.selector" (dict "ctx" . "name" "kerf-ksm") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $ksmLabels | nindent 8 }}
+    spec:
+      serviceAccountName: kerf-ksm
+      {{- include "hub.c.imagePullSecrets" (dict "ctx" . "indent" 6) }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: kube-state-metrics
+          image: {{ $m.ksmImage | quote }}
+          args:
+            - --port=8080
+            - --resources=nodes,pods,replicasets,deployments,statefulsets,daemonsets,jobs,horizontalpodautoscalers
+            - --metric-labels-allowlist=nodes=[node.kubernetes.io/instance-type,karpenter.sh/capacity-type,topology.kubernetes.io/region,topology.kubernetes.io/zone],pods=[app],deployments=[app],statefulsets=[app],daemonsets=[app]
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+          resources: {{- toYaml $m.ksmResources | nindent 12 }}
+          securityContext: {{- include "qs.securityContext" . | nindent 12 }}
+{{- end }}

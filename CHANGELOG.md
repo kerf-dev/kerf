@@ -73,6 +73,12 @@ First public version.
 - **Breaking:** the web chart's `auth.anonymousRead` and `token.*` (`web.auth.anonymousRead`, `web.token.*` in
   the kerf chart), with the token Secret and ExternalSecret. The chart fails with an upgrade message while they
   are set. Revoke the old `ui` token unless a script uses it.
+- **One-command quickstart.** `hack/quickstart.sh` creates a kind or k3d cluster, installs Kerf with demo workloads and
+  a generated usage history, and prints the URL and the admin password of a UI that shows priced recommendations
+  (`hack/quickstart.sh down` removes everything). It uses the new chart values `values-quickstart.yaml`
+  (`quickstart.enabled`: a bundled dev-only PostgreSQL, VictoriaMetrics and kube-state-metrics, the demo workloads
+  and their history) and the new `webhook.tls.selfSigned` (a webhook certificate made by the chart, no cert-manager).
+  The values schema refuses both unless `dev: true`. See [docs/quickstart.md](docs/quickstart.md).
 - **Artifact Hub.** The chart carries the metadata Artifact Hub shows (images, CRDs with examples, the changes of the
   release and the cosign signature, see [Verify the signatures](docs/release.md#verify-the-signatures)). Every
   release pushes `artifacthub-repo.yml` as the `artifacthub.io` tag of the chart repository, and CI runs `ah lint`

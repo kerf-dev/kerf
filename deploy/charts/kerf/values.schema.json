@@ -12,7 +12,7 @@
       "const": "(not used: set global.mode instead of mode)"
     },
     "dev": {
-      "description": "Development: allows inline secrets, cookieSecure false and an empty global.imageRegistry.",
+      "description": "Development: allows inline secrets, cookieSecure false, an empty global.imageRegistry, quickstart.enabled and webhook.tls.selfSigned.",
       "type": "boolean"
     },
     "global": {
@@ -61,6 +61,15 @@
     },
     "webhook": {
       "$ref": "#/definitions/component"
+    },
+    "quickstart": {
+      "description": "The laptop quickstart (bundled PostgreSQL, VictoriaMetrics, demo workloads): enabled only with dev: true.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     }
   },
   "additionalProperties": false,
@@ -396,6 +405,30 @@
                     },
                     "token": {
                       "$ref": "#/definitions/empty"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "quickstart": {
+          "properties": {
+            "enabled": {
+              "description": "The quickstart (bundled PostgreSQL, ...) is for development: dev: true only.",
+              "$ref": "#/definitions/notTrue"
+            }
+          }
+        },
+        "webhook": {
+          "properties": {
+            "tls": {
+              "properties": {
+                "selfSigned": {
+                  "properties": {
+                    "enabled": {
+                      "description": "A self-signed webhook certificate is for development: dev: true only.",
+                      "$ref": "#/definitions/notTrue"
                     }
                   }
                 }

@@ -10,14 +10,21 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY api/ api/
 COPY internal/ internal/
 COPY cmd/hub/ cmd/hub/
+COPY tools/synth/ tools/synth/
 ARG VERSION=dev
 ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/hub ./cmd/hub
+# The demo history of the laptop quickstart (docs/quickstart.md) is generated in the cluster by this tool; it
+# only runs when the chart's quickstart job asks for it.
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags "-s -w" -o /out/synth ./tools/synth
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/hub /hub
+COPY --from=build /out/synth /synth
 COPY db/migrations/ /migrations/
 ENV HUB_MIGRATIONS_DIR=/migrations
 USER 65532:65532

@@ -1,0 +1,82 @@
+{{- if .Values.quickstart.enabled }}
+{{- $pg := .Values.quickstart.postgres }}
+{{- $labels := include "qs.labels" (dict "ctx" . "name" "kerf-postgres") }}
+{{- $password := include "qs.stableSecret" (dict "ctx" . "secret" "kerf-quickstart-db" "key" "POSTGRES_PASSWORD") }}
+# Development only: one PostgreSQL pod for the hub. Not backed up, not highly available, no TLS.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kerf-quickstart-db
+  labels: {{- $labels | nindent 4 }}
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: {{ $password | quote }}
+  DATABASE_URL: {{ printf "postgres://kerf:%s@kerf-postgres:5432/kerf?sslmode=disable" $password | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kerf-postgres
+  labels: {{- $labels | nindent 4 }}
+spec:
+  selector: {{- include "qs.selector" (dict "ctx" . "name" "kerf-postgres") | nindent 4 }}
+  ports:
+    - {name: postgres, port: 5432, targetPort: postgres}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kerf-postgres
+  labels: {{- $labels | nindent 4 }}
+spec:
+  serviceName: kerf-postgres
+  replicas: 1
+  selector:
+    matchLabels: {{- include "qs.selector" (dict "ctx" . "name" "kerf-postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $labels | nindent 8 }}
+    spec:
+      {{- include "hub.c.imagePullSecrets" (dict "ctx" . "indent" 6) }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: postgres
+          image: {{ $pg.image | quote }}
+          env:
+            - {name: POSTGRES_USER, value: kerf}
+            - {name: POSTGRES_DB, value: kerf}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: kerf-quickstart-db, key: POSTGRES_PASSWORD}}
+          ports:
+            - {name: postgres, containerPort: 5432}
+          readinessProbe:
+            exec: {command: [pg_isready, -U, kerf, -d, kerf]}
+            periodSeconds: 5
+          livenessProbe:
+            exec: {command: [pg_isready, -U, kerf, -d, kerf]}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources: {{- toYaml $pg.resources | nindent 12 }}
+          securityContext: {{- include "qs.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: run, mountPath: /var/run/postgresql}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: run, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ $pg.storage }}
+{{- end }}

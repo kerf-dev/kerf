@@ -1,4 +1,19 @@
 {{- if include "webhook.c.enabled" . -}}
+{{- if .Values.tls.selfSigned.enabled }}
+{{- $pki := include "webhook.selfSigned" . | fromJson }}
+# Development only (tls.selfSigned): the serving certificate, made by this chart.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "webhook.tlsSecret" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "webhook.labels" . | nindent 4 }}
+type: kubernetes.io/tls
+data:
+  ca.crt: {{ $pki.ca }}
+  tls.crt: {{ $pki.crt }}
+  tls.key: {{ $pki.key }}
+{{- else }}
 {{- if not .Values.certManager.issuerRef.name }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
@@ -35,4 +50,5 @@ spec:
     kind: Issuer
     name: {{ include "webhook.fullname" . }}-selfsigned
     {{- end }}
+{{- end }}
 {{ end -}}

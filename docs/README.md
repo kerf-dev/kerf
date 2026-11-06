@@ -9,6 +9,7 @@ with search and a version switch, at [getkerf.dev/docs](https://getkerf.dev/docs
 
 | Document | What it covers |
 |---|---|
+| [Quickstart on your laptop](quickstart.md) | One command on kind or k3d: Kerf with demo workloads and recommendations in minutes, what it installed, how to remove it and how to move to a real install |
 | [Install on Amazon EKS](install/eks.md) | Prerequisites, AWS resources, the hub and workload clusters, readiness, turning on `auto-patch`, Argo CD, upgrade, uninstall, troubleshooting |
 | [Install on any cluster](install/any-cluster.md) | The same chart on a conformant cluster, with a static price table instead of the AWS price list |
 | [Concepts](concepts/README.md) | Modes, policies and precedence, apply strategies, guardrails, rollback, HPA coordination, JVM, approve once, GitOps and Argo CD |

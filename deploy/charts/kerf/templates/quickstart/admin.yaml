@@ -1,0 +1,12 @@
+{{- if .Values.quickstart.enabled }}
+# Development only: the password of the first admin (user admin), generated once and kept across upgrades.
+# Read it with: kubectl -n <namespace> get secret kerf-quickstart-admin -o jsonpath='{.data.password}' | base64 -d
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kerf-quickstart-admin
+  labels: {{- include "qs.labels" (dict "ctx" . "name" "kerf-quickstart-admin") | nindent 4 }}
+type: Opaque
+stringData:
+  password: {{ include "qs.stableSecret" (dict "ctx" . "secret" "kerf-quickstart-admin" "key" "password") | quote }}
+{{- end }}

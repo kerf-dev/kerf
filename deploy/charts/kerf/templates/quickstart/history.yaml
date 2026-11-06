@@ -1,0 +1,59 @@
+{{- if and .Values.quickstart.enabled .Values.quickstart.demo.enabled }}
+{{- $demo := .Values.quickstart.demo }}
+{{- $node := .Values.quickstart.node }}
+{{- $cluster := required "global.clusterName is required" .Values.global.clusterName }}
+{{- $labels := include "qs.labels" (dict "ctx" . "name" "kerf-quickstart-history") }}
+{{- $workloads := list }}
+{{- range $demo.workloads }}
+{{- $workloads = append $workloads (dict "name" .name "namespace" $demo.namespace "kind" "Deployment" "replicas" .replicas "containers" (list (dict "name" "app" "image" $demo.image "requests" .requests "limits" .limits "cpu" .usage.cpu "memory" .usage.memory))) }}
+{{- end }}
+{{- $scenario := dict "name" "quickstart" "seed" 7 "days" $demo.historyDays "step" "60s" "clusters" (list (dict "name" $cluster "region" $node.region "nodePools" (list (dict "instanceType" $node.instanceType "capacityType" "on-demand" "count" 1)) "workloads" $workloads)) }}
+# Development only: the generated usage history of the demo workloads (tools/synth, scenario below).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kerf-quickstart-scenario
+  labels: {{- $labels | nindent 4 }}
+data:
+  scenario.yaml: |
+    {{- toYaml $scenario | nindent 4 }}
+---
+# Runs once, after the install, and holds the install until the history is in VictoriaMetrics.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kerf-quickstart-history
+  labels: {{- $labels | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels: {{- $labels | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- include "hub.c.imagePullSecrets" (dict "ctx" . "indent" 6) }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: synth
+          image: {{ include "qs.image" (dict "ctx" . "component" "hub") | quote }}
+          imagePullPolicy: {{ .Values.hub.image.pullPolicy | default "IfNotPresent" }}
+          command: [/synth]
+          args:
+            - backfill
+            - --scenario=/scenario/scenario.yaml
+            - --vm-url=http://kerf-vm:8428
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          securityContext: {{- include "qs.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - {name: scenario, mountPath: /scenario, readOnly: true}
+      volumes:
+        - name: scenario
+          configMap: {name: kerf-quickstart-scenario}
+{{- end }}
