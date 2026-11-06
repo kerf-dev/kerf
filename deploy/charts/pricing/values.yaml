@@ -38,13 +38,15 @@ cur:
   source: ""
   # Region of the Athena workgroup or the export bucket; empty = aws.region or the SDK default.
   region: ""
-  # How often the report is read, the usage window rates are computed over, and how long the last
-  # rates are kept while the report cannot be read.
+  # How often the report is read.
   interval: 24h
+  # The usage window rates are computed over.
   window: 720h
+  # How long the last rates are kept while the report cannot be read; then list prices again.
   maxAge: 72h
   athena:
-    database: ""             # Glue database of the CUR 2.0 table, e.g. kerf_cur
+    # Glue database of the CUR 2.0 table (for example kerf_cur).
+    database: ""
     table: ""                # e.g. data
     workgroup: primary
     catalog: ""              # empty = AwsDataCatalog

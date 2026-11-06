@@ -192,6 +192,28 @@ Absent on recommendations computed before the field existed.
 | `source` | string, required | one of `metrics`, `default` |  |
 | `cpuCoreHourUSD` | number, required | min 0 |  |
 | `memoryGiBHourUSD` | number, required | min 0 |  |
+| `rateSources` | array of [PricingRateSource](schemas.md#pricingratesource) |  | With `source: metrics`, the cluster's priced nodes by where the pricing service took their rate from (the `source` label of the pricing series). Absent on older recommendations. |
+| `curPeriod` | [PricingPeriod](schemas.md#pricingperiod) |  | The usage the effective (`cur`) rates were computed from. |
+
+## PricingRateSource { #pricingratesource }
+
+Nodes priced from one rate source: `cur` (the effective rate paid, from the AWS Cost and Usage
+Report, Savings Plans and Reserved Instances amortised), `list` (AWS on-demand list price),
+`spot` (current spot price) or `static` (the static price file).
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `source` | string, required | one of `cur`, `list`, `spot`, `static` |  |
+| `nodes` | integer, required | min 0 |  |
+
+## PricingPeriod { #pricingperiod }
+
+The usage the effective (`cur`) rates were computed from.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `start` | string (date-time), required |  |  |
+| `end` | string (date-time), required |  |  |
 
 ## RecommendationList { #recommendationlist }
 
@@ -873,6 +895,37 @@ Adjusts the rates of one cluster. A fixed rate replaces the rate from the pricin
 | `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a local user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`). |
 | `reason` | string |  |  |
 | `value` | [PricingSettings](schemas.md#pricingsettings), required |  |  |
+| `rates` | [PricingRates](schemas.md#pricingrates) |  | Read-only, on GET: where the pricing service's rates come from now, read from its series in the hub's metrics store. Absent when the store cannot be queried. |
+
+## PricingRates { #pricingrates }
+
+Read-only, on GET: where the pricing service's rates come from now, read from its series in the
+hub's metrics store. Absent when the store cannot be queried.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cur` | [PricingCURStatus](schemas.md#pricingcurstatus) |  | The AWS Cost and Usage Report reader of the pricing service; absent when it is off. While `lastReadOK` is false the last effective rates are kept for a while (`pricing.cur.maxAge`), then every node falls back to list prices. |
+| `clusters` | array of [ClusterPricingRates](schemas.md#clusterpricingrates), required |  |  |
+
+## PricingCURStatus { #pricingcurstatus }
+
+The AWS Cost and Usage Report reader of the pricing service; absent when it is off. While
+`lastReadOK` is false the last effective rates are kept for a while (`pricing.cur.maxAge`), then
+every node falls back to list prices.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `lastReadOK` | boolean, required |  |  |
+| `lastSuccess` | string (date-time) |  |  |
+| `rates` | integer, required | min 0 | Instance type, region and capacity type keys with an effective rate in use. |
+| `period` | [PricingPeriod](schemas.md#pricingperiod) |  | The usage the effective (`cur`) rates were computed from. |
+
+## ClusterPricingRates { #clusterpricingrates }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `cluster` | string, required | pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`; example `ro-spoke-1` |  |
+| `sources` | array of [PricingRateSource](schemas.md#pricingratesource), required |  |  |
 
 ## PricingSettingsUpdate { #pricingsettingsupdate }
 
