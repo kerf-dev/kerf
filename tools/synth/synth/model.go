@@ -70,7 +70,10 @@ type ClusterModel struct {
 	Spec      *ClusterSpec
 	Nodes     []*Node
 	Workloads []*WorkloadSpec
-	nodeCPU   float64 // total allocatable CPU, for weighted placement
+	nodeCPU   float64 // total allocatable CPU of the nodes without GPUs, for weighted placement
+	// gpuSlots maps a GPU workload ("namespace/name") to the node of each of its pod slots; GPU
+	// pods run one per GPU node.
+	gpuSlots map[string][]*Node
 }
 
 // Node is one synthetic node.
@@ -135,6 +138,9 @@ func New(sc *Scenario, opt Options) (*Generator, error) {
 			cm.Workloads = append(cm.Workloads, &w)
 		}
 		g.sizeNodes(cm)
+		if err := g.placeGPU(cm); err != nil {
+			return nil, fmt.Errorf("cluster %s: %w", cs.Name, err)
+		}
 		g.Clusters = append(g.Clusters, cm)
 	}
 	if len(g.Clusters) == 0 {
@@ -157,6 +163,9 @@ func contains(xs []string, x string) bool {
 func (g *Generator) sizeNodes(cm *ClusterModel) {
 	var cpu, mem, dsCPU, dsMem float64
 	for _, w := range cm.Workloads {
+		if w.GPUsPerPod() > 0 {
+			continue // runs on GPU nodes, placed by placeGPU
+		}
 		var c, m float64
 		for _, ct := range w.Containers {
 			c += float64(ct.Requests.CPU)
@@ -181,11 +190,16 @@ func (g *Generator) sizeNodes(cm *ClusterModel) {
 	}
 	totalW := 0.0
 	for _, p := range cm.Spec.NodePools {
-		totalW += p.Weight
+		if InstanceTypes[p.InstanceType].GPUs == 0 {
+			totalW += p.Weight
+		}
 	}
 	r := newRand(g.Scenario.Seed, cm.Spec.Name, "nodes")
 	for _, p := range cm.Spec.NodePools {
 		it := InstanceTypes[p.InstanceType]
+		if it.GPUs > 0 {
+			continue // GPU pools: placeGPU
+		}
 		n := p.Count
 		if n == 0 {
 			share := p.Weight / totalW
@@ -198,28 +212,108 @@ func (g *Generator) sizeNodes(cm *ClusterModel) {
 			}
 		}
 		for i := 0; i < n; i++ {
-			zone := p.Zones[i%len(p.Zones)]
-			ip := fmt.Sprintf("10.%d.%d.%d", 20+r.IntN(40), r.IntN(256), 1+r.IntN(254))
-			node := &Node{
-				Name:         fmt.Sprintf("ip-%s.%s.compute.internal", strings.ReplaceAll(ip, ".", "-"), cm.Spec.Region),
-				InstanceType: p.InstanceType, CapacityType: p.CapacityType, Region: cm.Spec.Region, Zone: zone, IP: ip,
-				ProviderID: fmt.Sprintf("aws:///%s/i-0%s", zone, r.hex(16)), Type: it,
-			}
-			cm.Nodes = append(cm.Nodes, node)
-			cm.nodeCPU += it.AllocatableCPU
+			cm.addNode(r, p, i)
 		}
 	}
 }
 
+// addNode creates node i of pool p.
+func (cm *ClusterModel) addNode(r *rnd, p NodePoolSpec, i int) *Node {
+	it := InstanceTypes[p.InstanceType]
+	zone := p.Zones[i%len(p.Zones)]
+	ip := fmt.Sprintf("10.%d.%d.%d", 20+r.IntN(40), r.IntN(256), 1+r.IntN(254))
+	node := &Node{
+		Name:         fmt.Sprintf("ip-%s.%s.compute.internal", strings.ReplaceAll(ip, ".", "-"), cm.Spec.Region),
+		InstanceType: p.InstanceType, CapacityType: p.CapacityType, Region: cm.Spec.Region, Zone: zone, IP: ip,
+		ProviderID: fmt.Sprintf("aws:///%s/i-0%s", zone, r.hex(16)), Type: it,
+	}
+	cm.Nodes = append(cm.Nodes, node)
+	if it.GPUs == 0 {
+		cm.nodeCPU += it.AllocatableCPU
+	}
+	return node
+}
+
+// placeGPU creates the GPU nodes and assigns every pod slot of every GPU workload its own node:
+// the pool with the fewest GPUs per node that fits the pod. Pools with a count provide that many
+// nodes; pools without one grow on demand.
+func (g *Generator) placeGPU(cm *ClusterModel) error {
+	type pool struct {
+		spec NodePoolSpec
+		free []*Node
+		made int
+	}
+	var pools []*pool
+	r := newRand(g.Scenario.Seed, cm.Spec.Name, "gpu-nodes")
+	for _, p := range cm.Spec.NodePools {
+		if InstanceTypes[p.InstanceType].GPUs == 0 {
+			continue
+		}
+		pl := &pool{spec: p}
+		for i := 0; i < p.Count; i++ {
+			pl.free = append(pl.free, cm.addNode(r, p, pl.made))
+			pl.made++
+		}
+		pools = append(pools, pl)
+	}
+	cm.gpuSlots = map[string][]*Node{}
+	for _, w := range cm.Workloads {
+		perPod := w.GPUsPerPod()
+		if perPod == 0 {
+			continue
+		}
+		var best *pool
+		for _, pl := range pools {
+			if n := InstanceTypes[pl.spec.InstanceType].GPUs; n >= perPod && (best == nil || n < InstanceTypes[best.spec.InstanceType].GPUs) {
+				best = pl
+			}
+		}
+		if best == nil {
+			return fmt.Errorf("workload %s: no node pool with %d GPUs per node", w.Name, perPod)
+		}
+		slots := w.Replicas
+		switch {
+		case w.HPA != nil:
+			slots = w.HPA.Max
+		case w.Kind == KindCronJob:
+			slots = 1
+		}
+		for j := 0; j < slots; j++ {
+			switch {
+			case len(best.free) > 0:
+			case best.spec.Count == 0:
+				best.free = append(best.free, cm.addNode(r, best.spec, best.made))
+				best.made++
+			default:
+				return fmt.Errorf("workload %s needs %d %s nodes for its GPU pods, pool has %d", w.Name, slots, best.spec.InstanceType, best.spec.Count)
+			}
+			cm.gpuSlots[w.Namespace+"/"+w.Name] = append(cm.gpuSlots[w.Namespace+"/"+w.Name], best.free[0])
+			best.free = best.free[1:]
+		}
+	}
+	return nil
+}
+
+// gpuNode returns the node of pod slot j of a GPU workload.
+func (cm *ClusterModel) gpuNode(w *WorkloadSpec, j int) *Node {
+	return cm.gpuSlots[w.Namespace+"/"+w.Name][j]
+}
+
+// pickNode chooses a node without GPUs, weighted by allocatable CPU.
 func (cm *ClusterModel) pickNode(r *rnd) *Node {
 	x := r.Float64() * cm.nodeCPU
+	var last *Node
 	for _, n := range cm.Nodes {
+		if n.Type.GPUs > 0 {
+			continue // GPU nodes only run GPU workloads
+		}
+		last = n
 		x -= n.Type.AllocatableCPU
 		if x < 0 {
 			return n
 		}
 	}
-	return cm.Nodes[len(cm.Nodes)-1]
+	return last
 }
 
 // WorkloadTrace is the simulated history of one workload.
@@ -258,6 +352,10 @@ type ContainerTrace struct {
 	Periods   []float64 // CFS periods per second
 	Mem       []float64 // working set bytes
 	Instances []Instance
+	// GPU series per GPU of the pod (index = GPU of the node, 0..PerPod-1), nil without GPUs:
+	// utilisation in percent (integers) and framebuffer used in MiB (integers). Index k is sample
+	// Pod.Start+k like the other fields.
+	GPUUtil, GPUUsedMiB [][]float64
 }
 
 // Instance is one run of a container (a restart starts a new one).
@@ -320,8 +418,12 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 	// Workload-level shapes per container (shared by all pods: traffic is shared).
 	cpuShapes := make([][]float64, len(w.Containers))
 	memShapes := make([][]float64, len(w.Containers))
+	gpuShapes := make([][]float64, len(w.Containers))
 	for i := range w.Containers {
 		c := &w.Containers[i]
+		if c.GPU != nil {
+			gpuShapes[i] = g.shape(normalize(gpuUtilSignal(c.GPU), false), newRand(seed, cm.Spec.Name, w.Namespace, w.Name, c.Name, "gpu-util"))
+		}
 		cpuShapes[i] = g.shape(normalize(c.CPU, true), newRand(seed, cm.Spec.Name, w.Namespace, w.Name, c.Name, "cpu"))
 		memShapes[i] = g.shape(normalize(c.Memory, false), newRand(seed, cm.Spec.Name, w.Namespace, w.Name, c.Name, "mem"))
 	}
@@ -382,7 +484,11 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 	newPod := func(key string, start, end, rev int, node *Node, name, ownerKind, ownerName string) {
 		pr := newRand(seed, cm.Spec.Name, w.Namespace, w.Name, "pod", key)
 		if node == nil {
-			node = cm.pickNode(pr)
+			if w.GPUsPerPod() > 0 {
+				node = cm.gpuNode(w, 0) // CronJob runs
+			} else {
+				node = cm.pickNode(pr)
+			}
 		}
 		p := &PodTrace{Name: name, UID: pr.uid(), Node: node, OwnerKind: ownerKind, OwnerName: ownerName,
 			Start: start, End: end, Revision: rev,
@@ -391,7 +497,15 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 			// Own stream per container: containers are simulated one after the other, so a shared
 			// stream would make the second depend on how long the first ran.
 			cr := newRand(seed, cm.Spec.Name, w.Namespace, w.Name, "pod", key, w.Containers[ci].Name)
-			p.Containers = append(p.Containers, g.simContainer(cr, w, ci, p, cpuShapes[ci], memShapes[ci], perPodLoad))
+			ct := g.simContainer(cr, w, ci, p, cpuShapes[ci], memShapes[ci], perPodLoad)
+			if gs := w.Containers[ci].GPU; gs != nil {
+				cname := w.Containers[ci].Name
+				ct.GPUUtil, ct.GPUUsedMiB = g.simGPU(newRand(seed, cm.Spec.Name, w.Namespace, w.Name, "pod", key, cname, "gpu"),
+					func(d int) *rnd {
+						return newRand(seed, cm.Spec.Name, w.Namespace, w.Name, "pod", key, cname, "gpu", strconv.Itoa(d))
+					}, gs, p.End-p.Start, gpuShapes[ci][p.Start:p.End])
+			}
+			p.Containers = append(p.Containers, ct)
 		}
 		wt.Pods = append(wt.Pods, p)
 	}
@@ -453,9 +567,12 @@ func (g *Generator) Simulate(cm *ClusterModel, w *WorkloadSpec) *WorkloadTrace {
 				if active && cur < 0 {
 					cur, curRev = i, rev
 					curNode = nil
-					if w.Kind == KindDaemonSet {
+					switch {
+					case w.Kind == KindDaemonSet:
 						curNode = cm.Nodes[j]
-					} else {
+					case w.GPUsPerPod() > 0:
+						curNode = cm.gpuNode(w, j)
+					default:
 						curNode = cm.pickNode(sr)
 					}
 					deadline = math.MaxInt32

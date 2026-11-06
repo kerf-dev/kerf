@@ -6,6 +6,7 @@
 package hubclient
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/kerf-dev/kerf/api/v1alpha1"
@@ -144,6 +145,8 @@ type WorkloadRecommendation struct {
 	Pricing *RecommendationPricing `json:"pricing,omitempty"`
 	// HPA is the HPA coordination of hpa-coupled workloads (WO-11).
 	HPA *HPACoordination `json:"hpa,omitempty"`
+	// GPU is the hub's GPU visibility data (utilisation, cost, suggestions); the agent does not use it.
+	GPU json.RawMessage `json:"gpu,omitempty"`
 }
 
 // HPACoordination is the hub's HPA target recommendation (WO-11). Without RecommendedTarget

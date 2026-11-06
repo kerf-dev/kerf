@@ -23,6 +23,11 @@ type NodeCost struct {
 	CPURate  float64 // USD per allocatable vCPU-hour
 	MemRate  float64 // USD per allocatable GiB-hour
 	Weight   float64
+	// GPUs is the number of GPUs of the instance type and GPURate the node price per GPU-hour
+	// (the whole node price over its GPUs, so a pod's GPU cost is its share of the node's GPUs); both
+	// are 0 for nodes without GPUs.
+	GPUs    float64
+	GPURate float64
 }
 
 // Reasons a node is not priced (label `reason` of kerf_pricing_nodes).
@@ -44,6 +49,10 @@ var (
 		"CPU share of the node price per allocatable vCPU, in USD per hour.", costLabels, nil)
 	memCostDesc = prometheus.NewDesc("kerf_memory_gib_hourly_cost_usd",
 		"Memory share of the node price per allocatable GiB, in USD per hour.", costLabels, nil)
+	gpuCostDesc = prometheus.NewDesc("kerf_gpu_hourly_cost_usd",
+		"Node price per GPU of the instance type (node price over its GPU count), in USD per hour. Only nodes with GPUs.", costLabels, nil)
+	nodeGPUsDesc = prometheus.NewDesc("kerf_node_gpus",
+		"GPUs of the node's instance type. Only nodes with GPUs.", costLabels, nil)
 )
 
 // Exporter periodically prices every discovered node and exports the kerf_*_hourly_cost_usd series.
@@ -201,7 +210,11 @@ func (e *Exporter) price(ctx context.Context, n Node) (NodeCost, string) {
 		log.WarnContext(ctx, "cannot split node price", "err", err)
 		return NodeCost{}, ReasonNoAllocatable
 	}
-	return NodeCost{Node: n, Provider: e.Provider.Name(), NodeUSD: p.HourlyUSD, CPURate: cpu, MemRate: mem, Weight: w}, ""
+	nc := NodeCost{Node: n, Provider: e.Provider.Name(), NodeUSD: p.HourlyUSD, CPURate: cpu, MemRate: mem, Weight: w}
+	if p.GPUs > 0 {
+		nc.GPUs, nc.GPURate = p.GPUs, p.HourlyUSD/p.GPUs
+	}
+	return nc, ""
 }
 
 // Describe implements prometheus.Collector.
@@ -209,6 +222,8 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- nodeCostDesc
 	ch <- cpuCostDesc
 	ch <- memCostDesc
+	ch <- gpuCostDesc
+	ch <- nodeGPUsDesc
 }
 
 // Collect implements prometheus.Collector.
@@ -218,5 +233,9 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(nodeCostDesc, prometheus.GaugeValue, c.NodeUSD, lv...)
 		ch <- prometheus.MustNewConstMetric(cpuCostDesc, prometheus.GaugeValue, c.CPURate, lv...)
 		ch <- prometheus.MustNewConstMetric(memCostDesc, prometheus.GaugeValue, c.MemRate, lv...)
+		if c.GPUs > 0 {
+			ch <- prometheus.MustNewConstMetric(gpuCostDesc, prometheus.GaugeValue, c.GPURate, lv...)
+			ch <- prometheus.MustNewConstMetric(nodeGPUsDesc, prometheus.GaugeValue, c.GPUs, lv...)
+		}
 	}
 }

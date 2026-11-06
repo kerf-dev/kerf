@@ -92,14 +92,14 @@ func od(it string) Key { return Key{Region: "eu-west-1", InstanceType: it, Capac
 func TestSplitterWeight(t *testing.T) {
 	// Prices built from a = 0.036/vCPU, b = 0.004/GiB, i.e. a weight of exactly 9.
 	exact := map[Key]Price{
-		od("c6i.xlarge"): {0.036*4 + 0.004*8, Shape{4, 8}},
-		od("m6i.xlarge"): {0.036*4 + 0.004*16, Shape{4, 16}},
-		od("r6i.xlarge"): {0.036*4 + 0.004*32, Shape{4, 32}},
+		od("c6i.xlarge"): {0.036*4 + 0.004*8, Shape{4, 8}, 0},
+		od("m6i.xlarge"): {0.036*4 + 0.004*16, Shape{4, 16}, 0},
+		od("r6i.xlarge"): {0.036*4 + 0.004*32, Shape{4, 32}, 0},
 		// Only the m class is known for 6a: fallback.
-		od("m6a.xlarge"): {0.19, Shape{4, 16}},
+		od("m6a.xlarge"): {0.19, Shape{4, 16}, 0},
 		// Memory is priced negatively: fit rejected.
-		od("c5.xlarge"): {0.30, Shape{4, 8}},
-		od("m5.xlarge"): {0.20, Shape{4, 16}},
+		od("c5.xlarge"): {0.30, Shape{4, 8}, 0},
+		od("m5.xlarge"): {0.20, Shape{4, 16}, 0},
 	}
 	tests := []struct {
 		name, instanceType string
@@ -129,9 +129,9 @@ func TestSplitterWeightCaching(t *testing.T) {
 	transient := errors.New("throttled")
 	f := &fakeProvider{
 		prices: map[Key]Price{
-			od("c6i.xlarge"): {0.192, Shape{4, 8}},
-			od("m6i.xlarge"): {0.214, Shape{4, 16}},
-			od("r6i.xlarge"): {0.282, Shape{4, 32}},
+			od("c6i.xlarge"): {0.192, Shape{4, 8}, 0},
+			od("m6i.xlarge"): {0.214, Shape{4, 16}, 0},
+			od("r6i.xlarge"): {0.282, Shape{4, 32}, 0},
 		},
 		errs: map[Key]error{od("r6i.xlarge"): transient},
 	}
@@ -157,7 +157,7 @@ func TestFitWeightDegenerate(t *testing.T) {
 		t.Fatal("empty fit must fail")
 	}
 	// Invalid points are ignored.
-	if _, ok := fitWeight([]Price{{0, Shape{4, 8}}, {1, Shape{0, 16}}, {1, Shape{4, 16}}}); ok {
+	if _, ok := fitWeight([]Price{{0, Shape{4, 8}, 0}, {1, Shape{0, 16}, 0}, {1, Shape{4, 16}, 0}}); ok {
 		t.Fatal("one valid point must fail")
 	}
 }

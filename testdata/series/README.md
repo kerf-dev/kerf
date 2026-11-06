@@ -31,8 +31,16 @@ go test ./tools/synth/...    # TestFixturesUpToDate fails if the files are stale
 | `synth-restarting-0.json` | crash (reason `Error`) every ~8h | `restarting` |
 | `synth-daemon-0.json` | DaemonSet, one pod per node | cpu ↓, memory ↓ |
 | `synth-ledger-store-0.json` | StatefulSet, 3 replicas, weekly pattern | cpu ↓, memory ↓ |
+| `synth-gpu-idle-0.json` | 1 GPU, utilisation ~0-2 % with rare blips (`trainer-idle`) | `gpu.expect`: `idle`, `scale-to-zero` |
+| `synth-gpu-light-0.json` | 2 pods x 1 GPU, daily cycle p95 ~25 %, ~20 % of the memory, exported labels (`inference-light`) | `under-used`, `time-slicing` |
+| `synth-gpu-busy-0.json` | 2 pods x 1 GPU, daily cycle p95 ~80 % (`inference-busy`) | `ok`, no suggestion |
+| `synth-gpu-nodata-0.json` | requests a GPU, no DCGM series (`notebook-nodata`) | `no-data` |
 
-`expect.cpu` / `expect.memory` are `decrease`, `keep` (within roughly ±25%), `increase` or `any`;
+The GPU fixtures come from `tools/synth/scenarios/fleet-gpu.yaml` (cluster `synth-gpu`, same 14 days and
+end time, workloads with a `fixture:` name; their `workload` field is the workload's real name).
+
+`expect.cpu` / `expect.memory` of the GPU fixtures describe their CPU and memory (all `decrease`); the GPU
+ground truth is `gpu.expect`. `expect.cpu` / `expect.memory` are `decrease`, `keep` (within roughly ±25%), `increase` or `any`;
 `expect.riskFlags` lists flags a correct recommender must raise (it may raise more, e.g.
 `restarting` next to `oom-killed`). They are the ground truth from the scenario file.
 
@@ -66,6 +74,36 @@ which maps `null` to `NaN`.
 
 `null` means no pod was running in that bucket (before creation, between CronJob runs).
 Init containers appear with `"init": true` and carry requests/limits only.
+
+### GPU section
+
+Fixtures of workloads that request GPUs have a `gpu` object (absent otherwise, so the other files are
+unchanged and `schemaVersion` stays 1). It holds what the NVIDIA DCGM exporter reported for the GPUs of the
+workload's pods, per 5-minute bucket (the arrays have `points` elements, aligned with `replicas`).
+Per GPU, the samples of a bucket are reduced (mean utilisation, max framebuffer used, min free),
+then aggregated across all GPUs of all running pods:
+
+```jsonc
+"gpu": {
+  "container": "server",                  // the container that requests the GPUs
+  "perPod": 1,                            // nvidia.com/gpu requested by one pod
+  "model": "NVIDIA A10G",                 // DCGM modelName
+  "memoryMiB": 24576,                     // framebuffer of one GPU (used + free)
+  "labelStyle": "exported",               // pod | exported: DCGM label style (see tools/synth/README.md)
+  "dcgm": true,                           // false: the exporter has no series for the pods; the arrays below are absent
+  "node": {"instanceType": "g5.xlarge", "capacityType": "on-demand", "region": "eu-west-1", "gpus": 1},   // GPU price inputs
+  "devices": [2, 2, ...],                 // GPU series reporting in the bucket (running pods x perPod); null: none
+  "util":      {"min": [...], "max": [...], "avg": [...]},   // DCGM_FI_DEV_GPU_UTIL, percent 0-100, across GPUs
+  "fbUsedMiB": {"min": [...], "max": [...], "avg": [...]},   // DCGM_FI_DEV_FB_USED (max over the bucket per GPU), MiB
+  "fbFreeMiB": {"min": [...], "max": [...], "avg": [...]},   // DCGM_FI_DEV_FB_FREE (min over the bucket per GPU), MiB
+  "expect": {"status": "under-used", "suggestions": ["time-slicing"]}   // idle | under-used | ok | no-data; kinds the hub must suggest
+}
+```
+
+`util.avg` is the workload's GPU utilisation as the hub averages it over the GPUs at each step (its 95th
+percentile is what separates `idle` < 5 %, `under-used` < 40 %); `fbUsedMiB.max` is the busiest GPU.
+`fbFreeMiB.min` is `memoryMiB - fbUsedMiB.max`. `null` entries mean no pod ran. Load with
+`synth.LoadFixture` (`Fixture.GPU`).
 
 For tests that need raw Prometheus series instead, generate them in-process:
 

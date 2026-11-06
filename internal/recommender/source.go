@@ -44,6 +44,8 @@ type RawWorkload struct {
 	// Live is true when the workload has request/limit series at the window end (default lookback):
 	// it has pods right now (WO-04e).
 	Live bool
+	// GPU is set when the workload's pods request GPUs.
+	GPU *RawGPU
 }
 
 // ClusterData is the raw data of one cluster as of End.
@@ -53,6 +55,8 @@ type ClusterData struct {
 	Window    time.Duration
 	Workloads map[hubapi.WorkloadKey]*RawWorkload
 	Pricing   Pricing
+	// GPUPrices are the hourly prices of one GPU by node (USD); nodes without GPU price are absent.
+	GPUPrices map[string]float64
 }
 
 // SortedKeys returns the workload keys in a stable order.
@@ -345,6 +349,7 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 			w.HPA = &HPA{Name: k.name, Metrics: ms, Targets: hpaUtil[k], MinReplicas: hpaMin[k], MaxReplicas: hpaMax[k], PeakReplicas: hpaPeak[k]}
 		}
 	}
+	s.loadGPU(ctx, d, data, q, start, end)
 	d.Pricing = Pricing{CPUCoreHour: cfg.DefaultCPUCoreHourUSD, MemoryGiBHour: cfg.DefaultMemoryGiBHourUSD, Source: PricingSourceDefault}
 	if cpuRate > 0 && memRate > 0 {
 		d.Pricing = Pricing{CPUCoreHour: cpuRate, MemoryGiBHour: memRate, Source: PricingSourceMetrics, Nodes: int(nodes)}

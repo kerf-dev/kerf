@@ -131,3 +131,47 @@ func TestExporterProviderErrorAndRun(t *testing.T) {
 		t.Fatal("priced a node despite provider error")
 	}
 }
+
+func TestExporterGPUCost(t *testing.T) {
+	static, err := LoadStatic("../../dev/prices.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes := &fakeNodes{nodes: []Node{
+		{Cluster: "synth-gpu", Name: "gpu-1", InstanceType: "g5.12xlarge", CapacityType: OnDemand, Region: "eu-west-1", AllocatableCores: 47, AllocatableGiB: 180},
+		{Cluster: "synth-gpu", Name: "cpu-1", InstanceType: "m6i.xlarge", CapacityType: OnDemand, Region: "eu-west-1", AllocatableCores: 4, AllocatableGiB: 15.5},
+	}}
+	prov := NewCached(static, time.Hour, nil)
+	e := NewExporter(nodes, prov, &Splitter{Provider: prov}, nil)
+	reg := prometheus.NewRegistry()
+	if err := e.Register(reg, prometheus.WrapRegistererWith(prometheus.Labels{"cluster": "ro-hub"}, reg)); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var gpu NodeCost
+	for _, c := range e.Costs() {
+		switch c.Name {
+		case "gpu-1":
+			gpu = c
+		case "cpu-1":
+			if c.GPUs != 0 || c.GPURate != 0 {
+				t.Errorf("CPU node has GPU cost: %+v", c)
+			}
+		}
+	}
+	if gpu.GPUs != 4 || math.Abs(gpu.GPURate-6.240/4) > 1e-9 {
+		t.Fatalf("gpu node: %d GPUs at %v per GPU-hour, want 4 at %v", int(gpu.GPUs), gpu.GPURate, 6.240/4)
+	}
+	// Only GPU nodes export the GPU series.
+	if n := testutil.CollectAndCount(e, "kerf_gpu_hourly_cost_usd"); n != 1 {
+		t.Errorf("kerf_gpu_hourly_cost_usd series: %d, want 1", n)
+	}
+	if n := testutil.CollectAndCount(e, "kerf_node_gpus"); n != 1 {
+		t.Errorf("kerf_node_gpus series: %d, want 1", n)
+	}
+	if n := testutil.CollectAndCount(e, "kerf_node_hourly_cost_usd"); n != 2 {
+		t.Errorf("kerf_node_hourly_cost_usd series: %d, want 2", n)
+	}
+}

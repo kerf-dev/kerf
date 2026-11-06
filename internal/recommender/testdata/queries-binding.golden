@@ -532,3 +532,150 @@ avg by (cluster) (max by (cluster, node) (last_over_time(kerf_cpu_core_hourly_co
 ## Pricing/count
 count by (cluster) (max by (cluster, node) (last_over_time(kerf_cpu_core_hourly_cost_usd{cluster="ro-spoke-2"}[1h])))
 
+## GPUPods
+max by (cluster, namespace, pod, node, workload_kind, workload) (
+sum by (cluster, namespace, pod, node) (label_replace(kube_pod_container_resource_requests{k8s_cluster="prod-eu1", env="prod", resource="nvidia_com_gpu"}, "cluster", "ro-spoke-2", "", ""))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="ReplicaSet"}, "cluster", "ro-spoke-2", "", ""), "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(label_replace(kube_replicaset_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="Deployment"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="Job"}, "cluster", "ro-spoke-2", "", ""), "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(label_replace(kube_job_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="CronJob"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind=~"StatefulSet|DaemonSet"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## GPUUtilization
+avg by (cluster, namespace, workload_kind, workload) (
+avg by (cluster, namespace, pod) (label_replace(label_replace(label_replace(DCGM_FI_DEV_GPU_UTIL{k8s_cluster="prod-eu1", env="prod"}, "cluster", "ro-spoke-2", "", ""), "pod", "$1", "exported_pod", "(.+)"), "namespace", "$1", "exported_namespace", "(.+)"))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="ReplicaSet"}, "cluster", "ro-spoke-2", "", ""), "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(label_replace(kube_replicaset_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="Deployment"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="Job"}, "cluster", "ro-spoke-2", "", ""), "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(label_replace(kube_job_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="CronJob"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind=~"StatefulSet|DaemonSet"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## GPUMemoryUsed
+max by (cluster, namespace, workload_kind, workload) (
+max by (cluster, namespace, pod) (label_replace(label_replace(label_replace(DCGM_FI_DEV_FB_USED{k8s_cluster="prod-eu1", env="prod"}, "cluster", "ro-spoke-2", "", ""), "pod", "$1", "exported_pod", "(.+)"), "namespace", "$1", "exported_namespace", "(.+)"))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="ReplicaSet"}, "cluster", "ro-spoke-2", "", ""), "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(label_replace(kube_replicaset_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="Deployment"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="Job"}, "cluster", "ro-spoke-2", "", ""), "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(label_replace(kube_job_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="CronJob"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind=~"StatefulSet|DaemonSet"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## GPUMemoryTotal
+max by (cluster, namespace, workload_kind, workload, modelName) (
+max by (cluster, namespace, pod, modelName) (label_replace(label_replace(label_replace(last_over_time(DCGM_FI_DEV_FB_USED{k8s_cluster="prod-eu1", env="prod"}[24h]), "cluster", "ro-spoke-2", "", ""), "pod", "$1", "exported_pod", "(.+)"), "namespace", "$1", "exported_namespace", "(.+)") + label_replace(label_replace(label_replace(last_over_time(DCGM_FI_DEV_FB_FREE{k8s_cluster="prod-eu1", env="prod"}[24h]), "cluster", "ro-spoke-2", "", ""), "pod", "$1", "exported_pod", "(.+)"), "namespace", "$1", "exported_namespace", "(.+)"))
+* on (cluster, namespace, pod) group_left (workload_kind, workload)
+(
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="ReplicaSet"}, "cluster", "ro-spoke-2", "", ""), "replicaset", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, replicaset) group_left (workload)
+    max by (cluster, namespace, replicaset, workload) (
+      label_replace(label_replace(kube_replicaset_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="Deployment"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "Deployment", "workload", ".*"
+)
+or
+label_replace(
+  max by (cluster, namespace, pod, workload) (
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="Job"}, "cluster", "ro-spoke-2", "", ""), "job_name", "$1", "owner_name", "(.*)")
+    * on (cluster, namespace, job_name) group_left (workload)
+    max by (cluster, namespace, job_name, workload) (
+      label_replace(label_replace(kube_job_owner{k8s_cluster="prod-eu1", env="prod", owner_kind="CronJob"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)")
+    )
+  ),
+  "workload_kind", "CronJob", "workload", ".*"
+)
+or
+max by (cluster, namespace, pod, workload_kind, workload) (
+  label_replace(
+    label_replace(label_replace(kube_pod_owner{k8s_cluster="prod-eu1", env="prod", owner_kind=~"StatefulSet|DaemonSet"}, "cluster", "ro-spoke-2", "", ""), "workload", "$1", "owner_name", "(.*)"),
+    "workload_kind", "$1", "owner_kind", "(.*)"
+  )
+)
+)
+)
+
+## GPUPrice
+max by (cluster, node) (last_over_time(kerf_gpu_hourly_cost_usd{cluster="ro-spoke-2"}[1h]))
+

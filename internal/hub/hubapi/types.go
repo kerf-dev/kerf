@@ -212,6 +212,8 @@ type WorkloadRecommendation struct {
 	Pricing           *RecommendationPricing    `json:"pricing,omitempty"`
 	// HPA is the HPA coordination (WO-11) of hpa-coupled workloads.
 	HPA *HPACoordination `json:"hpa,omitempty"`
+	// GPU is set for workloads whose pods request GPUs.
+	GPU *GPUUsage `json:"gpu,omitempty"`
 }
 
 // Pricing sources (RecommendationPricing.source).
@@ -447,6 +449,7 @@ type WorkloadRow struct {
 	Confidence        *float64                  `json:"confidence,omitempty"`
 	RiskFlags         []string                  `json:"riskFlags,omitempty"`
 	MonthlySavingsUSD *Savings                  `json:"monthlySavingsUSD,omitempty"`
+	GPU               *GPUUsage                 `json:"gpu,omitempty"`
 }
 
 // WorkloadList is the response of GET /v1/workloads.
@@ -470,6 +473,7 @@ type WorkloadFacets struct {
 	Kinds      []FacetCount `json:"kinds"`
 	Modes      []FacetCount `json:"modes"`
 	RiskFlags  []FacetCount `json:"riskFlags"`
+	GPU        []FacetCount `json:"gpu,omitempty"`
 }
 
 // WorkloadDetail is the response of GET /v1/workloads/{id}.

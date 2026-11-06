@@ -105,6 +105,9 @@ type WorkloadSpec struct {
 	Containers      []ContainerSpec `yaml:"containers"`
 	InitContainers  []ContainerSpec `yaml:"initContainers"`
 	Expect          *Expectation    `yaml:"expect"`
+	// Fixture names the testdata/series file (without .json) written for this workload by
+	// `synth fixtures` when a scenario other than fleet-small lists it (fleet-gpu.yaml).
+	Fixture string `yaml:"fixture"`
 }
 
 // HPASpec attaches a utilization HPA to a Deployment.
@@ -134,6 +137,164 @@ type ContainerSpec struct {
 	Memory   Signal    `yaml:"memory"`
 	// CrashEvery: mean time between non-OOM crashes (reason Error); 0 = never.
 	CrashEvery Duration `yaml:"crashEvery"`
+	// GPU makes the container request nvidia.com/gpu and gives its GPUs DCGM series.
+	GPU *GPUSpec `yaml:"gpu"`
+}
+
+// GPUSpec describes the NVIDIA GPUs of a container: the kube-state-metrics requests/limits, and
+// (unless DCGM is false) one NVIDIA DCGM exporter series per GPU and pod. The pods run on GPU
+// nodes (g5.xlarge, g5.12xlarge), one pod per node.
+type GPUSpec struct {
+	// PerPod is nvidia.com/gpu requested (and limited) by one pod (default 1).
+	PerPod int `yaml:"perPod"`
+	// Model is the DCGM modelName label (default "NVIDIA A10G").
+	Model string `yaml:"model"`
+	// MemoryMiB is the framebuffer of one GPU: DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE (default 24576).
+	MemoryMiB float64 `yaml:"memoryMiB"`
+	// Utilization is DCGM_FI_DEV_GPU_UTIL, in percent.
+	Utilization GPUUtilization `yaml:"utilization"`
+	// MemoryUsed is the framebuffer in use; default depends on the utilization pattern.
+	MemoryUsed GPUMemoryUsed `yaml:"memoryUsed"`
+	// LabelStyle: "pod" (default) puts the workload's namespace/pod/container on the DCGM series
+	// (honor_labels, or the exporter's own pod mapping); "exported" is what a Prometheus scrape
+	// without honor_labels produces: namespace/pod/container are the exporter pod's, the
+	// workload's are exported_namespace/exported_pod/exported_container.
+	LabelStyle string `yaml:"labelStyle"`
+	// DCGM false emits no DCGM series at all (exporter missing on the GPU nodes); the requests remain.
+	DCGM *bool `yaml:"dcgm"`
+	// Expect is the ground truth a correct recommender reaches for the GPU.
+	Expect *GPUExpectation `yaml:"expect"`
+}
+
+// GPUUtilization shapes the GPU utilisation of a workload.
+type GPUUtilization struct {
+	// Pattern: idle (~0-2 % with rare small blips), light (diurnal, p95 ~25 %), busy (diurnal,
+	// p95 ~85 %). Default light.
+	Pattern string `yaml:"pattern"`
+	// P95 is the 95th percentile of the utilisation (percent) the pattern is scaled to; default
+	// 1 (idle), 25 (light), 85 (busy).
+	P95 float64 `yaml:"p95"`
+}
+
+// GPUMemoryUsed is the framebuffer used, either as a fraction of MemoryMiB or in MiB.
+type GPUMemoryUsed struct {
+	Fraction float64 `yaml:"fraction"`
+	MiB      float64 `yaml:"mib"`
+}
+
+// GPUExpectation is the GPU status and suggestion kinds a correct recommender reaches.
+type GPUExpectation struct {
+	Status      string   `yaml:"status" json:"status"` // idle | under-used | ok | no-data
+	Suggestions []string `yaml:"suggestions" json:"suggestions"`
+}
+
+// GPU utilisation patterns, label styles and the DCGM exporter's identity.
+const (
+	GPUIdle  = "idle"
+	GPULight = "light"
+	GPUBusy  = "busy"
+
+	GPULabelPod      = "pod"
+	GPULabelExported = "exported"
+
+	// dcgmNamespace is where the exporter pods run when the labels are `exported`.
+	dcgmNamespace = "gpu-operator"
+)
+
+// DCGMEnabled reports whether the container's GPUs have DCGM series.
+func (g *GPUSpec) DCGMEnabled() bool { return g.DCGM == nil || *g.DCGM }
+
+// gpuContainers returns the indexes of the containers that request GPUs.
+func (w *WorkloadSpec) gpuContainers() []int {
+	var out []int
+	for i := range w.Containers {
+		if w.Containers[i].GPU != nil {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// GPUsPerPod is the number of GPUs one pod of the workload requests (all containers).
+func (w *WorkloadSpec) GPUsPerPod() int {
+	n := 0
+	for _, c := range w.Containers {
+		if c.GPU != nil {
+			n += c.GPU.PerPod
+		}
+	}
+	return n
+}
+
+// applyDefaults fills the unset fields.
+func (g *GPUSpec) applyDefaults() {
+	if g.PerPod == 0 {
+		g.PerPod = 1
+	}
+	if g.Model == "" {
+		g.Model = "NVIDIA A10G"
+	}
+	if g.MemoryMiB == 0 {
+		g.MemoryMiB = 24576
+	}
+	if g.Utilization.Pattern == "" {
+		g.Utilization.Pattern = GPULight
+	}
+	if g.Utilization.P95 == 0 {
+		g.Utilization.P95 = map[string]float64{GPUIdle: 1, GPULight: 25, GPUBusy: 85}[g.Utilization.Pattern]
+	}
+	if g.MemoryUsed.Fraction == 0 && g.MemoryUsed.MiB == 0 {
+		g.MemoryUsed.Fraction = map[string]float64{GPUIdle: 0.04, GPULight: 0.2, GPUBusy: 0.75}[g.Utilization.Pattern]
+	}
+	if g.LabelStyle == "" {
+		g.LabelStyle = GPULabelPod
+	}
+}
+
+func (g *GPUSpec) validate() error {
+	maxGPUs := 0
+	for _, it := range InstanceTypes {
+		maxGPUs = max(maxGPUs, it.GPUs)
+	}
+	switch {
+	case g.PerPod < 1 || g.PerPod > maxGPUs:
+		return fmt.Errorf("gpu.perPod must be in [1, %d], got %d", maxGPUs, g.PerPod)
+	case g.MemoryMiB < 0 || g.MemoryMiB > 1<<20:
+		return fmt.Errorf("gpu.memoryMiB %v out of range", g.MemoryMiB)
+	case g.Utilization.Pattern != GPUIdle && g.Utilization.Pattern != GPULight && g.Utilization.Pattern != GPUBusy:
+		return fmt.Errorf("unknown gpu.utilization.pattern %q (known: idle, light, busy)", g.Utilization.Pattern)
+	case g.Utilization.P95 < 0 || g.Utilization.P95 > 100:
+		return fmt.Errorf("gpu.utilization.p95 must be a percentage in (0, 100], got %v", g.Utilization.P95)
+	case g.MemoryUsed.Fraction < 0 || g.MemoryUsed.Fraction > 1 || g.MemoryUsed.MiB < 0 || g.MemoryUsed.MiB > g.MemoryMiB:
+		return fmt.Errorf("gpu.memoryUsed must be a fraction in (0, 1] or MiB up to gpu.memoryMiB (%v)", g.MemoryMiB)
+	case g.MemoryUsed.Fraction > 0 && g.MemoryUsed.MiB > 0:
+		return fmt.Errorf("gpu.memoryUsed: set either fraction or mib")
+	case g.LabelStyle != GPULabelPod && g.LabelStyle != GPULabelExported:
+		return fmt.Errorf("unknown gpu.labelStyle %q (known: pod, exported)", g.LabelStyle)
+	}
+	if e := g.Expect; e != nil {
+		switch e.Status {
+		case "idle", "under-used", "ok", "no-data":
+		default:
+			return fmt.Errorf("gpu.expect.status %q must be idle, under-used, ok or no-data", e.Status)
+		}
+		for _, k := range e.Suggestions {
+			switch k {
+			case "time-slicing", "mig", "smaller-gpu", "scale-to-zero":
+			default:
+				return fmt.Errorf("gpu.expect.suggestions: unknown kind %q", k)
+			}
+		}
+	}
+	return nil
+}
+
+// memoryUsedMiB is the framebuffer in use at the mean.
+func (g *GPUSpec) memoryUsedMiB() float64 {
+	if g.MemoryUsed.MiB > 0 {
+		return g.MemoryUsed.MiB
+	}
+	return g.MemoryUsed.Fraction * g.MemoryMiB
 }
 
 // Resources holds cpu (cores) and memory (bytes); 0 = unset.
@@ -393,6 +554,37 @@ func (sc *Scenario) Validate() error {
 			}
 			names[key] = true
 		}
+		if err := c.validateGPUPools(); err != nil {
+			return fmt.Errorf("cluster %s: %w", c.Name, err)
+		}
+	}
+	return nil
+}
+
+// validateGPUPools checks that GPU workloads have a node pool with enough GPUs per node, and
+// that CPU-only workloads have a pool without GPUs (they never run on GPU nodes).
+func (c *ClusterSpec) validateGPUPools() error {
+	maxGPUs, cpuPools := 0, 0
+	for _, p := range c.NodePools {
+		if n := InstanceTypes[p.InstanceType].GPUs; n > 0 {
+			maxGPUs = max(maxGPUs, n)
+		} else {
+			cpuPools++
+		}
+	}
+	cpuWorkloads := c.Fleet != nil
+	for i := range c.Workloads {
+		w := &c.Workloads[i]
+		if n := w.GPUsPerPod(); n > 0 {
+			if n > maxGPUs {
+				return fmt.Errorf("workload %s requests %d GPUs per pod but no node pool has a GPU instance type with that many (max %d)", w.Name, n, maxGPUs)
+			}
+		} else {
+			cpuWorkloads = true
+		}
+	}
+	if cpuWorkloads && cpuPools == 0 {
+		return fmt.Errorf("workloads without GPUs need a node pool without GPUs (GPU nodes only run GPU workloads)")
 	}
 	return nil
 }
@@ -424,6 +616,22 @@ func (w *WorkloadSpec) validate() error {
 	}
 	if len(w.Containers) == 0 {
 		return fmt.Errorf("workload %s: no containers", w.Name)
+	}
+	for i := range w.Containers {
+		if g := w.Containers[i].GPU; g != nil {
+			g.applyDefaults()
+			if err := g.validate(); err != nil {
+				return fmt.Errorf("workload %s container %s: %w", w.Name, w.Containers[i].Name, err)
+			}
+			if w.Kind == KindDaemonSet {
+				return fmt.Errorf("workload %s: gpu is not supported on DaemonSets", w.Name)
+			}
+		}
+	}
+	for _, c := range w.InitContainers {
+		if c.GPU != nil {
+			return fmt.Errorf("workload %s: init container %s: gpu is not supported on init containers", w.Name, c.Name)
+		}
 	}
 	for _, c := range append(append([]ContainerSpec{}, w.Containers...), w.InitContainers...) {
 		if c.Name == "" {

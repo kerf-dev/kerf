@@ -1,0 +1,170 @@
+# GPU scenario: one cluster (synth-gpu) with GPU workloads in every state the hub reports
+# (idle, under-used, ok, no-data) next to a few ordinary CPU-only workloads. 30 days of history like
+# the default fleet, but small (~13 workloads' worth of series).
+#
+# GPU pods run one per GPU node: 1-GPU pods on g5.xlarge, the 4-GPU pod on a g5.12xlarge. The GPU
+# pools have no count, so nodes are created as the workloads need them.
+#
+# Per workload `gpu:` adds nvidia.com/gpu requests/limits (kube-state-metrics) and, unless
+# `dcgm: false`, one NVIDIA DCGM exporter series per GPU and pod. `labelStyle: exported` gives the
+# series a Prometheus scrape without honor_labels produces (exported_namespace, exported_pod,
+# exported_container). The `expect` of a GPU block is the ground truth for the recommender and for
+# the fixtures (testdata/series/synth-gpu-*.json, see `fixture:`).
+name: fleet-gpu
+seed: 20261106
+days: 30
+step: 60s
+workloadLabel: false
+groundTruth: true
+
+clusters:
+  - name: synth-gpu
+    region: eu-west-1
+    nodePools:
+      - {instanceType: m6i.xlarge, capacityType: on-demand, count: 2}
+      - {instanceType: g5.xlarge, capacityType: on-demand}
+      - {instanceType: g5.12xlarge, capacityType: on-demand}
+    workloads:
+      # 1 GPU, never used: scale to zero.
+      - name: trainer-idle
+        namespace: ml
+        fixture: synth-gpu-idle-0
+        replicas: 1
+        containers:
+          - name: trainer
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/ml/trainer:3.1.0
+            requests: {cpu: "2", memory: 8Gi}
+            limits: {memory: 8Gi}
+            cpu: {pattern: flat, base: 60m}
+            memory: {pattern: flat, base: 2Gi}
+            gpu:
+              perPod: 1
+              model: NVIDIA A10G
+              memoryMiB: 24576
+              utilization: {pattern: idle}
+              memoryUsed: {fraction: 0.05}
+              expect: {status: idle, suggestions: [scale-to-zero]}
+        expect: {cpu: decrease, memory: decrease}
+
+      # 2 pods x 1 GPU, ~25 % utilisation and ~20 % of the memory: under-used. DCGM labels as a
+      # scrape without honor_labels delivers them.
+      - name: inference-light
+        namespace: ml
+        fixture: synth-gpu-light-0
+        replicas: 2
+        containers:
+          - name: server
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/ml/inference-light:2.4.1
+            requests: {cpu: "2", memory: 6Gi}
+            limits: {memory: 6Gi}
+            cpu: {pattern: diurnal, base: 400m, diurnal: 0.4, peakHour: 14}
+            memory: {pattern: flat, base: 3Gi}
+            gpu:
+              perPod: 1
+              model: NVIDIA A10G
+              memoryMiB: 24576
+              utilization: {pattern: light, p95: 25}
+              memoryUsed: {fraction: 0.2}
+              labelStyle: exported
+              expect: {status: under-used, suggestions: [time-slicing]}
+        expect: {cpu: decrease, memory: decrease}
+
+      # 2 pods x 1 GPU, ~80 % utilisation: ok.
+      - name: inference-busy
+        namespace: ml
+        fixture: synth-gpu-busy-0
+        replicas: 2
+        containers:
+          - name: server
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/ml/inference-busy:2.4.1
+            requests: {cpu: "3", memory: 8Gi}
+            limits: {memory: 8Gi}
+            cpu: {pattern: diurnal, base: 1200m, diurnal: 0.2, peakHour: 14}
+            memory: {pattern: flat, base: 4Gi}
+            gpu:
+              perPod: 1
+              model: NVIDIA A10G
+              memoryMiB: 24576
+              utilization: {pattern: busy, p95: 80}
+              memoryUsed: {fraction: 0.7}
+              expect: {status: ok, suggestions: []}
+        expect: {cpu: decrease, memory: decrease}
+
+      # 1 pod x 4 GPUs on a g5.12xlarge, light.
+      - name: batch-4gpu-light
+        namespace: ml
+        replicas: 1
+        containers:
+          - name: worker
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/ml/batch-scorer:1.8.0
+            requests: {cpu: "16", memory: 64Gi}
+            limits: {memory: 64Gi}
+            cpu: {pattern: diurnal, base: 1500m, diurnal: 0.4, peakHour: 14}
+            memory: {pattern: flat, base: 12Gi}
+            gpu:
+              perPod: 4
+              model: NVIDIA A10G
+              memoryMiB: 24576
+              utilization: {pattern: light, p95: 25}
+              memoryUsed: {fraction: 0.25}
+              expect: {status: under-used, suggestions: [time-slicing]}
+        expect: {cpu: decrease, memory: decrease}
+
+      # Requests a GPU but the DCGM exporter has no series for it: no-data.
+      - name: notebook-nodata
+        namespace: ml
+        fixture: synth-gpu-nodata-0
+        replicas: 1
+        containers:
+          - name: notebook
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/ml/notebook:5.0.2
+            requests: {cpu: "2", memory: 8Gi}
+            limits: {memory: 8Gi}
+            cpu: {pattern: flat, base: 100m}
+            memory: {pattern: flat, base: 2Gi}
+            gpu:
+              perPod: 1
+              model: NVIDIA A10G
+              memoryMiB: 24576
+              dcgm: false
+              expect: {status: no-data, suggestions: []}
+        expect: {cpu: decrease, memory: decrease}
+
+      # Ordinary workloads.
+      - name: model-gateway
+        namespace: platform
+        replicas: 2
+        containers:
+          - name: gateway
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/platform/model-gateway:1.12.4
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: "1", memory: 512Mi}
+            cpu: {pattern: diurnal, base: 120m, diurnal: 0.5, peakHour: 13}
+            memory: {pattern: flat, base: 220Mi}
+        expect: {cpu: decrease, memory: decrease}
+
+      - name: feature-cache
+        namespace: ml
+        kind: StatefulSet
+        replicas: 2
+        containers:
+          - name: redis
+            image: docker.io/library/redis:7.4.1
+            requests: {cpu: 250m, memory: 2Gi}
+            limits: {memory: 2Gi}
+            cpu: {pattern: weekly, base: 60m, diurnal: 0.4, weekend: 0.6}
+            memory: {pattern: flat, base: 700Mi}
+        expect: {cpu: decrease, memory: decrease}
+
+      - name: embedding-export
+        namespace: ml
+        kind: CronJob
+        schedule: {every: 6h, offset: 30m, duration: 12m}
+        containers:
+          - name: export
+            image: 123456789012.dkr.ecr.eu-west-1.amazonaws.com/ml/embedding-export:0.9.3
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {cpu: "2", memory: 1Gi}
+            cpu: {pattern: sparse, base: 700m}
+            memory: {pattern: flat, base: 500Mi}
+        expect: {cpu: any, memory: any, riskFlags: [short-lived]}

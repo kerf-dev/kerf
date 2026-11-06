@@ -82,7 +82,7 @@ func (a *AWS) Price(ctx context.Context, k Key) (Price, error) {
 	if err != nil {
 		return Price{}, err
 	}
-	return Price{HourlyUSD: usd, Shape: od.Shape}, nil
+	return Price{HourlyUSD: usd, Shape: od.Shape, GPUs: od.GPUs}, nil
 }
 
 func (a *AWS) onDemand(ctx context.Context, region, instanceType string) (Price, error) {
@@ -152,6 +152,8 @@ type priceListItem struct {
 			InstanceType string `json:"instanceType"`
 			VCPU         string `json:"vcpu"`
 			Memory       string `json:"memory"`
+			// GPU is the number of GPUs ("1", "8"); absent or "0" on instances without GPUs.
+			GPU string `json:"gpu"`
 		} `json:"attributes"`
 	} `json:"product"`
 	Terms struct {
@@ -181,6 +183,12 @@ func parsePriceListItem(doc, instanceType string) (Price, error) {
 	if err != nil {
 		return Price{}, err
 	}
+	var gpus float64
+	if g := strings.TrimSpace(attrs.GPU); g != "" {
+		if gpus, err = strconv.ParseFloat(g, 64); err != nil || gpus < 0 {
+			return Price{}, fmt.Errorf("gpu %q: invalid count", attrs.GPU)
+		}
+	}
 	var usd float64
 	for _, term := range it.Terms.OnDemand {
 		for _, dim := range term.PriceDimensions {
@@ -196,7 +204,7 @@ func parsePriceListItem(doc, instanceType string) (Price, error) {
 			}
 		}
 	}
-	return Price{HourlyUSD: usd, Shape: Shape{VCPU: vcpu, MemoryGiB: mem}}, nil
+	return Price{HourlyUSD: usd, Shape: Shape{VCPU: vcpu, MemoryGiB: mem}, GPUs: gpus}, nil
 }
 
 // parseMemoryGiB parses the price list's memory attribute, e.g. "16 GiB" or "0.5 GiB".

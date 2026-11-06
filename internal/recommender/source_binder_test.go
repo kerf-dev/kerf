@@ -44,8 +44,9 @@ func TestSourceBinder(t *testing.T) {
 		}
 		pricing++
 	}
-	if pricing != 3 {
-		t.Errorf("%d pricing queries on the local store, want 3", pricing)
+	// CPU rate, memory rate, node count and the GPU price.
+	if pricing != 4 {
+		t.Errorf("%d pricing queries on the local store, want 4", pricing)
 	}
 
 	// a binder error fails the load; a nil matcher is the default

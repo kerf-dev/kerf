@@ -65,6 +65,8 @@ type Shape struct {
 type Price struct {
 	HourlyUSD float64
 	Shape     Shape
+	// GPUs is the number of GPUs of the instance type; 0 for instances without GPUs.
+	GPUs float64
 }
 
 // ErrNotFound means the provider has no price for the key. It is not a transient error.

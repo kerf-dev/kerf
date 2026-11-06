@@ -90,6 +90,15 @@ These drive the hub API like the web UI: logged in as the dev users `viewer`, `o
 | A10 | `TestReadinessRBAC` | spoke-2 | the agent's `pods/resize` rule removed from its ClusterRole → recheck → `ReadyAudit`, `rbac.resize` fail, `ReadinessChanged` row (actor system/readiness), auto-patch policy refused (409); rule restored (also on failure, and by `make e2e-unblock`) → `AutomationReady` again |
 | A11 | `TestReadinessKSMDown` | spoke-2 | **skipped unless `KERF_E2E_DISRUPTIVE=1`** (needs the user's OK): kube-state-metrics scaled to 0 → `metrics.freshness` fails (blocking), state below `MetricsOK`, `summary.blocking > 0` (banner); scaled back at the end |
 
+### GPU visibility
+
+| Test | Cluster | What is asserted |
+|---|---|---|
+| `TestGPUVisibility` | `synth-gpu` (synthetic) | read-only: after a recompute, `GET /v1/workloads?cluster=synth-gpu&gpu=any` lists the five GPU workloads of `tools/synth/scenarios/fleet-gpu.yaml` with status `idle` (+ `scale-to-zero`, the whole cost when priced), `under-used` (+ `time-slicing`; also the 4-GPU one), `ok` and `no-data`; the `gpu` filter and the `gpu` facet count them; `recommendation.gpu` of the detail matches; readiness check `metrics.dcgm` is `pass` |
+
+It needs the cluster `synth-gpu` in the hub (`make synth-backfill-gpu`, then register it with the `local` datasource) and
+**skips** with that hint when the hub doesn't know it. It is not part of the smoke tier.
+
 Spoke-2 is shared by scenarios that disturb its agent (hub outage, pause, RBAC removal, KSM) or
 need it undisturbed while they apply. A suite-wide lock (`lockSpoke2`) serialises those phases;
 setup (deploying, waiting for recommendations) still runs in parallel.
