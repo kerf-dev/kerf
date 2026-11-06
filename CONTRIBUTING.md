@@ -73,11 +73,43 @@ if internal development documents (`CLAUDE.md`, `.claude/`, `DECISIONS.md`, `roa
 `docs/handover/`, `docs/plans/`, `docs/STATUS.md`, `docs/open-source-checklist.md`) are committed.
 Run `make generate` after changing `api/` and commit the result.
 
+## Pull request titles
+
+Every pull request is squash-merged, and the commit on `main` keeps the pull request title. The release notes
+are built from those titles, grouped by type under Features, Bug fixes, Documentation and so on, so the title is
+what users read. A check (`pr title (conventional commits)`) fails until it follows
+[Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+type(scope)!: summary
+```
+
+- **type** is one of `feat` (a new capability), `fix` (a bug fix), `perf`, `docs`, `ci`, `build`, `refactor`,
+  `test`, `chore` or `revert`.
+- **scope** is optional, and when given one of `hub`, `agent`, `webhook`, `pricing`, `web`, `chart`, `api`, `e2e`,
+  `site`, `release`, `deps` or `security`. `security` and `deps` get their own groups in the notes, whatever the type.
+- **`!`** after the type or scope marks a breaking change (a changed CRD, API, metric or chart value). It is listed
+  first, under Breaking changes. A `BREAKING CHANGE:` footer in the description does the same.
+- **summary** starts with a lowercase letter, has no trailing period, and describes the change for a user. The whole
+  title is at most 72 characters.
+
+Examples:
+
+- `feat(hub): add a savings export to the workloads page`
+- `fix(agent): roll back when the resized pod never becomes ready`
+- `docs: explain the maintenance windows`
+- `feat(api)!: rename the policy field targetRef to workloadRef`
+
+Fix a title by editing it on the pull request; the check runs again. Try one locally with
+`.github/scripts/pr-title.sh "fix(hub): handle an empty metrics response"`. Dependabot's titles
+(`chore(deps): bump ...`) already fit.
+
 ## Pull requests
 
 - One topic per pull request, with a description of what changes and how you tested it. The pull request
   template has a short checklist.
-- Label it (`bug`, `enhancement`, `documentation`, `breaking-change`) so the release notes sort it.
+- Give it a [Conventional Commit title](#pull-request-titles): the release notes are grouped by it. A check
+  fails the pull request until the title fits.
 - User-visible changes get a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
 - Go: `log/slog` for logging, controller-runtime for Kubernetes code.
 - Writing docs or UI text? [docs/branding/brand.md](docs/branding/brand.md) has the voice and the words we use.
