@@ -26,6 +26,7 @@ type hubAPI struct {
 
 	mu            sync.Mutex
 	lastRecompute map[string]time.Time // per cluster
+	requested     map[string]time.Time // per cluster: the hub's requestedAt of the last accepted request
 	noRecompute   bool
 	holds         map[string]int // cluster -> > 0: no recompute requests (holdRecompute)
 }
@@ -137,7 +138,47 @@ func (h *hubAPI) recompute(ctx context.Context, cluster string, logf func(string
 		logf("recompute %s: %s: %s", cluster, resp.Status, b)
 	default:
 		logf("hub recompute of %s triggered (%s)", cluster, resp.Status)
+		var acc struct {
+			RequestedAt time.Time `json:"requestedAt"`
+		}
+		if json.Unmarshal(b, &acc) == nil && !acc.RequestedAt.IsZero() {
+			h.mu.Lock()
+			if h.requested == nil {
+				h.requested = map[string]time.Time{}
+			}
+			h.requested[cluster] = acc.RequestedAt
+			h.mu.Unlock()
+		}
 	}
+}
+
+// settle waits (up to 2 minutes) until the recommender run of the suite's last recompute request
+// for the cluster has finished, so no suite-triggered run lands after it (with holdRecompute).
+func (h *hubAPI) settle(t *testing.T, cluster string) {
+	t.Helper()
+	h.mu.Lock()
+	req := h.requested[cluster]
+	h.mu.Unlock()
+	if req.IsZero() {
+		return
+	}
+	eventually(t, 2*time.Minute, 2*time.Second, "recompute of "+cluster+" requested at "+req.Format(time.TimeOnly)+" finished", func() (bool, string) {
+		var s struct {
+			Clusters []struct {
+				Cluster              string     `json:"cluster"`
+				LastRecommenderRunAt *time.Time `json:"lastRecommenderRunAt"`
+			} `json:"clusters"`
+		}
+		if _, err := h.get(context.Background(), "/v1/summary", nil, &s); err != nil {
+			return false, err.Error()
+		}
+		for _, c := range s.Clusters {
+			if c.Cluster == cluster && c.LastRecommenderRunAt != nil {
+				return c.LastRecommenderRunAt.After(req), "last run finished at " + c.LastRecommenderRunAt.Format(time.TimeOnly)
+			}
+		}
+		return false, "no run for " + cluster
+	})
 }
 
 type resourceValues struct {

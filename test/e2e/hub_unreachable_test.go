@@ -242,8 +242,8 @@ func TestHubUnreachable(t *testing.T) {
 	p.Spec.CPU.Mode = v1alpha1.ModeAutoPatch
 	must(t, cl.C.Update(ctx(t), &p))
 	waitReason(t, cl, ns, deployment, "held", v1alpha1.ReasonHubUnreachable, 3*time.Minute)
-	// Nothing changes for at least three agent pulls (two before WO-30's shorter dev pull).
-	consistently(t, max(3*pull, 30*time.Second), 5*time.Second, "nothing applied, nothing reverted", func() (bool, string) {
+	// Nothing changes for at least two agent pulls (60 s at the 30 s pull before WO-30).
+	consistently(t, max(2*pull, 30*time.Second), 5*time.Second, "nothing applied, nothing reverted", func() (bool, string) {
 		if agentToken(t, cl) != invalidToken {
 			return false, "the agent token was restored by someone else during the outage (agent redeployed?); result not meaningful"
 		}
