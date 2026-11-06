@@ -323,7 +323,7 @@ test.describe('maintenance (WO-33)', () => {
 
 test.describe('readiness', () => {
   test('banner on the overview links to the cluster checklist with remediation', async ({ page }) => {
-    await page.goto('/')
+    await login(page, 'viewer')
     const banner = page.getByTestId('readiness-banner')
     await expect(banner).toContainText('prod-us-east-1')
     await banner.getByRole('link', { name: /prod-us-east-1/ }).click()
@@ -373,10 +373,11 @@ test.describe('WO-22b polish', () => {
 
 test.describe('WO-22c readiness alignment', () => {
   test('checks without a result show as pending, not failures', async ({ page }) => {
-    await page.goto('/')
+    await login(page, 'viewer')
     await expect(page.getByTestId('readiness-banner-pending').first()).toContainText(
       /\d+ checks? not reported yet/,
     )
+    await page.evaluate(() => localStorage.removeItem('ro-mock-session'))
     await login(page, 'admin', '/clusters/dr-eu-central-1?tab=readiness')
     const row = page.getByTestId('check-agent.version')
     await expect(row).toContainText('Not reported yet')
