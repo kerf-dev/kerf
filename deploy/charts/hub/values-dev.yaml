@@ -32,13 +32,14 @@ devSeed:
 # Plain HTTP on localhost:18080 / the web's nginx: the cookie cannot be Secure.
 auth:
   cookieSecure: false
-  # Sign-in with Dex. The e2e suite (TestOIDCSignIn) deploys Dex in namespace e2e-oidc while it runs;
-  # otherwise the sign-in page's "Sign in with Dex" answers that the provider cannot be reached.
-  # Development only: the client secret is in Git.
+  # Sign-in with the fleet's Dex (dev/manifests/hub/dex.yaml; users in dev/README.md). Browsers reach the
+  # issuer at localhost:15556, the hub at the Dex Service (connectAddress). Development only: the client
+  # secret is in Git.
   oidc:
     enabled: true
     name: Dex
-    issuer: http://dex.e2e-oidc.svc.cluster.local:5556/dex
+    issuer: http://localhost:15556/dex
+    connectAddress: dex.dex.svc.cluster.local:5556
     clientID: kerf
     redirectURL: http://localhost:19090/v1/auth/oidc/callback
     scopes: [openid, profile, email, groups, offline_access]

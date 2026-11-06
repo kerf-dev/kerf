@@ -223,6 +223,9 @@ auth:
     roleMappings: []
     defaultRole: ""         # role when no group matches; "" denies the sign-in
     refreshInterval: 5m     # how often a session re-reads the groups (a removed group ends the role)
+    # host:port the hub connects to for the issuer's host, when it reaches the provider by another address
+    # than browsers (split-horizon networks). URLs and TLS names stay the issuer's. Empty: the issuer's.
+    connectAddress: ""
     # The client secret: existingSecret/existingSecretKey, externalSecret (Secret <release>-oidc), or
     # value (development only; rendered into Secret <release>-oidc).
     clientSecret:

@@ -17,41 +17,35 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// Dex for the OIDC test, pinned by digest. v2.45.1: groups on static users, re-read at refresh.
-// Not v2.46.x: there a refresh deadlocks Dex's memory and SQLite storage (the identity is re-read
-// inside the refresh token's storage update).
-const dexImage = "ghcr.io/dexidp/dex:v2.45.1@sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462"
-
-// The hub dev chart (deploy/charts/hub/values-dev.yaml, auth.oidc) points at this Dex: fixed
-// namespace and Service, client kerf with the dev client secret, groups kerf-admins → admin,
-// kerf-operators → operator, kerf-viewers → viewer.
+// The fleet's Dex (dev/manifests/hub/dex.yaml), which the hub dev chart signs in with: issuer
+// http://localhost:15556/dex, users dex-<name>@example.com with password ro-dev-dex-<name>-pass, groups
+// kerf-admins → admin, kerf-operators → operator, kerf-viewers → viewer.
 const (
-	dexNamespace = "e2e-oidc"
-	dexHost      = "dex.e2e-oidc.svc.cluster.local:5556"
-	dexPassword  = "e2e-dex-password"
+	dexNamespace = "dex"
+	dexHost      = "localhost:15556"
 )
+
+func dexPassword(email string) string {
+	name := strings.TrimSuffix(strings.TrimPrefix(email, "dex-"), "@example.com")
+	return getenv("E2E_DEX_"+strings.ToUpper(name)+"_PASSWORD", "ro-dev-dex-"+name+"-pass")
+}
 
 var jwtRE = regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.`)
 
-// TestOIDCSignIn signs in through the web proxy with Dex (a real OpenID Connect provider) and checks
-// the mapped roles, the denial without a mapped group, the IdP identity in the audit log, a role
-// refresh against Dex, and that no ID or access token reaches the hub's logs.
+// TestOIDCSignIn signs in through the web proxy with the fleet's Dex (a real OpenID Connect provider)
+// and checks the mapped roles, the denial without a mapped group, the IdP identity in the audit log, a
+// role refresh against Dex, and that no ID or access token reaches the hub's logs.
 func TestOIDCSignIn(t *testing.T) {
 	t.Parallel()
 	web := webURL()
@@ -59,15 +53,13 @@ func TestOIDCSignIn(t *testing.T) {
 	cfg := hubRESTConfig(t)
 	cs, err := kubernetes.NewForConfig(cfg)
 	must(t, err)
-	hub, err := client.New(cfg, client.Options{Scheme: newScheme()})
-	must(t, err)
-	pod := deployDex(t, hub, cs, web)
-	port := portForward(t, cfg, cs, pod)
+	port := dexPort(t, cfg, cs)
 
 	type user struct{ email, group, role string }
 	users := []user{
-		{"e2e-oidc-admin@example.com", "kerf-admins", hubapi.UserRoleAdmin},
-		{"e2e-oidc-viewer@example.com", "kerf-viewers", hubapi.UserRoleViewer},
+		{"dex-admin@example.com", "kerf-admins", hubapi.UserRoleAdmin},
+		{"dex-operator@example.com", "kerf-operators", hubapi.UserRoleOperator},
+		{"dex-viewer@example.com", "kerf-viewers", hubapi.UserRoleViewer},
 	}
 	signIn := func(email, next string) (*http.Client, *url.URL) {
 		t.Helper()
@@ -89,7 +81,7 @@ func TestOIDCSignIn(t *testing.T) {
 	}
 
 	// No mapped group: Dex signs the user in, Kerf refuses.
-	if _, final := signIn("e2e-oidc-nogroup@example.com", "/"); final.Path != "/login" || final.Query().Get("error") != "oidc_denied" {
+	if _, final := signIn("dex-nobody@example.com", "/"); final.Path != "/login" || final.Query().Get("error") != "oidc_denied" {
 		t.Errorf("user without a mapped group ended at %s, want /login?error=oidc_denied", final)
 	}
 
@@ -148,102 +140,28 @@ func hubRESTConfig(t *testing.T) *rest.Config {
 	return cfg
 }
 
-// deployDex (re)creates namespace e2e-oidc with Dex and returns its ready pod.
-func deployDex(t *testing.T, c client.Client, cs *kubernetes.Clientset, web string) string {
+// dexPort returns the local port of the fleet's Dex: 15556 when the k3d port mapping exists, else a
+// port-forward to its pod (a fleet created before the mapping).
+func dexPort(t *testing.T, cfg *rest.Config, cs *kubernetes.Clientset) int {
 	t.Helper()
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: dexNamespace, Labels: map[string]string{suiteLabel: "true"}}}
-	// A namespace left by an earlier run may still be terminating.
-	deadline := time.Now().Add(3 * time.Minute)
-	for {
-		err := c.Create(ctx(t), ns)
-		if err == nil {
-			break
+	if r, err := (&http.Client{Timeout: 5 * time.Second}).Get("http://" + dexHost + "/dex/healthz"); err == nil {
+		r.Body.Close()
+		if r.StatusCode == http.StatusOK {
+			return 15556
 		}
-		if !apierrors.IsAlreadyExists(err) || time.Now().After(deadline) {
-			t.Fatalf("namespace %s: %v", dexNamespace, err)
-		}
-		_ = c.Delete(ctx(t), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: dexNamespace}})
-		time.Sleep(3 * time.Second)
 	}
-	t.Cleanup(func() {
-		if env.Keep {
-			return
-		}
-		cctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		_ = c.Delete(cctx, ns)
-	})
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(dexPassword), 10)
+	pods, err := cs.CoreV1().Pods(dexNamespace).List(ctx(t), metav1.ListOptions{LabelSelector: "app=dex"})
 	must(t, err)
-	type static struct {
-		Email    string   `json:"email"`
-		Hash     string   `json:"hash"`
-		Username string   `json:"username"`
-		UserID   string   `json:"userID"`
-		Groups   []string `json:"groups"`
-	}
-	var users []static
-	for i, u := range []struct{ name, group string }{{"admin", "kerf-admins"}, {"viewer", "kerf-viewers"}, {"nogroup", "sales"}} {
-		users = append(users, static{Email: "e2e-oidc-" + u.name + "@example.com", Hash: string(hash), Username: "e2e-oidc-" + u.name,
-			UserID: fmt.Sprintf("0e2e0000-0000-4000-8000-00000000000%d", i+1), Groups: []string{u.group}})
-	}
-	dexCfg, err := json.Marshal(map[string]any{
-		"issuer":           "http://" + dexHost + "/dex",
-		"storage":          map[string]any{"type": "memory"},
-		"web":              map[string]any{"http": "0.0.0.0:5556"},
-		"oauth2":           map[string]any{"skipApprovalScreen": true},
-		"enablePasswordDB": true,
-		"staticPasswords":  users,
-		"staticClients": []map[string]any{{"id": "kerf", "name": "Kerf",
-			"secret":       getenv("E2E_OIDC_CLIENT_SECRET", "ro-dev-oidc-3f9a6c1e8b2d7054e1a9c6b3"),
-			"redirectURIs": []string{web + "/v1/auth/oidc/callback"}}},
-	})
-	must(t, err)
-	must(t, c.Create(ctx(t), &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "dex", Namespace: dexNamespace},
-		Data: map[string]string{"config.yaml": string(dexCfg)}}))
-	labels := map[string]string{"app": "dex"}
-	must(t, c.Create(ctx(t), &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "dex", Namespace: dexNamespace},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: ptr(int32(1)),
-			Selector: &metav1.LabelSelector{MatchLabels: labels},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: labels},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name: "dex", Image: dexImage, Args: []string{"dex", "serve", "/etc/dex/config.yaml"},
-						Ports:          []corev1.ContainerPort{{Name: "http", ContainerPort: 5556}},
-						ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/dex/healthz", Port: intstr.FromInt32(5556)}}, PeriodSeconds: 2},
-						VolumeMounts:   []corev1.VolumeMount{{Name: "config", MountPath: "/etc/dex"}},
-						SecurityContext: &corev1.SecurityContext{AllowPrivilegeEscalation: ptr(false), RunAsNonRoot: ptr(true),
-							Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}},
-					}},
-					Volumes: []corev1.Volume{{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "dex"}}}}},
-				},
-			},
-		},
-	}))
-	must(t, c.Create(ctx(t), &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "dex", Namespace: dexNamespace},
-		Spec: corev1.ServiceSpec{Selector: labels, Ports: []corev1.ServicePort{{Name: "http", Port: 5556, TargetPort: intstr.FromInt32(5556)}}}}))
-
-	deadline = time.Now().Add(4 * time.Minute)
-	for time.Now().Before(deadline) {
-		pods, err := cs.CoreV1().Pods(dexNamespace).List(ctx(t), metav1.ListOptions{LabelSelector: "app=dex"})
-		must(t, err)
-		for _, p := range pods.Items {
-			for _, cond := range p.Status.Conditions {
-				if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-					t.Logf("dex ready: %s", p.Name)
-					return p.Name
-				}
+	for _, p := range pods.Items {
+		for _, c := range p.Status.Conditions {
+			if c.Type == corev1.PodReady && c.Status == corev1.ConditionTrue {
+				t.Logf("%s unreachable: port-forward to dex/%s", dexHost, p.Name)
+				return portForward(t, cfg, cs, p.Name)
 			}
 		}
-		time.Sleep(2 * time.Second)
 	}
-	t.Fatal("dex did not become ready")
-	return ""
+	t.Fatalf("no ready Dex pod in namespace %s: kubectl --context k3d-ro-hub apply -f dev/manifests/hub/dex.yaml", dexNamespace)
+	return 0
 }
 
 // portForward forwards a local port to Dex's pod and returns it.
@@ -307,7 +225,7 @@ func dexSignIn(t *testing.T, c *http.Client, web, email, next string) *url.URL {
 	}
 	action, err := resp.Request.URL.Parse(strings.ReplaceAll(string(m[1]), "&amp;", "&"))
 	must(t, err)
-	resp, err = c.PostForm(action.String(), url.Values{"login": {email}, "password": {dexPassword}})
+	resp, err = c.PostForm(action.String(), url.Values{"login": {email}, "password": {dexPassword(email)}})
 	must(t, err)
 	_, _ = io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()

@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -54,6 +55,10 @@ type OIDCConfig struct {
 	DefaultRole string `json:"defaultRole"`
 	// RefreshInterval: how often a session re-reads the user's groups from the provider (default 5m).
 	RefreshInterval string `json:"refreshInterval"`
+	// ConnectAddress (host:port) is where the hub connects for the issuer's host, when it reaches the
+	// provider by another address than browsers do (split-horizon networks; the dev fleet's Dex). URLs,
+	// the Host header and TLS names stay the issuer's. Empty: the issuer's own address.
+	ConnectAddress string `json:"connectAddress"`
 }
 
 // RoleMapping gives members of Group the Role.
@@ -93,6 +98,11 @@ func (c OIDCConfig) Validate() error {
 	}
 	if len(c.RoleMappings) == 0 && c.DefaultRole == "" {
 		errs = append(errs, errors.New("auth.oidc: set roleMappings or defaultRole, or nobody can sign in"))
+	}
+	if c.ConnectAddress != "" {
+		if _, _, err := net.SplitHostPort(c.ConnectAddress); err != nil {
+			errs = append(errs, fmt.Errorf("auth.oidc.connectAddress %q: want host:port", c.ConnectAddress))
+		}
 	}
 	if c.RefreshInterval != "" {
 		if d, err := time.ParseDuration(c.RefreshInterval); err != nil || d < time.Minute {
@@ -230,17 +240,40 @@ func NewOIDC(cfg OIDCConfig) (*OIDC, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &OIDC{Cfg: cfg, Box: box, secret: secret, Client: idpClient()}, nil
+	return &OIDC{Cfg: cfg, Box: box, secret: secret, Client: idpClient(cfg)}, nil
 }
 
 // idpClient bounds every call to the provider: a refresh runs inside a user's request, so a slow
 // or unreachable provider must fail fast (the session keeps its role until the next try). Idle
-// connections are not kept long: proxies and load balancers drop them silently.
-func idpClient() *http.Client {
+// connections are not kept long: proxies and load balancers drop them silently. With ConnectAddress,
+// connections to the issuer's host:port go there instead.
+func idpClient(cfg OIDCConfig) *http.Client {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.IdleConnTimeout = 30 * time.Second
 	tr.ResponseHeaderTimeout = 10 * time.Second
+	if from := issuerAddress(cfg.Issuer); cfg.ConnectAddress != "" && from != "" {
+		d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+		tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if addr == from {
+				addr = cfg.ConnectAddress
+			}
+			return d.DialContext(ctx, network, addr)
+		}
+	}
 	return &http.Client{Timeout: 15 * time.Second, Transport: tr}
+}
+
+// issuerAddress returns the host:port the issuer URL connects to.
+func issuerAddress(issuer string) string {
+	u, err := url.Parse(issuer)
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	port := u.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443"}[u.Scheme]
+	}
+	return net.JoinHostPort(u.Hostname(), port)
 }
 
 func (o *OIDC) ctx(ctx context.Context) context.Context {

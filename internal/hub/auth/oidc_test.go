@@ -63,6 +63,8 @@ func TestOIDCConfigValidate(t *testing.T) {
 		{"bad default", func(c *auth.OIDCConfig) { c.DefaultRole = "owner" }, "defaultRole"},
 		{"nobody", func(c *auth.OIDCConfig) { c.DefaultRole = "" }, "nobody can sign in"},
 		{"refresh", func(c *auth.OIDCConfig) { c.RefreshInterval = "10s" }, "refreshInterval"},
+		{"connect address", func(c *auth.OIDCConfig) { c.ConnectAddress = "dex.dex.svc" }, "connectAddress"},
+		{"connect address ok", func(c *auth.OIDCConfig) { c.ConnectAddress = "dex.dex.svc:5556" }, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -229,5 +231,24 @@ func TestOIDCProviderDown(t *testing.T) {
 	}
 	if _, err := o.AuthURL(context.Background(), "s", "n", "v"); err == nil || !strings.Contains(err.Error(), "discovery") {
 		t.Errorf("AuthURL with the provider down: %v", err)
+	}
+}
+
+// TestOIDCConnectAddress: the issuer is an address the hub cannot reach (as localhost in a pod); with
+// connectAddress the hub reaches the provider elsewhere while the issuer and its URLs stay the same.
+func TestOIDCConnectAddress(t *testing.T) {
+	p := oidctest.New(t)
+	p.AddUser(oidctest.User{Subject: "u-5", Email: "eve@example.com", Groups: []string{"g"}})
+	real := strings.TrimPrefix(p.Issuer, "http://")
+	// The fake provider answers for whatever issuer it is configured with; pretend it is published at
+	// an unreachable address.
+	p.Issuer = "http://kerf-unreachable.invalid:15556"
+	o := newClient(t, p, func(c *auth.OIDCConfig) { c.ConnectAddress = real })
+	id, toks, err := signIn(t, o, p, "u-5")
+	if err != nil || id.Issuer != p.Issuer || toks.Refresh == "" {
+		t.Fatalf("sign-in through connectAddress: %+v %v", id, err)
+	}
+	if _, _, err := o.Refresh(context.Background(), toks.Refresh); err != nil {
+		t.Errorf("refresh through connectAddress: %v", err)
 	}
 }

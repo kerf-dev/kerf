@@ -119,6 +119,11 @@ hub:
 Register the redirect URL with the provider exactly as written, on the host users open (the web UI), not
 the hub's API host.
 
+When the hub reaches the provider by another address than browsers do (split-horizon DNS, a provider only
+published on an internal load balancer), set `connectAddress: <host>:<port>`: the hub connects there for the
+issuer's host, while URLs, the `Host` header and TLS names stay the issuer's. The development environment
+uses it for its Dex (issuer `http://localhost:15556/dex`, which is the hub pod itself from inside it).
+
 ### Break-glass admin
 
 With `auth.local.enabled: false` nobody signs in with a password except one break-glass admin
@@ -134,7 +139,7 @@ the refresh token grant, and the redirect URL `https://<UI host>/v1/auth/oidc/ca
 
 #### Dex
 
-Tested (the e2e suite and a local Dex v2.45.1).
+Tested (the e2e suite, against the development environment's Dex v2.45.1: `dev/manifests/hub/dex.yaml`).
 
 ```yaml
 # Dex config

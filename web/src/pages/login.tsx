@@ -99,6 +99,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     document.title = 'Sign in · Kerf'
+    // The app has one title; leaving the sign-in page must not keep this one.
+    return () => {
+      document.title = 'Kerf'
+    }
   }, [])
 
   if (auth.signedIn && !login.isPending) return <Navigate to={next} replace />

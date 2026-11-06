@@ -136,6 +136,7 @@ The values of the `hub` component chart. In the `kerf` chart they sit under `hub
 | `auth.oidc.roleMappings` | array | `[]` | Groups to roles; the highest matching role wins. e.g. - {group: platform-admins, role: admin} - {group: platform, role: operator} - {group: engineering, role: viewer} |
 | `auth.oidc.defaultRole` | string | `""` | ole when no group matches; "" denies the sign-in |
 | `auth.oidc.refreshInterval` | string | `5m` | how often a session re-reads the groups (a removed group ends the role) |
+| `auth.oidc.connectAddress` | string | `""` | host:port the hub connects to for the issuer's host, when it reaches the provider by another address than browsers (split-horizon networks). URLs and TLS names stay the issuer's. Empty: the issuer's. |
 | `auth.oidc.clientSecret` | object | see the keys below | The client secret: existingSecret/existingSecretKey, externalSecret (Secret <release>-oidc), or value (development only; rendered into Secret <release>-oidc). |
 | `auth.oidc.clientSecret.existingSecret` | string | `""` |  |
 | `auth.oidc.clientSecret.existingSecretKey` | string | `client-secret` |  |

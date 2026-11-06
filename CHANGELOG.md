@@ -84,6 +84,7 @@ First public version.
 
 ### Fixed
 
+- After signing in, the browser tab kept the title "Sign in · Kerf" on every page.
 - Signing in through the web UI kept users read-only: the web proxy looked for the old session cookie name
   and never forwarded `kerf_session`, so every request still went out with the read-only UI token.
 
