@@ -74,6 +74,15 @@ var schemaTypes = map[string]any{
 	"RecomputeAccepted":    RecomputeAccepted{},
 	"Problem":              Problem{},
 
+	// Realized savings
+	"RealizedAmount":   RealizedAmount{},
+	"ReleasedRequests": ReleasedRequests{},
+	"RealizedPoint":    RealizedPoint{},
+	"RealizedCoverage": RealizedCoverage{},
+	"RealizedSavings":  RealizedSavings{},
+	"NodeCostPoint":    NodeCostPoint{},
+	"NodeCostTrend":    NodeCostTrend{},
+
 	// WO-19 admin area
 	"Actor":                      Actor{},
 	"ChangeReason":               ChangeReason{},
@@ -212,6 +221,8 @@ var enumLists = map[string][]string{
 	"DatasourceType":      {DatasourcePrometheus, DatasourceVictoriaMetrics, DatasourceThanos, DatasourceMimir, DatasourceAMP},
 	"DatasourceAuthType":  {AuthNone, AuthBearer, AuthBasic, AuthSigV4, AuthMTLS},
 	"InstallFormat":       {InstallHelm, InstallValues, InstallArgoCD},
+	"RealizedStep":        {RealizedStepDay, RealizedStepMonth},
+	"NodeCostStep":        {NodeCostStepHour, NodeCostStepDay},
 }
 
 func readinessStates() (out []string) {

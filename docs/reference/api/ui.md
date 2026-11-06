@@ -14,6 +14,9 @@ Read-only endpoints for the web UI.
 | [`GET /v1/workloads/{id}/usage`](#getWorkloadUsage) | Usage, request, limit and recommendation time series |
 | [`GET /v1/workloads/{id}/history`](#getWorkloadHistory) | Past recommendations and audit events of a workload |
 | [`GET /v1/savings/trend`](#getSavingsTrend) | Estimated monthly savings over time |
+| [`GET /v1/savings/realized`](#getRealizedSavings) | Realized savings from applied changes |
+| [`GET /v1/savings/realized/node-cost`](#getNodeCostTrend) | Node cost trend of a cluster, next to the released requests |
+| [`GET /v1/workloads/{id}/savings/realized`](#getWorkloadRealizedSavings) | Realized savings of one workload |
 | [`GET /v1/workloads/{id}/effective-policy`](#getEffectivePolicy) | Precedence chain and winning value per field |
 | [`GET /v1/workloads/{id}/override`](#getWorkloadOverride) | The workload's hub override policy |
 | [`PUT /v1/workloads/{id}/override`](#putWorkloadOverride) | Create or replace the workload's override |
@@ -212,7 +215,7 @@ Accepts: bearer token with role `ui` or session of a user with role `viewer` or 
 
 At each step: the sum of the estimated monthly savings of the recommendation that was
 latest at that time, over the workloads live at that time. Estimated, not realized
-(realized savings are). Points are aligned to multiples of `step` (UTC); a point at
+(realized savings: `GET /v1/savings/realized`). Points are aligned to multiples of `step` (UTC); a point at
 time `t` holds the value at the end of its bucket, `min(t + step, to)`, so with the default
 `to` (now) the last point equals the current `GET /v1/summary` totals.
 
@@ -231,6 +234,101 @@ time `t` holds the value at the end of its bucket, `min(t + step, to)`, so with 
 | Status | Description | Body |
 |---|---|---|
 | `200` | Savings trend. | [SavingsTrend](schemas.md#savingstrend) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+
+### Realized savings from applied changes { #getRealizedSavings }
+
+`GET /v1/savings/realized`
+
+Accepts: bearer token with role `ui` or session of a user with role `viewer` or higher.
+
+What the changes Kerf applied (auto-patch or approve once) actually saved: per workload and
+hour, the requests released (the `from` minus `to` requests of every `applied` and
+`rolled_back` event, cumulative, so rollbacks and later increases subtract; a `released`
+event ends the claim) times the replicas that ran in that hour (kube-state-metrics) times
+the cluster's rates of that hour (as stored by the recommender run of the time). The hub
+leader computes it hourly from the stored history, including changes applied before this
+endpoint existed. Realized, not estimated: never add these amounts to `Savings`
+(estimated, if applied). Method and SQL/PromQL: docs/realized-savings.md.
+
+Buckets are aligned to UTC days or months; the first bucket starts at `from` truncated to
+its bucket. Hours at or after `computedThrough` are not computed yet.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `cluster` | query | array of string |  |
+| `namespace` | query | array of string |  |
+| `from` | query | string (date-time) | Inclusive start. Default 12 months before `to` (`step=month`) or 30 days (`step=day`). |
+| `to` | query | string (date-time) | Exclusive end. Default now. |
+| `step` | query | RealizedStep (enum) | one of `day`, `month` |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Realized savings. | [RealizedSavings](schemas.md#realizedsavings) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+
+### Node cost trend of a cluster, next to the released requests { #getNodeCostTrend }
+
+`GET /v1/savings/realized/node-cost`
+
+Accepts: bearer token with role `ui` or session of a user with role `viewer` or higher.
+
+Per bucket: the average hourly cost of the cluster's priced nodes (`kerf_node_hourly_cost_usd`),
+their number, and the ratio of the scheduled pods' requests to the nodes' allocatable
+capacity, next to the requests Kerf's applied changes released (times replicas). The
+relation is `correlated`: if the node autoscaler turned released requests into fewer
+nodes, the lines show it, but Kerf does not claim one caused the other.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `cluster` | query | string, required | pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`; example `ro-spoke-1` |
+| `from` | query | string (date-time) | Inclusive start. Default 30 days before `to`. |
+| `to` | query | string (date-time) | Exclusive end. Default now. |
+| `step` | query | NodeCostStep (enum) | Default `hour` up to 7 days, `day` beyond. one of `hour`, `day` |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Node cost trend. | [NodeCostTrend](schemas.md#nodecosttrend) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+
+### Realized savings of one workload { #getWorkloadRealizedSavings }
+
+`GET /v1/workloads/{id}/savings/realized`
+
+Accepts: bearer token with role `ui` or session of a user with role `viewer` or higher.
+
+As `GET /v1/savings/realized`, for one workload. Also answers for a deleted workload that
+has realized history.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `id` | path | string, required | Workload id `<cluster>/<namespace>/<kind>/<name>`, URL-encoded as one segment. pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?/[^/]+/(Deployment\|StatefulSet\|DaemonSet\|CronJob)/[^/]+$`; example `ro-spoke-1/payments/Deployment/checkout` |
+| `from` | query | string (date-time) | Inclusive start. Default 30 days before `to` (`step=day`) or 12 months (`step=month`). |
+| `to` | query | string (date-time) | Exclusive end. Default now. |
+| `step` | query | RealizedStep (enum) | Default `day`. one of `day`, `month` |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Realized savings. | [RealizedSavings](schemas.md#realizedsavings) |
 | `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
 | `403` | The token is not allowed to access this cluster. | [Problem](schemas.md#problem) |

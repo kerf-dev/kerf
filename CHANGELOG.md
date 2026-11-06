@@ -44,6 +44,15 @@ First public version.
   and shows the release notes and `helm upgrade` commands; "Check now" runs it at once. It is on by default and
   sends nothing about the installation; turn it off with `hub.updateCheck.enabled: false`. Metric
   `kerf_update_available{current,latest}` and the alert `KerfUpdateAvailable` (severity `info`).
+- **Realized savings.** What the applied changes actually saved since they were applied: the requests released
+  by every applied change (rollbacks and later increases subtract) × the replicas that ran × the node rates of
+  the time, computed hourly by the hub leader, including changes applied before the upgrade. Shown as
+  "Realized since <date>" on the Overview (total and a monthly chart) and on the workload page, always apart
+  from the estimated savings, which are now labelled "Estimated (if applied)". A node cost trend per cluster
+  draws the hourly node cost and the requested/allocatable ratio next to the released requests (correlated, not
+  caused). New API `GET /v1/savings/realized`, `GET /v1/workloads/{id}/savings/realized` and
+  `GET /v1/savings/realized/node-cost`, metrics `kerf_hub_realized_*` and a Grafana row; the method is in
+  [docs/realized-savings.md](docs/realized-savings.md). Database migration `0016_realized_savings`.
 - **Copy as a patch.** A **Copy as…** menu on the workload page and on the Opportunities bulk bar turns the
   recommended values into a strategic merge patch, a `kubectl patch` command, a Kustomize `patches:` entry or a
   Helm values snippet, for one workload or a selection, so teams that keep their manifests in Git can make the

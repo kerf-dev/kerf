@@ -20,6 +20,7 @@ with search and a version switch, at [getkerf.dev/docs](https://getkerf.dev/docs
 | [Helm chart reference](../deploy/charts/kerf/README.md) | `global.mode`, the umbrella values, opt-in features |
 | [Component charts](../deploy/charts) | Values of `hub`, `web`, `pricing`, `agent`, `webhook` ([hub](../deploy/charts/hub/README.md), [agent](../deploy/charts/agent/README.md)) |
 | [Grafana dashboards](../dashboards/README.md) | Overview, opportunities, automation and workload dashboards |
+| [Realized savings](realized-savings.md) | What applied changes actually saved, kept apart from estimates; the method, with SQL and PromQL to reproduce it |
 | [Sign-in and access](auth.md) | Required sign-in, users and roles, sign-in protection, bearer tokens for automation, upgrading from anonymous read access |
 | [Copy a recommendation as a patch](copy-as-patch.md) | Hand a recommendation over as a strategic merge patch, a `kubectl patch` command, a Kustomize patch or Helm values, for one workload or a selection |
 | [Sign-in and access](auth.md) | Required sign-in, users and roles, sign-in with OpenID Connect (Okta, Entra ID, Google, Keycloak, Dex), sign-in protection, bearer tokens for automation, upgrading from anonymous read access |
