@@ -38,6 +38,10 @@ config:
   corsOrigins: ["http://localhost:5173"]
   recommender:
     interval: 5m
+    # Runs (and POST /v1/admin/recompute, which the e2e suite calls per cluster) use usage up to
+    # the last 30 s instead of the last full 5-minute step, so a new workload gets a
+    # recommendation a minute after it starts (WO-30). Production default: the step.
+    endAlignment: 30s
     # History before the first regular run, computed from the stored metrics: one run as of each
     # UTC midnight of the 29 days before it (the synthetic data covers 30 days). Missing days are
     # filled at every start, between the regular runs; runs off that grid are replaced.

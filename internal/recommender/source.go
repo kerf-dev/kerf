@@ -93,11 +93,11 @@ func (s *Source) bind(ctx context.Context, cluster string) (Querier, *datasource
 }
 
 // Load reads everything needed to recommend for one cluster. window is the longest profile window
-// in use for the cluster; End is aligned down to the step.
+// in use for the cluster; End is aligned down to the step (Config.Align).
 func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window time.Duration) (*ClusterData, error) {
 	cfg := s.Cfg
 	step := cfg.Step
-	end = end.Truncate(step)
+	end = cfg.Align(end)
 	start := end.Add(-window)
 	data, binding, err := s.bind(ctx, cluster)
 	if err != nil {

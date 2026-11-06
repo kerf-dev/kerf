@@ -59,6 +59,11 @@ func DefaultProfiles() map[string]Profile {
 type Config struct {
 	// Step is the subquery resolution for usage statistics.
 	Step time.Duration `json:"step"`
+	// EndAlignment: a run uses the data up to its time truncated to this (0 = Step, the default).
+	// A shorter alignment (dev/e2e, e.g. 30s) lets a run see the last minute of usage instead of
+	// waiting for the next full step; the evaluation grid (every Step back from the end) and the
+	// query cost stay the same. At most Step.
+	EndAlignment time.Duration `json:"endAlignment"`
 	// RateWindow is the range of rate() for CPU counters.
 	RateWindow time.Duration `json:"rateWindow"`
 	// RiskWindow is the lookback for throttling, OOM kills and restarts.
@@ -142,10 +147,21 @@ func DefaultConfig() Config {
 	}
 }
 
+// Align truncates a run's time to the end of its data: EndAlignment, else Step.
+func (c Config) Align(t time.Time) time.Time {
+	if c.EndAlignment > 0 && c.EndAlignment < c.Step {
+		return t.Truncate(c.EndAlignment)
+	}
+	return t.Truncate(c.Step)
+}
+
 // Validate checks the configuration.
 func (c Config) Validate() error {
 	if c.Step <= 0 || c.RateWindow <= 0 || c.RiskWindow <= 0 || c.InventoryLookback <= 0 {
 		return fmt.Errorf("step, rateWindow, riskWindow and inventoryLookback must be positive")
+	}
+	if c.EndAlignment < 0 || c.EndAlignment > c.Step {
+		return fmt.Errorf("endAlignment %s must be between 0 and the step %s", c.EndAlignment, c.Step)
 	}
 	if c.CPUStepCores <= 0 || c.MemoryStepBytes <= 0 {
 		return fmt.Errorf("rounding steps must be positive")
