@@ -72,6 +72,9 @@ is green within a minute. Pull requests build the images for `linux/amd64`; `mai
 if internal development documents (`CLAUDE.md`, `.claude/`, `DECISIONS.md`, `roadmap.md`, `docs/work-orders/`,
 `docs/handover/`, `docs/plans/`, `docs/STATUS.md`, `docs/open-source-checklist.md`) are committed.
 Run `make generate` after changing `api/` and commit the result.
+CodeQL runs as its own workflow (`.github/workflows/codeql.yaml`) and scans only the languages a pull request changes
+(Go, JavaScript/TypeScript, Python, GitHub Actions; `.github/scripts/codeql-languages.sh` decides). Pushes to `main` and
+a weekly run scan all of them. It is not a required check.
 
 ## Pull request titles
 
