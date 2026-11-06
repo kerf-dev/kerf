@@ -47,6 +47,8 @@ re-read on every request. The Secret is optional: without it the hub answers 401
 | events (core and events.k8s.io) | create patch | Kubernetes Events on RightsizingRecommendations |
 | leases (namespaced Role, only with leaderElection) | all | leader election |
 | configmaps (namespaced Role, only with configSync) | get update (`<fullname>-config-state` only), create | the last hub config: pause flag and approvals survive a restart without the hub |
+| karpenter.sh nodepools, nodeclaims (only with `capacity.enabled`) | get list | node estimate: node pools, consolidation policy, disruption budgets ([node savings](../../../docs/node-savings.md)) |
+| configmaps (Role in `kube-system`, only with `capacity.clusterAutoscaler.enabled`) | get (`cluster-autoscaler-status` only) | node estimate: Cluster Autoscaler node groups, their minimum size and health |
 
 The bracketed write verbs are dropped with `readOnly: true`, which also caps every mode at audit.
 

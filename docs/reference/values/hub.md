@@ -145,6 +145,11 @@ The values of the `hub` component chart. In the `kerf` chart they sit under `hub
 | `updateCheck.enabled` | boolean | `true` |  |
 | `updateCheck.interval` | string | `24h` | Go duration, at least 10m; a random delay of up to a tenth of it (at most 1h) is added. |
 | `updateCheck.url` | string | `https://api.github.com/repos/kerf-dev/kerf/releases` | The releases API (a mirror or a test server). |
+| `notifications` | object | see the keys below | Notifications (Admin -> Notifications, docs/notifications.md): Slack, Microsoft Teams and signed webhooks, rules, the weekly digest. Rules and the digest are set in the UI; channels can come from here too (read-only in the UI). A channel's URL (a credential) and a webhook channel's signing secret are read from a Secret you create or sync (External Secrets); the hub encrypts what the UI stores with the datasource key below. The hub needs egress to the destinations. |
+| `notifications.baseURL` | string | `""` | Where the web UI is reachable: messages link to <baseURL>/workloads/... Empty: no links. |
+| `notifications.rateLimitPerMinute` | integer | `20` | Messages per minute and channel; the surplus waits. |
+| `notifications.allowInsecureHTTP` | boolean | `false` | Accept http:// channel URLs (a receiver inside the cluster, tests). Default: HTTPS only. |
+| `notifications.channels` | array | `[]` | `channels:`<br>- name: platform-alerts         # a DNS label<br>`type: slack                   # slack \| teams \| webhook`<br>`existingSecret: kerf-slack    # Secret in this namespace`<br>`urlKey: url                   # key holding the webhook URL (default url)`<br>`secretKey: ""                 # webhook only: key holding the HMAC signing secret (optional)`<br>`enabled: true` |
 | `onboarding` | object | see the keys below | Datasource secrets (bearer tokens, passwords, mTLS keys) are encrypted at rest with this key. create: the chart generates a random key once and keeps it (helm.sh/resource-policy: keep); back the Secret up. Or point existingSecret at your own Secret (32 bytes, base64 or hex, one key per line; the first encrypts, the others still decrypt during a rotation), or let externalSecret build Secret <release>-datasource-key from Secrets Manager (wins over create). |
 | `onboarding.secretsKey` | object | see the keys below |  |
 | `onboarding.secretsKey.create` | boolean | `true` |  |
@@ -238,6 +243,10 @@ The values of the `hub` component chart. In the `kerf` chart they sit under `hub
 | `prometheusRule.alerts.updateAvailable.enabled` | boolean | `true` |  |
 | `prometheusRule.alerts.updateAvailable.for` | string | `1h` |  |
 | `prometheusRule.alerts.updateAvailable.severity` | string | `info` |  |
+| `prometheusRule.alerts.notificationFailing` | object | see the keys below | Notifications failed for good (kerf_notification_deliveries_total{result="failed"}). |
+| `prometheusRule.alerts.notificationFailing.enabled` | boolean | `true` |  |
+| `prometheusRule.alerts.notificationFailing.for` | string | `0m` |  |
+| `prometheusRule.alerts.notificationFailing.severity` | string | `warning` |  |
 | `prometheusRule.additionalRules` | array | `[]` |  |
 | `dashboards` | object | see the keys below | Grafana dashboards (dashboards/*.json) as ConfigMaps for the Grafana sidecar. They query the datasource uid `victoriametrics` by default (dashboard variable `datasource`). |
 | `dashboards.enabled` | boolean | `false` |  |

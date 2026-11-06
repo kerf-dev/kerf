@@ -175,6 +175,14 @@ hub:
   # GitHub releases API, nothing about this installation is sent. Air-gapped sites: enabled: false.
   # updateCheck: {enabled: true, interval: 24h}
 
+  # Notifications to Slack, Microsoft Teams and signed webhooks (Admin -> Notifications; docs/notifications.md).
+  # Rules and the weekly digest are set in the UI. Channels can come from a Secret you create:
+  # notifications:
+  #   baseURL: https://kerf.example.com       # the web UI's address, for the links in the messages
+  #   channels:
+  #     - {name: platform-alerts, type: slack, existingSecret: kerf-slack-platform}    # key `url`
+  #     - {name: pagerduty, type: webhook, existingSecret: kerf-pagerduty, secretKey: signing-secret}
+
 # ---------------------------------------------------------------------------------------------------
 # web: the UI (nginx, non-root on 8080) (mode hub, all)
 web:

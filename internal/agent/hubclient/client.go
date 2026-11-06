@@ -136,12 +136,12 @@ func (c *Client) ListRecommendations(ctx context.Context, etag string) ([]Worklo
 }
 
 // ReportWorkloadStatus upserts workload statuses, split into batches of MaxBatch. The batch
-// fields besides Items (agentVersion, configVersion, policyInventory, capabilities, checks) are
-// sent with the first request; configVersion and agentVersion with every one. A batch without
-// items is still sent when it carries an inventory, capabilities or checks.
+// fields besides Items (agentVersion, configVersion, policyInventory, capabilities, checks,
+// components, capacity) are sent with the first request; configVersion and agentVersion with every
+// one. A batch without items is still sent when it carries any of them.
 func (c *Client) ReportWorkloadStatus(ctx context.Context, batch WorkloadStatusBatch) error {
 	items := batch.Items
-	if len(items) == 0 && batch.PolicyInventory == nil && batch.Capabilities == nil && batch.Checks == nil && batch.Components == nil {
+	if len(items) == 0 && batch.PolicyInventory == nil && batch.Capabilities == nil && batch.Checks == nil && batch.Components == nil && batch.Capacity == nil {
 		return nil
 	}
 	for start := 0; start == 0 || start < len(items); start += MaxBatch {
@@ -150,7 +150,7 @@ func (c *Client) ReportWorkloadStatus(ctx context.Context, batch WorkloadStatusB
 			Items: append([]WorkloadStatus{}, items[start:end]...)}
 		if start == 0 {
 			body.PolicyInventory, body.Capabilities, body.Checks = batch.PolicyInventory, batch.Capabilities, batch.Checks
-			body.Components = batch.Components
+			body.Components, body.Capacity = batch.Components, batch.Capacity
 		}
 		var res BatchResult
 		if _, _, err := c.do(ctx, http.MethodPost, c.path("workload-status"), nil, nil, body, &res); err != nil {

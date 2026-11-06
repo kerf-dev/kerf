@@ -44,6 +44,16 @@ First public version.
   and shows the release notes and `helm upgrade` commands; "Check now" runs it at once. It is on by default and
   sends nothing about the installation; turn it off with `hub.updateCheck.enabled: false`. Metric
   `kerf_update_available{current,latest}` and the alert `KerfUpdateAvailable` (severity `info`).
+- **Notifications.** Admin → Notifications sends the events that matter (a change applied, rolled back, failed
+  or blocked, a cluster losing readiness, automation paused or resumed) to **Slack**, **Microsoft Teams**
+  (Workflows webhook) or a **generic webhook** signed with HMAC-SHA256 (`X-Kerf-Signature`, a versioned JSON payload
+  documented in `docs/contracts/notifications.md`), routed by rules on event type, cluster and namespace patterns.
+  A weekly digest (day, time and time zone are yours) sums up estimated savings, the week's realized savings, the top opportunities, the changes
+  and the clusters that need attention. Webhook URLs and secrets are encrypted at rest and never returned; the hub
+  leader sends with retries and exponential backoff for an hour, a per-channel rate limit, a "Send test" button and
+  the last delivery status per channel. Channels can also come from the chart (`hub.notifications`). Metrics
+  `kerf_notification_deliveries_total` and `kerf_notification_last_success_timestamp_seconds`, and the alert
+  `KerfNotificationDeliveryFailing`.
 - **Effective AWS prices from the Cost and Usage Report.** The pricing service can read your CUR 2.0 export
   (AWS Data Exports, Parquet in S3), through Athena or directly from S3, and price nodes at the rate you paid
   over the last 30 days, with Savings Plans and Reserved Instances amortised. Instance types without usage keep
@@ -99,6 +109,17 @@ First public version.
   release and the cosign signature, see [Verify the signatures](docs/release.md#verify-the-signatures)). Every
   release pushes `artifacthub-repo.yml` as the `artifacthub.io` tag of the chart repository, and CI runs `ah lint`
   (`make charts-ah-lint`).
+- **Node savings estimate.** The cluster page has a Capacity tab: requested vs allocatable CPU and memory now
+  and after the open recommendations, an estimate of the nodes each node pool needs (first-fit-decreasing bin
+  packing of pod requests, priced per instance type), and the consolidation blockers that keep nodes from
+  going away (PodDisruptionBudgets at zero, `karpenter.sh/do-not-disrupt` and `safe-to-evict=false` pods,
+  local storage, node pool minimums, Karpenter `WhenEmpty` and zero disruption budgets, nodes with
+  `scale-down-disabled`), each naming its object with a fix hint. The agent reads nodes, Karpenter
+  `NodePool`/`NodeClaim` and the Cluster Autoscaler status ConfigMap read-only (new RBAC: `get`/`list` on
+  `karpenter.sh` node pools and node claims, `get` on that one ConfigMap); turn it off with
+  `capacity.enabled: false`. API: `GET /v1/clusters/{cluster}/capacity`. The node cost trend on the Overview
+  shows the estimated hourly node cost as a dashed "Estimate" level. See
+  [docs/node-savings.md](docs/node-savings.md).
 
 ### Fixed
 

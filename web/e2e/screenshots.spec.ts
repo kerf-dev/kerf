@@ -144,6 +144,7 @@ const adminShots: Shot[] = [
   { name: 'admin-access', user: 'admin', path: '/admin/access' },
   { name: 'admin-audit', user: 'admin', path: '/admin/audit' },
   { name: 'admin-maintenance', user: 'admin', path: '/admin/maintenance', tablet: true },
+  { name: 'admin-notifications', user: 'admin', path: '/admin/notifications', tablet: true },
   { name: 'cluster-readiness', user: 'admin', path: '/clusters/prod-us-east-1?tab=readiness', tablet: true },
   { name: 'cluster-agent', user: 'admin', path: '/clusters/dr-eu-central-1?tab=agent' },
   {

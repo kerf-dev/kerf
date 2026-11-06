@@ -154,6 +154,10 @@ func (s *Server) reportWorkloadStatus(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, r, "invalid_item", err.Error())
 		return
 	}
+	if err := validateCapacity(batch.Capacity); err != nil {
+		badRequest(w, r, "invalid_item", err.Error())
+		return
+	}
 	if err := s.Store.UpsertStatuses(r.Context(), cluster, batch.Items, s.now()); err != nil {
 		s.internal(w, r, err)
 		return
@@ -172,6 +176,11 @@ func (s *Server) reportWorkloadStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	// Components found by the agent, e.g. the webhook pods (WO-33); absent = unchanged.
 	if err := s.recordAgentComponents(r.Context(), cluster, batch.Components); err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	// Nodes and node pools for the node estimate; absent = unchanged.
+	if err := s.recordCapacity(r.Context(), cluster, batch.Capacity); err != nil {
 		s.internal(w, r, err)
 		return
 	}

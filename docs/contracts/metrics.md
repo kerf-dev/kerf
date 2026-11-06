@@ -140,6 +140,18 @@ two series have no `cluster` label because they describe the hub process, not a 
 | `kerf_hub_leader` | gauge | – | 1 while this replica is the leader, 0 otherwise. `sum(kerf_hub_leader)` is 1 in a healthy hub (0 during a failover, at most 15 s). |
 | `kerf_hub_leader_transitions_total` | counter | – | changes of `kerf_hub_leader` on this replica (acquired or lost); resets on restart, use `increase()`. |
 
+### Notifications
+
+Notification delivery ([notifications](../notifications.md)). No `cluster` label. The counter is per replica (only the
+leader sends, so it moves on the replica that led); `sum` it.
+
+| Series | Type | Extra labels | Meaning |
+|---|---|---|---|
+| `kerf_notification_deliveries_total` | counter | `channel_type` (`slack`\|`teams`\|`webhook`), `result` (`success`\|`retry`\|`failed`) | One increment per delivery attempt, test sends included: `success` (the destination answered 2xx), `retry` (it failed and will be tried again), `failed` (given up: a permanent error, or the one-hour retry window ended). Resets on restart; use `increase()`. |
+| `kerf_notification_last_success_timestamp_seconds` | gauge | `channel` (channel name) | Unix time of the channel's last successful delivery (leader only; no series until the first success). |
+
+Alert example: `increase(kerf_notification_deliveries_total{result="failed"}[1h]) > 0`.
+
 ### Update check
 
 The hub's check for a newer Kerf release ([Maintenance page](../maintenance.md)). Leader only, no `cluster` label.

@@ -101,6 +101,11 @@ spec:
               mountPath: /etc/hub/datasource-key
               readOnly: true
             {{- end }}
+            {{- range $i, $c := .Values.notifications.channels }}
+            - name: notification-{{ $i }}
+              mountPath: /etc/hub/notifications/{{ $i }}
+              readOnly: true
+            {{- end }}
             {{- if $dbCA }}
             - name: db-ca
               mountPath: /etc/hub/db-ca
@@ -134,6 +139,18 @@ spec:
             items:
               - key: {{ .Values.onboarding.secretsKey.existingSecretKey }}
                 path: key
+        {{- end }}
+        {{- range $i, $c := .Values.notifications.channels }}
+        - name: notification-{{ $i }}
+          secret:
+            secretName: {{ $c.existingSecret }}
+            items:
+              - key: {{ $c.urlKey | default "url" }}
+                path: url
+              {{- if $c.secretKey }}
+              - key: {{ $c.secretKey }}
+                path: secret
+              {{- end }}
         {{- end }}
         {{- if $dbCA }}
         {{- $ca := .Values.database.caBundle }}
