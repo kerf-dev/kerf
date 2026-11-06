@@ -11,7 +11,7 @@ async function login(page: Page, user: string, next = '/') {
   await page.getByLabel('Username').fill(user)
   await page.getByLabel('Password', { exact: true }).fill('dev-password')
   await page.getByTestId('login-submit').click()
-  await expect(page).toHaveURL(new RegExp(`${next.replace(/[?]/g, '\\?')}$`))
+  await expect(page).toHaveURL((url) => url.pathname + url.search === next)
   await expect(page.getByTestId('user-menu')).toBeVisible()
 }
 

@@ -19,10 +19,34 @@ function idsOf(file) {
   return new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]))
 }
 
+// True for an absolute URL whose origin is exactly the site's (https://getkerf.dev.example.com is not).
+function onSiteOrigin(url) {
+  try {
+    return new URL(url).origin === ORIGIN
+  } catch {
+    return false
+  }
+}
+
+// The site-relative file a link points at; absolute site URLs and relative links resolve the same way.
 function sitePath(url) {
-  if (url.startsWith(ORIGIN)) url = url.slice(ORIGIN.length) || '/'
-  const path = url.split('#')[0].split('?')[0]
-  return path === '/' || path === '' ? 'index.html' : path.replace(/^\//, '')
+  let path = new URL(url, ORIGIN).pathname
+  try {
+    path = decodeURIComponent(path)
+  } catch {
+    // keep the raw path: it will not match a file and is reported as missing
+  }
+  return path === '/' ? 'index.html' : path.replace(/^\//, '')
+}
+
+// Removes every match, repeatedly, so that removing one cannot join the pieces around it into a new match.
+function stripAll(text, pattern) {
+  let previous
+  do {
+    previous = text
+    text = text.replace(pattern, '')
+  } while (text !== previous)
+  return text
 }
 
 function check(from, url) {
@@ -35,7 +59,7 @@ function check(from, url) {
     if (!existsSync(join(repo, decodeURIComponent(p)))) problems.push(`${from}: ${url} -> no ${p} in this checkout`)
     return
   }
-  if (/^(https?:|mailto:)/.test(url) && !url.startsWith(ORIGIN)) return // other external links: not checked offline
+  if (/^(https?:|mailto:)/.test(url) && !onSiteOrigin(url)) return // other external links: not checked offline
   const target = url.startsWith('#') ? from : sitePath(url)
   const file = join(site, target)
   if (!existsSync(file) || !statSync(file).isFile()) {
@@ -48,9 +72,9 @@ function check(from, url) {
 }
 
 for (const page of ['index.html', '404.html']) {
-  const html = readFileSync(join(site, page), 'utf8').replace(/<!--[\s\S]*?-->/g, '')
+  const html = stripAll(readFileSync(join(site, page), 'utf8'), /<!--[\s\S]*?-->/g)
   for (const [, attr, value] of html.matchAll(/\s(href|src|content)="([^"]+)"/g)) {
-    if (attr === 'content' && !value.startsWith(ORIGIN)) continue
+    if (attr === 'content' && !onSiteOrigin(value)) continue
     check(page, value)
   }
   for (const [, set] of html.matchAll(/\ssrcset="([^"]+)"/g)) {
