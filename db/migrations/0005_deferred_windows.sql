@@ -1,4 +1,4 @@
--- WO-10: deferred strategy. New workload phase Deferred and the next maintenance window.
+-- Deferred strategy. New workload phase Deferred and the next maintenance window.
 -- Idempotent: safe to re-run on a database that already has it.
 
 -- +goose Up

@@ -13,7 +13,7 @@ import (
 )
 
 // singleReplicaUnsafe returns why the change would leave a single-replica workload without a
-// Ready pod, or "" (WO-13): in place only without a container restart; a rollout only with
+// Ready pod, or "": in place only without a container restart; a rollout only with
 // maxSurge >= 1 and maxUnavailable 0. The allow-disruption annotation lifts the check.
 func singleReplicaUnsafe(in Input, changes []hubclient.ContainerChange) string {
 	d := in.Disruption

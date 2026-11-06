@@ -1,4 +1,4 @@
-# Hub config for `go run ./cmd/hub --config dev/hub.yaml` on the host (WO-04).
+# Hub config for `go run ./cmd/hub --config dev/hub.yaml` on the host.
 # Uses the shared k3d environment through its host ports (dev/README.md).
 # The in-cluster deployment uses deploy/charts/hub/values-dev.yaml instead.
 listen: ":8080"

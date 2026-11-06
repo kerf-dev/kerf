@@ -1,4 +1,4 @@
-# Web UI (WO-14): React SPA in web/, nginx image, Helm chart deploy/charts/web.
+# Web UI: React SPA in web/, nginx image, Helm chart deploy/charts/web.
 # Included by the root Makefile. Node 22+ must be on PATH (see CONTRIBUTING.md).
 
 WEB_DIR        := web
@@ -50,7 +50,7 @@ web-screenshots: $(WEB_DIR)/node_modules ## Capture every page (light, dark, tab
 	mkdir -p $(WEB_SCREENSHOTS_DIR)
 	cd $(WEB_DIR) && SCREENSHOTS_DIR=$(abspath $(WEB_SCREENSHOTS_DIR)) npx playwright test screenshots
 
-web-verify: web-check-api web-lint web-typecheck web-test web-build web-e2e ## Everything under WO-14 "Verification" except docker.
+web-verify: web-check-api web-lint web-typecheck web-test web-build web-e2e ## Every web UI check except the docker build.
 
 docker-web: ## Build the web image (nginx + SPA).
 	docker build -t $(WEB_IMAGE):$(WEB_TAG) $(WEB_DIR)

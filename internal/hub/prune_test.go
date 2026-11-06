@@ -9,7 +9,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// TestPruneAbsent (WO-04e): on a cluster with an agent, a workload missing from the agent's full
+// TestPruneAbsent: on a cluster with an agent, a workload missing from the agent's full
 // status batches after two pulls and without pods is soft-deleted: gone from lists, facets and
 // the summary, kept for its detail page and audit, revived when it reappears. Live workloads the
 // agent does not report and clusters without an agent keep the metrics-based behaviour.
@@ -120,7 +120,7 @@ func TestPruneAbsent(t *testing.T) {
 	expect("pulls without batches", base...)
 
 	// Revived: the agent reports ghost again; legacy has pods again in the next run. That run
-	// marks ghost deleted for having no series at all, as before WO-04e.
+	// marks ghost deleted for having no series at all, as before workload pruning.
 	cycle(append(reported, kGhost)...)
 	expect("ghost reported again", append(base, "ghost")...)
 	e.loader.mu.Lock()

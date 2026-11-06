@@ -177,7 +177,7 @@ export function ActorChip({ actor, time }: { actor?: Actor; time?: string }) {
   )
 }
 
-/** Whether the agent has applied the config the hub serves (D-022). */
+/** Whether the agent has applied the config the hub serves. */
 export function SyncBadge({ sync }: { sync?: AgentConfigSync }) {
   if (!sync) return null
   if (!sync.lastConfigPullAt)

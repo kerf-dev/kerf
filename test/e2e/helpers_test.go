@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// fieldManager is the agent's server-side-apply field manager (D-006).
+// fieldManager is the agent's server-side-apply field manager.
 const fieldManager = "kerf"
 
 // ownsCPURequest reports whether the agent's field manager owns
@@ -69,7 +69,7 @@ func replicaSets(t *testing.T, cl cluster, ns, app string) int {
 	return len(list.Items)
 }
 
-// hpa attaches a CPU-utilization HPA (D-011: such workloads are hpa-coupled).
+// hpa attaches a CPU-utilization HPA (such workloads are hpa-coupled).
 func hpa(t *testing.T, cl cluster, ns, name string, target int32) {
 	t.Helper()
 	min := int32(2)

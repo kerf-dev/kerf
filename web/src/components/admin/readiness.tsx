@@ -24,7 +24,7 @@ import { formatDateTime, relativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CodeBlock } from './common'
 
-/** Readiness model (D-025, docs/contracts/readiness.md). */
+/** Readiness model (docs/contracts/readiness.md). */
 export const STATE_INFO: Record<ReadinessState, { label: string; desc: string }> = {
   Registered: { label: 'Registered', desc: 'Known to the hub; no agent has connected yet.' },
   AgentConnected: { label: 'Agent connected', desc: 'The agent pulls its config and reports status.' },

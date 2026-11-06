@@ -9,7 +9,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/store"
 )
 
-// Hub HA (WO-18a, D-028). Every replica serves the whole API from the database. One replica, the
+// Hub HA. Every replica serves the whole API from the database. One replica, the
 // leader (Elector), runs the background work in RunLeader. The replicas tell each other about
 // changes through Postgres notifications (HandleNotify).
 

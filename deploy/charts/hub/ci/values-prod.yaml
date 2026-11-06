@@ -1,5 +1,5 @@
 # Every production feature on, with EKS-like settings (rendered by `make charts-lint`; not an
-# install example: WO-18d ships those). Needs leader election (WO-18a) for 2 replicas.
+# install example: the umbrella chart is the install path). Needs leader election for 2 replicas.
 global:
   imageRegistry: 123456789012.dkr.ecr.eu-west-1.amazonaws.com
   imagePullSecrets: [ecr-pull]

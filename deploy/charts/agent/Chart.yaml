@@ -1,6 +1,6 @@
 apiVersion: v2
 name: agent
-description: Kerf per-cluster agent (WO-06) - policy resolution, guardrails and apply
+description: Kerf per-cluster agent - policy resolution, guardrails and apply
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

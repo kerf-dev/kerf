@@ -323,7 +323,7 @@ func TestIsJVMImage(t *testing.T) {
 	}
 }
 
-// TestSynthJVMFixture runs WO-02's JVM fixture (image-only detection, sawtooth memory near the
+// TestSynthJVMFixture runs the synthetic generator's JVM fixture (image-only detection, sawtooth memory near the
 // limit): the recommendation keeps memory (expect.memory = keep) and explains the JVM default.
 func TestSynthJVMFixture(t *testing.T) {
 	_, file, _, _ := runtime.Caller(0)

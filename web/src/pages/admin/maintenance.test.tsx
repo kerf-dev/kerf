@@ -1,5 +1,5 @@
 /**
- * Admin → Maintenance (WO-33) against the MSW mock hub: versions per component, mismatch highlight,
+ * Admin → Maintenance against the MSW mock hub: versions per component, mismatch highlight,
  * every update state, and "Check now" for admins only.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'

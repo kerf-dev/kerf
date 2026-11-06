@@ -1,7 +1,7 @@
 // Package hubapi holds the Go types of the hub HTTP API (api/openapi/hub.yaml).
 //
 // The types are hand-written to mirror the OpenAPI schemas one to one; field names and JSON tags
-// must match the contract. Agents (WO-06) may import this package to talk to the hub.
+// must match the contract. Agents may import this package to talk to the hub.
 package hubapi
 
 import (
@@ -39,7 +39,7 @@ const (
 	RoleUI    = "ui"
 	RoleAdmin = "admin"
 	// RolePricing is the pricing service's token: metrics bindings and the datasource query proxy
-	// only (D-026).
+	// only.
 	RolePricing = "pricing"
 )
 
@@ -52,7 +52,7 @@ const (
 	FlagSidecar       = "sidecar"
 	FlagShortLived    = "short-lived"
 	FlagLowConfidence = "low-confidence"
-	// FlagJVMFixedHeap: JVM with a fixed -Xmx; memory is audit-only (WO-12).
+	// FlagJVMFixedHeap: JVM with a fixed -Xmx; memory is audit-only.
 	FlagJVMFixedHeap = "jvm-fixed-heap"
 )
 
@@ -146,7 +146,7 @@ type ResourceExplanation struct {
 	RoundedTo string     `json:"roundedTo,omitempty"`
 	LimitRule string     `json:"limitRule,omitempty"`
 	Notes     []string   `json:"notes,omitempty"`
-	// JVM is set on the memory explanation of JVM containers (WO-12).
+	// JVM is set on the memory explanation of JVM containers.
 	JVM *JVMExplanation `json:"jvm,omitempty"`
 }
 
@@ -166,7 +166,7 @@ type ConfidenceFactor struct {
 	Weight float64 `json:"weight"`
 }
 
-// ConfidenceFactors explain a container's confidence: sum of score x weight (D-016).
+// ConfidenceFactors explain a container's confidence: sum of score x weight.
 type ConfidenceFactors struct {
 	Coverage   ConfidenceFactor `json:"coverage"`
 	Samples    ConfidenceFactor `json:"samples"`
@@ -210,7 +210,7 @@ type WorkloadRecommendation struct {
 	MonthlySavingsUSD Savings                   `json:"monthlySavingsUSD"`
 	DataCoverage      DataCoverage              `json:"dataCoverage"`
 	Pricing           *RecommendationPricing    `json:"pricing,omitempty"`
-	// HPA is the HPA coordination (WO-11) of hpa-coupled workloads.
+	// HPA is the HPA coordination of hpa-coupled workloads.
 	HPA *HPACoordination `json:"hpa,omitempty"`
 	// GPU is set for workloads whose pods request GPUs.
 	GPU *GPUUsage `json:"gpu,omitempty"`
@@ -222,7 +222,7 @@ const (
 	PricingSourceDefault = "default"
 )
 
-// RecommendationPricing are the rates used for a recommendation's savings (D-016).
+// RecommendationPricing are the rates used for a recommendation's savings.
 type RecommendationPricing struct {
 	Source           string  `json:"source"`
 	CPUCoreHourUSD   float64 `json:"cpuCoreHourUSD"`
@@ -279,7 +279,7 @@ type EffectiveModes struct {
 	MemorySource string `json:"memorySource,omitempty"`
 }
 
-// DefaultModes are the modes of a workload the agent never reported (D-005).
+// DefaultModes are the modes of a workload the agent never reported.
 func DefaultModes() EffectiveModes {
 	return EffectiveModes{CPU: ModeAudit, Memory: ModeAudit, CPUSource: SourceGlobalDefault, MemorySource: SourceGlobalDefault}
 }
@@ -288,7 +288,7 @@ func DefaultModes() EffectiveModes {
 type WorkloadStatus struct {
 	Workload WorkloadRef `json:"workload"`
 	Policy   string      `json:"policy,omitempty"`
-	// Override is the hub workload-override policy layered on top of Policy (D-022).
+	// Override is the hub workload-override policy layered on top of Policy.
 	Override         string               `json:"override,omitempty"`
 	Modes            EffectiveModes       `json:"modes"`
 	Strategy         string               `json:"strategy,omitempty"`
@@ -301,7 +301,7 @@ type WorkloadStatus struct {
 	AppliedAt        *time.Time           `json:"appliedAt,omitempty"`
 	NextWindow       *time.Time           `json:"nextWindow,omitempty"`
 	ObservedAt       *time.Time           `json:"observedAt,omitempty"`
-	// JVM lists the JVM containers the agent detected (WO-12).
+	// JVM lists the JVM containers the agent detected.
 	JVM []JVMContainer `json:"jvm,omitempty"`
 	// Labels are the workload's labels and NamespaceLabels its namespace's (team ownership); nil =
 	// not reported (an older agent), the stored labels stay.
@@ -313,14 +313,14 @@ type WorkloadStatus struct {
 type WorkloadStatusBatch struct {
 	AgentVersion string           `json:"agentVersion,omitempty"`
 	Items        []WorkloadStatus `json:"items"`
-	// ConfigVersion is the cluster config the agent last materialised (D-022).
+	// ConfigVersion is the cluster config the agent last materialised.
 	ConfigVersion string `json:"configVersion,omitempty"`
 	// PolicyInventory is nil when unchanged; non-nil (possibly empty) is the full inventory.
 	PolicyInventory []PolicyInventoryItem `json:"policyInventory,omitempty"`
-	// Capabilities and Checks are the agent self-checks (D-025): nil = unchanged.
+	// Capabilities and Checks are the agent self-checks: nil = unchanged.
 	Capabilities []AgentCapability `json:"capabilities,omitempty"`
 	Checks       []ReadinessCheck  `json:"checks,omitempty"`
-	// Components are the Kerf components the agent found in its cluster (WO-33, webhook pods):
+	// Components are the Kerf components the agent found in its cluster (webhook pods):
 	// nil = unchanged, empty = none.
 	Components []AgentComponent `json:"components,omitzero"`
 	// Capacity is the node and node pool snapshot for the node estimate: nil = unchanged.
@@ -450,14 +450,14 @@ type ClusterInfo struct {
 	AgentVersion    string        `json:"agentVersion,omitempty"`
 	AgentStatus     string        `json:"agentStatus"`
 	Counts          ClusterCounts `json:"counts"`
-	// Admin area (D-022).
+	// Admin area.
 	Environment  string           `json:"environment,omitempty"`
 	Owner        string           `json:"owner,omitempty"`
 	PolicySource string           `json:"policySource,omitempty"`
 	Paused       *bool            `json:"paused,omitempty"`
 	Automation   *Automation      `json:"automation,omitempty"`
 	ConfigSync   *AgentConfigSync `json:"configSync,omitempty"`
-	// Readiness (D-025).
+	// Readiness.
 	Readiness *ReadinessSummary `json:"readiness,omitempty"`
 }
 
@@ -524,9 +524,9 @@ type WorkloadDetail struct {
 	LastSeenAt     *time.Time              `json:"lastSeenAt,omitempty"`
 	Recommendation *WorkloadRecommendation `json:"recommendation,omitempty"`
 	Status         *WorkloadStatus         `json:"status,omitempty"`
-	// Approval is the latest approve-once grant (D-024).
+	// Approval is the latest approve-once grant.
 	Approval *Approval `json:"approval,omitempty"`
-	// Override is the workload's hub override policy (D-022).
+	// Override is the workload's hub override policy.
 	Override *AdminPolicy `json:"override,omitempty"`
 }
 
@@ -646,7 +646,7 @@ func contains(list []string, v string) bool {
 // Contains reports whether list holds v.
 func Contains(list []string, v string) bool { return contains(list, v) }
 
-// RecomputeAccepted is the response of POST /v1/admin/recompute (D-019).
+// RecomputeAccepted is the response of POST /v1/admin/recompute.
 type RecomputeAccepted struct {
 	RunID       string    `json:"runId"`
 	Cluster     string    `json:"cluster,omitempty"`
@@ -654,7 +654,7 @@ type RecomputeAccepted struct {
 	Coalesced   bool      `json:"coalesced"`
 }
 
-// HPACoordination is WorkloadRecommendation.hpa (WO-11).
+// HPACoordination is WorkloadRecommendation.hpa.
 type HPACoordination struct {
 	Name              string `json:"name"`
 	Metric            string `json:"metric"`

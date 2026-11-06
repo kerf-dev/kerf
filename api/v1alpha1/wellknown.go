@@ -6,18 +6,18 @@ import (
 	"strings"
 )
 
-// Identifiers (D-006, D-012).
+// Identifiers.
 const (
 	// Prefix of every annotation and label key owned by Kerf.
 	Prefix = "kerf.getkerf.dev/"
 
-	// FieldManager is the server-side-apply field manager for every write to workloads (D-006).
+	// FieldManager is the server-side-apply field manager for every write to workloads.
 	// Argo CD ignores fields owned by this manager.
 	FieldManager = "kerf"
 )
 
 // Annotations set by users on workload objects (Deployment, StatefulSet, DaemonSet, CronJob).
-// They are the highest precedence level (D-005).
+// They are the highest precedence level.
 const (
 	// AnnotationMode sets the mode for both CPU and memory: off | audit | auto-patch.
 	AnnotationMode = Prefix + "mode"
@@ -31,7 +31,7 @@ const (
 	AnnotationProfile = Prefix + "profile"
 	// AnnotationAllowDisruption set to "true" allows changes that leave a single-replica workload
 	// (one replica, or a PodDisruptionBudget that allows no disruption) without a Ready pod for a
-	// moment: an in-place resize that restarts the container, or a rollout without surge (WO-13).
+	// moment: an in-place resize that restarts the container, or a rollout without surge.
 	AnnotationAllowDisruption = Prefix + "allow-disruption"
 )
 
@@ -57,14 +57,14 @@ const (
 	LabelWebhookSkip = Prefix + "skip-webhook"
 
 	// LabelManagedBy marks RightsizingPolicy CRs the agent materialised from the hub config
-	// (value ManagedByHub, D-022). The agent creates, updates and deletes only CRs with this label;
+	// (value ManagedByHub). The agent creates, updates and deletes only CRs with this label;
 	// CRs without it (e.g. from Git) are never touched.
 	LabelManagedBy = Prefix + "managed-by"
 	// ManagedByHub is the LabelManagedBy value of hub-managed policies.
 	ManagedByHub = "hub"
 )
 
-// Annotations on hub-managed RightsizingPolicy CRs (D-022, docs/contracts/admin.md).
+// Annotations on hub-managed RightsizingPolicy CRs (docs/contracts/admin.md).
 const (
 	// AnnotationHubPolicyID is the hub policy id (UUID) a CR was materialised from.
 	AnnotationHubPolicyID = Prefix + "hub-policy-id"
@@ -152,15 +152,15 @@ const (
 	ReasonRestartPolicyRequired    = "RestartPolicyRequired"
 	ReasonHubUnreachable           = "HubUnreachable"
 	// ReasonPaused: automation of the cluster (or the fleet) is paused in the hub config; like a
-	// cluster-wide freeze, rollbacks still run (D-022).
+	// cluster-wide freeze, rollbacks still run.
 	ReasonPaused = "Paused"
-	// ReasonJVMFixedHeap: memory change refused on a JVM with a fixed -Xmx (WO-12).
+	// ReasonJVMFixedHeap: memory change refused on a JVM with a fixed -Xmx.
 	ReasonJVMFixedHeap = "JVMFixedHeap"
 	// ReasonSingleReplicaUnsafe: single-replica workload and the change would leave it without a
-	// Ready pod; opt in with AnnotationAllowDisruption (WO-13).
+	// Ready pod; opt in with AnnotationAllowDisruption.
 	ReasonSingleReplicaUnsafe = "SingleReplicaUnsafe"
 	// ReasonPodDisruptionBudget: a PodDisruptionBudget refused the eviction of an OnDelete
-	// StatefulSet pod; the agent retries (WO-13).
+	// StatefulSet pod; the agent retries.
 	ReasonPodDisruptionBudget = "PodDisruptionBudget"
 
 	// fallback
@@ -184,6 +184,6 @@ const (
 	// applied
 	ReasonRecommendationApplied = "RecommendationApplied"
 	// ReasonApprovedOnce: a recommendation of a workload in audit mode was applied once because an
-	// operator approved it in the hub (D-024).
+	// operator approved it in the hub.
 	ReasonApprovedOnce = "ApprovedOnce"
 )

@@ -113,7 +113,7 @@ spec:
                     x-kubernetes-list-type: atomic
                   maintenanceWindows:
                     description: MaintenanceWindows are the only times the deferred
-                      strategy may apply changes (WO-10).
+                      strategy may apply changes.
                     items:
                       description: TimeWindow is either recurring (schedule + duration)
                         or one-off (start + end).
@@ -231,8 +231,7 @@ spec:
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                   rollback:
-                    description: Rollback configures the health watch after each change
-                      (WO-08).
+                    description: Rollback configures the health watch after each change.
                     properties:
                       oomKills:
                         description: 'OOMKills is the number of OOM kills that triggers
@@ -260,8 +259,8 @@ spec:
                 type: object
               hpa:
                 description: |-
-                  HPA configures coordination with HorizontalPodAutoscalers (WO-11; until then, workloads with
-                  a CPU/memory-utilization HPA stay audit-only regardless of this field, D-011).
+                  HPA configures coordination with HorizontalPodAutoscalers. Without coordination, workloads with
+                  a CPU/memory-utilization HPA stay audit-only.
                 properties:
                   coordinate:
                     description: 'Coordinate changes requests and the HPA utilization
@@ -288,12 +287,12 @@ spec:
                         || self.minUtilization <= self.maxUtilization'
                 type: object
               jvm:
-                description: JVM configures JVM detection (WO-12).
+                description: JVM configures JVM detection.
                 properties:
                   detect:
                     description: |-
                       Detect JVM containers and treat their memory as heap-bound (memory changes need
-                      RestartContainer or rollout, D-007). Global default: true.
+                      RestartContainer or rollout). Global default: true.
                     type: boolean
                 type: object
               memory:
@@ -375,7 +374,7 @@ spec:
                     description: |-
                       Workloads restricts the policy to the listed workloads: a workload matches if it equals any
                       entry. Empty means no restriction. Like every criterion it is combined with the others (AND).
-                      The hub uses it for UI workload overrides (D-022). Agents older than this field ignore it,
+                      The hub uses it for UI workload overrides. Agents older than this field ignore it,
                       so the hub also sets namespaces and kinds to narrow such a policy.
                     items:
                       description: NamespacedWorkloadRef identifies one workload in

@@ -22,7 +22,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/agent/workload"
 )
 
-// IndexRSRByTarget registers the IndexTargetRef field index (shared convention, WO-00).
+// IndexRSRByTarget registers the IndexTargetRef field index (shared convention).
 func IndexRSRByTarget(ctx context.Context, mgr manager.Manager) error {
 	return mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.RightsizingRecommendation{}, v1alpha1.IndexTargetRef,
 		func(o client.Object) []string {

@@ -151,7 +151,7 @@ func (h *Handler) handle(ctx context.Context, req admission.Request) outcome {
 }
 
 // recommendation returns the eligible RightsizingRecommendation of a workload, or nil and the skip
-// reason. Recommendations are looked up by spec.targetRef (never by name, WO-00).
+// reason. Recommendations are looked up by spec.targetRef (never by name).
 func (h *Handler) recommendation(ctx context.Context, ns string, owner Owner) (*v1alpha1.RightsizingRecommendation, string, error) {
 	var list v1alpha1.RightsizingRecommendationList
 	if err := h.Cache.List(ctx, &list, client.InNamespace(ns),

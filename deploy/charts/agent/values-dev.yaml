@@ -1,5 +1,5 @@
 # Local k3d development (picked up by dev/scripts/tilt-deploy.sh and `make deploy-agent`).
-# Short timers so the e2e suite (test/e2e, WO-30) waits seconds, not minutes; the production
+# Short timers so the e2e suite (test/e2e) waits seconds, not minutes; the production
 # defaults are in values.yaml (pullInterval 1m, hubStaleAfter 5m, reportInterval 10s,
 # health.checkInterval 15s).
 pullInterval: 15s

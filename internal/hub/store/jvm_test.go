@@ -9,7 +9,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// TestReportedJVM (WO-12): JVM containers reported with the status are stored next to the settings
+// TestReportedJVM: JVM containers reported with the status are stored next to the settings
 // and returned per workload; a status without JVM containers maps to an empty slice.
 func TestReportedJVM(t *testing.T) {
 	st := newTestStore(t)

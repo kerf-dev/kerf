@@ -1,4 +1,4 @@
-# Agent (WO-06) targets. Included by the root Makefile.
+# Agent targets. Included by the root Makefile.
 
 AGENT_IMAGE      ?= localhost:5005/kerf/agent
 AGENT_IMAGE_PULL ?= k3d-ro-registry:5005/kerf/agent
@@ -11,7 +11,7 @@ AGENT_CLUSTERS   ?= ro-spoke-1 ro-spoke-2
 ENVTEST_K8S      ?= 1.35.0
 SETUP_ENVTEST    ?= $(LOCALBIN)/setup-envtest
 
-##@ Agent (WO-06)
+##@ Agent
 
 .PHONY: build-agent
 build-agent: ## Build the agent binary into ./bin/agent.
@@ -28,7 +28,7 @@ test-agent: agent-envtest ## Unit + envtest tests of the agent, with coverage.
 	  $(GO) test $(GOFLAGS) ./internal/agent/... -cover
 
 .PHONY: agent-sync-crds
-agent-sync-crds: charts-sync ## Alias of `make charts-sync` (CRDs are chart templates since WO-18b).
+agent-sync-crds: charts-sync ## Alias of `make charts-sync` (CRDs are chart templates).
 
 .PHONY: lint-agent-chart
 lint-agent-chart: ## helm lint the agent chart.

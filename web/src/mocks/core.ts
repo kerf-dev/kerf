@@ -1,6 +1,6 @@
 /**
  * Shared plumbing of the mock hub: scenarios, the seeded databases, problem responses, the mock
- * session (D-023) and the lazy "background" work of the simulated agent and hub.
+ * session and the lazy "background" work of the simulated agent and hub.
  */
 import { delay, HttpResponse } from 'msw'
 import type { Problem } from '@/api/types'
@@ -126,7 +126,7 @@ export function json<T>(body: T, init: { status?: number; version?: number } = {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Session (D-023). The mock keeps it in localStorage (a service worker cannot hold an HttpOnly
+// Session. The mock keeps it in localStorage (a service worker cannot hold an HttpOnly
 // cookie for the page), so reloads stay signed in.
 // ---------------------------------------------------------------------------------------------
 

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "kerf umbrella chart values (WO-18d)",
+  "title": "kerf umbrella chart values",
   "description": "Component sections are the component charts' values; this schema checks what the umbrella needs per global.mode and rejects inline secrets unless dev: true.",
   "type": "object",
   "required": [

@@ -1,4 +1,4 @@
-# Kerf mutating admission webhook (WO-07). One release per spoke cluster,
+# Kerf mutating admission webhook. One release per spoke cluster,
 # namespace kerf. Needs cert-manager and the Kerf CRDs (rendered by
 # the agent chart; see crds.install). Every production feature is shown switched on in
 # ci/values-prod.yaml (rendered by `make charts-lint`).

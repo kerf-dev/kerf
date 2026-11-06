@@ -431,7 +431,7 @@ function targetClusters(st: AdminState, clusters: string[] | undefined) {
 }
 
 /**
- * D-025 gating: auto-patch only on AutomationReady clusters, unless an admin sends
+ * Readiness gating: auto-patch only on AutomationReady clusters, unless an admin sends
  * overrideReadiness. An operator sending the flag gets 403 admin_required.
  */
 function readinessGate(ctx: Ctx, clusters: string[], spec: Spec | undefined, overrideReadiness?: boolean) {
@@ -843,7 +843,7 @@ async function automationUpdate(request: Request): Promise<S['AutomationUpdate']
 }
 
 // ---------------------------------------------------------------------------------------------
-// Maintenance (WO-33): the hub's view of component versions
+// Maintenance: the hub's view of component versions
 // ---------------------------------------------------------------------------------------------
 
 function compatMessage(c: S['ComponentVersion'], hub: string): string | undefined {
@@ -2183,7 +2183,7 @@ export const adminHandlers = [
     return json<S['ConfigChangeList']>(pg)
   }),
 
-  // Maintenance (WO-33) ------------------------------------------------------------------------
+  // Maintenance ------------------------------------------------------------------------
   http.get('*/v1/admin/maintenance', async ({ request }) => {
     const g = await gate(request)
     if (g instanceof Response) return g
@@ -2290,7 +2290,7 @@ export const adminHandlers = [
     if (g instanceof Response) return g
     const d = g.st.datasources.find((x) => x.id === String(params.datasourceId) && !x.deletedAt)
     if (!d) return notFound('not_found', `datasource ${String(params.datasourceId)} not found`)
-    // Like the hub (WO-25): the built-in datasource is managed by the hub configuration.
+    // Like the hub: the built-in datasource is managed by the hub configuration.
     if (d.builtIn)
       return conflict(
         'builtin',

@@ -72,7 +72,7 @@ export function BulkBar({ selected, onClear }: { selected: Map<string, WorkloadR
   }, [open])
   const git = useGitOnlyClusters()
   const all = [...selected.values()]
-  // Workload overrides are hub policies, which Git-only clusters never receive (D-022): skip those.
+  // Workload overrides are hub policies, which Git-only clusters never receive: skip those.
   // A workload also needs operator on its team (docs/teams.md): a viewer of that team cannot change it.
   const noRole = all.filter((w) => !git.has(w.cluster) && !auth.canOperateTeam(w.team))
   const rows = all.filter((w) => !git.has(w.cluster) && auth.canOperateTeam(w.team))

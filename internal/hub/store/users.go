@@ -12,7 +12,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// UserRow is a local user with its credentials and login bookkeeping (D-023).
+// UserRow is a local user with its credentials and login bookkeeping.
 type UserRow struct {
 	hubapi.User
 	PasswordHash string

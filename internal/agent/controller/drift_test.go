@@ -17,7 +17,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/agent/hubclient"
 )
 
-// WO-21c: the hub issues a new recommendation id on every run, also when the values do not
+// The hub issues a new recommendation id on every run, also when the values do not
 // change. Drift repair, rollback protection and the approve-once hold compare values, not ids.
 
 // The next hub run in each case.
@@ -200,7 +200,7 @@ func TestDriftRepairAcrossIDs(t *testing.T) {
 				}
 			}
 
-			// Later runs with the same values: no event spam (D-017).
+			// Later runs with the same values: no event spam.
 			if run.same && run.newID {
 				r3 := r2
 				r3.ID = fmt.Sprintf("3c000000-0000-4000-8000-%012d", i)
@@ -227,7 +227,7 @@ func TestDriftRepairAcrossIDs(t *testing.T) {
 	}
 }
 
-// TestRollbackAcrossIDs: after a health-watch rollback (WO-08) the rolled-back values are never
+// TestRollbackAcrossIDs: after a health-watch rollback the rolled-back values are never
 // applied again, also under a new id or within the tolerance; different values are applied. The
 // cooldown is 0 here, so only this check keeps the rolled-back values out.
 func TestRollbackAcrossIDs(t *testing.T) {
@@ -314,7 +314,7 @@ func TestRollbackAcrossIDs(t *testing.T) {
 	}
 }
 
-// TestApprovedAcrossIDs (D-027 with WO-21c): after an approve-once rollout the hold stays for the
+// TestApprovedAcrossIDs: after an approve-once rollout the hold stays for the
 // same id, a new id with the same values or within the tolerance, and ends for different values.
 func TestApprovedAcrossIDs(t *testing.T) {
 	needEnv(t)

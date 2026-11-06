@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Maintenance (WO-33): component versions and the stored update check.
+// Maintenance: component versions and the stored update check.
 
 // Components in component_versions.
 const (

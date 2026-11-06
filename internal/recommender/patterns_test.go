@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Hand-written fixtures: usage patterns generated in Go (WO-02's testdata/series fixtures can be
+// Hand-written fixtures: usage patterns generated in Go (the testdata/series fixtures can be
 // added to the table once they exist). Each generator returns per-step samples ending at end.
 
 var testEnd = time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)

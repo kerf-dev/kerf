@@ -1,4 +1,4 @@
-// Package health is the health watch after every automatic change (WO-08).
+// Package health is the health watch after every automatic change.
 //
 // After a RightsizingRecommendation reaches phase Applied, the workload is watched for
 // guardrails.rollback.watchDuration. OOM kills and container restarts come from pod status (pods

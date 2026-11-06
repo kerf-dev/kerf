@@ -28,7 +28,7 @@ hub:
   preStopSleepSeconds: 15
   terminationGracePeriodSeconds: 45
 
-  # RDS PostgreSQL with verify-full (D-028). The ExternalSecret builds Secret hub-db (DATABASE_URL)
+  # RDS PostgreSQL with verify-full. The ExternalSecret builds Secret hub-db (DATABASE_URL)
   # from the JSON secret {"username": ..., "password": ...} and the CA bundle ConfigMap below.
   database:
     host: ro-hub.c0ffee0c0ffe.eu-west-1.rds.amazonaws.com
@@ -129,7 +129,7 @@ web:
     enabled: true
     className: alb
     annotations:
-      # internal or internet-facing: your choice (D-028).
+      # internal or internet-facing: your choice.
       alb.ingress.kubernetes.io/scheme: internal
       alb.ingress.kubernetes.io/target-type: ip
       alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'

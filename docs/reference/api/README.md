@@ -3,7 +3,8 @@
 # Hub API
 
 The hub computes recommendations for every workload in every cluster; each cluster's agent
-pulls them, applies them according to its local policy and reports status and events back. The hub never calls the agents. The web UI reads through the `ui` endpoints.
+pulls them, applies them according to its local policy and reports status and events back.
+The hub never calls the agents. The web UI reads through the `ui` endpoints.
 
 **Authentication**: every request carries `Authorization: Bearer <token>`. Each token
 has one role; the roles an operation accepts are listed in its `security` requirement.

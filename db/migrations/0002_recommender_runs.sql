@@ -1,4 +1,4 @@
--- WO-04: recommender run bookkeeping and pricing provenance.
+-- Recommender run bookkeeping and pricing provenance.
 
 -- +goose Up
 

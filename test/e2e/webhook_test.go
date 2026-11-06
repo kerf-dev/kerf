@@ -18,7 +18,7 @@ import (
 	v1alpha1 "github.com/kerf-dev/kerf/api/v1alpha1"
 )
 
-// The webhook (WO-07) is the Helm release `webhook`, Deployment kerf/webhook.
+// The webhook is the Helm release `webhook`, Deployment kerf/webhook.
 var (
 	webhookNamespace  = getenv("E2E_WEBHOOK_NAMESPACE", "kerf")
 	webhookDeployment = getenv("E2E_WEBHOOK_DEPLOYMENT", "webhook")
@@ -155,7 +155,7 @@ func TestWebhook(t *testing.T) {
 
 	t.Run("webhook down does not block pod creation", func(t *testing.T) {
 		// A recommender run after the apply gives the workload a new recommendation id, usually with
-		// the same values. The agent adopts it and keeps repairing drift (WO-21c; before that fix
+		// the same values. The agent adopts it and keeps repairing drift (before that fix
 		// drift repair stopped at the first run after an apply). So force one before the drift.
 		want = adoptNewRecommendation(t, cl, ns, "web", want)
 		restore := webhookDown(t, cl)
@@ -192,7 +192,7 @@ func TestWebhook(t *testing.T) {
 }
 
 // adoptNewRecommendation forces a recommender run, waits until the hub has a new recommendation
-// for the Applied workload and the agent has adopted it (RSR appliedRecommendationID, WO-21c), and
+// for the Applied workload and the agent has adopted it (RSR appliedRecommendationID), and
 // returns the CPU request that is then live. A new recommendation beyond the agent's tolerance is
 // not adopted silently (it is a new change, held by the cooldown): then it logs and returns want.
 func adoptNewRecommendation(t *testing.T, cl cluster, ns, name string, want resource.Quantity) resource.Quantity {

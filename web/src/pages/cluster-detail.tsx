@@ -366,7 +366,7 @@ function SettingsTab({ c }: { c: ClusterAdmin }) {
   const [spec, setSpec] = useState<RightsizingPolicySpec>(base)
   const [confirm, setConfirm] = useState(false)
   useEffect(() => setSpec(base), [base])
-  // Git-only clusters get no hub policies (D-022): their defaults are managed in Git.
+  // Git-only clusters get no hub policies: their defaults are managed in Git.
   const gitOnly = c.policySource === 'git'
   const readOnly = !auth.can('admin') || gitOnly
   const errors = validateSpec(spec, 'cluster-default')

@@ -139,12 +139,12 @@ export const useAudit = (query: Omit<QueryAuditQuery, 'continue'>) =>
     getNextPageParam: (last) => last.continue || undefined,
   })
 
-/** Filter values with counts (D-016). Each facet ignores its own filter. */
+/** Filter values with counts. Each facet ignores its own filter. */
 export const useFacets = (query: FacetsQuery) =>
   useQuery({
     queryKey: ['facets', query],
     queryFn: () => unwrap(api.GET('/v1/workloads/facets', { params: { query } })),
     placeholderData: keepPreviousData,
-    // Older hubs (before WO-04b) have no facets endpoint; callers fall back to static options.
+    // Older hubs have no facets endpoint; callers fall back to static options.
     retry: false,
   })

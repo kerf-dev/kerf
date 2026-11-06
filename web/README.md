@@ -1,6 +1,6 @@
-# Kerf web UI (WO-14, WO-22)
+# Kerf web UI
 
-The primary interface for platform and FinOps teams (D-014): where the savings are, why each
+The primary interface for platform and FinOps teams: where the savings are, why each
 recommendation was made, and what automation did.
 
 | Page                                                          | What it answers                                                                                                                                                                                                                                                                                     |
@@ -11,7 +11,7 @@ recommendation was made, and what automation did.
 | **Clusters** `/clusters`                                      | Agent heartbeat, version, coverage, auto-patch/blocked counts and savings per cluster.                                                                                                                                                                                                              |
 | **Activity** `/activity`                                      | Audit log across clusters with type, cluster, namespace, workload and time filters, plus a volume chart.                                                                                                                                                                                            |
 
-**Admin area (WO-22, D-022…D-025).** Signed-in operators and admins also get:
+**Admin area.** Signed-in operators and admins also get:
 
 | Page                                                          | What it does                                                                                                                                                                                                                   | Role                            |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |

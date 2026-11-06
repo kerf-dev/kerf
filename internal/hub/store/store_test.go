@@ -570,7 +570,7 @@ func TestStatusesEventsAudit(t *testing.T) {
 	}
 }
 
-// TestRecordPull (WO-04e): the last two pulls are kept; pages and retries within minGap are not
+// TestRecordPull: the last two pulls are kept; pages and retries within minGap are not
 // pulls of their own.
 func TestRecordPull(t *testing.T) {
 	st := newTestStore(t)

@@ -57,7 +57,7 @@ func Open(ctx context.Context, url string) (*Store, error) {
 func (s *Store) Close() { s.Pool.Close() }
 
 // Migrate applies the goose migrations in fsys (db/migrations) under goose's Postgres session
-// locker (WO-18a): hub replicas starting together apply each migration once; the others wait
+// locker: hub replicas starting together apply each migration once; the others wait
 // (up to 10 minutes) for the lock and then find nothing left to apply.
 func (s *Store) Migrate(ctx context.Context, fsys fs.FS) ([]string, error) {
 	db := stdlib.OpenDBFromPool(s.Pool)
@@ -179,13 +179,13 @@ type Attributes struct {
 	AverageReplicas float64            `json:"averageReplicas"`
 	HPA             *recommender.HPA   `json:"hpa,omitempty"`
 	Used24h         map[string]float64 `json:"used24h,omitempty"` // cpu (cores), memory (bytes)
-	// Live: the workload had pods at the end of the latest regular run's data (WO-04e). Absent in
-	// attributes written before WO-04e, which count as live.
+	// Live: the workload had pods at the end of the latest regular run's data. Absent in
+	// attributes written before workload pruning, which count as live.
 	Live bool `json:"live"`
 }
 
 // liveSQL is true for a workload with pods in the latest metrics: Attributes.Live, or attributes
-// written before WO-04e. A workload only an agent reported (empty attributes) is not live.
+// written before workload pruning. A workload only an agent reported (empty attributes) is not live.
 const liveSQL = `(attributes @> '{"live": true}'::jsonb OR (attributes <> '{}'::jsonb AND NOT attributes ? 'live'))`
 
 // UpsertInventory records the workloads found by a run. When markDeleted is true, live workloads
@@ -317,7 +317,7 @@ func (r *recRow) build(ref hubapi.WorkloadRef) (*hubapi.WorkloadRecommendation, 
 	if rec.RiskFlags == nil {
 		rec.RiskFlags = []string{}
 	}
-	// Rows from before D-016 store '{}': no pricing in the response.
+	// Older rows store '{}': no pricing in the response.
 	var p hubapi.RecommendationPricing
 	if json.Unmarshal(r.pricing, &p) == nil && p.Source != "" {
 		rec.Pricing = &p
@@ -406,7 +406,7 @@ type WorkloadFilter struct {
 // workloads of the caller's teams are returned (teams.WithScope): every list, count and total built
 // from them is scoped.
 func (s *Store) LoadWorkloads(ctx context.Context, f WorkloadFilter) ([]*WorkloadView, error) {
-	// Workloads of deleted clusters (WO-20) are hidden like deleted workloads.
+	// Workloads of deleted clusters are hidden like deleted workloads.
 	where := "w.deleted_at IS NULL AND w.cluster NOT IN (SELECT name FROM clusters WHERE deleted_at IS NOT NULL)"
 	args := []any{}
 	if f.Key != nil {
@@ -616,7 +616,7 @@ type RunInfo struct {
 	AsOf   time.Time
 	Status string
 	// RepricingNeeded: a cluster of the run used the default rates although the cluster's latest
-	// regular run had pricing series (WO-04d: backfills from before the series existed).
+	// regular run had pricing series (backfills from before the series existed).
 	RepricingNeeded bool
 }
 
@@ -844,7 +844,7 @@ func (s *Store) RecordPull(ctx context.Context, cluster string, now time.Time, m
 }
 
 // PruneAbsent soft-deletes the live workloads of an agent-backed cluster that the agent no longer
-// reports (WO-04e). The agent sends a full status batch after every pull; last and prev are the
+// reports. The agent sends a full status batch after every pull; last and prev are the
 // two pulls before the current one. A workload is deleted when
 //   - it was not reported since prev, so it is missing from the full batches after prev and last,
 //   - the full batch after last arrived (some workload of the cluster was reported since last),

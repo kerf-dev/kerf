@@ -55,7 +55,7 @@ RightsizingPolicySpec selects workloads and configures how they are rightsized.
 | `spec.guardrails.rollback.restarts` | integer | min 1 | Restarts is the number of container restarts (any reason) that triggers a rollback. Global default: 3. |
 | `spec.guardrails.rollback.throttlingRatio` | string | pattern `^(0(\.[0-9]{1,3})?\|1(\.0{1,3})?)$` | ThrottlingRatio (0-1, decimal string) is the CFS throttled-periods ratio that triggers a CPU rollback. Global default: "0.25". |
 | `spec.guardrails.rollback.watchDuration` | string |  | WatchDuration is how long a workload is watched after a change. Global default: 30m. |
-| `spec.hpa` | object |  | HPA configures coordination with HorizontalPodAutoscalers (; until then, workloads with a CPU/memory-utilization HPA stay audit-only regardless of this field). |
+| `spec.hpa` | object |  | HPA configures coordination with HorizontalPodAutoscalers. Without coordination, workloads with a CPU/memory-utilization HPA stay audit-only. |
 | `spec.hpa.coordinate` | boolean |  | Coordinate changes requests and the HPA utilization target in one step. Global default: false. |
 | `spec.hpa.targetBounds` | object | rule: minUtilization must be <= maxUtilization | TargetBounds limits the HPA utilization target the agent may set. |
 | `spec.hpa.targetBounds.maxUtilization` | integer | min 1; max 100 |  |

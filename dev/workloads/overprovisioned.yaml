@@ -1,5 +1,5 @@
 # Overprovisioned: requests 500m / 256Mi, uses ~50m CPU (10%) and ~24Mi of memory (~10%).
-# Target of WO-06's in-place verification (kubectl annotate deploy/overprovisioned ...).
+# Target of the agent's in-place verification (kubectl annotate deploy/overprovisioned ...).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

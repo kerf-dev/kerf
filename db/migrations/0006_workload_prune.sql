@@ -1,4 +1,4 @@
--- WO-04e: prune workloads deleted on agent-backed clusters.
+-- Prune workloads deleted on agent-backed clusters.
 -- clusters.agent_pull_at / agent_prev_pull_at: the last two recommendation pulls of the cluster's
 -- agent (hub clock); a full status batch follows every pull. workloads.deleted_by: what marked a
 -- workload deleted ('metrics': gone from the inventory; 'agent': absent from the agent's full

@@ -62,7 +62,7 @@ func wantBlockedMessage(name, substr string) func() error {
 	}
 }
 
-// TestHPACoordination (WO-11): with spec.hpa.coordinate the requests and the HPA target change in
+// TestHPACoordination: with spec.hpa.coordinate the requests and the HPA target change in
 // one rollout, the target is kept live, released with the workload and restored by a rollback.
 func TestHPACoordination(t *testing.T) {
 	needEnv(t)
@@ -89,7 +89,7 @@ func TestHPACoordination(t *testing.T) {
 	setRec(recFor(bounded, "250m", "200Mi"))
 	setRec(recFor(atMax, "400m", "200Mi"))
 
-	// Coordination off (global default): blocked as before (D-011).
+	// Coordination off (global default): blocked as before.
 	eventually(t, 20*time.Second, "blocked without coordination", wantPhase(name, v1alpha1.PhaseBlocked))
 	eventually(t, 5*time.Second, "blocked event", wantBlockedMessage(name, "coordination is off"))
 
@@ -166,7 +166,7 @@ func TestHPACoordination(t *testing.T) {
 		t.Fatalf("release changed the target: %d", got)
 	}
 
-	// A rollback of cpu restores the previous target (health watch, WO-08). Released, the agent
+	// A rollback of cpu restores the previous target (health watch). Released, the agent
 	// no longer re-asserts the target, so the restore stays visible.
 	rsr = applied0
 	if err := apply.RestoreHPA(testCtx, k8s, k8s, rsr, []string{"memory"}); err != nil {

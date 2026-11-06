@@ -1,4 +1,4 @@
-// Package readiness is the catalog of cluster readiness checks (D-025, docs/contracts/readiness.md).
+// Package readiness is the catalog of cluster readiness checks (docs/contracts/readiness.md).
 //
 // Check ids are stable: the hub (metrics checks), the agent (self-checks), the UI, the metric
 // kerf_cluster_readiness{check} and the stored history all use them. Adding a check is a contract

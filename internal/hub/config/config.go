@@ -1,4 +1,4 @@
-// Package config turns the hub's admin settings into what the hub runs with (WO-20): the
+// Package config turns the hub's admin settings into what the hub runs with: the
 // recommender settings section into a recommender configuration, the pricing section into
 // adjusted rates, and a cluster's agent configuration into its content-addressed version.
 package config

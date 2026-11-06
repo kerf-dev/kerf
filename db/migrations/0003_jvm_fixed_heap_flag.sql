@@ -1,4 +1,4 @@
--- WO-12: risk flag jvm-fixed-heap (JVM with a fixed -Xmx; memory audit-only).
+-- Risk flag jvm-fixed-heap (JVM with a fixed -Xmx; memory audit-only).
 
 -- +goose Up
 ALTER TABLE recommendations DROP CONSTRAINT recommendations_risk_flags_check;

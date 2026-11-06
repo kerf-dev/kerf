@@ -1,4 +1,4 @@
-# WO-18e staging: shared variables and the AWS stand-ins. Sourced by staging.sh.
+# Staging: shared variables and the AWS stand-ins. Sourced by staging.sh.
 # Everything here replaces an AWS piece of docs/install/eks.md; staging.sh otherwise runs the guide's
 # commands as written.
 set -euo pipefail
@@ -28,7 +28,7 @@ export SPOKE_CTX=k3d-ro-stg-spoke
 export SPOKE_METRICS_URL=http://prometheus-operated.monitoring.svc:9090
 export SPOKE_VPC_CIDR=10.42.0.0/16            # stand-in: k3s's API server reaches the webhook from cni0
 export HELM_OCI_FLAGS=--plain-http            # stand-in: the local registry speaks HTTP
-export WIZ_CLUSTER=ro-stg-spoke-2             # WO-18f: the workload cluster installed with the wizard's snippet
+export WIZ_CLUSTER=ro-stg-spoke-2             # The workload cluster installed with the wizard's snippet
 export WIZ_CTX=k3d-ro-stg-spoke-2
 export AGENT_SECRET=kerf-agent-token
 INGRESS_PORT=19443                            # host port of the hub cluster's traefik ("the ALB")

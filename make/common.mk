@@ -1,4 +1,4 @@
-# Shared variables and repo-wide targets (WO-00).
+# Shared variables and repo-wide targets.
 #
 # Component makefiles (make/<component>.mk) may:
 #   - add their own targets, prefixed with the component name (e.g. build-hub, docker-hub);

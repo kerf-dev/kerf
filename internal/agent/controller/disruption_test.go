@@ -60,7 +60,7 @@ func TestSingleReplicaRecreateBlocked(t *testing.T) {
 	}
 	time.Sleep(time.Second)
 	if n := countEvents(name, hubclient.EventBlocked, v1alpha1.ReasonSingleReplicaUnsafe); n != 1 {
-		t.Fatalf("blocked event emitted %d times, want once (D-017)", n)
+		t.Fatalf("blocked event emitted %d times, want once", n)
 	}
 
 	annotate(t, &appsv1.Deployment{}, name, map[string]any{v1alpha1.AnnotationAllowDisruption: "true"})

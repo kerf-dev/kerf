@@ -87,7 +87,7 @@ func (s *Server) listRecommendations(w http.ResponseWriter, r *http.Request) {
 const pullMinGap = 10 * time.Second
 
 // pruneAbsent records a pull by the cluster's agent and soft-deletes the workloads missing from
-// the agent's last two full status batches that have no pods (WO-04e, Store.PruneAbsent). Errors
+// the agent's last two full status batches that have no pods (Store.PruneAbsent). Errors
 // are logged: they never fail the pull.
 func (s *Server) pruneAbsent(ctx context.Context, cluster string) {
 	now := s.now()
@@ -162,19 +162,19 @@ func (s *Server) reportWorkloadStatus(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, err)
 		return
 	}
-	// The config the agent materialised and its policy inventory (D-022); absent = unchanged.
+	// The config the agent materialised and its policy inventory; absent = unchanged.
 	if batch.ConfigVersion != "" || batch.PolicyInventory != nil {
 		if err := s.Store.RecordAgentConfig(r.Context(), cluster, batch.ConfigVersion, batch.PolicyInventory, s.now()); err != nil {
 			s.internal(w, r, err)
 			return
 		}
 	}
-	// Agent self-checks (D-025); absent = unchanged.
+	// Agent self-checks; absent = unchanged.
 	if err := s.recordAgentChecks(r.Context(), cluster, batch); err != nil {
 		s.internal(w, r, err)
 		return
 	}
-	// Components found by the agent, e.g. the webhook pods (WO-33); absent = unchanged.
+	// Components found by the agent, e.g. the webhook pods; absent = unchanged.
 	if err := s.recordAgentComponents(r.Context(), cluster, batch.Components); err != nil {
 		s.internal(w, r, err)
 		return
@@ -215,7 +215,7 @@ func (s *Server) reportEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, e := range stored {
 		s.Metrics.countAction(cluster, e)
-		// An applied approve-once grant is consumed (D-024).
+		// An applied approve-once grant is consumed.
 		if e.Type == "applied" && e.Reason == v1alpha1.ReasonApprovedOnce && e.Details["approvalId"] != "" {
 			if ok, err := s.Store.ConsumeApproval(r.Context(), cluster, e.Details["approvalId"], e.ID, e.Time); err != nil {
 				s.Log.WarnContext(r.Context(), "consume approval", "cluster", cluster, "approval", e.Details["approvalId"], "err", err)

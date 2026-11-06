@@ -52,7 +52,7 @@ serviceAccount:
   automountServiceAccountToken: false
 
 # Port nginx listens on. The image listens on 80 today (root, NET_BIND_SERVICE); a non-root
-# image (WO-18c) listens on 8080: set containerPort: 8080 together with the non-root
+# image listens on 8080: set containerPort: 8080 together with the non-root
 # securityContext below.
 containerPort: 8080
 
@@ -60,7 +60,7 @@ containerPort: 8080
 # it from its endpoints first (no 502s during a rolling update). Built-in preStop sleep action. 0 = off.
 preStopSleepSeconds: 5
 
-# The image (WO-18c) runs nginx as user 101 on 8080 with a read-only root filesystem.
+# The image runs nginx as user 101 on 8080 with a read-only root filesystem.
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 101
@@ -90,7 +90,7 @@ extraVolumes: []
 extraVolumeMounts: []
 
 hub:
-  # host:port of the hub API Service (the WO-04 chart names it after its release, `hub`). nginx resolves
+  # host:port of the hub API Service (the hub chart names it after its release, `hub`). nginx resolves
   # it per request with the cluster DNS, which does not apply search domains: use the full name.
   upstream: hub.kerf.svc.cluster.local:8080
 
@@ -110,7 +110,7 @@ service:
   nodePort: null        # e.g. 30090 with type NodePort
   annotations: {}
 
-# The UI for browsers. AWS Load Balancer Controller example (D-028: scheme of your choice, ACM):
+# The UI for browsers. AWS Load Balancer Controller example (scheme of your choice, ACM):
 #   className: alb
 #   annotations:
 #     alb.ingress.kubernetes.io/scheme: internal          # or internet-facing
