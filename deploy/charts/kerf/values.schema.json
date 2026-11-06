@@ -48,7 +48,74 @@
       }
     },
     "hub": {
-      "$ref": "#/definitions/component"
+      "allOf": [
+        {
+          "$ref": "#/definitions/component"
+        },
+        {
+          "properties": {
+            "notifications": {
+              "type": "object",
+              "description": "Slack, Teams and signed webhook notifications (docs/notifications.md).",
+              "properties": {
+                "baseURL": {
+                  "type": "string",
+                  "description": "The web UI's address, for the links in the messages."
+                },
+                "rateLimitPerMinute": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                },
+                "allowInsecureHTTP": {
+                  "type": "boolean"
+                },
+                "channels": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "type",
+                      "existingSecret"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$",
+                        "description": "A DNS label; also the channel's name in the UI."
+                      },
+                      "type": {
+                        "enum": [
+                          "slack",
+                          "teams",
+                          "webhook"
+                        ]
+                      },
+                      "existingSecret": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Secret in the hub's namespace holding the URL (and the signing secret)."
+                      },
+                      "urlKey": {
+                        "type": "string"
+                      },
+                      "secretKey": {
+                        "type": "string",
+                        "description": "Webhook channels only: the key holding the HMAC signing secret."
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "web": {
       "$ref": "#/definitions/component"

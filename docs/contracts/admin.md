@@ -429,6 +429,7 @@ self-checks. See [the Maintenance page](../maintenance.md).
 | `0008_users_sessions` | `users` (bcrypt `password_hash`, role, disabled, must_change_password, failed_logins, locked_until, soft delete), `sessions` (`id_sha256`, `csrf_token`, expiry, revoke), `api_tokens` + `last_used_at, created_by, revoked_by` |
 | `0010_onboarding_readiness` | `datasources` (`local` built-in, encrypted `auth_secret`), `cluster_metrics_bindings`, `clusters` + `provider, region`, `cluster_readiness`, `readiness_checks`, `readiness_history`; config audit targets `datasource`, `readiness` (see `docs/contracts/readiness.md`) |
 | `0011_pricing_token_role` | `api_tokens.role` also allows `pricing` (no cluster): the pricing service's token for `/v1/internal/*` |
+| `0015_notifications` | `notification_channels` (URL and signing secret encrypted in `secret_enc`), `notification_rules`, `notification_digest` (one row), `notification_deliveries` (the queue and its history), `notification_cursor`, index `audit_events(received_at)`; config audit target `notification` (see `docs/notifications.md`) |
 | `0009_approvals_config_events` | `workload_approvals` (one open per workload), `audit_events`: type `config_changed`; `cluster, namespace, workload_kind, workload_name` nullable for it only (`audit_events_shape_check`); + `actor, target_type, target_id, target_name, version, before, after` |
 
 All are idempotent (`IF NOT EXISTS`, drop-then-add constraints) and have down migrations. **The

@@ -13,6 +13,7 @@ with the [README](../README.md) for the overview; this page lists everything els
 | [Helm chart reference](../deploy/charts/kerf/README.md) | `global.mode`, the umbrella values, opt-in features |
 | [Component charts](../deploy/charts) | Values of `hub`, `web`, `pricing`, `agent`, `webhook` ([hub](../deploy/charts/hub/README.md), [agent](../deploy/charts/agent/README.md)) |
 | [Grafana dashboards](../dashboards/README.md) | Overview, opportunities, automation and workload dashboards |
+| [Notifications](notifications.md) | Slack, Teams and signed webhook channels, rules, the weekly digest, retries and metrics |
 | [Maintenance and updates](maintenance.md) | Component versions, the check for a new release, turning it off |
 | [Changelog](../CHANGELOG.md) | What changed in each release and how to upgrade |
 | [Security policy](../SECURITY.md) | How to report a vulnerability |
@@ -27,6 +28,7 @@ The interfaces between components. Changes to them need a design note (see [CONT
 | [Hub API](../api/openapi/hub.yaml) | The HTTP API used by the agents, the web UI and automation (OpenAPI 3) |
 | [Metrics](contracts/metrics.md) | The `kerf_*` metrics and the PromQL the recommender runs |
 | [Events](contracts/events.md) | The audit trail: what the agent decided and did, as sent to the hub |
+| [Notification webhook](contracts/notifications.md) | The signed JSON payload (version 1), its headers, retries, and how to verify the signature |
 | [Admin area](contracts/admin.md) | Users, roles, tokens, policies and settings through the API and UI |
 | [Readiness](contracts/readiness.md) | Metrics sources (datasources) and the per-cluster readiness checks |
 | [Database schema](../db/migrations) | PostgreSQL migrations of the hub |

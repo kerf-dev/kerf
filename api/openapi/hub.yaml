@@ -2714,6 +2714,460 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+  /v1/admin/notifications/status:
+    get:
+      tags: [admin]
+      operationId: getNotificationStatus
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Notification settings the page needs
+      description: |
+        Whether webhook URLs can be stored (the secrets encryption key), whether messages link to the UI, and the delivery limits.
+      responses:
+        '200':
+          description: Status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/admin/notifications/channels:
+    get:
+      tags: [admin]
+      operationId: listNotificationChannels
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Notification channels
+      description: |
+        Slack, Microsoft Teams and generic webhook channels, ordered by name, with the outcome of the last delivery. Webhook URLs are masked and secrets are never returned.
+      responses:
+        '200':
+          description: Channels.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationChannelList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [admin]
+      operationId: createNotificationChannel
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Add a notification channel
+      description: |
+        A Slack incoming webhook, a Microsoft Teams Workflows webhook or a generic webhook (optionally signed with an HMAC secret, `docs/contracts/notifications.md`). The URL and the secret are write-only: stored encrypted, never returned. `https` only (`http` when the hub allows it, `notifications.allowInsecureHTTP`). `409 secrets_key_missing` when the hub has no secrets encryption key, `409 already_exists` for a taken name. Records `NotificationChannelCreated` (without the URL or secret).
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationChannelInput'
+      responses:
+        '201':
+          description: Created.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationChannel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/notifications/channels/{channelId}:
+    parameters:
+      - $ref: '#/components/parameters/NotificationChannelID'
+    get:
+      tags: [admin]
+      operationId: getNotificationChannel
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: One notification channel
+      responses:
+        '200':
+          description: Channel.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationChannel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [admin]
+      operationId: updateNotificationChannel
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Replace a notification channel
+      description: |
+        Omitted `url` and `secret` keep their stored values; `clearSecret: true` removes the signing secret. The `type` cannot change (`400`). Channels defined in the chart values (`source: config`) are read-only (`409 channel_read_only`). Records `NotificationChannelUpdated`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationChannelInput'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationChannel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+    delete:
+      tags: [admin]
+      operationId: deleteNotificationChannel
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Delete a notification channel
+      description: |
+        Soft delete; queued deliveries of the channel are dropped. `409 channel_in_use` while a rule or the enabled digest sends to it, `channel_read_only` for chart-defined channels. Records `NotificationChannelDeleted`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeReason'
+      responses:
+        '204':
+          description: Done.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/admin/notifications/channels/{channelId}/test:
+    parameters:
+      - $ref: '#/components/parameters/NotificationChannelID'
+    post:
+      tags: [admin]
+      operationId: testNotificationChannel
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Send a test message
+      description: |
+        Sends a test message to the channel now, from the replica that answers (not queued, not retried), and returns the outcome. `200` also when the destination refused it (`ok: false`, `error`; the error never contains the URL). Test messages appear in the delivery history.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '200':
+          description: The outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationTestResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/admin/notifications/rules:
+    get:
+      tags: [admin]
+      operationId: listNotificationRules
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Notification rules
+      responses:
+        '200':
+          description: Rules, ordered by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRuleList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [admin]
+      operationId: createNotificationRule
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Add a notification rule
+      description: |
+        A rule sends the listed event types to the listed channels. `clusters` and `namespaces` are glob patterns (`prod-*`); empty matches everything. An event without a namespace (readiness, automation) never matches a rule that lists namespaces. Rule names are unique (`409 already_exists`); every channel must exist. Records `NotificationRuleCreated`.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRuleInput'
+      responses:
+        '201':
+          description: Created.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/notifications/rules/{ruleId}:
+    parameters:
+      - $ref: '#/components/parameters/NotificationRuleID'
+    put:
+      tags: [admin]
+      operationId: updateNotificationRule
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Replace a notification rule
+      description: |
+        Records `NotificationRuleUpdated`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRuleInput'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+    delete:
+      tags: [admin]
+      operationId: deleteNotificationRule
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Delete a notification rule
+      description: |
+        Soft delete. Records `NotificationRuleDeleted`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeReason'
+      responses:
+        '204':
+          description: Done.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/admin/notifications/digest:
+    get:
+      tags: [admin]
+      operationId: getNotificationDigest
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Weekly digest settings
+      responses:
+        '200':
+          description: Settings.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDigest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [admin]
+      operationId: updateNotificationDigest
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Change the weekly digest
+      description: |
+        Day (0 = Sunday), time of day and IANA time zone of the digest and the channels it goes to; enabling it needs at least one channel (`400`). Records `NotificationDigestUpdated`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationDigestInput'
+      responses:
+        '200':
+          description: Saved.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDigest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+  /v1/admin/notifications/digest/send:
+    post:
+      tags: [admin]
+      operationId: sendNotificationDigest
+      security:
+        - sessionAuth: [admin]
+        - bearerAuth: [admin]
+      summary: Send the digest now
+      description: |
+        Queues the digest for the configured, enabled channels now (the leader sends it). `409 no_channels` when there is none.
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '202':
+          description: Queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDigestQueued'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /v1/admin/notifications/deliveries:
+    get:
+      tags: [admin]
+      operationId: listNotificationDeliveries
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Delivery history
+      description: |
+        Queued, sent and failed deliveries, newest first. Deliveries are kept for 30 days. A failing delivery is retried with exponential backoff for one hour, then marked `failed` (also exported as `kerf_notification_deliveries_total{result="failed"}`).
+      parameters:
+        - $ref: '#/components/parameters/NotifChannelFilter'
+        - $ref: '#/components/parameters/NotifStatusFilter'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Continue'
+      responses:
+        '200':
+          description: Deliveries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDeliveryList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
   securitySchemes:
     bearerAuth:
@@ -2768,6 +3222,33 @@ components:
       description: '`local` or a UUID.'
       schema:
         type: string
+    NotificationChannelID:
+      name: channelId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NotificationRuleID:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NotifChannelFilter:
+      name: channelId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    NotifStatusFilter:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/NotificationDeliveryStatus'
     PolicyID:
       name: policyId
       in: path
@@ -5406,7 +5887,7 @@ components:
             type: string
     ConfigTargetType:
       type: string
-      enum: [settings, policy, workload-override, approval, cluster, automation, token, user, datasource, readiness]
+      enum: [settings, policy, workload-override, approval, cluster, automation, token, user, datasource, readiness, notification]
     ConfigAction:
       type: string
       description: CamelCase action of a configuration change (`docs/contracts/events.md`).
@@ -5434,6 +5915,13 @@ components:
         - DatasourceUpdated
         - DatasourceDeleted
         - ReadinessChanged
+        - NotificationChannelCreated
+        - NotificationChannelUpdated
+        - NotificationChannelDeleted
+        - NotificationRuleCreated
+        - NotificationRuleUpdated
+        - NotificationRuleDeleted
+        - NotificationDigestUpdated
     ConfigTarget:
       type: object
       required: [type, id]
@@ -6148,3 +6636,340 @@ components:
           type: string
         code:
           type: string
+
+    NotificationChannelType:
+      type: string
+      enum: [slack, teams, webhook]
+    NotificationEventType:
+      type: string
+      description: |
+        `applied`, `rolled_back`, `failed` and `blocked` are the workload events of `docs/contracts/events.md`;
+        `readiness_degraded` (a cluster's readiness state went down), `automation_paused` and
+        `automation_resumed` come from the configuration audit.
+      enum: [applied, rolled_back, failed, blocked, readiness_degraded, automation_paused, automation_resumed]
+    NotificationDeliveryKind:
+      type: string
+      enum: [event, digest, test]
+    NotificationDeliveryStatus:
+      type: string
+      enum: [pending, sent, failed]
+    NotificationChannelInput:
+      type: object
+      required: [name, type, reason]
+      properties:
+        name:
+          type: string
+          description: A DNS-style label (lower case letters, digits, `-`; at most 63).
+        type:
+          $ref: '#/components/schemas/NotificationChannelType'
+        url:
+          type: string
+          format: uri
+          writeOnly: true
+          description: |
+            The incoming webhook URL. Required on create. `https` only, unless the hub allows
+            `http` (`notifications.allowInsecureHTTP`, for tests).
+        secret:
+          type: string
+          writeOnly: true
+          description: Webhook channels only, the HMAC-SHA256 signing secret (at least 16 characters).
+        clearSecret:
+          type: boolean
+          description: Remove the stored signing secret (webhook channels).
+        enabled:
+          type: boolean
+          description: Default true.
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1024
+    NotificationLastDelivery:
+      type: object
+      required: [status, at]
+      properties:
+        status:
+          type: string
+          enum: [sent, failed, retrying]
+        at:
+          type: string
+          format: date-time
+        error:
+          type: string
+          description: Why the last attempt failed (never contains the URL).
+    NotificationChannel:
+      type: object
+      required: [id, name, type, source, enabled, url, secretSet, pending, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/NotificationChannelType'
+        source:
+          type: string
+          enum: [api, config]
+          description: '`config`: defined in the chart values, read-only here.'
+        enabled:
+          type: boolean
+        url:
+          type: string
+          description: The URL masked to its scheme and host.
+        secretSet:
+          type: boolean
+          description: A signing secret is stored (webhook channels).
+        pending:
+          type: integer
+          description: Deliveries queued for this channel.
+        lastDelivery:
+          $ref: '#/components/schemas/NotificationLastDelivery'
+        lastSuccessAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          $ref: '#/components/schemas/Actor'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          $ref: '#/components/schemas/Actor'
+    NotificationChannelList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationChannel'
+    NotificationTestResult:
+      type: object
+      required: [ok, latencyMs]
+      properties:
+        ok:
+          type: boolean
+        httpStatus:
+          type: integer
+          description: The destination's HTTP status, when it answered.
+        latencyMs:
+          type: integer
+        error:
+          type: string
+    NotificationRuleInput:
+      type: object
+      required: [name, eventTypes, channelIds, reason]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        enabled:
+          type: boolean
+          description: Default true.
+        eventTypes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/NotificationEventType'
+        clusters:
+          type: array
+          description: Glob patterns of cluster names; empty = every cluster.
+          items:
+            type: string
+        namespaces:
+          type: array
+          description: Glob patterns of namespaces; empty = every namespace.
+          items:
+            type: string
+        channelIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1024
+    NotificationRule:
+      type: object
+      required: [id, name, enabled, eventTypes, clusters, namespaces, channelIds, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        enabled:
+          type: boolean
+        eventTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationEventType'
+        clusters:
+          type: array
+          items:
+            type: string
+        namespaces:
+          type: array
+          items:
+            type: string
+        channelIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          $ref: '#/components/schemas/Actor'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          $ref: '#/components/schemas/Actor'
+    NotificationRuleList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationRule'
+    NotificationDigestInput:
+      type: object
+      required: [enabled, weekday, time, timezone, channelIds, reason]
+      properties:
+        enabled:
+          type: boolean
+        weekday:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: 0 = Sunday ... 6 = Saturday.
+        time:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: Local time of day in `timezone`.
+        timezone:
+          type: string
+          description: IANA time zone, e.g. `Europe/Berlin`.
+        channelIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1024
+    NotificationDigest:
+      type: object
+      required: [enabled, weekday, time, timezone, channelIds, version, updatedAt]
+      properties:
+        enabled:
+          type: boolean
+        weekday:
+          type: integer
+        time:
+          type: string
+        timezone:
+          type: string
+        channelIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        nextSendAt:
+          type: string
+          format: date-time
+          description: Set while the digest is enabled.
+        lastSentAt:
+          type: string
+          format: date-time
+          description: The scheduled time of the last digest that was queued.
+        version:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          $ref: '#/components/schemas/Actor'
+    NotificationDigestQueued:
+      type: object
+      required: [queued]
+      properties:
+        queued:
+          type: integer
+          description: Deliveries queued (one per channel).
+    NotificationDelivery:
+      type: object
+      required: [id, channelId, channelName, kind, summary, status, attempts, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        channelId:
+          type: string
+          format: uuid
+        channelName:
+          type: string
+        kind:
+          $ref: '#/components/schemas/NotificationDeliveryKind'
+        eventType:
+          $ref: '#/components/schemas/NotificationEventType'
+        summary:
+          type: string
+        status:
+          $ref: '#/components/schemas/NotificationDeliveryStatus'
+        attempts:
+          type: integer
+        nextAttemptAt:
+          type: string
+          format: date-time
+          description: Set while `pending`.
+        lastError:
+          type: string
+        httpStatus:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        lastAttemptAt:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+    NotificationDeliveryList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationDelivery'
+        continue:
+          type: string
+    NotificationStatus:
+      type: object
+      required: [secretsKey, links, rateLimitPerMinute, retryWindowSeconds]
+      properties:
+        secretsKey:
+          type: boolean
+          description: Webhook URLs can be stored (the secrets encryption key is configured).
+        links:
+          type: boolean
+          description: Messages link to the web UI (`notifications.baseURL` is set).
+        rateLimitPerMinute:
+          type: integer
+        retryWindowSeconds:
+          type: integer

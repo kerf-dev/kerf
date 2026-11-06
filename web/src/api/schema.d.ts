@@ -1320,6 +1320,207 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/admin/notifications/status': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Notification settings the page needs
+     * @description Whether webhook URLs can be stored (the secrets encryption key), whether messages link to the UI, and the delivery limits.
+     */
+    get: operations['getNotificationStatus']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/notifications/channels': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Notification channels
+     * @description Slack, Microsoft Teams and generic webhook channels, ordered by name, with the outcome of the last delivery. Webhook URLs are masked and secrets are never returned.
+     */
+    get: operations['listNotificationChannels']
+    put?: never
+    /**
+     * Add a notification channel
+     * @description A Slack incoming webhook, a Microsoft Teams Workflows webhook or a generic webhook (optionally signed with an HMAC secret, `docs/contracts/notifications.md`). The URL and the secret are write-only: stored encrypted, never returned. `https` only (`http` when the hub allows it, `notifications.allowInsecureHTTP`). `409 secrets_key_missing` when the hub has no secrets encryption key, `409 already_exists` for a taken name. Records `NotificationChannelCreated` (without the URL or secret).
+     */
+    post: operations['createNotificationChannel']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/notifications/channels/{channelId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        channelId: components['parameters']['NotificationChannelID']
+      }
+      cookie?: never
+    }
+    /** One notification channel */
+    get: operations['getNotificationChannel']
+    /**
+     * Replace a notification channel
+     * @description Omitted `url` and `secret` keep their stored values; `clearSecret: true` removes the signing secret. The `type` cannot change (`400`). Channels defined in the chart values (`source: config`) are read-only (`409 channel_read_only`). Records `NotificationChannelUpdated`.
+     */
+    put: operations['updateNotificationChannel']
+    post?: never
+    /**
+     * Delete a notification channel
+     * @description Soft delete; queued deliveries of the channel are dropped. `409 channel_in_use` while a rule or the enabled digest sends to it, `channel_read_only` for chart-defined channels. Records `NotificationChannelDeleted`.
+     */
+    delete: operations['deleteNotificationChannel']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/notifications/channels/{channelId}/test': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        channelId: components['parameters']['NotificationChannelID']
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Send a test message
+     * @description Sends a test message to the channel now, from the replica that answers (not queued, not retried), and returns the outcome. `200` also when the destination refused it (`ok: false`, `error`; the error never contains the URL). Test messages appear in the delivery history.
+     */
+    post: operations['testNotificationChannel']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/notifications/rules': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Notification rules */
+    get: operations['listNotificationRules']
+    put?: never
+    /**
+     * Add a notification rule
+     * @description A rule sends the listed event types to the listed channels. `clusters` and `namespaces` are glob patterns (`prod-*`); empty matches everything. An event without a namespace (readiness, automation) never matches a rule that lists namespaces. Rule names are unique (`409 already_exists`); every channel must exist. Records `NotificationRuleCreated`.
+     */
+    post: operations['createNotificationRule']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/notifications/rules/{ruleId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        ruleId: components['parameters']['NotificationRuleID']
+      }
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Replace a notification rule
+     * @description Records `NotificationRuleUpdated`.
+     */
+    put: operations['updateNotificationRule']
+    post?: never
+    /**
+     * Delete a notification rule
+     * @description Soft delete. Records `NotificationRuleDeleted`.
+     */
+    delete: operations['deleteNotificationRule']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/notifications/digest': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Weekly digest settings */
+    get: operations['getNotificationDigest']
+    /**
+     * Change the weekly digest
+     * @description Day (0 = Sunday), time of day and IANA time zone of the digest and the channels it goes to; enabling it needs at least one channel (`400`). Records `NotificationDigestUpdated`.
+     */
+    put: operations['updateNotificationDigest']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/notifications/digest/send': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Send the digest now
+     * @description Queues the digest for the configured, enabled channels now (the leader sends it). `409 no_channels` when there is none.
+     */
+    post: operations['sendNotificationDigest']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/admin/notifications/deliveries': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Delivery history
+     * @description Queued, sent and failed deliveries, newest first. Deliveries are kept for 30 days. A failing delivery is retried with exponential backoff for one hour, then marked `failed` (also exported as `kerf_notification_deliveries_total{result="failed"}`).
+     */
+    get: operations['listNotificationDeliveries']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -2770,6 +2971,7 @@ export interface components {
       | 'user'
       | 'datasource'
       | 'readiness'
+      | 'notification'
     /**
      * @description CamelCase action of a configuration change (`docs/contracts/events.md`).
      * @enum {string}
@@ -2798,6 +3000,13 @@ export interface components {
       | 'DatasourceUpdated'
       | 'DatasourceDeleted'
       | 'ReadinessChanged'
+      | 'NotificationChannelCreated'
+      | 'NotificationChannelUpdated'
+      | 'NotificationChannelDeleted'
+      | 'NotificationRuleCreated'
+      | 'NotificationRuleUpdated'
+      | 'NotificationRuleDeleted'
+      | 'NotificationDigestUpdated'
     ConfigTarget: {
       type: components['schemas']['ConfigTargetType']
       /**
@@ -3244,6 +3453,195 @@ export interface components {
       instance?: string
       code?: string
     }
+    /** @enum {string} */
+    NotificationChannelType: 'slack' | 'teams' | 'webhook'
+    /**
+     * @description `applied`, `rolled_back`, `failed` and `blocked` are the workload events of `docs/contracts/events.md`;
+     *     `readiness_degraded` (a cluster's readiness state went down), `automation_paused` and
+     *     `automation_resumed` come from the configuration audit.
+     * @enum {string}
+     */
+    NotificationEventType:
+      | 'applied'
+      | 'rolled_back'
+      | 'failed'
+      | 'blocked'
+      | 'readiness_degraded'
+      | 'automation_paused'
+      | 'automation_resumed'
+    /** @enum {string} */
+    NotificationDeliveryKind: 'event' | 'digest' | 'test'
+    /** @enum {string} */
+    NotificationDeliveryStatus: 'pending' | 'sent' | 'failed'
+    NotificationChannelInput: {
+      /** @description A DNS-style label (lower case letters, digits, `-`; at most 63). */
+      name: string
+      type: components['schemas']['NotificationChannelType']
+      /**
+       * Format: uri
+       * @description The incoming webhook URL. Required on create. `https` only, unless the hub allows
+       *     `http` (`notifications.allowInsecureHTTP`, for tests).
+       */
+      url?: string
+      /** @description Webhook channels only, the HMAC-SHA256 signing secret (at least 16 characters). */
+      secret?: string
+      /** @description Remove the stored signing secret (webhook channels). */
+      clearSecret?: boolean
+      /** @description Default true. */
+      enabled?: boolean
+      reason: string
+    }
+    NotificationLastDelivery: {
+      /** @enum {string} */
+      status: 'sent' | 'failed' | 'retrying'
+      /** Format: date-time */
+      at: string
+      /** @description Why the last attempt failed (never contains the URL). */
+      error?: string
+    }
+    NotificationChannel: {
+      /** Format: uuid */
+      id: string
+      name: string
+      type: components['schemas']['NotificationChannelType']
+      /**
+       * @description `config`: defined in the chart values, read-only here.
+       * @enum {string}
+       */
+      source: 'api' | 'config'
+      enabled: boolean
+      /** @description The URL masked to its scheme and host. */
+      url: string
+      /** @description A signing secret is stored (webhook channels). */
+      secretSet: boolean
+      /** @description Deliveries queued for this channel. */
+      pending: number
+      lastDelivery?: components['schemas']['NotificationLastDelivery']
+      /** Format: date-time */
+      lastSuccessAt?: string
+      version: number
+      /** Format: date-time */
+      createdAt: string
+      createdBy?: components['schemas']['Actor']
+      /** Format: date-time */
+      updatedAt: string
+      updatedBy?: components['schemas']['Actor']
+    }
+    NotificationChannelList: {
+      items: components['schemas']['NotificationChannel'][]
+    }
+    NotificationTestResult: {
+      ok: boolean
+      /** @description The destination's HTTP status, when it answered. */
+      httpStatus?: number
+      latencyMs: number
+      error?: string
+    }
+    NotificationRuleInput: {
+      name: string
+      /** @description Default true. */
+      enabled?: boolean
+      eventTypes: components['schemas']['NotificationEventType'][]
+      /** @description Glob patterns of cluster names; empty = every cluster. */
+      clusters?: string[]
+      /** @description Glob patterns of namespaces; empty = every namespace. */
+      namespaces?: string[]
+      channelIds: string[]
+      reason: string
+    }
+    NotificationRule: {
+      /** Format: uuid */
+      id: string
+      name: string
+      enabled: boolean
+      eventTypes: components['schemas']['NotificationEventType'][]
+      clusters: string[]
+      namespaces: string[]
+      channelIds: string[]
+      version: number
+      /** Format: date-time */
+      createdAt: string
+      createdBy?: components['schemas']['Actor']
+      /** Format: date-time */
+      updatedAt: string
+      updatedBy?: components['schemas']['Actor']
+    }
+    NotificationRuleList: {
+      items: components['schemas']['NotificationRule'][]
+    }
+    NotificationDigestInput: {
+      enabled: boolean
+      /** @description 0 = Sunday ... 6 = Saturday. */
+      weekday: number
+      /** @description Local time of day in `timezone`. */
+      time: string
+      /** @description IANA time zone, e.g. `Europe/Berlin`. */
+      timezone: string
+      channelIds: string[]
+      reason: string
+    }
+    NotificationDigest: {
+      enabled: boolean
+      weekday: number
+      time: string
+      timezone: string
+      channelIds: string[]
+      /**
+       * Format: date-time
+       * @description Set while the digest is enabled.
+       */
+      nextSendAt?: string
+      /**
+       * Format: date-time
+       * @description The scheduled time of the last digest that was queued.
+       */
+      lastSentAt?: string
+      version: number
+      /** Format: date-time */
+      updatedAt: string
+      updatedBy?: components['schemas']['Actor']
+    }
+    NotificationDigestQueued: {
+      /** @description Deliveries queued (one per channel). */
+      queued: number
+    }
+    NotificationDelivery: {
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      channelId: string
+      channelName: string
+      kind: components['schemas']['NotificationDeliveryKind']
+      eventType?: components['schemas']['NotificationEventType']
+      summary: string
+      status: components['schemas']['NotificationDeliveryStatus']
+      attempts: number
+      /**
+       * Format: date-time
+       * @description Set while `pending`.
+       */
+      nextAttemptAt?: string
+      lastError?: string
+      httpStatus?: number
+      /** Format: date-time */
+      createdAt: string
+      /** Format: date-time */
+      lastAttemptAt?: string
+      /** Format: date-time */
+      sentAt?: string
+    }
+    NotificationDeliveryList: {
+      items: components['schemas']['NotificationDelivery'][]
+      continue?: string
+    }
+    NotificationStatus: {
+      /** @description Webhook URLs can be stored (the secrets encryption key is configured). */
+      secretsKey: boolean
+      /** @description Messages link to the web UI (`notifications.baseURL` is set). */
+      links: boolean
+      rateLimitPerMinute: number
+      retryWindowSeconds: number
+    }
   }
   responses: {
     /** @description The datasource could not be reached. */
@@ -3395,6 +3793,10 @@ export interface components {
     PromQuery: string
     /** @description `local` or a UUID. */
     DatasourceID: string
+    NotificationChannelID: string
+    NotificationRuleID: string
+    NotifChannelFilter: string
+    NotifStatusFilter: components['schemas']['NotificationDeliveryStatus']
     PolicyID: string
     Username: components['schemas']['Username']
     PageLimit: number
@@ -5641,6 +6043,454 @@ export interface operations {
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
       409: components['responses']['Conflict']
+    }
+  }
+  getNotificationStatus: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Status. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationStatus']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  listNotificationChannels: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Channels. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationChannelList']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  createNotificationChannel: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NotificationChannelInput']
+      }
+    }
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationChannel']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
+    }
+  }
+  getNotificationChannel: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        channelId: components['parameters']['NotificationChannelID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Channel. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationChannel']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  updateNotificationChannel: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        channelId: components['parameters']['NotificationChannelID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NotificationChannelInput']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationChannel']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  deleteNotificationChannel: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        channelId: components['parameters']['NotificationChannelID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeReason']
+      }
+    }
+    responses: {
+      /** @description Done. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  testNotificationChannel: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        channelId: components['parameters']['NotificationChannelID']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description The outcome. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationTestResult']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  listNotificationRules: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Rules, ordered by name. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationRuleList']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  createNotificationRule: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NotificationRuleInput']
+      }
+    }
+    responses: {
+      /** @description Created. */
+      201: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationRule']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
+    }
+  }
+  updateNotificationRule: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        ruleId: components['parameters']['NotificationRuleID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NotificationRuleInput']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationRule']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  deleteNotificationRule: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path: {
+        ruleId: components['parameters']['NotificationRuleID']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeReason']
+      }
+    }
+    responses: {
+      /** @description Done. */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+      409: components['responses']['Conflict']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  getNotificationDigest: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Settings. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationDigest']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+    }
+  }
+  updateNotificationDigest: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description ETag (`"<version>"`) of the object being changed (`428` if missing, `412` if stale). */
+        'If-Match': components['parameters']['IfMatch']
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NotificationDigestInput']
+      }
+    }
+    responses: {
+      /** @description Saved. */
+      200: {
+        headers: {
+          ETag: components['headers']['ETag']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationDigest']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      412: components['responses']['PreconditionFailed']
+      428: components['responses']['PreconditionRequired']
+    }
+  }
+  sendNotificationDigest: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description Required when the request is authenticated with the session cookie. */
+        'X-CSRF-Token'?: components['parameters']['CSRFToken']
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Queued. */
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationDigestQueued']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      409: components['responses']['Conflict']
+    }
+  }
+  listNotificationDeliveries: {
+    parameters: {
+      query?: {
+        channelId?: components['parameters']['NotifChannelFilter']
+        status?: components['parameters']['NotifStatusFilter']
+        /** @description Maximum number of items in this page. */
+        limit?: components['parameters']['Limit']
+        /** @description Token from a previous page's `continue` field. */
+        continue?: components['parameters']['Continue']
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Deliveries. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NotificationDeliveryList']
+        }
+      }
+      400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
     }
   }
 }

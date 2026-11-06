@@ -248,6 +248,27 @@ updateCheck:
   # The releases API (a mirror or a test server).
   url: https://api.github.com/repos/kerf-dev/kerf/releases
 
+# Notifications (Admin -> Notifications, docs/notifications.md): Slack, Microsoft Teams and signed
+# webhooks, rules, the weekly digest. Rules and the digest are set in the UI; channels can come from
+# here too (read-only in the UI). A channel's URL (a credential) and a webhook channel's signing
+# secret are read from a Secret you create or sync (External Secrets); the hub encrypts what the UI
+# stores with the datasource key below. The hub needs egress to the destinations.
+notifications:
+  # Where the web UI is reachable: messages link to <baseURL>/workloads/... Empty: no links.
+  baseURL: ""
+  # Messages per minute and channel; the surplus waits.
+  rateLimitPerMinute: 20
+  # Accept http:// channel URLs (a receiver inside the cluster, tests). Default: HTTPS only.
+  allowInsecureHTTP: false
+  # channels:
+  #   - name: platform-alerts         # a DNS label
+  #     type: slack                   # slack | teams | webhook
+  #     existingSecret: kerf-slack    # Secret in this namespace
+  #     urlKey: url                   # key holding the webhook URL (default url)
+  #     secretKey: ""                 # webhook only: key holding the HMAC signing secret (optional)
+  #     enabled: true
+  channels: []
+
 # Datasource secrets (bearer tokens, passwords, mTLS keys) are encrypted at rest with this key
 # (D-025). create: the chart generates a random key once and keeps it (helm.sh/resource-policy:
 # keep); back the Secret up. Or point existingSecret at your own Secret (32 bytes, base64 or hex,
@@ -349,6 +370,8 @@ prometheusRule:
     pricingStale: {enabled: true, for: 5m, severity: warning, staleAfter: 30m}
     # A newer stable Kerf release exists (kerf_update_available, needs updateCheck.enabled).
     updateAvailable: {enabled: true, for: 1h, severity: info}
+    # Notifications failed for good (kerf_notification_deliveries_total{result="failed"}).
+    notificationFailing: {enabled: true, for: 0m, severity: warning}
   additionalRules: []
 
 # Grafana dashboards (dashboards/*.json, WO-05) as ConfigMaps for the Grafana sidecar. They

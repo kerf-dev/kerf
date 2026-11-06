@@ -8,6 +8,7 @@ import type { components } from '@/api/schema'
 import { CLUSTERS, iso, POLICIES, type MockDb, type WorkloadModel } from './data'
 import { hash, mulberry32, uuid, type Rng } from './random'
 import { buildReadiness, type ReadinessModel } from './readiness'
+import { seedNotifications, type NotificationModel } from './notifications-state'
 import { overridePolicyName } from './sha256'
 
 type S = components['schemas']
@@ -120,6 +121,7 @@ export interface AdminState {
   /** delay until the simulated agent applies a config change */
   syncDelayMs: number
   maintenance: MaintenanceModel
+  notifications: NotificationModel
 }
 
 export const SYSTEM: Actor = { type: 'system', name: 'system' }
@@ -432,6 +434,7 @@ export function seedAdmin(db: MockDb): AdminState {
     rng: r,
     syncDelayMs: 5000,
     maintenance: seedMaintenance(db),
+    notifications: seedNotifications(now),
   }
   const empty = db.clusters.length === 0
 

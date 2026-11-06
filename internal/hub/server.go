@@ -18,6 +18,7 @@ import (
 
 	"github.com/kerf-dev/kerf/internal/hub/auth"
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/notify"
 	"github.com/kerf-dev/kerf/internal/hub/store"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
@@ -46,6 +47,9 @@ type Server struct {
 	Started  time.Time
 	// Updates checks for a newer Kerf release (WO-33); nil = off.
 	Updates *UpdateChecker
+	// Notify manages notification channels, rules and the digest; its Run is the leader's
+	// notification work. nil answers 501 (InitNotifications).
+	Notify *notify.Service
 
 	mu         sync.Mutex
 	tokens     map[string]tokenEntry
@@ -166,6 +170,22 @@ func (s *Server) Handler() http.Handler {
 	// Maintenance (WO-33).
 	route("GET /v1/admin/maintenance", accessViewer, s.getMaintenance)
 	route("POST /v1/admin/maintenance/update-check", accessAdmin, s.checkForUpdate)
+	// Notifications.
+	route("GET /v1/admin/notifications/status", accessViewer, s.getNotificationStatus)
+	route("GET /v1/admin/notifications/channels", accessViewer, s.listNotificationChannels)
+	route("POST /v1/admin/notifications/channels", accessAdmin, s.createNotificationChannel)
+	route("GET /v1/admin/notifications/channels/{channelId}", accessViewer, s.getNotificationChannel)
+	route("PUT /v1/admin/notifications/channels/{channelId}", accessAdmin, s.updateNotificationChannel)
+	route("DELETE /v1/admin/notifications/channels/{channelId}", accessAdmin, s.deleteNotificationChannel)
+	route("POST /v1/admin/notifications/channels/{channelId}/test", accessAdmin, s.testNotificationChannel)
+	route("GET /v1/admin/notifications/rules", accessViewer, s.listNotificationRules)
+	route("POST /v1/admin/notifications/rules", accessAdmin, s.createNotificationRule)
+	route("PUT /v1/admin/notifications/rules/{ruleId}", accessAdmin, s.updateNotificationRule)
+	route("DELETE /v1/admin/notifications/rules/{ruleId}", accessAdmin, s.deleteNotificationRule)
+	route("GET /v1/admin/notifications/digest", accessViewer, s.getNotificationDigest)
+	route("PUT /v1/admin/notifications/digest", accessAdmin, s.updateNotificationDigest)
+	route("POST /v1/admin/notifications/digest/send", accessAdmin, s.sendNotificationDigest)
+	route("GET /v1/admin/notifications/deliveries", accessViewer, s.listNotificationDeliveries)
 	// Pricing service (D-026).
 	route("GET /v1/internal/metrics-bindings", accessPricing, s.listMetricsBindings)
 	route("GET /v1/internal/datasources/{datasourceId}/api/v1/query", accessPricing, s.proxyQuery)

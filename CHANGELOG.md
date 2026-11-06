@@ -39,6 +39,16 @@ First public version.
   and shows the release notes and `helm upgrade` commands; "Check now" runs it at once. It is on by default and
   sends nothing about the installation; turn it off with `hub.updateCheck.enabled: false`. Metric
   `kerf_update_available{current,latest}` and the alert `KerfUpdateAvailable` (severity `info`).
+- **Notifications.** Admin → Notifications sends the events that matter (a change applied, rolled back, failed
+  or blocked, a cluster losing readiness, automation paused or resumed) to **Slack**, **Microsoft Teams**
+  (Workflows webhook) or a **generic webhook** signed with HMAC-SHA256 (`X-Kerf-Signature`, a versioned JSON payload
+  documented in `docs/contracts/notifications.md`), routed by rules on event type, cluster and namespace patterns.
+  A weekly digest (day, time and time zone are yours) sums up estimated savings, the top opportunities, the changes
+  and the clusters that need attention. Webhook URLs and secrets are encrypted at rest and never returned; the hub
+  leader sends with retries and exponential backoff for an hour, a per-channel rate limit, a "Send test" button and
+  the last delivery status per channel. Channels can also come from the chart (`hub.notifications`). Metrics
+  `kerf_notification_deliveries_total` and `kerf_notification_last_success_timestamp_seconds`, and the alert
+  `KerfNotificationDeliveryFailing`.
 
 ### Fixed
 
