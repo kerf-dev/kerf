@@ -110,6 +110,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET /v1/workloads/{id}/usage", &accessViewer, s.getWorkloadUsage},
 		{"GET /v1/workloads/{id}/history", &accessViewer, s.getWorkloadHistory},
 		{"GET /v1/savings/trend", &accessViewer, s.getSavingsTrend},
+		{"GET /v1/clusters/{cluster}/capacity", &accessViewer, s.getClusterCapacity},
 		{"POST /v1/admin/recompute", &accessAdmin, s.recompute},
 		// Auth.
 		{"POST /v1/auth/login", nil, s.login},

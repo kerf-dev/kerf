@@ -26,6 +26,7 @@ import {
   type MockDb,
 } from './data'
 import { adminHandlers, decorateClusters, decorateDetail, decorateHistory } from './admin'
+import { capacityHandlers } from './capacity'
 import { dec, enc, gate, problem } from './core'
 
 export { currentScenario, getDb, getAdmin, resetDb, timing, type Scenario } from './core'
@@ -93,6 +94,7 @@ function filterWorkloads(db: MockDb, f: Filters): WorkloadModel[] {
 
 export const handlers = [
   ...adminHandlers,
+  ...capacityHandlers,
 
   http.get('*/v1/summary', async () => {
     const g = await gate()

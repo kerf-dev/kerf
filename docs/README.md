@@ -22,6 +22,7 @@ with search and a version switch, at [getkerf.dev/docs](https://getkerf.dev/docs
 | [Grafana dashboards](../dashboards/README.md) | Overview, opportunities, automation and workload dashboards |
 | [Sign-in and access](auth.md) | Required sign-in, users and roles, sign-in protection, bearer tokens for automation, upgrading from anonymous read access |
 | [Copy a recommendation as a patch](copy-as-patch.md) | Hand a recommendation over as a strategic merge patch, a `kubectl patch` command, a Kustomize patch or Helm values, for one workload or a selection |
+| [Node savings](node-savings.md) | Capacity, the node estimate after the recommendations, consolidation blockers with Karpenter and the Cluster Autoscaler |
 | [Maintenance and updates](maintenance.md) | Component versions, the check for a new release, turning it off |
 | [Changelog](../CHANGELOG.md) | What changed in each release and how to upgrade |
 | [Security policy](../SECURITY.md) | How to report a vulnerability |

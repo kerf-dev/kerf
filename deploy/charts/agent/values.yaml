@@ -170,6 +170,24 @@ selfCheck:
     namespace: argocd
     force: false
 
+# Node capacity report for the node estimate and consolidation blockers on the cluster page.
+# Read only: nodes, pods and PodDisruptionBudgets (already readable), Karpenter NodePools and
+# NodeClaims (get/list on karpenter.sh), and the Cluster Autoscaler status ConfigMap (get on that
+# one ConfigMap, a Role in its namespace). Kerf never creates, deletes or drains nodes.
+capacity:
+  enabled: true
+  # How often the report is built; it is sent when it changed (at least every 30 minutes).
+  interval: 5m
+  # Node labels naming a node's pool when it is not a Karpenter node, tried in order. Empty = the
+  # built-in list (EKS, GKE, AKS, kOps and the Cluster Autoscaler KWOK provider labels).
+  nodePoolLabels: []
+  clusterAutoscaler:
+    # Read the status ConfigMap the Cluster Autoscaler writes (--write-status-configmap=true).
+    enabled: true
+    statusConfigMap:
+      namespace: kube-system
+      name: cluster-autoscaler-status
+
 # More than 1 needs leaderElection: true (only the leader works; the others wait). Production
 # example (also in ci/values-prod.yaml):
 #   replicaCount: 2

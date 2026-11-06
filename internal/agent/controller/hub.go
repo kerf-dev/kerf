@@ -167,6 +167,15 @@ type Reporter struct {
 	checksDirty  bool
 	// components found by the self-checks (WO-33), sent with them; nil = unknown (omitted).
 	components []hubclient.AgentComponent
+	// capacity is the latest capacity report, sent once with the next batch.
+	capacity *hubclient.CapacityReport
+}
+
+// SetCapacity records a capacity report; the next status batch carries it.
+func (r *Reporter) SetCapacity(rep *hubclient.CapacityReport) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.capacity = rep
 }
 
 // SetSelfChecks records a self-check run; the next status batch carries it.
@@ -396,8 +405,10 @@ func (r *Reporter) flushStatuses(ctx context.Context, full bool) error {
 			batch.Components = append([]hubclient.AgentComponent{}, r.components...)
 		}
 	}
+	sentCapacity := r.capacity
+	batch.Capacity = sentCapacity
 	r.mu.Unlock()
-	if len(items) == 0 && batch.PolicyInventory == nil && !sentChecks {
+	if len(items) == 0 && batch.PolicyInventory == nil && !sentChecks && sentCapacity == nil {
 		return nil
 	}
 	if err := r.hub.ReportWorkloadStatus(ctx, batch); err != nil {
@@ -411,6 +422,9 @@ func (r *Reporter) flushStatuses(ctx context.Context, full bool) error {
 	}
 	if sentChecks {
 		r.checksDirty = false
+	}
+	if sentCapacity != nil && r.capacity == sentCapacity {
+		r.capacity = nil
 	}
 	r.mu.Unlock()
 	return nil

@@ -9,3 +9,6 @@ hubStaleAfter: 1m
 reportInterval: 5s
 health:
   checkInterval: 5s
+# TestNodeCapacity waits for a capacity report with its objects (production default 5m).
+capacity:
+  interval: 30s

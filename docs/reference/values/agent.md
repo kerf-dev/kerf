@@ -82,6 +82,15 @@ The values of the `agent` component chart. In the `kerf` chart they sit under `a
 | `selfCheck.argocd.enabled` | boolean | `true` | Read argocd-cm (only that ConfigMap, a Role in the Argo CD namespace) to check that Argo CD ignores the agent's fields. The Role is created only when the namespace exists at install time (Helm lookup); set force: true when rendering without cluster access (e.g. Argo CD renders the chart) and the namespace exists. |
 | `selfCheck.argocd.namespace` | string | `argocd` |  |
 | `selfCheck.argocd.force` | boolean | `false` |  |
+| `capacity` | object | see the keys below | Node capacity report for the node estimate and consolidation blockers on the cluster page. Read only: nodes, pods and PodDisruptionBudgets (already readable), Karpenter NodePools and NodeClaims (get/list on karpenter.sh), and the Cluster Autoscaler status ConfigMap (get on that one ConfigMap, a Role in its namespace). Kerf never creates, deletes or drains nodes. |
+| `capacity.enabled` | boolean | `true` |  |
+| `capacity.interval` | string | `5m` | How often the report is built; it is sent when it changed (at least every 30 minutes). |
+| `capacity.nodePoolLabels` | array | `[]` | Node labels naming a node's pool when it is not a Karpenter node, tried in order. Empty = the built-in list (EKS, GKE, AKS, kOps and the Cluster Autoscaler KWOK provider labels). |
+| `capacity.clusterAutoscaler` | object | see the keys below |  |
+| `capacity.clusterAutoscaler.enabled` | boolean | `true` | Read the status ConfigMap the Cluster Autoscaler writes (--write-status-configmap=true). |
+| `capacity.clusterAutoscaler.statusConfigMap` | object | see the keys below |  |
+| `capacity.clusterAutoscaler.statusConfigMap.namespace` | string | `kube-system` |  |
+| `capacity.clusterAutoscaler.statusConfigMap.name` | string | `cluster-autoscaler-status` |  |
 | `replicaCount` | integer | `1` | More than 1 needs leaderElection: true (only the leader works; the others wait). Production example (also in ci/values-prod.yaml):<br>`replicaCount: 2`<br>`leaderElection: true`<br>`podDisruptionBudget: {enabled: true, minAvailable: 1}     # rendered when replicaCount > 1`<br>`topologySpread: {enabled: true}                           # node and zone spread`<br>`priorityClassName: system-cluster-critical                # or your own class` |
 | `replicas` | object | `null` | Deprecated alias of replicaCount (wins when set). |
 | `leaderElection` | boolean | `false` |  |

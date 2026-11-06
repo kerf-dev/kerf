@@ -44,6 +44,17 @@ export type WorkloadFacets = S['WorkloadFacets']
 export type FacetCount = S['FacetCount']
 export type ConfidenceFactors = S['ConfidenceFactors']
 export type RecommendationPricing = S['RecommendationPricing']
+export type ClusterCapacity = S['ClusterCapacity']
+export type CapacityTotals = S['CapacityTotals']
+export type CapacityAmounts = S['CapacityAmounts']
+export type NodeEstimate = S['NodeEstimate']
+export type CapacityPoolEstimate = S['CapacityPoolEstimate']
+export type CapacityInstanceType = S['CapacityInstanceType']
+export type ConsolidationBlocker = S['ConsolidationBlocker']
+export type BlockerType = S['BlockerType']
+export type CapacityObjectRef = S['CapacityObjectRef']
+export type CapacityAutoscaler = S['CapacityAutoscaler']
+export type NodeAutoscalerKind = S['NodeAutoscalerKind']
 export type FacetsQuery = NonNullable<operations['getWorkloadFacets']['parameters']['query']>
 
 export type ListWorkloadsQuery = NonNullable<operations['listWorkloads']['parameters']['query']>

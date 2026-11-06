@@ -73,6 +73,16 @@ First public version.
 - **Breaking:** the web chart's `auth.anonymousRead` and `token.*` (`web.auth.anonymousRead`, `web.token.*` in
   the kerf chart), with the token Secret and ExternalSecret. The chart fails with an upgrade message while they
   are set. Revoke the old `ui` token unless a script uses it.
+- **Node savings estimate.** The cluster page has a Capacity tab: requested vs allocatable CPU and memory now
+  and after the open recommendations, an estimate of the nodes each node pool needs (first-fit-decreasing bin
+  packing of pod requests, priced per instance type), and the consolidation blockers that keep nodes from
+  going away (PodDisruptionBudgets at zero, `karpenter.sh/do-not-disrupt` and `safe-to-evict=false` pods,
+  local storage, node pool minimums, Karpenter `WhenEmpty` and zero disruption budgets, nodes with
+  `scale-down-disabled`), each naming its object with a fix hint. The agent reads nodes, Karpenter
+  `NodePool`/`NodeClaim` and the Cluster Autoscaler status ConfigMap read-only (new RBAC: `get`/`list` on
+  `karpenter.sh` node pools and node claims, `get` on that one ConfigMap); turn it off with
+  `capacity.enabled: false`. API: `GET /v1/clusters/{cluster}/capacity`. See
+  [docs/node-savings.md](docs/node-savings.md).
 
 ### Fixed
 

@@ -2615,6 +2615,36 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/clusters/{cluster}/capacity:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [ui]
+      operationId: getClusterCapacity
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Node capacity, the node estimate after the open recommendations, and consolidation blockers
+      description: |
+        Built from the agent's last capacity report (`WorkloadStatusBatch.capacity`), the open
+        recommendations and the pricing series. The node estimate is an estimate: a
+        first-fit-decreasing bin packing of pod requests per node pool, described in
+        `docs/node-savings.md` (`estimate.methodURL`). Kerf never creates, deletes or drains nodes.
+        `reportedAt` is absent when the agent never sent a capacity report (agents before this
+        feature, or `--capacity=false`); the other fields are then empty.
+      responses:
+        '200':
+          description: Capacity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterCapacity'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /v1/admin/clusters/{cluster}/install:
     parameters:
       - $ref: '#/components/parameters/Cluster'
@@ -3361,6 +3391,8 @@ components:
             the self-checks; absent = unchanged, an empty array = none running.
           items:
             $ref: '#/components/schemas/AgentComponent'
+        capacity:
+          $ref: '#/components/schemas/CapacityReport'
         items:
           type: array
           maxItems: 1000
@@ -6133,6 +6165,406 @@ components:
           $ref: '#/components/schemas/UpdateStatus'
         upgrade:
           $ref: '#/components/schemas/UpgradeCommands'
+    CapacityReport:
+      type: object
+      description: |
+        Read-only snapshot of the cluster's nodes, node pools and what may block consolidation, for
+        the node estimate (`GET /v1/clusters/{cluster}/capacity`). Sent every 5 minutes and when
+        it changes; absent = unchanged. Each list is complete (not a delta); `truncated` is true
+        when a list hit its limit.
+      required: [observedAt, nodePools, nodes, podGroups]
+      properties:
+        observedAt:
+          type: string
+          format: date-time
+        autoscalers:
+          type: array
+          description: Node autoscalers found. Empty = none found.
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/CapacityAutoscaler'
+        nodePools:
+          type: array
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/CapacityNodePool'
+        nodes:
+          type: array
+          maxItems: 10000
+          items:
+            $ref: '#/components/schemas/CapacityNode'
+        podGroups:
+          type: array
+          description: |
+            Scheduled, non-terminal pods grouped by owner, node pool and requests (one entry per
+            distinct shape).
+          maxItems: 50000
+          items:
+            $ref: '#/components/schemas/CapacityPodGroup'
+        pdbs:
+          type: array
+          description: PodDisruptionBudgets that allow no disruption now (`disruptionsAllowed` 0).
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/CapacityPDB'
+        pods:
+          type: array
+          description: Pods that block the removal of their node (do-not-disrupt, safe-to-evict false, local storage).
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/CapacityPod'
+        truncated:
+          type: boolean
+    CapacityObjectRef:
+      type: object
+      description: A Kubernetes object. `namespace` is absent for cluster-scoped objects.
+      required: [kind, name]
+      properties:
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        namespace:
+          type: string
+        name:
+          type: string
+    CapacityAutoscaler:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          $ref: '#/components/schemas/NodeAutoscalerKind'
+        object:
+          $ref: '#/components/schemas/CapacityObjectRef'
+        status:
+          type: string
+          description: Cluster Autoscaler health from its status ConfigMap (e.g. `Healthy`).
+        scaleDown:
+          type: string
+          description: Cluster Autoscaler cluster-wide scale-down status (e.g. `CandidatesPresent`, `NoCandidates`).
+        lastProbeTime:
+          type: string
+          format: date-time
+    NodeAutoscalerKind:
+      type: string
+      enum: [karpenter, cluster-autoscaler, none]
+    CapacityNodePool:
+      type: object
+      description: |
+        A Karpenter NodePool, a Cluster Autoscaler node group, or nodes sharing a node pool label
+        (`autoscaler` `none`).
+      required: [name, autoscaler]
+      properties:
+        name:
+          type: string
+        autoscaler:
+          $ref: '#/components/schemas/NodeAutoscalerKind'
+        object:
+          $ref: '#/components/schemas/CapacityObjectRef'
+        minNodes:
+          type: integer
+          minimum: 0
+          description: Cluster Autoscaler `minSize`, or the replicas of a static Karpenter NodePool.
+        maxNodes:
+          type: integer
+          minimum: 0
+        instanceTypes:
+          type: array
+          description: Instance types the pool allows (`node.kubernetes.io/instance-type` In). Absent = not restricted or unknown.
+          items:
+            type: string
+        capacityTypes:
+          type: array
+          items:
+            type: string
+        consolidationPolicy:
+          type: string
+          description: Karpenter `disruption.consolidationPolicy` (`WhenEmptyOrUnderutilized`, `WhenEmpty`).
+        consolidateAfter:
+          type: string
+        budgets:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapacityDisruptionBudget'
+    CapacityDisruptionBudget:
+      type: object
+      description: A Karpenter disruption budget.
+      required: [nodes]
+      properties:
+        nodes:
+          type: string
+          description: Count or percentage (`10%`, `0`).
+        schedule:
+          type: string
+        duration:
+          type: string
+        reasons:
+          type: array
+          items:
+            type: string
+    CapacityNode:
+      type: object
+      required: [name, allocatable]
+      properties:
+        name:
+          type: string
+        nodePool:
+          type: string
+          description: Empty = no node pool found.
+        instanceType:
+          type: string
+        capacityType:
+          type: string
+        zone:
+          type: string
+        allocatable:
+          $ref: '#/components/schemas/ResourceValues'
+        unschedulable:
+          type: boolean
+        doNotDisrupt:
+          type: boolean
+          description: The node has `karpenter.sh/do-not-disrupt=true`.
+        scaleDownDisabled:
+          type: boolean
+          description: The node has `cluster-autoscaler.kubernetes.io/scale-down-disabled=true`.
+    CapacityPodGroup:
+      type: object
+      required: [nodePool, count, containers]
+      properties:
+        owner:
+          $ref: '#/components/schemas/CapacityObjectRef'
+        workload:
+          $ref: '#/components/schemas/WorkloadRef'
+        nodePool:
+          type: string
+        daemonSet:
+          type: boolean
+        count:
+          type: integer
+          minimum: 1
+        containers:
+          type: array
+          description: Requests of the regular containers and the sidecars (restartable init containers).
+          items:
+            $ref: '#/components/schemas/ContainerResources'
+        initRequests:
+          $ref: '#/components/schemas/ResourceValues'
+        overhead:
+          $ref: '#/components/schemas/ResourceValues'
+    CapacityPDB:
+      type: object
+      required: [namespace, name, disruptionsAllowed]
+      properties:
+        namespace:
+          type: string
+        name:
+          type: string
+        disruptionsAllowed:
+          type: integer
+        currentHealthy:
+          type: integer
+        desiredHealthy:
+          type: integer
+        expectedPods:
+          type: integer
+        workload:
+          $ref: '#/components/schemas/WorkloadRef'
+    CapacityPod:
+      type: object
+      required: [namespace, name, reasons]
+      properties:
+        namespace:
+          type: string
+        name:
+          type: string
+        node:
+          type: string
+        nodePool:
+          type: string
+        workload:
+          $ref: '#/components/schemas/WorkloadRef'
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapacityPodReason'
+    CapacityPodReason:
+      type: string
+      enum: [do-not-disrupt, safe-to-evict-false, local-storage]
+    ClusterCapacity:
+      type: object
+      required: [cluster, autoscalers, totals, pools, blockers]
+      properties:
+        cluster:
+          type: string
+        reportedAt:
+          type: string
+          format: date-time
+          description: When the hub received the capacity report. Absent = never.
+        observedAt:
+          type: string
+          format: date-time
+        autoscalers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapacityAutoscaler'
+        totals:
+          $ref: '#/components/schemas/CapacityTotals'
+        estimate:
+          $ref: '#/components/schemas/NodeEstimate'
+        pools:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapacityPoolEstimate'
+        blockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsolidationBlocker'
+        blockersOmitted:
+          type: integer
+          description: Blockers not listed (the list is capped at 200).
+        truncated:
+          type: boolean
+          description: The agent's report hit a list limit; numbers may be incomplete.
+    CapacityAmounts:
+      type: object
+      required: [cpuCores, memoryBytes]
+      properties:
+        cpuCores:
+          type: number
+        memoryBytes:
+          type: number
+    CapacityTotals:
+      type: object
+      description: Totals over every node and pod (daemonset pods included).
+      required: [nodes, allocatable, requested, requestedAfter]
+      properties:
+        nodes:
+          type: integer
+        allocatable:
+          $ref: '#/components/schemas/CapacityAmounts'
+        requested:
+          $ref: '#/components/schemas/CapacityAmounts'
+        requestedAfter:
+          $ref: '#/components/schemas/CapacityAmounts'
+          description: Requests after the open recommendations.
+    NodeEstimate:
+      type: object
+      description: |
+        Estimate, not a forecast of what the autoscaler will do (`docs/node-savings.md`).
+        Hourly prices: the pricing series per instance type (`priceSource` `metrics`), else the
+        cluster's per-core and per-GiB rates times the instance's allocatable (`rates`).
+      required: [method, methodURL, currentNodes, estimatedNodes, currentMonthlyUSD, estimatedMonthlyUSD, savingsMonthlyUSD, recommendations]
+      properties:
+        method:
+          type: string
+          enum: [first-fit-decreasing]
+        methodURL:
+          type: string
+        currentNodes:
+          type: integer
+        estimatedNodes:
+          type: integer
+        currentMonthlyUSD:
+          type: number
+        estimatedMonthlyUSD:
+          type: number
+        savingsMonthlyUSD:
+          type: number
+          description: currentMonthlyUSD - estimatedMonthlyUSD; negative when more nodes are needed.
+        recommendations:
+          type: integer
+          description: Open recommendations applied to the pods before packing.
+        priceSource:
+          type: string
+          enum: [metrics, rates, mixed, none]
+    CapacityPoolEstimate:
+      type: object
+      required: [name, autoscaler, nodes, estimatedNodes, allocatable, requested, requestedAfter, instanceTypes]
+      properties:
+        name:
+          type: string
+          description: Empty = nodes without a node pool.
+        autoscaler:
+          $ref: '#/components/schemas/NodeAutoscalerKind'
+        object:
+          $ref: '#/components/schemas/CapacityObjectRef'
+        nodes:
+          type: integer
+        estimatedNodes:
+          type: integer
+        minNodes:
+          type: integer
+        allocatable:
+          $ref: '#/components/schemas/CapacityAmounts'
+        requested:
+          $ref: '#/components/schemas/CapacityAmounts'
+        requestedAfter:
+          $ref: '#/components/schemas/CapacityAmounts'
+        daemonSetOverhead:
+          $ref: '#/components/schemas/CapacityAmounts'
+          description: Requests of the daemonset pods on each node of the pool (the largest).
+        currentMonthlyUSD:
+          type: number
+        estimatedMonthlyUSD:
+          type: number
+        instanceTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapacityInstanceType'
+        unplaced:
+          type: integer
+          description: Pods that fit no known instance type of the pool; counted as one node each.
+        consolidationPolicy:
+          type: string
+    CapacityInstanceType:
+      type: object
+      required: [instanceType, nodes, estimatedNodes, allocatable]
+      properties:
+        instanceType:
+          type: string
+        capacityType:
+          type: string
+        nodes:
+          type: integer
+        estimatedNodes:
+          type: integer
+        allocatable:
+          $ref: '#/components/schemas/CapacityAmounts'
+        hourlyUSD:
+          type: number
+        priceSource:
+          type: string
+          enum: [metrics, rates, none]
+    ConsolidationBlocker:
+      type: object
+      required: [type, object, message, fix]
+      properties:
+        type:
+          $ref: '#/components/schemas/BlockerType'
+        object:
+          $ref: '#/components/schemas/CapacityObjectRef'
+        nodePool:
+          type: string
+        workloadId:
+          type: string
+          description: The Kerf workload the object belongs to, when known.
+        message:
+          type: string
+        fix:
+          type: string
+          description: Short hint on how to unblock.
+    BlockerType:
+      type: string
+      enum:
+        - pdb-zero-disruptions
+        - do-not-disrupt-pod
+        - do-not-disrupt-node
+        - safe-to-evict-false
+        - local-storage
+        - node-pool-minimum
+        - consolidation-policy
+        - disruption-budget-zero
+        - scale-down-disabled
     Problem:
       type: object
       description: |
