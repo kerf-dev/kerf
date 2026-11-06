@@ -1,7 +1,7 @@
 //go:build e2e
 
 // Package e2e is the end-to-end suite (WO-09). It runs against the shared k3d environment
-// (docs/handover/WO-01-handover.md) with the deployed hub (WO-04) and agents (WO-06):
+// (dev/README.md) with the deployed hub (WO-04) and agents (WO-06):
 //
 //	make e2e
 //

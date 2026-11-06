@@ -8,7 +8,7 @@ package e2e
 // Helm releases that Helm applies server-side as field manager "helm". A plain update by the suite
 // takes over the fields it wrote, and the next `helm upgrade` then fails with a field-manager
 // conflict. So after restoring such an object the suite also drops its own managedFields entry.
-// Run markers make a running suite visible to other tracks' pre-deploy checks (CLAUDE.md).
+// Run markers make a running suite visible to other tracks' pre-deploy checks.
 
 import (
 	"context"
