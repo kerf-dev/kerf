@@ -144,7 +144,7 @@ function FleetSavings() {
         className="group flex h-8 shrink-0 items-center gap-2 rounded-lg border border-success/25 bg-success/8 pr-2.5 pl-2 text-[13px] transition-colors outline-none hover:border-success/45 hover:bg-success/12 focus-visible:ring-[3px] focus-visible:ring-ring/30"
       >
         <PiggyBankIcon className="size-4 text-success" />
-        <span className="hidden text-muted-foreground sm:inline">Fleet savings</span>
+        <span className="hidden text-muted-foreground sm:inline">Estimated savings</span>
         <span className="font-semibold text-success tabular">
           {formatUSD(f.monthlySavingsUSD.total)}
           <span className="text-xs font-normal text-muted-foreground">/mo</span>

@@ -160,6 +160,40 @@ describe('mock responses match hub.yaml', () => {
     expectValid('SavingsTrend', byCluster)
     expect(byCluster.series.length).toBe(3)
   })
+  it('GET /v1/savings/realized (fleet, by month and by day) adds up', async () => {
+    const db = getDb()
+    const to = new Date(db.now).toISOString()
+    const month = await unwrap(
+      api.GET('/v1/savings/realized', {
+        params: { query: { step: 'month', from: new Date(db.now - 365 * 86400_000).toISOString(), to } },
+      }),
+    )
+    expectValid('RealizedSavings', month)
+    expect(month.since).toBeDefined()
+    expect(month.total.total).toBeGreaterThan(0)
+    const sum = month.points.reduce((a, p) => a + p.total, 0)
+    expect(Math.abs(sum - month.inRange.total)).toBeLessThan(0.01)
+    const byDay = await unwrap(
+      api.GET('/v1/savings/realized', {
+        params: { query: { step: 'day', from: new Date(db.now - 30 * 86400_000).toISOString(), to } },
+      }),
+    )
+    expectValid('RealizedSavings', byDay)
+    expect(byDay.points.length).toBe(31)
+  })
+  it('GET /v1/workloads/{id}/savings/realized and the node cost trend', async () => {
+    const db = getDb()
+    const applied = db.workloads.find((w) => w.appliedAt && w.phase === 'Applied')!
+    const id = `${applied.cluster}/${applied.namespace}/${applied.kind}/${applied.name}`
+    const wl = await unwrap(api.GET('/v1/workloads/{id}/savings/realized', { params: { path: { id } } }))
+    expectValid('RealizedSavings', wl)
+    const nc = await unwrap(
+      api.GET('/v1/savings/realized/node-cost', { params: { query: { cluster: applied.cluster } } }),
+    )
+    expectValid('NodeCostTrend', nc)
+    expect(nc.relation).toBe('correlated')
+    expect(nc.points.length).toBeGreaterThan(20)
+  })
   it('GET /v1/audit with filters and paging', async () => {
     const page = await unwrap(
       api.GET('/v1/audit', {

@@ -13,6 +13,7 @@ with the [README](../README.md) for the overview; this page lists everything els
 | [Helm chart reference](../deploy/charts/kerf/README.md) | `global.mode`, the umbrella values, opt-in features |
 | [Component charts](../deploy/charts) | Values of `hub`, `web`, `pricing`, `agent`, `webhook` ([hub](../deploy/charts/hub/README.md), [agent](../deploy/charts/agent/README.md)) |
 | [Grafana dashboards](../dashboards/README.md) | Overview, opportunities, automation and workload dashboards |
+| [Realized savings](realized-savings.md) | What applied changes actually saved, kept apart from estimates; the method, with SQL and PromQL to reproduce it |
 | [Maintenance and updates](maintenance.md) | Component versions, the check for a new release, turning it off |
 | [Changelog](../CHANGELOG.md) | What changed in each release and how to upgrade |
 | [Security policy](../SECURITY.md) | How to report a vulnerability |

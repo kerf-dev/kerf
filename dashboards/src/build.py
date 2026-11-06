@@ -551,6 +551,32 @@ def overview():
         targets(("sum by (cluster) (" + sav + ")", "{{cluster}}")),
         unit=USD, decimals=0, legend_calcs=["lastNotNull", "max"], legend_mode="table"))
 
+    g.row("Realized savings (from applied changes)")
+    rl = "cluster, namespace, workload_kind, workload, resource"
+    realized = dedup("kerf_hub_realized_savings_usd", rl, *sel)
+    released = lambda res: "sum(" + dedup("kerf_hub_realized_released_requests", rl, *sel, 'resource="' + res + '"') + ")"
+    g.add(6, 6, stat(
+        "Realized savings (since the first change)",
+        "What the changes Kerf applied actually saved: requests released by applied changes × replicas that ran × "
+        "node rates of the time, from the first change on (kerf_hub_realized_savings_usd, computed hourly by the "
+        "hub). Realized, not estimated: never add it to the estimated panels above. Method: docs/realized-savings.md.",
+        targets(("sum(" + realized + ")", "Realized")), unit=USD, decimals=2, th=TH_SAVINGS, graph="area",
+        no_value="0"))
+    g.add(4, 6, stat(
+        "CPU released now",
+        "CPU requests released by applied changes in the last computed hour, × replicas.",
+        targets((released("cpu"), "CPU")), unit=CORES, decimals=2, no_value="0"))
+    g.add(4, 6, stat(
+        "Memory released now",
+        "Memory requests released by applied changes in the last computed hour, × replicas.",
+        targets((released("memory"), "Memory")), unit="bytes", decimals=1, no_value="0"))
+    g.add(10, 6, timeseries(
+        "Realized savings over time",
+        "Cumulative realized savings per cluster (USD since the first applied change). The slope is the saving "
+        "per hour; a flat line means nothing is released (rolled back, or handed back to Git).",
+        targets(("sum by (cluster) (" + realized + ")", "{{cluster}}")),
+        unit=USD, decimals=2, legend_calcs=["lastNotNull"], legend_mode="table"))
+
     g.row("Capacity: requested vs used vs recommended")
     cpu_req = running_requests("cpu", sel)
     cpu_used = ("sum(rate(" + v("container_cpu_usage_seconds_total", *sel, *REAL_CONTAINER) + "[$__rate_interval]))")

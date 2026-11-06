@@ -15,7 +15,7 @@ import {
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError } from '@/api/client'
-import { useWorkload } from '@/api/queries'
+import { useWorkload, useWorkloadRealized } from '@/api/queries'
 import type { ContainerRecommendation, Mode, ModeSource, WorkloadDetail } from '@/api/types'
 import {
   DeltaPill,
@@ -41,6 +41,7 @@ import {
   parseQuantity,
   relativeTime,
 } from '@/lib/format'
+import { realizedLabel } from '@/lib/realized'
 import { cn } from '@/lib/utils'
 import { workloadId } from '@/lib/workload-id'
 import type { WorkloadKind } from '@/api/types'
@@ -157,6 +158,7 @@ function Header({ id, w }: { id: string; w?: WorkloadDetail }) {
   const p = id.split('/')
   const [copied, setCopied] = useState(false)
   const rec = w?.recommendation
+  const realized = useWorkloadRealized(id, !!w).data
   return (
     <div className="space-y-3">
       <nav
@@ -212,24 +214,58 @@ function Header({ id, w }: { id: string; w?: WorkloadDetail }) {
             ) : null}
           </div>
         </div>
-        {rec ? (
-          <div className="flex items-stretch gap-3">
-            <div className="rounded-xl border bg-card px-4 py-2.5 text-right shadow-xs">
-              <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                Savings / month
+        {rec || realized?.since ? (
+          <div className="flex flex-wrap items-stretch gap-3">
+            {realized?.since ? (
+              <div
+                className="rounded-xl border border-success/30 bg-success/5 px-4 py-2.5 text-right shadow-xs"
+                data-testid="workload-realized"
+              >
+                <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  {realizedLabel(realized.since)}
+                </div>
+                <div className="mt-0.5 text-2xl font-semibold text-success tabular">
+                  {formatUSD(realized.total.total, { cents: Math.abs(realized.total.total) < 100 })}
+                </div>
+                <div className="text-[11px] text-muted-foreground tabular">
+                  {formatUSD(realized.inRange.total, { cents: Math.abs(realized.inRange.total) < 100 })} in
+                  the last 30 days
+                  {releasedNow(realized.releasedNow) ? (
+                    <> · {releasedNow(realized.releasedNow)} released now</>
+                  ) : null}
+                </div>
               </div>
-              <div className="mt-0.5 text-2xl font-semibold tabular">
-                <Savings value={rec.monthlySavingsUSD.total} className="font-semibold" />
+            ) : null}
+            {rec ? (
+              <div
+                className="rounded-xl border bg-card px-4 py-2.5 text-right shadow-xs"
+                data-testid="workload-estimated"
+              >
+                <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  Estimated (if applied)
+                </div>
+                <div className="mt-0.5 text-2xl font-semibold tabular">
+                  <Savings value={rec.monthlySavingsUSD.total} className="font-semibold" />
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">/ month</span>
+                </div>
+                <div className="text-[11px] text-muted-foreground tabular">
+                  CPU {formatUSD(rec.monthlySavingsUSD.cpu)} · Mem {formatUSD(rec.monthlySavingsUSD.memory)}
+                </div>
               </div>
-              <div className="text-[11px] text-muted-foreground tabular">
-                CPU {formatUSD(rec.monthlySavingsUSD.cpu)} · Mem {formatUSD(rec.monthlySavingsUSD.memory)}
-              </div>
-            </div>
+            ) : null}
           </div>
         ) : null}
       </div>
     </div>
   )
+}
+
+/** "270m CPU, 128 MiB" for what is released now; "" when nothing is. */
+function releasedNow(r: { cpuCores: number; memoryBytes: number }) {
+  const parts: string[] = []
+  if (r.cpuCores) parts.push(`${formatCores(r.cpuCores)} CPU`)
+  if (r.memoryBytes) parts.push(formatBytes(r.memoryBytes, 0))
+  return parts.join(', ')
 }
 
 function StatusBanner({ w }: { w: WorkloadDetail }) {

@@ -105,6 +105,9 @@ func (s *Server) Handler() http.Handler {
 	route("GET /v1/workloads/{id}/usage", accessViewer, s.getWorkloadUsage)
 	route("GET /v1/workloads/{id}/history", accessViewer, s.getWorkloadHistory)
 	route("GET /v1/savings/trend", accessViewer, s.getSavingsTrend)
+	route("GET /v1/savings/realized", accessViewer, s.getRealizedSavings)
+	route("GET /v1/savings/realized/node-cost", accessViewer, s.getNodeCostTrend)
+	route("GET /v1/workloads/{id}/savings/realized", accessViewer, s.getWorkloadRealizedSavings)
 	route("POST /v1/admin/recompute", accessAdmin, s.recompute)
 	// Auth (D-023).
 	mux.Handle("POST /v1/auth/login", s.instrument("POST /v1/auth/login", http.HandlerFunc(s.login)))
