@@ -502,3 +502,13 @@ export const useWorkloadIndex = (max = 2000) =>
     },
     staleTime: 5 * 60_000,
   })
+
+export const useClusterCapacity = (cluster: string | undefined) =>
+  useQuery({
+    queryKey: ['capacity', cluster],
+    queryFn: () =>
+      unwrap(api.GET('/v1/clusters/{cluster}/capacity', { params: { path: { cluster: cluster! } } })),
+    enabled: !!cluster,
+    retry: notFoundIsFinal,
+    refetchInterval: 60_000,
+  })

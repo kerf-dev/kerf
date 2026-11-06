@@ -1329,6 +1329,34 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/clusters/{cluster}/capacity': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /**
+     * Node capacity, the node estimate after the open recommendations, and consolidation blockers
+     * @description Built from the agent's last capacity report (`WorkloadStatusBatch.capacity`), the open
+     *     recommendations and the pricing series. The node estimate is an estimate: a
+     *     first-fit-decreasing bin packing of pod requests per node pool, described in
+     *     `docs/node-savings.md` (`estimate.methodURL`). Kerf never creates, deletes or drains nodes.
+     *     `reportedAt` is absent when the agent never sent a capacity report (agents before this
+     *     feature, or `--capacity=false`); the other fields are then empty.
+     */
+    get: operations['getClusterCapacity']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/admin/clusters/{cluster}/install': {
     parameters: {
       query?: never
@@ -1914,6 +1942,7 @@ export interface components {
        *     the self-checks; absent = unchanged, an empty array = none running.
        */
       components?: components['schemas']['AgentComponent'][]
+      capacity?: components['schemas']['CapacityReport']
       items: components['schemas']['WorkloadStatus'][]
     }
     ContainerChange: {
@@ -3675,6 +3704,222 @@ export interface components {
       update: components['schemas']['UpdateStatus']
       upgrade?: components['schemas']['UpgradeCommands']
     }
+    /**
+     * @description Read-only snapshot of the cluster's nodes, node pools and what may block consolidation, for
+     *     the node estimate (`GET /v1/clusters/{cluster}/capacity`). Sent every 5 minutes and when
+     *     it changes; absent = unchanged. Each list is complete (not a delta); `truncated` is true
+     *     when a list hit its limit.
+     */
+    CapacityReport: {
+      /** Format: date-time */
+      observedAt: string
+      /** @description Node autoscalers found. Empty = none found. */
+      autoscalers?: components['schemas']['CapacityAutoscaler'][]
+      nodePools: components['schemas']['CapacityNodePool'][]
+      nodes: components['schemas']['CapacityNode'][]
+      /**
+       * @description Scheduled, non-terminal pods grouped by owner, node pool and requests (one entry per
+       *     distinct shape).
+       */
+      podGroups: components['schemas']['CapacityPodGroup'][]
+      /** @description PodDisruptionBudgets that allow no disruption now (`disruptionsAllowed` 0). */
+      pdbs?: components['schemas']['CapacityPDB'][]
+      /** @description Pods that block the removal of their node (do-not-disrupt, safe-to-evict false, local storage). */
+      pods?: components['schemas']['CapacityPod'][]
+      truncated?: boolean
+    }
+    /** @description A Kubernetes object. `namespace` is absent for cluster-scoped objects. */
+    CapacityObjectRef: {
+      apiVersion?: string
+      kind: string
+      namespace?: string
+      name: string
+    }
+    CapacityAutoscaler: {
+      kind: components['schemas']['NodeAutoscalerKind']
+      object?: components['schemas']['CapacityObjectRef']
+      /** @description Cluster Autoscaler health from its status ConfigMap (e.g. `Healthy`). */
+      status?: string
+      /** @description Cluster Autoscaler cluster-wide scale-down status (e.g. `CandidatesPresent`, `NoCandidates`). */
+      scaleDown?: string
+      /** Format: date-time */
+      lastProbeTime?: string
+    }
+    /** @enum {string} */
+    NodeAutoscalerKind: 'karpenter' | 'cluster-autoscaler' | 'none'
+    /**
+     * @description A Karpenter NodePool, a Cluster Autoscaler node group, or nodes sharing a node pool label
+     *     (`autoscaler` `none`).
+     */
+    CapacityNodePool: {
+      name: string
+      autoscaler: components['schemas']['NodeAutoscalerKind']
+      object?: components['schemas']['CapacityObjectRef']
+      /** @description Cluster Autoscaler `minSize`, or the replicas of a static Karpenter NodePool. */
+      minNodes?: number
+      maxNodes?: number
+      /** @description Instance types the pool allows (`node.kubernetes.io/instance-type` In). Absent = not restricted or unknown. */
+      instanceTypes?: string[]
+      capacityTypes?: string[]
+      /** @description Karpenter `disruption.consolidationPolicy` (`WhenEmptyOrUnderutilized`, `WhenEmpty`). */
+      consolidationPolicy?: string
+      consolidateAfter?: string
+      budgets?: components['schemas']['CapacityDisruptionBudget'][]
+    }
+    /** @description A Karpenter disruption budget. */
+    CapacityDisruptionBudget: {
+      /** @description Count or percentage (`10%`, `0`). */
+      nodes: string
+      schedule?: string
+      duration?: string
+      reasons?: string[]
+    }
+    CapacityNode: {
+      name: string
+      /** @description Empty = no node pool found. */
+      nodePool?: string
+      instanceType?: string
+      capacityType?: string
+      zone?: string
+      allocatable: components['schemas']['ResourceValues']
+      unschedulable?: boolean
+      /** @description The node has `karpenter.sh/do-not-disrupt=true`. */
+      doNotDisrupt?: boolean
+      /** @description The node has `cluster-autoscaler.kubernetes.io/scale-down-disabled=true`. */
+      scaleDownDisabled?: boolean
+    }
+    CapacityPodGroup: {
+      owner?: components['schemas']['CapacityObjectRef']
+      workload?: components['schemas']['WorkloadRef']
+      nodePool: string
+      daemonSet?: boolean
+      count: number
+      /** @description Requests of the regular containers and the sidecars (restartable init containers). */
+      containers: components['schemas']['ContainerResources'][]
+      initRequests?: components['schemas']['ResourceValues']
+      overhead?: components['schemas']['ResourceValues']
+    }
+    CapacityPDB: {
+      namespace: string
+      name: string
+      disruptionsAllowed: number
+      currentHealthy?: number
+      desiredHealthy?: number
+      expectedPods?: number
+      workload?: components['schemas']['WorkloadRef']
+    }
+    CapacityPod: {
+      namespace: string
+      name: string
+      node?: string
+      nodePool?: string
+      workload?: components['schemas']['WorkloadRef']
+      reasons: components['schemas']['CapacityPodReason'][]
+    }
+    /** @enum {string} */
+    CapacityPodReason: 'do-not-disrupt' | 'safe-to-evict-false' | 'local-storage'
+    ClusterCapacity: {
+      cluster: string
+      /**
+       * Format: date-time
+       * @description When the hub received the capacity report. Absent = never.
+       */
+      reportedAt?: string
+      /** Format: date-time */
+      observedAt?: string
+      autoscalers: components['schemas']['CapacityAutoscaler'][]
+      totals: components['schemas']['CapacityTotals']
+      estimate?: components['schemas']['NodeEstimate']
+      pools: components['schemas']['CapacityPoolEstimate'][]
+      blockers: components['schemas']['ConsolidationBlocker'][]
+      /** @description Blockers not listed (the list is capped at 200). */
+      blockersOmitted?: number
+      /** @description The agent's report hit a list limit; numbers may be incomplete. */
+      truncated?: boolean
+    }
+    CapacityAmounts: {
+      cpuCores: number
+      memoryBytes: number
+    }
+    /** @description Totals over every node and pod (daemonset pods included). */
+    CapacityTotals: {
+      nodes: number
+      allocatable: components['schemas']['CapacityAmounts']
+      requested: components['schemas']['CapacityAmounts']
+      /** @description Requests after the open recommendations. */
+      requestedAfter: components['schemas']['CapacityAmounts']
+    }
+    /**
+     * @description Estimate, not a forecast of what the autoscaler will do (`docs/node-savings.md`).
+     *     Hourly prices: the pricing series per instance type (`priceSource` `metrics`), else the
+     *     cluster's per-core and per-GiB rates times the instance's allocatable (`rates`).
+     */
+    NodeEstimate: {
+      /** @enum {string} */
+      method: 'first-fit-decreasing'
+      methodURL: string
+      currentNodes: number
+      estimatedNodes: number
+      currentMonthlyUSD: number
+      estimatedMonthlyUSD: number
+      /** @description currentMonthlyUSD - estimatedMonthlyUSD; negative when more nodes are needed. */
+      savingsMonthlyUSD: number
+      /** @description Open recommendations applied to the pods before packing. */
+      recommendations: number
+      /** @enum {string} */
+      priceSource?: 'metrics' | 'rates' | 'mixed' | 'none'
+    }
+    CapacityPoolEstimate: {
+      /** @description Empty = nodes without a node pool. */
+      name: string
+      autoscaler: components['schemas']['NodeAutoscalerKind']
+      object?: components['schemas']['CapacityObjectRef']
+      nodes: number
+      estimatedNodes: number
+      minNodes?: number
+      allocatable: components['schemas']['CapacityAmounts']
+      requested: components['schemas']['CapacityAmounts']
+      requestedAfter: components['schemas']['CapacityAmounts']
+      /** @description Requests of the daemonset pods on each node of the pool (the largest). */
+      daemonSetOverhead?: components['schemas']['CapacityAmounts']
+      currentMonthlyUSD?: number
+      estimatedMonthlyUSD?: number
+      instanceTypes: components['schemas']['CapacityInstanceType'][]
+      /** @description Pods that fit no known instance type of the pool; counted as one node each. */
+      unplaced?: number
+      consolidationPolicy?: string
+    }
+    CapacityInstanceType: {
+      instanceType: string
+      capacityType?: string
+      nodes: number
+      estimatedNodes: number
+      allocatable: components['schemas']['CapacityAmounts']
+      hourlyUSD?: number
+      /** @enum {string} */
+      priceSource?: 'metrics' | 'rates' | 'none'
+    }
+    ConsolidationBlocker: {
+      type: components['schemas']['BlockerType']
+      object: components['schemas']['CapacityObjectRef']
+      nodePool?: string
+      /** @description The Kerf workload the object belongs to, when known. */
+      workloadId?: string
+      message: string
+      /** @description Short hint on how to unblock. */
+      fix: string
+    }
+    /** @enum {string} */
+    BlockerType:
+      | 'pdb-zero-disruptions'
+      | 'do-not-disrupt-pod'
+      | 'do-not-disrupt-node'
+      | 'safe-to-evict-false'
+      | 'local-storage'
+      | 'node-pool-minimum'
+      | 'consolidation-policy'
+      | 'disruption-budget-zero'
+      | 'scale-down-disabled'
     /**
      * @description RFC 9457 problem details; the single error schema for every endpoint. `code` is a stable
      *     machine-readable identifier (e.g. `cluster_forbidden`, `invalid_workload_id`).
@@ -6297,6 +6542,32 @@ export interface operations {
         }
       }
       400: components['responses']['BadRequest']
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  getClusterCapacity: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Capacity. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ClusterCapacity']
+        }
+      }
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
       404: components['responses']['NotFound']

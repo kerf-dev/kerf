@@ -36,6 +36,7 @@ not fixed durations. Production defaults are unchanged.
 | Setting | Production default | Dev/e2e value | Where | Effect |
 |---|---|---|---|---|
 | hub `config.recommender.endAlignment` | the step (5m) | `30s` | `deploy/charts/hub/values-dev.yaml` | a run (and a recompute) sees usage up to 30 s ago instead of the last full 5-minute step: a new workload gets its first recommendation ~1 min after it starts instead of ~5.5 min |
+| agent `capacity.interval` | `5m` | `30s` | `deploy/charts/agent/values-dev.yaml` | `TestNodeCapacity` sees its blockers within a minute |
 | agent `pullInterval` | `1m` | `15s` (was 30s) | `deploy/charts/agent/values-dev.yaml` | recommendations, policies, pause and approvals reach the agent sooner |
 | agent `hubStaleAfter` | `5m` | `1m` | same | `TestHubUnreachable` waits 1 min plus the cut-off, not 6.5 min |
 | agent `reportInterval` | `10s` | `5s` (unchanged) | same | events reach the hub |
@@ -72,6 +73,7 @@ not fixed durations. Production defaults are unchanged.
 | 10 | `TestRollback/restarts_after_an_in-place_CPU_change` | spoke-1 | in-place CPU decrease applied; the container is then made to crash-loop (ConfigMap) → ≥ 3 restarts → RSR `RolledBack`, pods resized back to 250m in place, template untouched, hub `rolled_back` event reason `Restarts` |
 | 11 | `TestHubUnreachable` | spoke-2 | with one workload applied and one waiting in audit, the agent is cut off from the hub (invalid hub token) until it counts the hub as unreachable (`hubStaleAfter` after its last request, as recorded by the hub); switching the waiting workload to auto-patch gives `HubUnreachable` and nothing changes for 2 agent pulls (at least 30 s); the applied workload is not reverted; after reconnecting, the pending change is applied |
 | 12 | `TestRealizedSavings` | spoke-1 | in-place CPU decrease applied (2 replicas); the hub's realized savings for ro-spoke-1 are computed up to the last hour or so; applied changes of earlier runs older than two hours have a realized saving by workload id (also for deleted namespaces); the node cost trend (`relation: correlated`) has hourly points with node cost and requested/allocatable CPU. With `E2E_REALIZED_WAIT` (e.g. `75m`; the hub counts complete hours only): the CPU released now is (250m − applied) × 2 replicas, within 5 % |
+| 13 | `TestNodeCapacity` | spoke-1 | a PodDisruptionBudget with `minAvailable` = replicas and a `karpenter.sh/do-not-disrupt` pod → within a few agent capacity reports (`capacity.interval` 30s in dev) `GET /v1/clusters/{cluster}/capacity` lists both as blockers naming their objects, with message and fix; totals, pools and a `first-fit-decreasing` estimate with its method link |
 
 ### Admin area (WO-24, D-022..D-027)
 

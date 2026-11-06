@@ -57,6 +57,13 @@ export function formatBytes(bytes: number | undefined, digits = 1): string {
   return `${sign}${trim(v, d)} ${BYTE_UNITS[i]}`
 }
 
+/** 17179869184 → "16 GiB" (always GiB, for node-sized amounts) */
+export function formatGiB(bytes: number | undefined): string {
+  if (bytes == null || Number.isNaN(bytes)) return '—'
+  const g = bytes / 1024 ** 3
+  return `${trim(g, Math.abs(g) >= 100 ? 0 : 1)} GiB`
+}
+
 export type Resource = 'cpu' | 'memory'
 
 export function formatResource(resource: Resource, value: number | undefined): string {

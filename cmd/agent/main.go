@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -35,6 +36,7 @@ import (
 
 	"github.com/kerf-dev/kerf/api/v1alpha1"
 	"github.com/kerf-dev/kerf/internal/agent"
+	"github.com/kerf-dev/kerf/internal/agent/capacity"
 	"github.com/kerf-dev/kerf/internal/agent/configsync"
 	"github.com/kerf-dev/kerf/internal/agent/controller"
 	"github.com/kerf-dev/kerf/internal/agent/hubclient"
@@ -123,6 +125,34 @@ func newSelfCheck(mgr manager.Manager, hub *hubclient.Client, rep *controller.Re
 	return runner, nil
 }
 
+// addCapacity starts the capacity report (read only): its result goes with the next status batch.
+func addCapacity(mgr manager.Manager, rep *controller.Reporter, interval time.Duration, caStatus string, poolLabels []string, log *slog.Logger) error {
+	var ca types.NamespacedName
+	if caStatus != "" {
+		ns, name, ok := strings.Cut(caStatus, "/")
+		if !ok || ns == "" || name == "" {
+			return fmt.Errorf("--cluster-autoscaler-status %q: want namespace/name", caStatus)
+		}
+		ca = types.NamespacedName{Namespace: ns, Name: name}
+	}
+	r := &capacity.Runner{
+		Collector: &capacity.Collector{Pods: mgr.GetClient(), Reader: mgr.GetAPIReader(), PoolLabels: poolLabels, CAStatus: ca, Log: log},
+		Interval:  interval,
+		OnReport:  rep.SetCapacity,
+		Log:       log,
+	}
+	return mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		// Let the pod cache sync and the first pull happen.
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(20 * time.Second):
+		}
+		r.Run(ctx)
+		return nil
+	}))
+}
+
 type labelSelectors []map[string]string
 
 func (l *labelSelectors) String() string { return fmt.Sprint(*l) }
@@ -186,10 +216,16 @@ func run(args []string) error {
 		argocdNamespaces  stringList
 		docsBaseURL       = fs.String("docs-base-url", "", "base of the readiness docs links")
 
+		capacityOn       = fs.Bool("capacity", true, "report nodes, node pools (Karpenter, Cluster Autoscaler) and consolidation blockers for the node estimate (read only)")
+		capacityInterval = fs.Duration("capacity-interval", capacity.DefaultInterval, "how often the capacity report is built (sent when it changed)")
+		caStatus         = fs.String("cluster-autoscaler-status", capacity.DefaultCAStatus.String(), "namespace/name of the Cluster Autoscaler status ConfigMap; empty disables it")
+		poolLabels       stringList
+
 		configSync    = fs.Bool("config-sync", true, "pull the hub config: hub-managed policies, pause and approve-once (D-022, WO-21)")
 		configStateCM = fs.String("config-state-configmap", "kerf-agent-config-state", "ConfigMap in $POD_NAMESPACE that persists the last hub config; empty disables persistence")
 	)
 	fs.Var(&metricsExtra, "metrics-extra-matcher", "extra PromQL label matcher for --metrics-url, e.g. env=\"prod\"; repeatable")
+	fs.Var(&poolLabels, "node-pool-label", "node label naming a node's pool when it is not a Karpenter node (default: EKS, GKE, AKS, kOps and KWOK labels); repeatable")
 	fs.Var(&argocdNamespaces, "argocd-namespace", "namespace searched for argocd-cm (default argocd); repeatable")
 	fs.Var(&unsupported, "unsupported-node-selector", "label selector (k=v,k2=v2; empty value = key exists) of nodes where in-place resize is not used; repeatable")
 	if err := fs.Parse(args); err != nil {
@@ -319,6 +355,11 @@ func run(args []string) error {
 		}
 		if syncer, ok := puller.Config.(*configsync.Syncer); ok {
 			syncer.Recheck = func(at time.Time) { runner.Recheck(at) }
+		}
+	}
+	if *capacityOn {
+		if err := addCapacity(mgr, rep, *capacityInterval, *caStatus, poolLabels, log.With("component", "capacity")); err != nil {
+			return err
 		}
 	}
 	if err := mgr.Add(puller); err != nil {
