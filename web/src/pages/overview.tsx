@@ -33,6 +33,7 @@ import {
 } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { workloadPath } from '@/lib/workload-id'
+import { NodeCostCard, RealizedCard } from './overview-realized'
 
 /** Stable color per cluster (alphabetical index), so a cluster has the same color in every chart. */
 function clusterColor(c: ReturnType<typeof useChartColors>, name: string | undefined, all: string[]) {
@@ -118,6 +119,11 @@ export function OverviewPage() {
         <ResourceTile resource="cpu" summary={s?.fleet} />
         <ResourceTile resource="memory" summary={s?.fleet} />
         <RiskTile summary={s?.fleet} />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <RealizedCard />
+        <NodeCostCard clusters={s?.clusters} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -221,7 +227,7 @@ function SavingsTile({ summary }: { summary?: Summary }) {
   const total = summary?.monthlySavingsUSD.total ?? 0
   const cpuShare = total > 0 ? Math.max(0, summary!.monthlySavingsUSD.cpu) / total : 0
   return (
-    <Tile icon={PiggyBankIcon} label="Estimated monthly savings" loading={!summary}>
+    <Tile icon={PiggyBankIcon} label="Estimated (if applied)" loading={!summary}>
       <div className="flex items-end justify-between gap-3">
         <div>
           <div
@@ -231,7 +237,9 @@ function SavingsTile({ summary }: { summary?: Summary }) {
             {formatUSD(total)}
           </div>
           <div className="mt-1.5 text-xs text-muted-foreground">
-            <span className="whitespace-nowrap">{formatUSD(total * 12, { compact: true })} / year</span>
+            <span className="whitespace-nowrap">
+              per month · {formatUSD(total * 12, { compact: true })} / year
+            </span>
             {first ? (
               <Tooltip content="Change of the estimated savings over the last 30 days. Applied recommendations turn estimated savings into realized ones, so this can go down while costs fall.">
                 <span className="ml-1.5 cursor-help whitespace-nowrap underline decoration-dotted underline-offset-2">
@@ -420,9 +428,9 @@ function SavingsTrendCard({ className }: { className?: string }) {
     <Card className={className}>
       <CardHeader>
         <div>
-          <CardTitle>Savings trend</CardTitle>
+          <CardTitle>Estimated savings trend</CardTitle>
           <CardDescription>
-            Estimated monthly savings of the latest recommendations, by cluster
+            Estimated (if applied) monthly savings of the latest recommendations, by cluster
           </CardDescription>
         </div>
         <Segmented
@@ -494,8 +502,10 @@ function ClusterSavingsCard({
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Savings by cluster</CardTitle>
-          <CardDescription>Monthly estimate and requested-vs-recommended CPU</CardDescription>
+          <CardTitle>Estimated savings by cluster</CardTitle>
+          <CardDescription>
+            Estimated (if applied) per month, and requested-vs-recommended CPU
+          </CardDescription>
         </div>
       </CardHeader>
       <CardContent className="space-y-1 pt-3">

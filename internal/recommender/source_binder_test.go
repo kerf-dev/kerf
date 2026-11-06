@@ -39,13 +39,14 @@ func TestSourceBinder(t *testing.T) {
 	}
 	pricing := 0
 	for q := range local.called {
-		if !strings.Contains(q, "hourly_cost_usd") {
+		if !strings.Contains(q, "hourly_cost_usd") && !strings.Contains(q, "kerf_pricing_cur_") {
 			t.Errorf("data query on the local store: %.80s", q)
 		}
 		pricing++
 	}
-	if pricing != 3 {
-		t.Errorf("%d pricing queries on the local store, want 3", pricing)
+	// rates, node count, rate sources and the cur period
+	if pricing != 6 {
+		t.Errorf("%d pricing queries on the local store, want 6", pricing)
 	}
 
 	// a binder error fails the load; a nil matcher is the default

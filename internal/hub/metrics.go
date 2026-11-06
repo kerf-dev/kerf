@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
+	"github.com/kerf-dev/kerf/internal/hub/realized"
 	"github.com/kerf-dev/kerf/internal/hub/store"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
@@ -37,6 +38,8 @@ type Metrics struct {
 	dirty       atomic.Bool
 	refreshMu   sync.Mutex
 	lastRefresh atomic.Int64 // unix nanoseconds
+	// realized exports the realized-savings totals (kerf_hub_realized_*), refreshed by the worker.
+	realized *realized.Collector
 }
 
 // NewMetrics registers all metrics.
@@ -77,7 +80,8 @@ func NewMetrics() *Metrics {
 	m.Registry.MustRegister(m.actions, m.requests, m.reqDuration, m.runs, m.runDuration, m.leader, m.transitions,
 		collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	// State read from the database: only the leader exports it, so N replicas don't export N copies.
-	m.LeaderOnly().MustRegister(m.lastRun, m.pricingFB, m.clusterRecs, &recCollector{m: m})
+	m.realized = &realized.Collector{}
+	m.LeaderOnly().MustRegister(m.lastRun, m.pricingFB, m.clusterRecs, &recCollector{m: m}, m.realized)
 	return m
 }
 

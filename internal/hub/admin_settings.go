@@ -60,6 +60,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, err)
 		return
 	}
+	pr.Rates = s.pricingRates(r.Context())
 	writeJSON(w, hubapi.Settings{Recommender: rec, Pricing: pr})
 }
 
@@ -81,6 +82,7 @@ func (s *Server) getPricingSettings(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, err)
 		return
 	}
+	doc.Rates = s.pricingRates(r.Context())
 	setETag(w, doc.Version)
 	writeJSON(w, doc)
 }

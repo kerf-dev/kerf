@@ -77,7 +77,15 @@ One series per spoke node. All are gauges, in USD per hour, for the current pric
 | `kerf_memory_gib_hourly_cost_usd` | memory share of the node price, per GiB (allocatable) |
 
 Labels (all three): `cluster`, `node`, `instance_type`, `capacity_type` (`on-demand`\|`spot`),
-`region`, `zone`, `provider` (`aws`\|`static`).
+`region`, `zone`, `provider` (`aws`\|`static`), `source` (`cur`\|`list`\|`spot`\|`static`: where the
+node's rate came from; [docs/pricing.md](../pricing.md)). A node's `source` changes when its rate source
+changes, so aggregate with `max by (cluster, node)` before counting or joining, as for a pricing rollout.
+
+The pricing service's AWS Cost and Usage Report reader (off by default) also exports, with the hub's
+`cluster`: `kerf_pricing_cur_last_read_ok` (1/0), `kerf_pricing_cur_last_success_timestamp_seconds`,
+`kerf_pricing_cur_rates` (keys with an effective rate in use), `kerf_pricing_cur_period_start_timestamp_seconds`,
+`kerf_pricing_cur_period_end_timestamp_seconds` and `kerf_pricing_cur_refreshes_total{result}`. The hub reads
+them for readiness (`pricing.coverage`) and the Pricing page; they do not exist while the reader is off.
 
 Invariant: `kerf_cpu_core_hourly_cost_usd * allocatable_cores + kerf_memory_gib_hourly_cost_usd * allocatable_gib ≈ kerf_node_hourly_cost_usd`.
 

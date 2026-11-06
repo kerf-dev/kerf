@@ -31,6 +31,7 @@ Component sections are the component charts' values; this schema checks what the
 | `hub.image` | object | see the keys below | `enabled: true            # override global.mode for this component` |
 | `pricing` | object | see the keys below | pricing: node prices and cost series (mode hub, all) |
 | `pricing.clusterName` | string | `""` | empty: global.clusterName |
+| `pricing.cur` | object | see the keys below | Effective rates from the AWS Cost and Usage Report (Savings Plans and Reserved Instances amortised; docs/pricing.md), on top of provider aws. Off by default. For example:<br>`cur:`<br>`source: athena          # or s3 for small accounts`<br>`region: eu-west-1`<br>`athena: {database: kerf_cur, table: data, workgroup: kerf}` |
 | `pricing.hub` | object | see the keys below |  |
 | `pricing.image` | object | see the keys below |  |
 | `pricing.provider` | string | `static` | static (the price file in the image) or aws (Pricing API + spot prices; IAM through EKS Pod Identity for ServiceAccount <pricing name>: docs/install/eks.md). |

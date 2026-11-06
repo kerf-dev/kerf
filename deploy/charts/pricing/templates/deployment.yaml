@@ -2,12 +2,23 @@
 {{- if not (has .Values.provider (list "static" "aws")) }}
 {{- fail "provider must be static or aws" }}
 {{- end }}
+{{- $cur := .Values.cur | default dict }}
+{{- if not (has ($cur.source | default "") (list "" "athena" "s3")) }}
+{{- fail "cur.source must be empty, athena or s3" }}
+{{- end }}
+{{- if and (eq $cur.source "athena") (not (and $cur.athena.database $cur.athena.table)) }}
+{{- fail "cur.source athena needs cur.athena.database and cur.athena.table" }}
+{{- end }}
+{{- if and (eq $cur.source "s3") (not $cur.s3.bucket) }}
+{{- fail "cur.source s3 needs cur.s3.bucket" }}
+{{- end }}
+{{- $curTmp := eq ($cur.source | default "") "s3" }}
 {{- if gt (include "pricing.c.replicas" . | int) 1 }}
 {{- fail "pricing is a singleton (replicaCount 1): more replicas would publish every cost series twice" }}
 {{- end }}
 {{- $ca := include "pricing.caEnabled" . }}
-{{- $vols := or .Values.prices .Values.hub.url $ca .Values.extraVolumes }}
-{{- $mounts := or .Values.prices .Values.hub.url $ca .Values.extraVolumeMounts }}
+{{- $vols := or .Values.prices .Values.hub.url $ca $curTmp .Values.extraVolumes }}
+{{- $mounts := or .Values.prices .Values.hub.url $ca $curTmp .Values.extraVolumeMounts }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,7 +40,7 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "pricing.serviceAccountName" . }}
-      automountServiceAccountToken: {{ eq .Values.provider "aws" }}
+      automountServiceAccountToken: {{ or (eq .Values.provider "aws") (ne ($cur.source | default "") "") }}
       {{- include "pricing.c.imagePullSecrets" (dict "ctx" . "indent" 6) }}
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
@@ -61,6 +72,29 @@ spec:
             {{- if .Values.hub.url }}
             - --hub-url={{ .Values.hub.url }}
             - --hub-token-file=/etc/kerf/hub-token/token
+            {{- end }}
+            {{- with $cur.source }}
+            - --cur-source={{ . }}
+            - --cur-interval={{ $cur.interval }}
+            - --cur-window={{ $cur.window }}
+            - --cur-max-age={{ $cur.maxAge }}
+            {{- with ($cur.region | default $.Values.aws.region) }}
+            - --cur-region={{ . }}
+            {{- end }}
+            {{- if eq . "athena" }}
+            - --cur-athena-database={{ $cur.athena.database }}
+            - --cur-athena-table={{ $cur.athena.table }}
+            - --cur-athena-workgroup={{ $cur.athena.workgroup }}
+            {{- with $cur.athena.catalog }}
+            - --cur-athena-catalog={{ . }}
+            {{- end }}
+            {{- with $cur.athena.outputLocation }}
+            - --cur-athena-output={{ . }}
+            {{- end }}
+            {{- else }}
+            - --cur-s3-bucket={{ $cur.s3.bucket }}
+            - --cur-s3-prefix={{ $cur.s3.prefix }}
+            {{- end }}
             {{- end }}
           {{- $awsRegion := and (eq .Values.provider "aws") .Values.aws.region }}
           {{- if or $awsRegion $ca .Values.extraEnv }}
@@ -109,6 +143,10 @@ spec:
               mountPath: /etc/kerf/hub-ca
               readOnly: true
             {{- end }}
+            {{- if $curTmp }}
+            - name: tmp
+              mountPath: /tmp
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}{{ toYaml . | nindent 12 }}{{ end }}
           {{- end }}
       {{- if $vols }}
@@ -139,6 +177,11 @@ spec:
             items:
               - key: {{ $c.key }}
                 path: ca.crt
+        {{- end }}
+        {{- if $curTmp }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ $cur.s3.tmpSizeLimit | default "1Gi" }}
         {{- end }}
         {{- with .Values.extraVolumes }}{{ toYaml . | nindent 8 }}{{ end }}
       {{- end }}
