@@ -78,7 +78,7 @@ function parseHeaders(s: string): Record<string, string> | string {
   return out
 }
 
-/** Create or edit a metrics datasource (D-025). Secrets are write-only: blank keeps the stored one. */
+/** Create or edit a metrics datasource. Secrets are write-only: blank keeps the stored one. */
 export function DatasourceDialog({
   open,
   onOpenChange,

@@ -139,7 +139,7 @@ export const useAudit = (query: Omit<QueryAuditQuery, 'continue'>) =>
     getNextPageParam: (last) => last.continue || undefined,
   })
 
-/** Filter values with counts (D-016). Each facet ignores its own filter. */
+/** Filter values with counts. Each facet ignores its own filter. */
 export const useFacets = (query: FacetsQuery) =>
   useQuery({
     queryKey: ['facets', query],

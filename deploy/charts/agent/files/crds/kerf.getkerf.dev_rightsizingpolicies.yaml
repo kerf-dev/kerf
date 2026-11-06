@@ -260,7 +260,7 @@ spec:
               hpa:
                 description: |-
                   HPA configures coordination with HorizontalPodAutoscalers. Without coordination, workloads with
-                  a CPU/memory-utilization HPA stay audit-only (D-011).
+                  a CPU/memory-utilization HPA stay audit-only.
                 properties:
                   coordinate:
                     description: 'Coordinate changes requests and the HPA utilization
@@ -292,7 +292,7 @@ spec:
                   detect:
                     description: |-
                       Detect JVM containers and treat their memory as heap-bound (memory changes need
-                      RestartContainer or rollout, D-007). Global default: true.
+                      RestartContainer or rollout). Global default: true.
                     type: boolean
                 type: object
               memory:
@@ -374,7 +374,7 @@ spec:
                     description: |-
                       Workloads restricts the policy to the listed workloads: a workload matches if it equals any
                       entry. Empty means no restriction. Like every criterion it is combined with the others (AND).
-                      The hub uses it for UI workload overrides (D-022). Agents older than this field ignore it,
+                      The hub uses it for UI workload overrides. Agents older than this field ignore it,
                       so the hub also sets namespaces and kinds to narrow such a policy.
                     items:
                       description: NamespacedWorkloadRef identifies one workload in

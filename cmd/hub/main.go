@@ -137,7 +137,7 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 		Engine:  &recommender.Engine{Loader: source, Cfg: recCfg, Strategy: strategy},
 		Metrics: metrics, Cfg: cfg, Log: log,
 	}
-	// Leader election (D-028): every replica serves the API; the leader runs the
+	// Leader election: every replica serves the API; the leader runs the
 	// recommender, recompute requests, readiness checks and sweeps (srv.RunLeader).
 	elector, err := srv.NewElector(identity)
 	if err != nil {

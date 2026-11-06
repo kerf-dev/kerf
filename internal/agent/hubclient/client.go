@@ -28,7 +28,7 @@ type Client struct {
 }
 
 // HubClock returns the Date header of the last hub response and the local time it arrived (zero
-// before the first response): the agent.clock-skew self-check (D-025).
+// before the first response): the agent.clock-skew self-check.
 func (c *Client) HubClock() (hubDate, localAt time.Time) {
 	c.clockMu.Lock()
 	defer c.clockMu.Unlock()
@@ -163,7 +163,7 @@ func (c *Client) ReportWorkloadStatus(ctx context.Context, batch WorkloadStatusB
 	return nil
 }
 
-// GetConfig fetches the cluster's hub configuration (D-022). etag is the ETag of the previous
+// GetConfig fetches the cluster's hub configuration. etag is the ETag of the previous
 // successful call ("" for none); on 304 it returns ErrNotModified. A hub that predates the admin
 // area answers 404 (see IsNotFound).
 func (c *Client) GetConfig(ctx context.Context, etag string) (*ClusterConfig, string, error) {

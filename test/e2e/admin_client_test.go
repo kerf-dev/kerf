@@ -3,7 +3,7 @@
 package e2e
 
 // Admin-area client: the scenarios drive the hub API like the web UI does, as a logged-in
-// user with the session cookie and the CSRF token (docs/contracts/admin.md, D-023).
+// user with the session cookie and the CSRF token (docs/contracts/admin.md).
 
 import (
 	"bytes"

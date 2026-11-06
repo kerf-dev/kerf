@@ -12,7 +12,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// ---- cluster administration (D-022, D-025 fields stored only) ----
+// ---- cluster administration (metrics source fields stored only) ----
 
 // ClusterRow is a cluster with its admin metadata, agent sync state and metrics binding.
 type ClusterRow struct {
@@ -464,7 +464,7 @@ func (s *Store) ExpirePauses(ctx context.Context, now time.Time) ([]string, erro
 	return scopes, err
 }
 
-// ---- approve once (D-024) ----
+// ---- approve once ----
 
 const approvalColumns = `id, cluster, namespace, kind, name, recommendation_id, approved_by, approved_at, expires_at, reason,
 	consumed_at, consumed_event_id, superseded_at`

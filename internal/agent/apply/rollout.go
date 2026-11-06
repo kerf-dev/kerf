@@ -1,10 +1,10 @@
 // Package apply writes recommended values to the cluster.
 //
 //   - rollout: server-side apply of container resources on the pod template under field manager
-//     kerf with force (Argo CD's controller owns the fields first, D-006);
+//     kerf with force (Argo CD's controller owns the fields first);
 //   - release: drop kerf's managedFields entry without deleting any field, so the
 //     values stay until Argo CD (or anyone) restores them;
-//   - in-place: resize running pods through the pods/resize subresource (D-007).
+//   - in-place: resize running pods through the pods/resize subresource.
 package apply
 
 import (
@@ -23,7 +23,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/agent/workload"
 )
 
-// FieldManager is the SSA field manager of every write to workloads (D-006).
+// FieldManager is the SSA field manager of every write to workloads.
 const FieldManager = v1alpha1.FieldManager
 
 // releaseManager is used for the release patch itself; it ends up owning nothing.
@@ -193,7 +193,7 @@ func walkResources(node map[string]any, inResources bool, out map[corev1.Resourc
 
 // Release removes kerf's managedFields entries and our annotations from the
 // workload in one JSON patch, guarded by resourceVersion. No resource field is deleted: values
-// stay as they are, now owned by nobody, so Argo CD's next sync restores the Git values (D-006).
+// stay as they are, now owned by nobody, so Argo CD's next sync restores the Git values.
 // It returns false if there was nothing to release.
 func Release(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
 	var keep []metav1.ManagedFieldsEntry

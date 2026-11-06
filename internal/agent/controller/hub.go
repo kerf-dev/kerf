@@ -155,12 +155,12 @@ type Reporter struct {
 	dirty    map[wkey]bool
 	events   []hubclient.Event
 
-	// configVersion is sent with every status batch, inventory with full ones (D-022); nil
+	// configVersion is sent with every status batch, inventory with full ones; nil
 	// inventory = not known yet (omitted).
 	configVersion string
 	inventory     []hubclient.PolicyInventoryItem
 
-	// Self-checks (D-025): sent with the next batch after a run (pending) and with every full one.
+	// Self-checks: sent with the next batch after a run (pending) and with every full one.
 	capabilities []hubclient.AgentCapability
 	checks       []hubclient.ReadinessCheck
 	checksSet    bool
@@ -440,7 +440,7 @@ type Puller struct {
 	// Trigger is called after every pull (successful or not) to re-evaluate every workload: it
 	// is the periodic resync and picks up a hub that became (un)reachable.
 	Trigger func()
-	// Config pulls and materialises the hub config after every recommendation pull (D-022), so
+	// Config pulls and materialises the hub config after every recommendation pull, so
 	// the reconciles that follow see the current pause flag and approvals; nil disables it.
 	Config ConfigSyncer
 	Log    *slog.Logger

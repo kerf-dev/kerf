@@ -18,8 +18,8 @@ var labelNameRE = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 // matcherRE splits one PromQL label matcher: name, operator, double-quoted value.
 var matcherRE = regexp.MustCompile(`^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(=~|!~|!=|=)\s*("(?:[^"\\]|\\.)*")\s*$`)
 
-// Matcher selects one cluster's series in its datasource, built from the cluster's metrics binding
-// (D-025). Every query selector gets Selectors(); Relabel rewrites query results to carry the
+// Matcher selects one cluster's series in its datasource, built from the cluster's metrics binding.
+// Every query selector gets Selectors(); Relabel rewrites query results to carry the
 // registered cluster name in label `cluster`, so nothing downstream sees the binding.
 type Matcher struct {
 	// Cluster is the registered cluster name.
@@ -114,7 +114,7 @@ func NormalizeMatcher(s string) (string, error) {
 	return name + op + strconv.Quote(value), nil
 }
 
-// IsDefault reports whether the matcher equals the behaviour before D-025 (no relabelling, no
+// IsDefault reports whether the matcher equals the behaviour without a binding (no relabelling, no
 // extra matchers).
 func (m Matcher) IsDefault() bool {
 	return m.Label == ClusterLabel && m.Value == m.Cluster && len(m.Extra) == 0

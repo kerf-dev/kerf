@@ -51,7 +51,7 @@ func TestCommonTemplatesInSync(t *testing.T) {
 }
 
 // TestNoCRDsDirectory fails when a chart ships crds/: Helm would install those once and never
-// upgrade them, and they would clash with the CRD templates (D-028).
+// upgrade them, and they would clash with the CRD templates.
 func TestNoCRDsDirectory(t *testing.T) {
 	dirs, _ := filepath.Glob("*/crds")
 	if len(dirs) > 0 {

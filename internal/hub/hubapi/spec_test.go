@@ -179,7 +179,7 @@ var schemaTypes = map[string]any{
 	"ConfigChange":               ConfigChange{},
 	"ConfigChangeList":           ConfigChangeList{},
 
-	// Onboarding and readiness (D-025)
+	// Onboarding and readiness
 	"DatasourceSigV4":       DatasourceSigV4{},
 	"DatasourceTLSInput":    DatasourceTLSInput{},
 	"DatasourceAuthInput":   DatasourceAuthInput{},

@@ -64,7 +64,7 @@ not fixed durations. Production defaults are unchanged.
 | 3c | `TestSingleReplicaRestartIsBlocked` | spoke-1 | single-replica JVM whose in-place memory resize would restart its container (RestartContainer): agent blocks with `SingleReplicaUnsafe`, pod and Deployment unchanged |
 | 4 | `TestInPlaceFallback` | spoke-1 | policy floor `guardrails.minCPU: 16` (twice the node) makes the agent resize to 16 cores; the kubelet answers `PodResizePending/Infeasible`; the agent falls back: hub `fallback` event (`ResizeInfeasible`), RSR `spec.strategy: rollout`, template cpu 16 (the new pod stays Pending, the old one keeps running) |
 | 5 | `TestRollout` | spoke-1 | RSR `Applied`; template cpu = recommendation (a decrease); field manager `kerf` owns `…containers[app].resources.requests.cpu`; new ReplicaSet, pods at the new value; hub `applied` event, strategy rollout |
-| 6 | `TestArgoCD/hard_sync_keeps_values` | spoke-1 | workload deployed by its own Argo CD Application from the in-cluster git server (`e2e/<namespace>/`), D-006 settings; after the rollout patch a hard refresh + explicit sync keeps the value, the app is Synced, and 75 s of self-heal don't revert it |
+| 6 | `TestArgoCD/hard_sync_keeps_values` | spoke-1 | workload deployed by its own Argo CD Application from the in-cluster git server (`e2e/<namespace>/`), with Argo CD set to ignore the fields owned by `kerf`; after the rollout patch a hard refresh + explicit sync keeps the value, the app is Synced, and 75 s of self-heal don't revert it |
 | 7 | `TestArgoCD/release_restores_Git_values` | spoke-1 | policy switched to audit → the agent drops its field ownership → hard refresh + sync restores the Git value (250m), app Synced |
 | 8 | `TestWebhook/scale-out_gets_the_applied_values` | spoke-1 | in-place CPU applied (RSR `Applied`, status observed its spec); scaling 1 → 2 gives new pods the applied CPU at admission (`injected-resources` annotation, no restarts); template unchanged |
 | 8 | `TestWebhook/webhook_down_does_not_block_pod_creation` | spoke-1 | webhook Deployment scaled to 0 (original replicas recorded in an annotation, restored at the end): scaling 2 → 3 still creates a Ready pod within a minute, not mutated; after the webhook is back, the agent's drift repair resizes that pod to the applied value |
@@ -75,7 +75,7 @@ not fixed durations. Production defaults are unchanged.
 | 12 | `TestRealizedSavings` | spoke-1 | in-place CPU decrease applied (2 replicas); the hub's realized savings for ro-spoke-1 are computed up to the last hour or so; applied changes of earlier runs older than two hours have a realized saving by workload id (also for deleted namespaces); the node cost trend (`relation: correlated`) has hourly points with node cost and requested/allocatable CPU. With `E2E_REALIZED_WAIT` (e.g. `75m`; the hub counts complete hours only): the CPU released now is (250m − applied) × 2 replicas, within 5 % |
 | 13 | `TestNodeCapacity` | spoke-1 | a PodDisruptionBudget with `minAvailable` = replicas and a `karpenter.sh/do-not-disrupt` pod → within a few agent capacity reports (`capacity.interval` 30s in dev) `GET /v1/clusters/{cluster}/capacity` lists both as blockers naming their objects, with message and fix; totals, pools and a `first-fit-decreasing` estimate with its method link |
 
-### Admin area (D-022..D-027)
+### Admin area
 
 These drive the hub API like the web UI: logged in as the dev users `viewer`, `operator` and `admin`
 (values-dev.yaml; `E2E_<USER>_PASSWORD` overrides) with the `kerf_session` cookie and `X-CSRF-Token`.
@@ -87,7 +87,7 @@ These drive the hub API like the web UI: logged in as the dev users `viewer`, `o
 | A3 | `TestApproveOnce` | spoke-1 | operator approves the latest recommendation of an audit workload → `applied/ApprovedOnce`, pods resized in place, approval `consumed`, `WorkloadApproved` row; the next recommendation (new id) is not applied |
 | A5 | `TestGitPolicyUntouched` | spoke-1 | a hub policy with the name of a Git CR (no hub label): the CR is never modified or deleted (also after the hub policy is deleted); the inventory lists it as `source: git` and the hub policy as invalid |
 | A6 | `TestAdminRoles` | registered test cluster | viewer: 403 `role_forbidden` on policy create, pause, recheck; operator: 403 on global defaults, policies and recommender settings, 403 `csrf_invalid` without the token, pause + resume of a non-prod cluster OK and audited |
-| A7 | `TestApproveOnceArgoCD` | spoke-1 | approve once on an Argo CD app with self-heal (rollout): the agent keeps the field ownership (D-027), a hard sync and 75 s of self-heal keep the approved value, app Synced |
+| A7 | `TestApproveOnceArgoCD` | spoke-1 | approve once on an Argo CD app with self-heal (rollout): the agent keeps the field ownership, a hard sync and 75 s of self-heal keep the approved value, app Synced |
 | A8 | `TestOnboarding` | new cluster `e2e-onb-*` | datasource test of `local` with ro-spoke-1's label finds series; registered with that binding; recheck runs the metrics checks; state stays `Registered`; auto-patch policy → 409 `cluster_not_automation_ready`; operator `overrideReadiness` → 403; admin override → 201 with `after.overrideReadiness: true`; cluster deleted |
 | A9 | `TestReadiness/*` | both spokes | after a recheck (answered by the agent) the state is `AutomationReady`, no blocking failures, every capability granted |
 | A10 | `TestReadinessRBAC` | spoke-2 | the agent's `pods/resize` rule removed from its ClusterRole → recheck → `ReadyAudit`, `rbac.resize` fail, `ReadinessChanged` row (actor system/readiness), auto-patch policy refused (409); rule restored (also on failure, and by `make e2e-unblock`) → `AutomationReady` again |
@@ -166,7 +166,7 @@ second agent with a stub hub would fight them over the same workloads.
 - Webhook down (scenario 8): the webhook Deployment on spoke-1 is scaled to 0 for about a minute,
   with its replicas recorded in annotation `e2e.kerf.getkerf.dev/scaled-from`, then scaled
   back. `make e2e-unblock` scales it back after a killed run.
-- Recompute (D-019): when the hub offers `POST /v1/admin/recompute`, the suite triggers it for the
+- Recompute: when the hub offers `POST /v1/admin/recompute`, the suite triggers it for the
   cluster it waits on, at most every `E2E_RECOMPUTE_EVERY` (30 s) per cluster, using the admin token from `hub-dev-tokens` (`E2E_HUB_ADMIN_TOKEN`
   overrides; `E2E_HUB_RECOMPUTE=off` disables it). Without it (404), it waits for the periodic run.
 

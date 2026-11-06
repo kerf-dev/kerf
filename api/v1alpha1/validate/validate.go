@@ -1,6 +1,6 @@
 // Package validate checks RightsizingPolicy specs. The hub (every policy write) and the agent
 // (every hub policy before it is materialised, and the policy inventory it reports) use it, so a
-// policy is accepted or refused the same way everywhere (D-022, docs/contracts/admin.md).
+// policy is accepted or refused the same way everywhere (docs/contracts/admin.md).
 //
 // Spec enforces exactly the rules of the CRD schema (OpenAPI and CEL markers in api/v1alpha1),
 // plus the checks the agent makes when it evaluates a policy and that the CRD cannot express:

@@ -2,7 +2,7 @@
 
 package e2e
 
-// Admin-area scenarios (D-022..D-027). They drive the hub API as logged-in dev users
+// Admin-area scenarios. They drive the hub API as logged-in dev users
 // (admin_client_test.go) and check the effect on the spokes. Hub objects they create (policies,
 // clusters, pause state) are removed at the end of each test and swept at the start of a run
 // (sweepHub) in case a run was killed.
@@ -237,7 +237,7 @@ func TestAdminPause(t *testing.T) {
 	armed(t, cl, ns+"-rb", ns, "rb", overCPU, pa)
 	// From here until the blocked events are counted, no suite recompute for spoke-2 (and none in
 	// flight): a new recommendation with other values is a new proposal and gets its own blocked
-	// event (D-017). The hub's periodic run may still bring one; the count below allows for it.
+	// event. The hub's periodic run may still bring one; the count below allows for it.
 	releaseRecompute := env.Hub.holdRecompute(t, cl.Name)
 	waitPhase(t, cl, ns, deployment, "rb", v1alpha1.PhaseApplied)
 	env.Hub.settle(t, cl.Name)
@@ -288,7 +288,7 @@ func TestAdminPause(t *testing.T) {
 	evs, err := env.Hub.audit(ctx(t), cl.Name, ns, deployment, "web", "blocked")
 	must(t, err)
 	evs = slices.DeleteFunc(evs, func(e auditEvent) bool { return e.Reason != v1alpha1.ReasonPaused })
-	// D-017: one blocked/Paused event, and another only when the proposed values change (a newer
+	// One blocked/Paused event, and another only when the proposed values change (a newer
 	// recommendation with another cpu request, e.g. from the hub's periodic run during the pause).
 	cpuOf := recommendedCPU(t, cl, ns, "web")
 	if len(evs) == 0 {
@@ -297,7 +297,7 @@ func TestAdminPause(t *testing.T) {
 	for i := 1; i < len(evs); i++ {
 		prev, cur := cpuOf[evs[i-1].RecommendationID], cpuOf[evs[i].RecommendationID]
 		if prev == "" || prev == cur {
-			t.Errorf("blocked/Paused event %d of %d for web repeats the proposal (recommendation %s cpu %q after %s cpu %q), want one per proposal (D-017)",
+			t.Errorf("blocked/Paused event %d of %d for web repeats the proposal (recommendation %s cpu %q after %s cpu %q), want one per proposal",
 				i+1, len(evs), evs[i].RecommendationID, cur, evs[i-1].RecommendationID, prev)
 		}
 	}
@@ -495,7 +495,7 @@ func TestAdminRoles(t *testing.T) {
 	requireActor(t, waitConfigChange(t, q, hubapi.ActionAutomationPaused, recent), hubapi.Actor{Type: hubapi.ActorUser, Name: operator, Role: operator})
 }
 
-// Scenario 7 (D-027): approve once on an Argo CD application with self-heal: the approved values
+// Scenario 7: approve once on an Argo CD application with self-heal: the approved values
 // stay after a hard sync and through self-heal.
 func TestApproveOnceArgoCD(t *testing.T) {
 	t.Parallel()
@@ -514,7 +514,7 @@ func TestApproveOnceArgoCD(t *testing.T) {
 	waitHubRecommendation(t, cl, ns, deployment, "web", cpuBelow(smallCPU))
 	waitReason(t, cl, ns, deployment, "web", v1alpha1.ReasonModeAudit, 3*time.Minute)
 
-	// D-027: the agent holds the approved fields until a newer recommendation with other values
+	// The agent holds the approved fields until a newer recommendation with other values
 	// arrives; the suite's recompute requests stay off for the rest of the test.
 	env.Hub.holdRecompute(t, cl.Name)
 	a, ev := approveApplied(t, operator, cl, ns, "web")
@@ -531,7 +531,7 @@ func TestApproveOnceArgoCD(t *testing.T) {
 		t.Fatalf("approved cpu %s is not a decrease", approved.String())
 	}
 	waitReady(t, cl, ns, "web", 3*time.Minute)
-	// The agent keeps ownership of the approved fields (D-027), so Argo CD ignores them.
+	// The agent keeps ownership of the approved fields, so Argo CD ignores them.
 	eventually(t, 2*time.Minute, 5*time.Second, "agent keeps the field ownership", func() (bool, string) {
 		d := getDeployment(t, cl, ns, "web")
 		return ownsCPURequest(d.ManagedFields), managers(d.ManagedFields)
@@ -543,11 +543,11 @@ func TestApproveOnceArgoCD(t *testing.T) {
 		t.Fatalf("after a hard sync the template cpu is %s, want the approved %s", got.String(), approved.String())
 	}
 	// 75 s of self-heal. The hub's periodic run may deliver a newer recommendation with other
-	// values meanwhile; then the hold ends by design (D-027) and the check stops there.
+	// values meanwhile; then the hold ends by design and the check stops there.
 	for end := time.Now().Add(75 * time.Second); time.Now().Before(end); time.Sleep(5 * time.Second) {
 		if rec, err := env.Hub.workload(ctx(t), cl.Name, ns, deployment, "web"); err == nil && rec != nil && rec.Recommendation != nil &&
 			rec.Recommendation.ID != a.RecommendationID && q(rec.Recommendation.Containers[0].Recommended.Requests.CPU).Cmp(approved) != 0 {
-			t.Logf("a newer recommendation %s (cpu %s) ends the approved hold (D-027); self-heal checked until now",
+			t.Logf("a newer recommendation %s (cpu %s) ends the approved hold; self-heal checked until now",
 				rec.Recommendation.ID, rec.Recommendation.Containers[0].Recommended.Requests.CPU)
 			return
 		}
@@ -560,7 +560,7 @@ func TestApproveOnceArgoCD(t *testing.T) {
 	}
 }
 
-// Scenario 8 (D-025): onboarding. A new cluster bound to datasource local with an existing spoke's
+// Scenario 8: onboarding. A new cluster bound to datasource local with an existing spoke's
 // label: the datasource test finds its series, readiness stays Registered (no agent), auto-patch is
 // refused (409 cluster_not_automation_ready) unless an admin overrides it, which is audited.
 func TestOnboarding(t *testing.T) {
@@ -633,7 +633,7 @@ func TestOnboarding(t *testing.T) {
 	}
 }
 
-// Scenario 9 (D-025): both spokes are AutomationReady after a recheck.
+// Scenario 9: both spokes are AutomationReady after a recheck.
 func TestReadiness(t *testing.T) {
 	t.Parallel()
 	for _, cl := range []cluster{env.Spoke1, env.Spoke2} {
@@ -693,7 +693,7 @@ func restoreResizeRule(c context.Context, cl cluster, rule rbacv1.PolicyRule) er
 	return lastErr
 }
 
-// Scenario 10 (D-025): removing the agent's pods/resize permission on ro-spoke-2 drops readiness
+// Scenario 10: removing the agent's pods/resize permission on ro-spoke-2 drops readiness
 // to ReadyAudit after a recheck, writes a ReadinessChanged audit row and refuses auto-patch. The
 // rule is restored at the end, also when the test fails.
 func TestReadinessRBAC(t *testing.T) {
@@ -771,7 +771,7 @@ func TestReadinessRBAC(t *testing.T) {
 	})
 }
 
-// Scenario 11 (D-025): kube-state-metrics scaled to 0 on ro-spoke-2 → metrics.freshness fails
+// Scenario 11: kube-state-metrics scaled to 0 on ro-spoke-2 → metrics.freshness fails
 // (blocking) and the banner condition (blocking > 0) holds. Disruptive for every track using
 // spoke-2's metrics: only with KERF_E2E_DISRUPTIVE=1 (and the user's OK).
 func TestReadinessKSMDown(t *testing.T) {

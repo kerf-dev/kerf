@@ -21,7 +21,7 @@ import (
 )
 
 // access is who may call a route: bearer tokens of the listed roles (an admin token always) and,
-// when session is set, browser sessions of users with at least that role (D-023).
+// when session is set, browser sessions of users with at least that role.
 //
 // teams marks the routes a team-scoped user may call (docs/teams.md): their data is filtered by the
 // caller's scope in the store, and on /v1/workloads/{id}/... routes the caller needs the role on
@@ -43,7 +43,7 @@ var (
 	// team-scoped users (filtered data; the role on the workload's team).
 	accessTeamViewer   = access{tokens: []string{hubapi.RoleUI}, session: hubapi.UserRoleViewer, teams: true}
 	accessTeamOperator = access{tokens: []string{hubapi.RoleAdmin}, session: hubapi.UserRoleOperator, teams: true}
-	// accessPricing: the pricing service's token (D-026) or an admin token.
+	// accessPricing: the pricing service's token or an admin token.
 	accessPricing = access{tokens: []string{hubapi.RolePricing}}
 )
 
@@ -465,7 +465,7 @@ func (s *Server) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 
 // ---- bootstrap and dev users ----
 
-// BootstrapUsers creates the initial admin on a database without users (D-023) and the dev seed
+// BootstrapUsers creates the initial admin on a database without users and the dev seed
 // users when missing. Passwords are hashed with cfg.Auth.BcryptCost.
 func BootstrapUsers(ctx context.Context, st *store.Store, cfg Config, log interface {
 	InfoContext(context.Context, string, ...any)

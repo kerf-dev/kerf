@@ -13,7 +13,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// ---- hub-managed policies (D-022) ----
+// ---- hub-managed policies ----
 
 const policyColumns = `id, type, name, description, clusters, workload_cluster, workload_namespace, workload_kind, workload_name,
 	priority, spec, version, created_at, created_by, updated_at, updated_by, deleted_at`

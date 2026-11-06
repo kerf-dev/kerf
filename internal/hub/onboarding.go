@@ -17,7 +17,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
-// Onboarding is the hub side of D-025: datasources, metrics bindings, readiness and install.
+// Onboarding is the hub side of metrics sources and cluster readiness: datasources, metrics bindings, readiness and install.
 type Onboarding struct {
 	Bind      *Bindings
 	DS        *datasource.Registry
@@ -298,7 +298,7 @@ func (s *Server) triggerChecks(clusters ...string) {
 	}
 }
 
-// ---- auto-patch gating (D-025) ----
+// ---- auto-patch gating ----
 
 // readinessGate answers 409 cluster_not_automation_ready when auto-patch (or an approve-once)
 // targets a cluster that is not AutomationReady, unless an admin overrides it. clusters empty =

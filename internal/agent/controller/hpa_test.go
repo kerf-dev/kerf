@@ -89,7 +89,7 @@ func TestHPACoordination(t *testing.T) {
 	setRec(recFor(bounded, "250m", "200Mi"))
 	setRec(recFor(atMax, "400m", "200Mi"))
 
-	// Coordination off (global default): blocked as before (D-011).
+	// Coordination off (global default): blocked as before.
 	eventually(t, 20*time.Second, "blocked without coordination", wantPhase(name, v1alpha1.PhaseBlocked))
 	eventually(t, 5*time.Second, "blocked event", wantBlockedMessage(name, "coordination is off"))
 

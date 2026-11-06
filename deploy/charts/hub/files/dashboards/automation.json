@@ -1412,7 +1412,7 @@
     {
       "type": "table",
       "title": "Modes and where they come from",
-      "description": "Workloads per effective mode and the level that set it (global-default < cluster-default < policy < annotation, D-005).",
+      "description": "Workloads per effective mode and the level that set it (global-default < cluster-default < policy < annotation).",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"

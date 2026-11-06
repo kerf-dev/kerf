@@ -136,7 +136,7 @@ func TestHubPolicyMaterialised(t *testing.T) {
 	eventually(t, 10*time.Second, "released by the override", wantEvent(name, hubclient.EventReleased, v1alpha1.ReasonModeChanged))
 }
 
-// TestPause (D-022): a paused cluster applies nothing (blocked/Paused once, with the scope) and
+// TestPause: a paused cluster applies nothing (blocked/Paused once, with the scope) and
 // applies the change after the resume.
 func TestPause(t *testing.T) {
 	needEnv(t)
@@ -152,7 +152,7 @@ func TestPause(t *testing.T) {
 	eventually(t, 5*time.Second, "paused event", wantEvent(name, hubclient.EventBlocked, v1alpha1.ReasonPaused))
 	time.Sleep(1500 * time.Millisecond) // several pulls and resyncs
 	if n := countEvents(name, hubclient.EventBlocked, v1alpha1.ReasonPaused); n != 1 {
-		t.Fatalf("%d Paused events, want 1 (D-017)", n)
+		t.Fatalf("%d Paused events, want 1", n)
 	}
 	for _, e := range eventsFor(name) {
 		if e.Reason == v1alpha1.ReasonPaused && (e.Details[hubclient.DetailPauseScope] != "fleet" || e.Message == "") {
@@ -173,7 +173,7 @@ func TestPause(t *testing.T) {
 	}
 }
 
-// TestApproveOnce (D-024): an audit workload's approved recommendation is applied once with the
+// TestApproveOnce: an audit workload's approved recommendation is applied once with the
 // configured strategy (applied/ApprovedOnce), the workload stays in audit, the approval is
 // consumed, and the next recommendation is not applied.
 func TestApproveOnce(t *testing.T) {
@@ -282,7 +282,7 @@ func owns(t *testing.T, name string) map[corev1.ResourceName]bool {
 	return apply.OwnedResources(getDeploy(t, name))
 }
 
-// TestApprovedOwnership (D-027): after an approve-once rollout the agent keeps the field manager on
+// TestApprovedOwnership: after an approve-once rollout the agent keeps the field manager on
 // the approved fields, so an Argo CD sync (here: a non-forced apply of the Git values) cannot revert
 // them; a new recommendation id with the same values keeps it; different values release it.
 func TestApprovedOwnership(t *testing.T) {
@@ -340,7 +340,7 @@ func TestApprovedOwnership(t *testing.T) {
 	}
 }
 
-// TestApprovedOwnershipModeOff (D-027): setting a resource to off releases that resource only.
+// TestApprovedOwnershipModeOff: setting a resource to off releases that resource only.
 func TestApprovedOwnershipModeOff(t *testing.T) {
 	needEnv(t)
 	resetConfig(t)

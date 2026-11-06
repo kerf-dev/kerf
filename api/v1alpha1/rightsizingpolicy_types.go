@@ -6,7 +6,7 @@ import (
 )
 
 // Unset fields in a RightsizingPolicy mean "inherit from the next lower precedence level"
-// (cluster default, then global default; D-005). The CRD therefore has no OpenAPI defaults:
+// (cluster default, then global default). The CRD therefore has no OpenAPI defaults:
 // the agent fills in defaults during policy resolution. Documented global defaults are
 // listed on each field as "Global default".
 
@@ -45,7 +45,7 @@ type RightsizingPolicySpec struct {
 	Guardrails *Guardrails `json:"guardrails,omitempty"`
 
 	// HPA configures coordination with HorizontalPodAutoscalers. Without coordination, workloads with
-	// a CPU/memory-utilization HPA stay audit-only (D-011).
+	// a CPU/memory-utilization HPA stay audit-only.
 	// +optional
 	HPA *HPAPolicy `json:"hpa,omitempty"`
 
@@ -83,7 +83,7 @@ type PolicySelector struct {
 
 	// Workloads restricts the policy to the listed workloads: a workload matches if it equals any
 	// entry. Empty means no restriction. Like every criterion it is combined with the others (AND).
-	// The hub uses it for UI workload overrides (D-022). Agents older than this field ignore it,
+	// The hub uses it for UI workload overrides. Agents older than this field ignore it,
 	// so the hub also sets namespaces and kinds to narrow such a policy.
 	// +optional
 	// +kubebuilder:validation:MaxItems=100
@@ -135,7 +135,7 @@ type MemoryPolicy struct {
 	LimitEqualsRequest *bool `json:"limitEqualsRequest,omitempty"`
 }
 
-// ApplyPolicy configures how changes are applied (D-007).
+// ApplyPolicy configures how changes are applied.
 type ApplyPolicy struct {
 	// Strategy used to apply changes. Global default: in-place.
 	// +optional
@@ -258,7 +258,7 @@ type HPATargetBounds struct {
 // JVMPolicy configures JVM detection.
 type JVMPolicy struct {
 	// Detect JVM containers and treat their memory as heap-bound (memory changes need
-	// RestartContainer or rollout, D-007). Global default: true.
+	// RestartContainer or rollout). Global default: true.
 	// +optional
 	Detect *bool `json:"detect,omitempty"`
 }

@@ -2,7 +2,7 @@ package hubapi
 
 import "time"
 
-// Cluster onboarding, metrics sources and readiness (D-025).
+// Cluster onboarding, metrics sources and readiness.
 // docs/contracts/readiness.md; check catalog and state computation: api/v1alpha1/readiness.
 
 // LocalDatasourceID is the id of the built-in hub VictoriaMetrics datasource.
@@ -144,7 +144,7 @@ type MetricsBinding struct {
 	JobNames          *MetricsJobNames `json:"jobNames,omitempty"`
 }
 
-// DefaultMetricsBinding is the binding of a cluster without one (behaviour before D-025).
+// DefaultMetricsBinding is the binding of a cluster without one (behaviour without a binding).
 func DefaultMetricsBinding(cluster string) MetricsBinding {
 	return MetricsBinding{DatasourceID: LocalDatasourceID, ClusterLabel: DefaultClusterLabel, ClusterLabelValue: cluster}
 }
@@ -265,7 +265,7 @@ type InstallSnippet struct {
 	Notes                   []string `json:"notes,omitempty"`
 }
 
-// ClusterMetricsBinding is a cluster's metrics binding for the pricing service (D-026). Bound is
+// ClusterMetricsBinding is a cluster's metrics binding for the pricing service. Bound is
 // false for clusters without a stored binding (datasource local, label cluster = the name).
 type ClusterMetricsBinding struct {
 	Cluster string         `json:"cluster"`
@@ -278,7 +278,7 @@ type MetricsBindingList struct {
 	Items []ClusterMetricsBinding `json:"items"`
 }
 
-// PromQueryForm are the parameters the datasource query proxy forwards (D-026).
+// PromQueryForm are the parameters the datasource query proxy forwards.
 type PromQueryForm struct {
 	Query   string `json:"query"`
 	Time    string `json:"time,omitempty"`

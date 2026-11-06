@@ -33,7 +33,7 @@ type Server struct {
 	Log     *slog.Logger
 	// Job runs the recommender; POST /v1/admin/recompute queues runs on it.
 	Job *Job
-	// Onb serves datasources, readiness and install (D-025); nil answers 501 (InitOnboarding).
+	// Onb serves datasources, readiness and install; nil answers 501 (InitOnboarding).
 	Onb *Onboarding
 	// Coord is the leader election and notification channel shared with the other hub replicas
 	// nil = this process is the only hub and leads (tests).
@@ -257,7 +257,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Add("Vary", "Origin")
-			// Sessions (D-023): credentials only for explicitly listed origins, never for "*".
+			// Sessions: credentials only for explicitly listed origins, never for "*".
 			if allowed[origin] {
 				h.Set("Access-Control-Allow-Credentials", "true")
 			}
@@ -328,7 +328,7 @@ func (s *Server) heartbeat(ctx context.Context, cluster, version string) {
 
 // ---- responses ----
 
-// recompute serves POST /v1/admin/recompute (D-019).
+// recompute serves POST /v1/admin/recompute.
 func (s *Server) recompute(w http.ResponseWriter, r *http.Request) {
 	cluster := r.URL.Query().Get("cluster")
 	if cluster != "" {
@@ -359,7 +359,7 @@ func (s *Server) recompute(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusAccepted, hubapi.RecomputeAccepted{RunID: id.String(), Cluster: cluster, RequestedAt: at.UTC(), Coalesced: coalesced})
 }
 
-// notImplemented answers routes that exist in the API spec but are not implemented yet (D-025).
+// notImplemented answers routes that exist in the API spec but are not implemented yet.
 func notImplemented(w http.ResponseWriter, r *http.Request) {
 	writeProblem(w, r, http.StatusNotImplemented, hubapi.CodeNotImplemented, "Not implemented yet.")
 }

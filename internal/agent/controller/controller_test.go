@@ -179,7 +179,7 @@ func memReq(d *appsv1.Deployment) string {
 
 // TestRolloutFieldManagerAndRelease: rollout takes the fields from Argo CD's manager with
 // force, release gives them up without deleting them, and Argo CD can then restore Git values
-// without a conflict (D-006).
+// without a conflict.
 func TestRolloutFieldManagerAndRelease(t *testing.T) {
 	needEnv(t)
 	const name = "web-rollout"

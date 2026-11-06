@@ -901,7 +901,7 @@ func TestClustersTokensUsers(t *testing.T) {
 		}
 	}
 
-	// D-025 endpoints answer 501 for now.
+	// The onboarding endpoints answer 501 for now.
 	e.problem(e.do(http.MethodGet, "/v1/admin/datasources", tokUI, nil), 501, hubapi.CodeNotImplemented)
 	e.problem(e.do(http.MethodGet, "/v1/clusters/c1/readiness", tokUI, nil), 501, hubapi.CodeNotImplemented)
 }

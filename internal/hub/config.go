@@ -102,7 +102,7 @@ type MaintenanceConfig struct {
 	ReleaseNamespace string `json:"releaseNamespace"`
 }
 
-// HAConfig tunes running several hub replicas on one database (D-028). The defaults
+// HAConfig tunes running several hub replicas on one database. The defaults
 // give a failover of at most 15 s after the leader dies.
 type HAConfig struct {
 	// LeaderRetry: how often a follower tries to take the leader lock (default 5s).
@@ -115,7 +115,7 @@ type HAConfig struct {
 	RecomputePoll Duration `json:"recomputePoll"`
 }
 
-// OnboardingConfig configures datasources, readiness checks and install snippets (D-025).
+// OnboardingConfig configures datasources, readiness checks and install snippets.
 type OnboardingConfig struct {
 	// SecretsKeyFile holds the datasource secrets encryption key(s), one per line, the first
 	// encrypts (a mounted Secret; env HUB_DATASOURCE_KEY_FILE). Empty: datasources with a secret
@@ -209,7 +209,7 @@ type DevUser struct {
 	Password    string `json:"password"`
 }
 
-// AuthConfig configures local users and browser sessions (D-023).
+// AuthConfig configures local users and browser sessions.
 type AuthConfig struct {
 	// CookieSecure sets the Secure attribute of the session cookie (default true; false only for
 	// plain-HTTP development).
@@ -225,7 +225,7 @@ type AuthConfig struct {
 	// LoginRateLimit is the number of login attempts per minute per client address and per
 	// username (default 10).
 	LoginRateLimit int `json:"loginRateLimit"`
-	// BootstrapAdmin is created on a database without users (D-023). The password comes from
+	// BootstrapAdmin is created on a database without users. The password comes from
 	// PasswordFile (a mounted Secret) or env HUB_BOOTSTRAP_ADMIN_PASSWORD.
 	BootstrapAdmin BootstrapAdmin `json:"bootstrapAdmin"`
 	// Local sign-in with passwords; OIDC sign-in with an OpenID Connect provider (docs/auth.md).

@@ -1,4 +1,4 @@
--- Admin area (D-022/D-024): approve-once grants, and configuration changes in the audit
+-- Admin area: approve-once grants, and configuration changes in the audit
 -- log (type config_changed, docs/contracts/events.md).
 -- Idempotent: safe to re-run on a database that already has it.
 

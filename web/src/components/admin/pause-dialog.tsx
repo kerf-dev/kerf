@@ -24,7 +24,7 @@ function resumeAtFor(u: Until, custom: string): string | undefined {
 }
 
 /**
- * Pause or resume automation for one cluster or the whole fleet (D-022). A pause works like a
+ * Pause or resume automation for one cluster or the whole fleet. A pause works like a
  * cluster-wide freeze: no new changes, rollbacks still allowed; agents pick it up on their next pull.
  */
 export function PauseDialog({

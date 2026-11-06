@@ -26,7 +26,7 @@ imagePullSecrets: []
 # Set by Tilt (unused by the hub, which serves every cluster).
 clusterName: ""
 
-# The hub elects a leader on Postgres (D-028): only the leader runs the recommender,
+# The hub elects a leader on Postgres: only the leader runs the recommender,
 # readiness checks and sweeps; every replica serves the API. The database URL must reach Postgres
 # directly or through a session-mode pooler (the leader lock and LISTEN need a real session).
 replicaCount: 2
@@ -98,7 +98,7 @@ service:
   annotations: {}
 
 # Hub API for agents in other clusters, the pricing service and browsers (through the web UI).
-# AWS Load Balancer Controller example (D-028: internal ALB, ACM certificate):
+# AWS Load Balancer Controller example (internal ALB, ACM certificate):
 #   className: alb
 #   annotations:
 #     alb.ingress.kubernetes.io/scheme: internal
@@ -125,7 +125,7 @@ database:
   url: ""
   existingSecret: ""
   existingSecretKey: DATABASE_URL
-  # Used to build the URL when externalSecret.source is rds (D-028: RDS with verify-full).
+  # Used to build the URL when externalSecret.source is rds (RDS with verify-full).
   host: ""
   port: 5432
   name: kerf
@@ -172,7 +172,7 @@ devSeed:
   # hub-dev-users. Development only.
   users: []
 
-# Local users and browser sessions (D-023).
+# Local users and browser sessions.
 auth:
   # Secure attribute of the session cookie; false only for plain-HTTP development.
   cookieSecure: true
@@ -260,7 +260,7 @@ config:
   # whose namespace selector matches, else to Unassigned.
   teams:
     ownerLabel: team        # label key on workloads and namespaces whose value is a team id
-  # Cluster onboarding and readiness (D-025, internal/hub/config.go OnboardingConfig).
+  # Cluster onboarding and readiness (internal/hub/config.go OnboardingConfig).
   onboarding:
     # Readiness docs links: <docsBaseURL>/readiness#<check id>.
     docsBaseURL: ""
@@ -318,8 +318,8 @@ notifications:
   #     enabled: true
   channels: []
 
-# Datasource secrets (bearer tokens, passwords, mTLS keys) are encrypted at rest with this key
-# (D-025). create: the chart generates a random key once and keeps it (helm.sh/resource-policy:
+# Datasource secrets (bearer tokens, passwords, mTLS keys) are encrypted at rest with this key:
+# create: the chart generates a random key once and keeps it (helm.sh/resource-policy:
 # keep); back the Secret up. Or point existingSecret at your own Secret (32 bytes, base64 or hex,
 # one key per line; the first encrypts, the others still decrypt during a rotation), or let
 # externalSecret build Secret <release>-datasource-key from Secrets Manager (wins over create).

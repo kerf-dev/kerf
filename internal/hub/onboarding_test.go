@@ -407,7 +407,7 @@ func TestInstallSnippetAPI(t *testing.T) {
 	}
 }
 
-// TestPricingTokenScope: a pricing token (D-026) reaches only the two internal endpoints.
+// TestPricingTokenScope: a pricing token reaches only the two internal endpoints.
 func TestPricingTokenScope(t *testing.T) {
 	e := newEnv(t)
 	e.initOnboarding()

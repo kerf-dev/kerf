@@ -1,4 +1,4 @@
-// Package selfcheck runs the agent's cluster readiness self-checks (D-025,
+// Package selfcheck runs the agent's cluster readiness self-checks (see
 // docs/contracts/readiness.md §3): RBAC per capability (SelfSubjectAccessReview), version and CRD
 // compatibility, in-place resize support, webhook health, cert-manager, nodes with swap or static
 // managers, the Argo CD ignoreDifferences setting, namespace coverage and clock skew. Results go
@@ -44,9 +44,9 @@ const (
 const (
 	MaxClockSkew = 30 * time.Second
 	// InPlaceMinVersion is the first Kubernetes version with in-place pod resize on by default
-	// through the pods/resize subresource (D-007).
+	// through the pods/resize subresource.
 	InPlaceMinVersion = "1.33.0"
-	// FieldManager is the agent's server-side apply field manager (D-006).
+	// FieldManager is the agent's server-side apply field manager.
 	FieldManager = "kerf"
 	// IgnoreDifferencesKey is the argocd-cm key holding ignoreDifferences for every resource.
 	IgnoreDifferencesKey = "resource.customizations.ignoreDifferences.all"
@@ -618,7 +618,7 @@ func (c *Checker) checkNodes(ctx context.Context, r *result) {
 	}
 	d["nodes"] = strings.Join(shown, ",")
 	r.add(rd.CheckNodesInPlaceMemory, rd.StatusWarn, fmt.Sprintf("%d of %d nodes have swap or a static CPU/memory manager: memory changes there use rollout", len(bad), len(nodes.Items)),
-		"Nothing to do unless most workloads run there: memory changes on those nodes use the rollout strategy (D-007).", RemediationText, d)
+		"Nothing to do unless most workloads run there: memory changes on those nodes use the rollout strategy.", RemediationText, d)
 }
 
 // ArgoCDSnippet is the argocd-cm entry the Argo CD check asks for.

@@ -5,9 +5,9 @@
 // Order of checks (the first match decides the workload-level outcome):
 //
 //  1. no auto-patch resource                    -> skipped ModeOff / ModeAudit
-//  2. hub not reachable / automation paused (D-022) / recommendation stale
+//  2. hub not reachable / automation paused / recommendation stale
 //     -> blocked HubUnreachable, blocked Paused, skipped RecommendationStale
-//  3. hpa-coupled without HPA coordination (D-011), learning period, confidence, freeze window, maintenance window -> blocked
+//  3. hpa-coupled without HPA coordination, learning period, confidence, freeze window, maintenance window -> blocked
 //  4. per container and resource: clamp decreases to maxChangePercent, floors, never decrease a
 //     throttled / oom-killed resource (Throttled / OOMKilled), JVM/Python memory needs
 //     RestartContainer for in-place (RestartPolicyRequired); changes below the tolerance are dropped
@@ -80,7 +80,7 @@ type Input struct {
 	Tolerance float64
 	// Disruption describes single-replica protection; nil skips the check.
 	Disruption *apply.Disruption
-	// Paused: automation is paused in the hub config (D-022); like a cluster-wide freeze, nothing
+	// Paused: automation is paused in the hub config; like a cluster-wide freeze, nothing
 	// new is applied. PauseMessage describes it.
 	Paused       bool
 	PauseMessage string
@@ -160,7 +160,7 @@ func Evaluate(in Input) Decision {
 	if in.HPACoupled || (!in.HPAChecked && slices.Contains(in.Rec.RiskFlags, string(v1alpha1.RiskHPACoupled))) {
 		msg := in.HPAMessage
 		if msg == "" {
-			msg = "workload has a CPU/memory-utilization HPA; audit-only without HPA coordination (D-011)"
+			msg = "workload has a CPU/memory-utilization HPA; audit-only without HPA coordination"
 		}
 		return block(v1alpha1.ReasonHPACoupled, "%s", msg)
 	}
@@ -377,7 +377,7 @@ func targets(in Input, scope map[string]bool) ([]v1alpha1.ContainerRecommendatio
 				}
 			}
 
-			// D-007: memory of JVM/Python containers is bound at start-up; in-place needs RestartContainer.
+			// Memory of JVM/Python containers is bound at start-up; in-place needs RestartContainer.
 			if res == corev1.ResourceMemory && (reqChanged || limChanged) && in.Strategy == v1alpha1.StrategyInPlace &&
 				eff.JVMDetect && workload.HeapBound(live.Container) &&
 				workload.ResizePolicy(live.Container, corev1.ResourceMemory) != corev1.RestartContainer {

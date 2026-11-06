@@ -14,7 +14,7 @@ CREATE TABLE clusters (
     agent_version  text
 );
 
--- Bearer tokens (D-012). Only the SHA-256 of the token is stored.
+-- Bearer tokens. Only the SHA-256 of the token is stored.
 -- role 'agent' is bound to one cluster; 'ui' (read-only) and 'admin' (everything) have cluster NULL.
 CREATE TABLE api_tokens (
     id            bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

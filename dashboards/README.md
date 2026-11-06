@@ -1,7 +1,7 @@
 # Grafana dashboards
 
 Four dashboards in folder **kerf**, provisioned from this directory by the dev Grafana
-(`dev/scripts/sync-dashboards.sh`). Every panel uses only PromQL (D-003) over the series in
+(`dev/scripts/sync-dashboards.sh`). Every panel uses only PromQL over the series in
 [`docs/contracts/metrics.md`](../docs/contracts/metrics.md).
 
 | UID | File | Purpose |

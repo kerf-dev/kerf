@@ -62,7 +62,7 @@ type Syncer struct {
 	ReadOnly bool
 	// Inventory receives the configVersion and the policy inventory after every sync.
 	Inventory func(configVersion string, items []hubclient.PolicyInventoryItem)
-	// Recheck is called when the hub asks for the self-checks to run again (D-025).
+	// Recheck is called when the hub asks for the self-checks to run again.
 	Recheck func(requestedAt time.Time)
 	Log     *slog.Logger
 

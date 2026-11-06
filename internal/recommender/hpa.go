@@ -9,7 +9,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
-// HPA coordination (lifts D-011).
+// HPA coordination.
 //
 // An HPA on a resource's utilization scales on usage / (sum of the pod's requests x target): the
 // desired replica count is ceil(replicas x utilization / target). Changing the requests alone

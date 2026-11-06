@@ -1,6 +1,6 @@
 package recommender
 
-// JVM-aware memory recommendations (D-007).
+// JVM-aware memory recommendations.
 //
 // A JVM sizes its maximum heap at start-up: from -Xmx (fixed), or as MaxRAMPercentage of the
 // container memory limit (default 25 %). Memory below what the heap may grow to gets the container

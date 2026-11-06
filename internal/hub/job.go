@@ -292,7 +292,7 @@ func alignDown(t time.Time, d time.Duration) time.Time {
 	return time.Unix(u-((u%sec)+sec)%sec, 0).UTC()
 }
 
-// Trigger queues a recommender run now (POST /v1/admin/recompute, D-019) for cluster, or for all
+// Trigger queues a recommender run now (POST /v1/admin/recompute) for cluster, or for all
 // clusters when cluster is "". The request is stored in the database, so any replica
 // can take it; the leader's RecomputeLoop runs it once no other run is in progress, as of that
 // moment. A request whose scope already has a queued run that has not started gets that run
@@ -565,7 +565,7 @@ func (j *Job) runCluster(ctx context.Context, runID uuid.UUID, cluster string, a
 		return err
 	}
 	if !backfill {
-		// Approve-once grants apply to one recommendation; a newer one supersedes them (D-024).
+		// Approve-once grants apply to one recommendation; a newer one supersedes them.
 		if n, err := j.Store.SupersedeStaleApprovals(ctx, cluster, j.now()); err != nil {
 			j.Log.WarnContext(ctx, "supersede approvals", "cluster", cluster, "err", err)
 		} else if n > 0 {

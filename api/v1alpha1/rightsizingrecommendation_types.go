@@ -20,7 +20,7 @@ const (
 	PhaseBlocked Phase = "Blocked"
 	// PhaseRolledBack: the health watch reverted the change.
 	PhaseRolledBack Phase = "RolledBack"
-	// PhaseReleased: the workload left auto-patch and field ownership was released (D-006).
+	// PhaseReleased: the workload left auto-patch and field ownership was released.
 	PhaseReleased Phase = "Released"
 	// PhaseDeferred: strategy deferred; the change is queued until the next maintenance window
 	// (status.nextWindow) and then applied as a rollout.
@@ -114,7 +114,7 @@ type HPATarget struct {
 	AverageUtilization int32 `json:"averageUtilization"`
 }
 
-// EffectivePolicy is the result of policy resolution for a workload (D-005).
+// EffectivePolicy is the result of policy resolution for a workload.
 type EffectivePolicy struct {
 	// Policy is the name of the winning RightsizingPolicy, empty if none matched.
 	// +optional

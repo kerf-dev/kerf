@@ -72,7 +72,7 @@ is green within a minute. Pull requests build the images for `linux/amd64`; `mai
 if internal development notes are committed.
 Run `make generate` after changing `api/` and commit the result.
 
-CI also fails if a tracked file contains an internal tracking label (`WO-` followed by a number): describe the change in words instead.
+CI also fails if a tracked file contains an internal tracking label (`WO-` or `D-0` followed by digits) or is larger than 5 MB: describe the change in words, and keep build outputs out of the tree.
 
 ## Pull request titles
 

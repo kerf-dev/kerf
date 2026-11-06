@@ -164,7 +164,7 @@ func TestInPlaceCPU(t *testing.T) {
 }
 
 // Scenario 3: in-place memory decrease on a JVM workload restarts the container, not the pod.
-// On nodes with swap the agent must refuse in-place memory changes instead (D-007).
+// On nodes with swap the agent must refuse in-place memory changes instead.
 // Two replicas: a single replica whose resize restarts the container is blocked (see
 // TestSingleReplicaRestartIsBlocked).
 func TestInPlaceJVMMemory(t *testing.T) {

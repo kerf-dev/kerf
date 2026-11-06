@@ -1,6 +1,6 @@
 /**
  * Contract and behaviour tests of the admin-area mocks: every response validates against
- * api/openapi/hub.yaml, and the mock enforces the contract's auth, CSRF, If-Match, role and D-025
+ * api/openapi/hub.yaml, and the mock enforces the contract's auth, CSRF, If-Match, role and readiness
  * gating rules, so the UI built on it handles the real hub's answers.
  */
 import { readFileSync } from 'node:fs'

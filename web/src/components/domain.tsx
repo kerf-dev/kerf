@@ -257,7 +257,7 @@ export const RISK_INFO: Record<
   'hpa-coupled': {
     label: 'HPA-coupled',
     desc: 'A CPU/memory-utilization HorizontalPodAutoscaler targets this workload.',
-    impact: 'Changing requests would change scaling behaviour, so it stays audit-only (D-011).',
+    impact: 'Changing requests would change scaling behaviour, so it stays audit-only.',
     icon: ShuffleIcon,
     severity: 'medium',
   },

@@ -254,7 +254,7 @@ func TestHeapBound(t *testing.T) {
 	}
 }
 
-// TestPaused (D-022): a hub pause blocks every change like a freeze; audit workloads stay skipped.
+// TestPaused: a hub pause blocks every change like a freeze; audit workloads stay skipped.
 func TestPaused(t *testing.T) {
 	in := base()
 	in.Paused, in.PauseMessage = true, "automation is paused in the hub (cluster): incident"

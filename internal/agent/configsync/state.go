@@ -1,4 +1,4 @@
-// Package configsync is the agent side of the hub-managed configuration (D-022, D-024):
+// Package configsync is the agent side of the hub-managed configuration:
 // it pulls GET /v1/clusters/{c}/config, materialises the hub policies as RightsizingPolicy CRs
 // labelled managed-by=hub, keeps the cluster flags (pause) and approve-once grants for the
 // reconciler, persists them so a restart without the hub keeps them, and builds the policy

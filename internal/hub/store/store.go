@@ -317,7 +317,7 @@ func (r *recRow) build(ref hubapi.WorkloadRef) (*hubapi.WorkloadRecommendation, 
 	if rec.RiskFlags == nil {
 		rec.RiskFlags = []string{}
 	}
-	// Rows from before D-016 store '{}': no pricing in the response.
+	// Older rows store '{}': no pricing in the response.
 	var p hubapi.RecommendationPricing
 	if json.Unmarshal(r.pricing, &p) == nil && p.Source != "" {
 		rec.Pricing = &p

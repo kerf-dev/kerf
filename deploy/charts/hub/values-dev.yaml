@@ -21,7 +21,7 @@ devSeed:
     synth-b: ro-dev-synthb-a06443f1dbc00f61be2e0900
     ui: ro-dev-ui-97446cd3a095035d6290abc5
     admin: ro-dev-admin-1b71e51dc42ec5deb56e7f06
-    # Pricing service: metrics bindings and the datasource query proxy (D-026).
+    # Pricing service: metrics bindings and the datasource query proxy.
     pricing: ro-dev-pricing-5f0c3b7e9a1d24c86e13a0b2
   # Local users for the admin area. Development only — the passwords are in Git.
   users:

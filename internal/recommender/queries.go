@@ -8,14 +8,14 @@ import (
 )
 
 // Queries builds the canonical PromQL of the hub (docs/contracts/metrics.md, section 4). Every
-// query is plain PromQL that runs on Prometheus and VictoriaMetrics (D-003).
+// query is plain PromQL that runs on Prometheus and VictoriaMetrics.
 type Queries struct {
 	// Cluster restricts every selector to one cluster.
 	Cluster string
 	// RateWindow is the range of rate() and increase().
 	RateWindow time.Duration
-	// Binding selects the cluster's series in its datasource and relabels results to Cluster
-	// (D-025). nil = label cluster = Cluster, the queries before D-025 (byte-identical).
+	// Binding selects the cluster's series in its datasource and relabels results to Cluster.
+	// nil = label cluster = Cluster, the queries without a binding (byte-identical).
 	Binding *datasource.Matcher
 }
 

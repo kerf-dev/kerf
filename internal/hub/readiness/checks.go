@@ -1,7 +1,7 @@
 // Package readiness runs the hub-side cluster readiness checks (metrics checks against the
 // cluster's datasource), merges them with the agent's self-checks, computes the readiness state
 // (api/v1alpha1/readiness.ComputeState), stores results and history, and exports
-// kerf_cluster_readiness. D-025, docs/contracts/readiness.md.
+// kerf_cluster_readiness. See docs/contracts/readiness.md.
 package readiness
 
 import (

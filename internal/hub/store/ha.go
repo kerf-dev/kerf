@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Hub HA (D-028): several hub replicas share one database. One replica, the leader, runs
+// Hub HA: several hub replicas share one database. One replica, the leader, runs
 // the background work; the others serve the API. What they must share goes through the database:
 // recompute requests (table recompute_requests) and notifications (channel NotifyChannel).
 

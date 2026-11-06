@@ -80,7 +80,7 @@ func main() {
 	fs.StringVar(&o.selfCluster, "cluster-name", envOr("CLUSTER_NAME", "ro-hub"), "cluster this service runs in (cluster label of its own kerf_pricing_* series)")
 	fs.StringVar(&o.pricingRegion, "aws-pricing-region", pricing.DefaultPricingRegion, "aws provider: AWS Pricing API endpoint region")
 	fs.StringVar(&o.logLevel, "log-level", envOr("LOG_LEVEL", "info"), "debug, info, warn or error")
-	fs.StringVar(&o.hubURL, "hub-url", envOr("PRICING_HUB_URL", ""), "hub API URL: clusters with a metrics binding are discovered in their datasource through the hub's query proxy (D-025, D-026); empty = only --vm-url")
+	fs.StringVar(&o.hubURL, "hub-url", envOr("PRICING_HUB_URL", ""), "hub API URL: clusters with a metrics binding are discovered in their datasource through the hub's query proxy; empty = only --vm-url")
 	fs.StringVar(&o.hubTokenFile, "hub-token-file", envOr("PRICING_HUB_TOKEN_FILE", ""), "file with the hub token of role pricing (needed with --hub-url)")
 	fs.StringVar(&o.cur.source, "cur-source", envOr("PRICING_CUR_SOURCE", ""), "AWS Cost and Usage Report reader: athena, s3, or empty for none (list prices only)")
 	fs.StringVar(&o.cur.region, "cur-region", envOr("PRICING_CUR_REGION", ""), "region of the Athena workgroup or the export bucket (default: the SDK's region)")

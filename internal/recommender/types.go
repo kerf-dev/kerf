@@ -2,7 +2,7 @@
 //
 // The package is split in three layers:
 //   - Source (prom.go): reads inventory and per-container usage statistics from Prometheus or
-//     VictoriaMetrics with PromQL only (D-003).
+//     VictoriaMetrics with PromQL only.
 //   - Strategy (strategy.go, percentile.go): turns usage statistics into unrounded per-pod requests.
 //   - Recommend (recommend.go): applies risk rules, rounding, limit policy, confidence and savings,
 //     and produces the hub API shape.
@@ -79,7 +79,7 @@ type HPA struct {
 	PeakReplicas float64 `json:"peakReplicas,omitempty"`
 }
 
-// Coupled reports whether the HPA scales on CPU or memory utilization (D-011).
+// Coupled reports whether the HPA scales on CPU or memory utilization.
 func (h *HPA) Coupled() bool {
 	if h == nil {
 		return false

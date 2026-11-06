@@ -20,7 +20,7 @@ type HealthConfig struct {
 	// VictoriaMetrics); empty disables it.
 	MetricsURL       string
 	MetricsTokenFile string
-	// MetricsSelector selects the cluster's series at MetricsURL (its metrics binding, D-025);
+	// MetricsSelector selects the cluster's series at MetricsURL (its metrics binding);
 	// nil = label cluster = the cluster name.
 	MetricsSelector *health.MetricsSelector
 	// CadvisorFallback reads throttling from the kubelets (nodes/proxy) when MetricsURL fails.

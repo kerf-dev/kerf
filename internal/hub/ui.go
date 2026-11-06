@@ -235,7 +235,7 @@ func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
 		if cc := counts[c.Name]; cc != nil {
 			ci.Counts = *cc
 		}
-		// Admin area (D-022) and readiness (D-025).
+		// Admin area and readiness.
 		ca, err := s.clusterAdmin(r, c, automation)
 		if err != nil {
 			s.internal(w, r, err)
@@ -461,7 +461,7 @@ func (f workloadFilters) matchGPU(v *store.WorkloadView) bool {
 	return slices.Contains(f.gpu, hubapi.GPUAny) || slices.Contains(f.gpu, v.Rec.GPU.Status)
 }
 
-// getWorkloadFacets serves GET /v1/workloads/facets (D-016).
+// getWorkloadFacets serves GET /v1/workloads/facets.
 func (s *Server) getWorkloadFacets(w http.ResponseWriter, r *http.Request) {
 	wf, ok := parseWorkloadFilters(w, r)
 	if !ok {

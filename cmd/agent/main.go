@@ -70,7 +70,7 @@ func (l *stringList) String() string     { return strings.Join(*l, ";") }
 func (l *stringList) Set(v string) error { *l = append(*l, v); return nil }
 
 // metricsSelector is the cluster's metrics binding at --metrics-url; nil = label cluster = the
-// cluster name (before D-025).
+// cluster name (without a binding).
 func metricsSelector(label, value string, extra []string) *health.MetricsSelector {
 	if label == "cluster" && value == "" && len(extra) == 0 {
 		return nil
@@ -78,7 +78,7 @@ func metricsSelector(label, value string, extra []string) *health.MetricsSelecto
 	return &health.MetricsSelector{Label: label, Value: value, Extra: extra}
 }
 
-// newSelfCheck starts the readiness self-checks (D-025): their results go with the next status
+// newSelfCheck starts the readiness self-checks: their results go with the next status
 // batch; the hub's recheck flag re-runs them.
 func newSelfCheck(mgr manager.Manager, hub *hubclient.Client, rep *controller.Reporter, puller *controller.Puller, cfg selfcheck.Config,
 	interval time.Duration, log *slog.Logger) (*selfcheck.Runner, error) {
@@ -205,11 +205,11 @@ func run(args []string) error {
 		cadvisorFallback = fs.Bool("health-cadvisor-fallback", false, "read throttling from the kubelets' cAdvisor (needs nodes/proxy) when --metrics-url fails")
 		minThrottleWin   = fs.Duration("health-min-throttling-window", 2*time.Minute, "time after a change before throttling is evaluated")
 
-		metricsLabel      = fs.String("metrics-cluster-label", "cluster", "label selecting this cluster's series at --metrics-url (its metrics binding, D-025); empty = none")
+		metricsLabel      = fs.String("metrics-cluster-label", "cluster", "label selecting this cluster's series at --metrics-url (its metrics binding); empty = none")
 		metricsLabelValue = fs.String("metrics-cluster-label-value", "", "value of --metrics-cluster-label (default: --cluster-name)")
 		metricsExtra      stringList
 
-		selfCheck         = fs.Bool("self-check", true, "run the readiness self-checks and report them to the hub (D-025)")
+		selfCheck         = fs.Bool("self-check", true, "run the readiness self-checks and report them to the hub")
 		selfCheckInterval = fs.Duration("self-check-interval", selfcheck.DefaultInterval, "how often the self-checks run (also at start and on the hub's recheck flag)")
 		webhookConfig     = fs.String("webhook-config-name", "", "MutatingWebhookConfiguration of the webhook (default: found by webhook name)")
 		webhookDryRun     = fs.Bool("self-check-webhook-dry-run", false, "dry-run create a pod to see the webhook mutate it (needs create pods)")
@@ -221,7 +221,7 @@ func run(args []string) error {
 		caStatus         = fs.String("cluster-autoscaler-status", capacity.DefaultCAStatus.String(), "namespace/name of the Cluster Autoscaler status ConfigMap; empty disables it")
 		poolLabels       stringList
 
-		configSync    = fs.Bool("config-sync", true, "pull the hub config: hub-managed policies, pause and approve-once (D-022)")
+		configSync    = fs.Bool("config-sync", true, "pull the hub config: hub-managed policies, pause and approve-once")
 		configStateCM = fs.String("config-state-configmap", "kerf-agent-config-state", "ConfigMap in $POD_NAMESPACE that persists the last hub config; empty disables persistence")
 	)
 	fs.Var(&metricsExtra, "metrics-extra-matcher", "extra PromQL label matcher for --metrics-url, e.g. env=\"prod\"; repeatable")
@@ -268,7 +268,7 @@ func run(args []string) error {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		// Pods are cached for the health watch: strip their managedFields. Never strip workloads':
-		// the agent reads its own field ownership from them (release, D-006).
+		// the agent reads its own field ownership from them (release).
 		Cache: cache.Options{ByObject: map[client.Object]cache.ByObject{
 			&corev1.Pod{}: {Transform: cache.TransformStripManagedFields()},
 		}},

@@ -31,7 +31,7 @@ type Node struct {
 }
 
 // Discovery lists nodes of every spoke from the hub's VictoriaMetrics (kube_node_labels and
-// kube_node_status_allocatable, see docs/contracts/metrics.md). It needs no kube credentials (D-004).
+// kube_node_status_allocatable, see docs/contracts/metrics.md). It needs no kube credentials.
 type Discovery struct {
 	// VMURL is the Prometheus-compatible query base URL, e.g. http://victoria-metrics.monitoring.svc:8428.
 	VMURL string
@@ -43,7 +43,7 @@ type Discovery struct {
 	// 0 = DefaultNodeLookback. Larger values keep backfilled (synthetic) nodes priced.
 	Lookback time.Duration
 	HTTP     *http.Client
-	// Targets lists clusters with a metrics binding (D-025); nil = only VMURL.
+	// Targets lists clusters with a metrics binding; nil = only VMURL.
 	Targets TargetLister
 	Log     *slog.Logger
 }
@@ -70,7 +70,7 @@ const DefaultNodeLookback = 10 * time.Minute
 // Nodes returns the nodes currently reported, sorted by cluster and name. Nodes with an unknown
 // capacity type are returned with an empty CapacityType so the caller can count them.
 //
-// Every cluster label value in VMURL is discovered as before D-025. Clusters with a metrics
+// Every cluster label value in VMURL is discovered as it was before metrics bindings. Clusters with a metrics
 // binding (Targets) are then read from their own datasource with their own matchers and
 // re-labelled to the registered cluster name; they replace whatever VMURL had for that name. A
 // failing target is logged and skipped.

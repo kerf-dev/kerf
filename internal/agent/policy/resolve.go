@@ -1,4 +1,4 @@
-// Package policy resolves the effective rightsizing policy of a workload (D-005, D-022):
+// Package policy resolves the effective rightsizing policy of a workload:
 //
 //	built-in defaults < hub ro-global-defaults < chart cluster defaults < hub ro-cluster-defaults
 //	  < winning RightsizingPolicy (highest priority match) < hub workload override < annotations
@@ -57,7 +57,7 @@ type Workload struct {
 // Effective is the resolved policy of one workload, with every default filled in.
 type Effective struct {
 	Policy string
-	// Override is the hub workload-override policy layered on top of Policy (D-022).
+	// Override is the hub workload-override policy layered on top of Policy.
 	Override         string
 	CPUMode          v1alpha1.Mode
 	CPUModeSource    v1alpha1.ModeSource

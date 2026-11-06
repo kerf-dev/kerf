@@ -1,5 +1,5 @@
 # Argo CD Application on ro-spoke-1 syncing the sample workloads from the in-cluster git server.
-# D-006: fields owned by field manager `kerf` are ignored for diffing (here and globally in
+# Fields owned by field manager `kerf` are ignored for diffing (here and globally in
 # argocd-cm) and RespectIgnoreDifferences=true keeps a sync from overwriting them. Releasing the
 # ownership (agent switches back from auto-patch) lets the next sync restore the Git values.
 apiVersion: argoproj.io/v1alpha1

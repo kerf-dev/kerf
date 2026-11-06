@@ -77,7 +77,7 @@ test.describe('smoke', () => {
     await expect(page).toHaveURL(/\/workloads\/[^/]+\/[^/]+\/[^/]+\/[^/]+$/)
     await expect(page.getByText('Why this recommendation')).toBeVisible()
     await expect(page.getByText('Recommended resources')).toBeVisible()
-    // D-016: confidence formula and pricing source
+    // Confidence formula and pricing source
     await expect(page.getByTestId('confidence-factors')).toContainText('Coverage')
     await expect(page.getByTestId('pricing')).toContainText(/core·h/)
     const usage = page.locator('[data-testid=chart] canvas').first()

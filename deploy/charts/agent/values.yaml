@@ -30,7 +30,7 @@ installCRDs: null
 hub:
   # Hub base URL. Spokes reach the hub through a selector-less Service.
   url: http://hub-api.hub.svc:8080
-  # Bearer token for the agent role of this cluster (D-012), read from a Secret key and
+  # Bearer token for the agent role of this cluster, read from a Secret key and
   # re-read on every request (rotation needs no restart). The Secret is optional: without it
   # the hub answers 401 and the agent behaves as offline (nothing new is applied).
   tokenSecret:
@@ -65,7 +65,7 @@ externalSecrets:
   refreshInterval: 1h
   secretStoreRef: {}        # e.g. {kind: ClusterSecretStore, name: aws-secrets-manager}
 
-# Cluster default policy (D-005): a RightsizingPolicy spec without selector/priority. Unset
+# Cluster default policy: a RightsizingPolicy spec without selector/priority. Unset
 # fields inherit the global defaults (mode audit, strategy in-place, profile production, ...).
 clusterDefaults: {}
 #  cpu:
@@ -98,7 +98,7 @@ freeze:
 # ClusterRole. Use it for clusters where every policy is audit.
 readOnly: false
 
-# Hub-managed configuration (D-022): on every pull the agent fetches the cluster config,
+# Hub-managed configuration: on every pull the agent fetches the cluster config,
 # makes the RightsizingPolicy CRs labelled kerf.getkerf.dev/managed-by=hub equal to the
 # hub's policies (never touching other CRs), applies the hub's pause flag like a cluster-wide
 # freeze and applies approve-once grants. The last config is kept in the ConfigMap
@@ -130,7 +130,7 @@ health:
   # Empty disables throttling-based rollback unless cadvisorFallback is on.
   metricsURL: http://victoria-metrics.hub.svc:8428
   minThrottlingWindow: 2m
-  # The cluster's metrics binding at metricsURL (D-025): label clusterLabel = clusterLabelValue
+  # The cluster's metrics binding at metricsURL: label clusterLabel = clusterLabelValue
   # (default: clusterName; clusterLabel "" = no cluster matcher) plus extra PromQL matchers such as
   # 'env="prod"'. The hub's install snippet fills these from the cluster's binding.
   clusterLabel: cluster
@@ -149,7 +149,7 @@ onDelete:
   maxPodDeletesPerRun: 1
   settle: 30s
 
-# Readiness self-checks (D-025): RBAC per capability, CRDs, in-place resize, webhook, Argo CD,
+# Readiness self-checks: RBAC per capability, CRDs, in-place resize, webhook, Argo CD,
 # nodes, clock skew. They run at start, every interval and when the hub asks for a re-check, and
 # are reported with the workload status.
 selfCheck:
@@ -163,7 +163,7 @@ selfCheck:
   docsBaseURL: ""
   argocd:
     # Read argocd-cm (only that ConfigMap, a Role in the Argo CD namespace) to check that Argo CD
-    # ignores the agent's fields (D-006). The Role is created only when the namespace exists at
+    # ignores the agent's fields. The Role is created only when the namespace exists at
     # install time (Helm lookup); set force: true when rendering without cluster access (e.g. Argo
     # CD renders the chart) and the namespace exists.
     enabled: true

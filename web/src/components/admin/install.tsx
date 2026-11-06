@@ -17,7 +17,7 @@ import { SwitchRow } from './policy-form'
 import { WriteDialog } from './write-dialog'
 
 /**
- * Install instructions in three flavours (D-025): the umbrella chart kerf in mode spoke
+ * Install instructions in three flavours: the umbrella chart kerf in mode spoke
  * (agent, webhook and CRDs). They reference the token Secret, never the token.
  */
 export function InstallSnippets({ cluster, compact }: { cluster: string; compact?: boolean }) {
@@ -84,7 +84,7 @@ export function InstallSnippets({ cluster, compact }: { cluster: string; compact
             <div className="mb-1 text-[13px] font-medium">Argo CD: ignore fields the optimizer owns</div>
             <p className="mb-2 text-xs text-muted-foreground">
               Add to <code className="font-mono">argocd-cm</code> so Argo CD does not revert the resized
-              requests (D-006).
+              requests.
             </p>
             <CodeBlock code={q.data.argocdIgnoreDifferences} maxHeight={160} />
           </div>

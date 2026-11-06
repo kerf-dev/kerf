@@ -200,7 +200,7 @@ func TestDriftRepairAcrossIDs(t *testing.T) {
 				}
 			}
 
-			// Later runs with the same values: no event spam (D-017).
+			// Later runs with the same values: no event spam.
 			if run.same && run.newID {
 				r3 := r2
 				r3.ID = fmt.Sprintf("3c000000-0000-4000-8000-%012d", i)
@@ -314,7 +314,7 @@ func TestRollbackAcrossIDs(t *testing.T) {
 	}
 }
 
-// TestApprovedAcrossIDs (D-027): after an approve-once rollout the hold stays for the
+// TestApprovedAcrossIDs: after an approve-once rollout the hold stays for the
 // same id, a new id with the same values or within the tolerance, and ends for different values.
 func TestApprovedAcrossIDs(t *testing.T) {
 	needEnv(t)

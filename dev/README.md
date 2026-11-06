@@ -1,6 +1,6 @@
 # Local dev environment (k3d)
 
-Three k3s v1.35 clusters on one Docker network (`ro-dev`) that stand in for the EKS fleet (D-010):
+Three k3s v1.35 clusters on one Docker network (`ro-dev`) that stand in for the EKS fleet:
 
 | Cluster | Role | Runs |
 |---|---|---|
@@ -60,7 +60,7 @@ pass `--context`. The WO verification also works through a port-forward:
 Every spoke has a namespace `hub` with selector-less Services (`victoria-metrics`, `hub-api`) whose
 EndpointSlices point at the hub node's IP on `ro-dev` (k3d keeps node IPs stable across restarts;
 `make dev-up` refreshes them). Spoke components use these stable names the way they would use a real
-hub endpoint in EKS. Spoke → hub only; the hub never talks to the spokes' API servers (D-004).
+hub endpoint in EKS. Spoke → hub only; the hub never talks to the spokes' API servers.
 
 ## Metrics
 
@@ -97,7 +97,7 @@ VictoriaMetrics (Prometheus type, uid `victoriametrics`) as the default datasour
 
 ## Argo CD and the git server (spoke-1)
 
-Argo CD is installed without dex, notifications or the ApplicationSet controller. Per D-006 it ignores
+Argo CD is installed without dex, notifications or the ApplicationSet controller. It ignores
 fields owned by field manager `kerf`, globally (`resource.customizations.ignoreDifferences.all`
 in `argocd-cm`) and on the Application `argocd/workloads` (`ignoreDifferences.managedFieldsManagers`
 plus `RespectIgnoreDifferences=true`, automated sync with prune and self-heal, 60 s reconciliation).

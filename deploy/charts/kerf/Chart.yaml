@@ -1,6 +1,6 @@
 apiVersion: v2
 name: kerf
-# One chart for every cluster (D-028): global.mode hub installs the hub, web UI and pricing
+# One chart for every cluster: global.mode hub installs the hub, web UI and pricing
 # service; spoke installs the agent, admission webhook and CRDs on a workload cluster; all installs
 # everything in one cluster.
 description: >-

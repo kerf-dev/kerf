@@ -1,5 +1,5 @@
 /**
- * Cluster readiness for the mock API (D-025, docs/contracts/readiness.md). The catalog mirrors
+ * Cluster readiness for the mock API (docs/contracts/readiness.md). The catalog mirrors
  * `api/v1alpha1/readiness` (ids, category, severity, source, gates, title) in catalog order.
  */
 import type { components } from '@/api/schema'

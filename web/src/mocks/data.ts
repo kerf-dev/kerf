@@ -557,7 +557,7 @@ function buildWorkload(
               ] as const) * (ci === 1 ? 0.75 : 1),
             ) || 1
 
-  // Modes (D-005 precedence: global < cluster < policy < annotation).
+  // Modes (precedence: global < cluster < policy < annotation).
   const pol = POLICIES[ns]
   let modes: EffectiveModes = {
     cpu: 'audit',
@@ -611,7 +611,7 @@ function buildWorkload(
     if (hpa) {
       phase = 'Blocked'
       reason = 'HPACoupled'
-      message = 'CPU-utilization HPA targets this workload; recommendations stay audit-only (D-011).'
+      message = 'CPU-utilization HPA targets this workload; recommendations stay audit-only.'
     } else {
       phase = weighted(r, [
         ['Applied', 70],
@@ -716,7 +716,7 @@ function buildWorkload(
   const coverage = ageDays >= 14 ? between(r, 0.88, 1) : Math.min(1, ageDays / 14) * between(r, 0.85, 1)
   const windowSec = 336 * 3600
   const coveredSec = Math.round(Math.min(windowSec, ageDays * 86400) * coverage)
-  // D-016: per-container confidence = Σ score × weight; the workload's is the minimum over containers.
+  // Per-container confidence = Σ score × weight; the workload's is the minimum over containers.
   const samplesScore = round2(Math.min(1, coveredSec / (7 * 86400)) * (shortLived ? between(r, 0.4, 0.6) : 1))
   for (const c of containers) {
     const variance = round2(
@@ -868,7 +868,7 @@ function buildEvents(w: WorkloadModel, now: number): AuditEvent[] {
   const recAt = (i: number) => w.history[Math.min(i, w.history.length - 1)]
   if (!w.hasRecommendation) return out
 
-  // audit / off: D-017 — one "skipped" per (workload, type, reason), when the agent first saw it.
+  // audit / off: one "skipped" per (workload, type, reason), when the agent first saw it.
   const notAuto = (['cpu', 'memory'] as const).filter((res) => w.modes[res] !== 'auto-patch')
   if (notAuto.length) {
     const first = recAt(w.history.length - 1)!
@@ -932,7 +932,7 @@ function buildEvents(w: WorkloadModel, now: number): AuditEvent[] {
       })
     }
     // later runs too close to the live values
-    // (D-017: once, not per run)
+    // (once, not per run)
     const later = [...w.history].reverse().find((h) => Date.parse(h.generatedAt) > t)
     if (later && r() < 0.6) {
       ev('skipped', Date.parse(later.generatedAt) + 60_000, 'NoSignificantChange', {

@@ -273,7 +273,7 @@ export const useNotificationDeliveries = (filter: {
   })
 
 /**
- * Clusters whose policies come only from Git (`policySource: git`, D-022): the hub sends them no
+ * Clusters whose policies come only from Git (`policySource: git`): the hub sends them no
  * policies, so policy edits (defaults, policies, overrides) do not reach them and are shown read-only.
  */
 export function useGitOnlyClusters() {

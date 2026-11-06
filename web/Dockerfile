@@ -2,7 +2,7 @@
 # Web UI: static SPA served by nginx, /v1/ proxied to the hub (the browser's session cookie only).
 # Build context: web/  (docker build -t kerf/web:dev web/)
 #
-# Multi-arch (D-028): the Node stage runs on the build host (its output is plain JS/CSS), and the
+# Multi-arch: the Node stage runs on the build host (its output is plain JS/CSS), and the
 # runtime stage has no RUN step, so `--platform linux/amd64,linux/arm64` needs no emulation.
 #
 # Runtime contract (for the chart):

@@ -4,7 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Mode controls what Kerf does for one resource (CPU or memory) of a workload (D-005).
+// Mode controls what Kerf does for one resource (CPU or memory) of a workload.
 // +kubebuilder:validation:Enum=off;audit;auto-patch
 type Mode string
 
@@ -16,11 +16,11 @@ const (
 	// ModeAutoPatch: the agent applies recommendations, subject to guardrails.
 	ModeAutoPatch Mode = "auto-patch"
 
-	// DefaultMode is the global default mode (lowest precedence, D-005).
+	// DefaultMode is the global default mode (lowest precedence).
 	DefaultMode = ModeAudit
 )
 
-// ModeSource says which precedence level produced an effective mode (D-005).
+// ModeSource says which precedence level produced an effective mode.
 // +kubebuilder:validation:Enum=global-default;cluster-default;policy;annotation
 type ModeSource string
 
@@ -31,7 +31,7 @@ const (
 	ModeSourceAnnotation     ModeSource = "annotation"
 )
 
-// Strategy is how a change is applied to a workload (D-007).
+// Strategy is how a change is applied to a workload.
 // +kubebuilder:validation:Enum=in-place;rollout;deferred
 type Strategy string
 

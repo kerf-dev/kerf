@@ -1,4 +1,4 @@
-// Package datasource is the registry of Prometheus-compatible metrics datasources (D-025): their
+// Package datasource is the registry of Prometheus-compatible metrics datasources: their
 // settings, encrypted secrets, HTTP clients with auth (bearer, basic, SigV4, mTLS, headers), the
 // reachability test, and the per-cluster metrics binding (Matcher). docs/contracts/readiness.md §1.
 package datasource

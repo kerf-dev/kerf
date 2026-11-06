@@ -20,7 +20,7 @@ data:
 {{- $ca := include "agent.caEnabled" . }}
 {{- if $tokenES }}
 ---
-# Hub token of this cluster's agent (D-012), re-read on every request: a rotation needs no restart.
+# Hub token of this cluster's agent, re-read on every request: a rotation needs no restart.
 {{ include "agent.c.externalSecret" (dict "ctx" . "name" .Values.hub.tokenSecret.name "es" .Values.hub.tokenSecret.externalSecret "data" (list (dict "secretKey" .Values.hub.tokenSecret.key))) }}
 {{- end }}
 {{- with .Values.hub.caBundle }}

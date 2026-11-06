@@ -50,7 +50,7 @@ const (
 // Config configures the reconciler.
 type Config struct {
 	ClusterName string
-	// ClusterDefaults is the cluster default level of policy resolution (D-005).
+	// ClusterDefaults is the cluster default level of policy resolution.
 	ClusterDefaults *v1alpha1.RightsizingPolicySpec
 	// ReadOnly caps every mode at audit; the agent then never writes workloads or pods.
 	ReadOnly bool
@@ -80,12 +80,12 @@ type Reconciler struct {
 	Recorder events.EventRecorder
 	Log      *slog.Logger
 	Now      func() time.Time
-	// Admin is the hub-managed configuration (pause flag, approve-once grants; D-022, D-024);
+	// Admin is the hub-managed configuration (pause flag, approve-once grants);
 	// nil means none.
 	Admin AdminState
 
 	mu sync.Mutex
-	// last holds, per workload and dedup slot, the signature of the last event emitted there (D-017).
+	// last holds, per workload and dedup slot, the signature of the last event emitted there.
 	last map[string]signature
 }
 
@@ -167,14 +167,14 @@ type run struct {
 	holdEffective bool
 	// note is appended to the Applied condition message (OnDelete roll progress).
 	note string
-	// paused: automation is paused in the hub config (D-022); frozen is set too.
+	// paused: automation is paused in the hub config; frozen is set too.
 	paused     bool
 	pauseScope string
 	pauseMsg   string
-	// approval is the approve-once grant being applied (D-024); nil otherwise.
+	// approval is the approve-once grant being applied; nil otherwise.
 	approval *hubclient.ConfigApproval
 	// approvedApply: this reconcile applied an approval (the Applied condition then says
-	// ApprovedOnce, which keeps the field ownership after it, D-027).
+	// ApprovedOnce, which keeps the field ownership after it).
 	approvedApply bool
 	// adopted: this reconcile adopted a new recommendation id with the applied values.
 	adopted bool
@@ -248,7 +248,7 @@ func (w *run) reconcile() (ctrl.Result, error) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Release (D-006)
+// Release
 
 func autoSet(e policy.Effective) map[corev1.ResourceName]bool {
 	out := map[corev1.ResourceName]bool{}
@@ -491,7 +491,7 @@ func (w *run) decide() (ctrl.Result, error) {
 			if c := meta.FindStatusCondition(w.prev.Conditions, v1alpha1.ConditionBlocked); c != nil &&
 				c.Status == metav1.ConditionFalse && c.Reason == v1alpha1.ReasonNoSignificantChange {
 				// Adopted (below): the skip stays the latest decision, so a restarted agent does
-				// not report it again (D-017).
+				// not report it again.
 				w.reason, w.message = c.Reason, c.Message
 			}
 			w.consumeLive()
@@ -506,7 +506,7 @@ func (w *run) decide() (ctrl.Result, error) {
 				return w.keepLive()
 			}
 			if dec.Outcome == guardrails.Skipped && dec.Reason == v1alpha1.ReasonNoSignificantChange {
-				// Reported once, as before (D-017): the new recommendation changes nothing.
+				// Reported once, as before: the new recommendation changes nothing.
 				w.reason, w.message = dec.Reason, dec.Message
 				w.emit(hubclient.Event{Type: hubclient.EventSkipped, Reason: dec.Reason, Message: dec.Message,
 					RecommendationID: w.rec.ID}, slotDecision, recValues(w.rec))
@@ -740,7 +740,7 @@ func (w *run) adoptable(dec guardrails.Decision, auto map[corev1.ResourceName]bo
 
 // adopt records the current recommendation as the applied one (spec source and
 // status.appliedRecommendationID) while its values stay the live ones: no applied event, the
-// cooldown keeps counting from the last change, and an approve-once hold stays (D-027). The
+// cooldown keeps counting from the last change, and an approve-once hold stays. The
 // status is written at the end of the reconcile.
 func (w *run) adopt() error {
 	prevID := w.rsr.Status.AppliedRecommendationID
@@ -889,7 +889,7 @@ func (w *run) applyRollout(targets []v1alpha1.ContainerRecommendation, previous 
 }
 
 // ---------------------------------------------------------------------------------------------
-// In-place (D-007)
+// In-place
 
 func (w *run) nodesSupportInPlace(pods []corev1.Pod, memoryChange bool) (bool, string) {
 	seen := map[string]bool{}
@@ -1030,7 +1030,7 @@ func (w *run) progressInPlace() (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
-// fallback switches an in-place change to rollout (D-007) and applies it to the template.
+// fallback switches an in-place change to rollout and applies it to the template.
 func (w *run) fallback(reason, msg, resizeStatus string) (ctrl.Result, error) {
 	recID := w.rsr.Spec.Source.RecommendationID
 	if why, err := w.fallbackUnsafe(); err != nil {
@@ -1278,7 +1278,7 @@ func (w *run) writeStatus() error {
 		}
 		appliedReason := v1alpha1.ReasonRecommendationApplied
 		if w.approvedApply || (approvedLive(w.prev) && (st.AppliedRecommendationID == w.prev.AppliedRecommendationID || w.adopted)) {
-			// Remembered across restarts: the approved values keep their field ownership (D-027).
+			// Remembered across restarts: the approved values keep their field ownership.
 			appliedReason = v1alpha1.ReasonApprovedOnce
 			applied += " (approved once)"
 		}
@@ -1293,7 +1293,7 @@ func (w *run) writeStatus() error {
 		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionTrue, reason, message)
 	case st.Phase == v1alpha1.PhaseApplied && isSkipReason(reason):
 		// Values are live and a newer recommendation was skipped: keep the reason here (the
-		// Applied condition stays True), so a restarted agent knows it reported it (D-017).
+		// Applied condition stays True), so a restarted agent knows it reported it.
 		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionFalse, reason, message)
 	default:
 		setCond(st, v1alpha1.ConditionBlocked, metav1.ConditionFalse, condReasonNotBlocked, "")
@@ -1419,7 +1419,7 @@ func (r *Reconciler) tolerance() float64 {
 
 // emit sends an event to the hub buffer and records it as a Kubernetes Event on the RSR.
 //
-// With a non-empty slot the event is de-duplicated (D-017): it is emitted only when its type,
+// With a non-empty slot the event is de-duplicated: it is emitted only when its type,
 // reason or resources differ from the last event emitted in that slot for the workload, or the
 // hub's recommended values moved by more than the tolerance. A new recommendation id alone does
 // not re-emit. An applied, rolled_back or released event resets the workload's slots.
@@ -1430,7 +1430,7 @@ func (w *run) emit(e hubclient.Event, slot string, values []v1alpha1.ContainerRe
 		e.Details = withDetail(e.Details, hubclient.DetailPauseScope, w.pauseScope)
 	}
 	if a := w.approval; a != nil && e.Type == hubclient.EventApplied && e.Reason == v1alpha1.ReasonRecommendationApplied {
-		// Approve once (D-024): the hub marks the approval consumed when it stores this event.
+		// Approve once: the hub marks the approval consumed when it stores this event.
 		e.Reason = v1alpha1.ReasonApprovedOnce
 		e.Details = withDetail(withDetail(e.Details, hubclient.DetailApprovalID, a.ID), hubclient.DetailApprovedBy, a.ApprovedBy)
 		e.Message = "approved once by " + a.ApprovedBy + ": " + e.Message
@@ -1468,7 +1468,7 @@ func (w *run) emit(e hubclient.Event, slot string, values []v1alpha1.ContainerRe
 }
 
 // policyDigest identifies the effective policy: editing it (e.g. turning HPA coordination on)
-// re-reports the current skip/block once, with the new reasoning (D-017).
+// re-reports the current skip/block once, with the new reasoning.
 func (w *run) policyDigest() string {
 	e := w.base
 	e.Warnings = nil
@@ -1670,7 +1670,7 @@ func pauseMessage(f hubclient.ConfigFlags) string {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Approve once (D-024)
+// Approve once
 
 // approve applies an approve-once grant for the workload's current recommendation: its audit
 // resources count as auto-patch for this one change, with every guardrail. The grant is
@@ -1708,7 +1708,7 @@ func (w *run) approve() {
 // consumeLive consumes the approval of a recommendation that advises the live values (the
 // applied one, or one adopted with the applied values): nothing changes, and the
 // applied/ApprovedOnce event names the recommendation so the hub marks the approval consumed. The
-// Applied condition then says ApprovedOnce (D-027). Without it the approval stayed pending after
+// Applied condition then says ApprovedOnce. Without it the approval stayed pending after
 // a recommender run had superseded the approval the agent applied.
 func (w *run) consumeLive() {
 	if w.approval == nil {
@@ -1719,7 +1719,7 @@ func (w *run) consumeLive() {
 		RecommendationID: w.rec.ID, Strategy: string(w.rsr.Spec.Strategy), Message: w.message}, "", nil)
 }
 
-// approvedLive reports whether the live values come from an approve-once apply (D-024).
+// approvedLive reports whether the live values come from an approve-once apply.
 func approvedLive(st v1alpha1.RightsizingRecommendationStatus) bool {
 	if st.Phase != v1alpha1.PhaseApplied {
 		return false
@@ -1729,7 +1729,7 @@ func approvedLive(st v1alpha1.RightsizingRecommendationStatus) bool {
 }
 
 // approvedHold returns the owned template resources the agent keeps after an approve-once apply
-// although they are in audit (D-027): Argo CD's ignoreDifferences on the Kerf field
+// although they are in audit: Argo CD's ignoreDifferences on the Kerf field
 // manager then keeps self-heal from reverting the approved values. The hold ends for a resource
 // set to off, and for all of them when the health watch rolled the change back or a newer
 // recommendation recommends different values (a new recommendation id with the same values

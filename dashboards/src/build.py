@@ -4,7 +4,7 @@
 The JSON files in dashboards/ are build output: edit this file, then run `make dashboards`.
 `make dashboards-verify` fails when the JSON is out of date.
 
-Every query is plain PromQL (D-003) over the series in docs/contracts/metrics.md.
+Every query is plain PromQL over the series in docs/contracts/metrics.md.
 Conventions used throughout:
   * Hub series carry scrape labels (instance, kubernetes_pod). During a hub rollout old and new
     pods export the same series for a few minutes, so every hub gauge is first reduced with
@@ -668,7 +668,7 @@ def overview():
         "count(" + dedup("kerf_workload_mode", WL, *sel, 'resource="' + res + '"', 'mode="' + m + '"') + " == 1)"))
     mode_panel = base_panel(
         "barchart", "Workloads per mode",
-        "Effective mode per resource (D-005: global default audit < cluster default < policy < annotation).",
+        "Effective mode per resource (global default audit < cluster default < policy < annotation).",
         [target(mode_expr("cpu"), "{{mode}}", "A", instant=True, fmt="table"),
          target(mode_expr("memory"), "{{mode}}", "B", instant=True, fmt="table")],
         decimals=0, color={"mode": "palette-classic"},
@@ -686,7 +686,7 @@ def overview():
     g.add(8, 8, bargauge(
         "Workloads per risk flag",
         "How many workloads carry each risk flag. throttled / oom-killed: never decreased; hpa-coupled: audit "
-        "only (D-011); low-confidence: confidence < 0.5.",
+        "only; low-confidence: confidence < 0.5.",
         targets({"expr": zero_filled(FLAGS, "flag", lambda f: (
             "count(" + dedup("kerf_recommendation_risk_flag", WL, *sel, 'flag="' + f + '"') + ")")),
             "legend": "{{flag}}", "instant": True}),
@@ -1204,7 +1204,7 @@ def automation():
     g.add(10, 8, table(
         "Modes and where they come from",
         "Workloads per effective mode and the level that set it (global-default < cluster-default < policy < "
-        "annotation, D-005).",
+        "annotation).",
         [target("count by (resource, mode, source) (" + dedup("kerf_workload_mode", WL + ", resource, mode, source", *sel)
                 + " == 1)", "", "A", instant=True, fmt="table")],
         columns=[("resource", "Resource"), ("mode", "Mode", [("mappings", [{"type": "value", "options": {

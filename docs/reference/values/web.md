@@ -69,7 +69,7 @@ The values of the `web` component chart. In the `kerf` chart they sit under `web
 | `service.port` | integer | `80` |  |
 | `service.nodePort` | object | `null` | e.g. 30090 with type NodePort |
 | `service.annotations` | object | `{}` |  |
-| `ingress` | object | see the keys below | The UI for browsers. AWS Load Balancer Controller example (: scheme of your choice, ACM):<br>`className: alb`<br>`annotations:`<br>`alb.ingress.kubernetes.io/scheme: internal          # or internet-facing`<br>`alb.ingress.kubernetes.io/target-type: ip`<br>`alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'`<br>`alb.ingress.kubernetes.io/ssl-redirect: "443"`<br>`alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account>:certificate/<id>`<br>`alb.ingress.kubernetes.io/healthcheck-path: /healthz`<br>`hosts: [{host: ro.example.com, paths: [{path: /, pathType: Prefix}]}]`<br>`tls: [{hosts: [ro.example.com]}]` |
+| `ingress` | object | see the keys below | The UI for browsers. AWS Load Balancer Controller example (scheme of your choice, ACM):<br>`className: alb`<br>`annotations:`<br>`alb.ingress.kubernetes.io/scheme: internal          # or internet-facing`<br>`alb.ingress.kubernetes.io/target-type: ip`<br>`alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'`<br>`alb.ingress.kubernetes.io/ssl-redirect: "443"`<br>`alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:<region>:<account>:certificate/<id>`<br>`alb.ingress.kubernetes.io/healthcheck-path: /healthz`<br>`hosts: [{host: ro.example.com, paths: [{path: /, pathType: Prefix}]}]`<br>`tls: [{hosts: [ro.example.com]}]` |
 | `ingress.enabled` | boolean | `false` |  |
 | `ingress.className` | string | `""` |  |
 | `ingress.annotations` | object | `{}` |  |

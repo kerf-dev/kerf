@@ -47,7 +47,7 @@ var schemaTypes = map[string]any{
 	"CapacityPDB":              CapacityPDB{},
 	"CapacityPod":              CapacityPod{},
 
-	// Admin area (D-022/D-024).
+	// Admin area.
 	"ClusterConfig":       ClusterConfig{},
 	"ConfigPolicy":        ConfigPolicy{},
 	"ConfigFlags":         ConfigFlags{},
@@ -152,7 +152,7 @@ type WorkloadRecommendation struct {
 	RiskFlags         []string                  `json:"riskFlags"`
 	MonthlySavingsUSD Savings                   `json:"monthlySavingsUSD"`
 	DataCoverage      DataCoverage              `json:"dataCoverage"`
-	// Pricing are the rates behind MonthlySavingsUSD (D-016); informational, unused by the agent.
+	// Pricing are the rates behind MonthlySavingsUSD; informational, unused by the agent.
 	Pricing *RecommendationPricing `json:"pricing,omitempty"`
 	// HPA is the HPA coordination of hpa-coupled workloads.
 	HPA *HPACoordination `json:"hpa,omitempty"`
@@ -172,7 +172,7 @@ type HPACoordination struct {
 	SkipReason        string `json:"skipReason,omitempty"`
 }
 
-// RecommendationPricing are the hourly rates the hub used for savings (D-016).
+// RecommendationPricing are the hourly rates the hub used for savings.
 type RecommendationPricing struct {
 	Source           string  `json:"source"`
 	CPUCoreHourUSD   float64 `json:"cpuCoreHourUSD"`
@@ -213,7 +213,7 @@ type EffectiveModes struct {
 type WorkloadStatus struct {
 	Workload WorkloadRef `json:"workload"`
 	Policy   string      `json:"policy,omitempty"`
-	// Override is the hub workload-override policy layered on top of Policy (D-022).
+	// Override is the hub workload-override policy layered on top of Policy.
 	Override         string               `json:"override,omitempty"`
 	Modes            EffectiveModes       `json:"modes"`
 	Strategy         string               `json:"strategy,omitempty"`
@@ -248,12 +248,12 @@ type JVMContainer struct {
 type WorkloadStatusBatch struct {
 	AgentVersion string           `json:"agentVersion,omitempty"`
 	Items        []WorkloadStatus `json:"items"`
-	// ConfigVersion is the ClusterConfig.configVersion the agent last materialised (D-022).
+	// ConfigVersion is the ClusterConfig.configVersion the agent last materialised.
 	ConfigVersion string `json:"configVersion,omitempty"`
 	// PolicyInventory: nil = unchanged since the last report (omitted); non-nil, even empty =
 	// the complete inventory. Send it with full batches.
 	PolicyInventory []PolicyInventoryItem `json:"policyInventory,omitempty"`
-	// Capabilities and Checks are the self-checks (D-025): nil = unchanged (omitted); non-nil =
+	// Capabilities and Checks are the self-checks: nil = unchanged (omitted); non-nil =
 	// the complete set. Send them at start, every 10 minutes and after a recheck.
 	Capabilities []AgentCapability `json:"capabilities,omitempty"`
 	Checks       []ReadinessCheck  `json:"checks,omitempty"`
@@ -345,7 +345,7 @@ type ClusterConfig struct {
 	Policies      []ConfigPolicy   `json:"policies"`
 	Flags         ConfigFlags      `json:"flags"`
 	Approvals     []ConfigApproval `json:"approvals"`
-	// HubVersion and MinAgentVersion feed the agent.version self-check (D-025).
+	// HubVersion and MinAgentVersion feed the agent.version self-check.
 	HubVersion      string `json:"hubVersion,omitempty"`
 	MinAgentVersion string `json:"minAgentVersion,omitempty"`
 }
@@ -372,12 +372,12 @@ type ConfigFlags struct {
 	PauseReason string     `json:"pauseReason,omitempty"`
 	PausedAt    *time.Time `json:"pausedAt,omitempty"`
 	ResumeAt    *time.Time `json:"resumeAt,omitempty"`
-	// Recheck: re-run the self-checks if RecheckRequestedAt is newer than the last run (D-025).
+	// Recheck: re-run the self-checks if RecheckRequestedAt is newer than the last run.
 	Recheck            bool       `json:"recheck,omitempty"`
 	RecheckRequestedAt *time.Time `json:"recheckRequestedAt,omitempty"`
 }
 
-// ConfigApproval is an approve-once grant (D-024): apply RecommendationID of Workload once, as if
+// ConfigApproval is an approve-once grant: apply RecommendationID of Workload once, as if
 // its audit resources were auto-patch, with all guardrails, if it is still the latest
 // recommendation and ExpiresAt has not passed; then emit applied/ApprovedOnce with
 // details approvalId and approvedBy.
@@ -425,7 +425,7 @@ const (
 	DetailPauseScope = "pauseScope"
 )
 
-// ReadinessCheck is one self-check result (D-025, docs/contracts/readiness.md). Fill ID, Category,
+// ReadinessCheck is one self-check result (docs/contracts/readiness.md). Fill ID, Category,
 // Severity, Source ("agent") and Gates from the catalog in api/v1alpha1/readiness.
 type ReadinessCheck struct {
 	ID              string            `json:"id"`

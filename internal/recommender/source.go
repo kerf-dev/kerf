@@ -77,8 +77,8 @@ type Source struct {
 	Cfg Config
 	// Concurrency bounds parallel queries per cluster.
 	Concurrency int
-	// Binder returns where a cluster's metrics are (D-025): its datasource and the matcher of its
-	// series. nil, or a nil matcher, = Q with label cluster (the queries before D-025). Pricing
+	// Binder returns where a cluster's metrics are: its datasource and the matcher of its
+	// series. nil, or a nil matcher, = Q with label cluster (the queries without a binding). Pricing
 	// series are always read from Q (the hub's own store).
 	Binder func(ctx context.Context, cluster string) (Querier, *datasource.Matcher, error)
 }

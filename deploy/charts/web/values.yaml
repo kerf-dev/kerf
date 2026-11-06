@@ -110,7 +110,7 @@ service:
   nodePort: null        # e.g. 30090 with type NodePort
   annotations: {}
 
-# The UI for browsers. AWS Load Balancer Controller example (D-028: scheme of your choice, ACM):
+# The UI for browsers. AWS Load Balancer Controller example (scheme of your choice, ACM):
 #   className: alb
 #   annotations:
 #     alb.ingress.kubernetes.io/scheme: internal          # or internet-facing

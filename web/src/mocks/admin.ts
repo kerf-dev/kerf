@@ -431,7 +431,7 @@ function targetClusters(st: AdminState, clusters: string[] | undefined) {
 }
 
 /**
- * D-025 gating: auto-patch only on AutomationReady clusters, unless an admin sends
+ * Readiness gating: auto-patch only on AutomationReady clusters, unless an admin sends
  * overrideReadiness. An operator sending the flag gets 403 admin_required.
  */
 function readinessGate(ctx: Ctx, clusters: string[], spec: Spec | undefined, overrideReadiness?: boolean) {

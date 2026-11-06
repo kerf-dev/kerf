@@ -1,4 +1,4 @@
-# Release (D-028): multi-arch images and OCI Helm charts for a registry such as ECR.
+# Release: multi-arch images and OCI Helm charts for a registry such as ECR.
 # Included by the root Makefile. Guide: docs/release.md.
 #
 #   make release       REGISTRY=<acct>.dkr.ecr.<region>.amazonaws.com/kerf VERSION=0.1.0

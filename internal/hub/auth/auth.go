@@ -1,4 +1,4 @@
-// Package auth holds the building blocks of the hub's local users and browser sessions (D-023):
+// Package auth holds the building blocks of the hub's local users and browser sessions:
 // bcrypt password hashing, random session/CSRF/API tokens, login rate limiting and lockout, and
 // the session cookie. It has no database or HTTP routing code; internal/hub wires it.
 package auth

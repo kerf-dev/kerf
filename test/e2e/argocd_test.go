@@ -80,7 +80,7 @@ func gitWrite(t *testing.T, ns string, files map[string][]byte, msg string) {
 
 var applicationGVK = schema.GroupVersionKind{Group: "argoproj.io", Version: "v1alpha1", Kind: "Application"}
 
-// argoApp creates an Application syncing e2e/<ns>/ into ns with the D-006 settings (same as the
+// argoApp creates an Application syncing e2e/<ns>/ into ns with the ignoreDifferences settings (same as the
 // main `workloads` Application: ignore fields of field manager kerf, respect the
 // ignored differences on sync, automated sync with self-heal). Deleted (cascading) at the end.
 func argoApp(t *testing.T, cl cluster, ns string) string {

@@ -23,7 +23,7 @@ func (h *batchHub) ReportEvents(context.Context, []hubclient.Event) (hubclient.B
 }
 
 // TestReporterSelfChecks: a self-check run goes with the next batch (even without changed
-// statuses), then only with full batches (D-025).
+// statuses), then only with full batches.
 func TestReporterSelfChecks(t *testing.T) {
 	h := &batchHub{}
 	rep := NewReporter(h, "test", 10, nil)

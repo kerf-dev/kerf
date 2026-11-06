@@ -2,7 +2,7 @@
 
 `synth` generates realistic cAdvisor and kube-state-metrics history for fake clusters, so the hub,
 recommender, dashboards and UI can be built and demoed against weeks of data that would otherwise
-take weeks to collect (D-010). The series have the same names and labels as the real stack
+take weeks to collect. The series have the same names and labels as the real stack
 (`docs/contracts/metrics.md`), so consumers can't tell the difference: workloads are reached through
 the KSM owner chain, never through a label on cAdvisor series.
 
