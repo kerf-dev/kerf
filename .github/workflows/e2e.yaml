@@ -48,12 +48,37 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install k3d, kubectl, helm
+        # Versions match dev/README.md and the quickstart workflow. Each tool is downloaded to a file first
+        # (curl -f fails the step on a 404) and checked against a SHA-256 before it is installed.
+        env:
+          K3D_VERSION: v5.9.0
+          K3D_SHA256: 06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0
+          KUBECTL_VERSION: v1.35.4
+          HELM_VERSION: v4.3.1
         run: |
-          curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/v5.9.1/install.sh | TAG=v5.9.1 bash
-          curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.35.4/bin/linux/amd64/kubectl
-          chmod +x /usr/local/bin/kubectl
-          curl -fsSL https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz | tar -xz -C /tmp
-          sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
+          set -euo pipefail
+          dl="$RUNNER_TEMP/tools"
+          mkdir -p "$dl"
+
+          curl -fsSL --retry 3 -o "$dl/k3d" "https://github.com/k3d-io/k3d/releases/download/$K3D_VERSION/k3d-linux-amd64"
+          echo "$K3D_SHA256  $dl/k3d" | sha256sum --check --strict -
+          sudo install -m 0755 "$dl/k3d" /usr/local/bin/k3d
+
+          curl -fsSL --retry 3 -o "$dl/kubectl" "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/amd64/kubectl"
+          curl -fsSL --retry 3 -o "$dl/kubectl.sha256" "https://dl.k8s.io/release/$KUBECTL_VERSION/bin/linux/amd64/kubectl.sha256"
+          echo "$(cat "$dl/kubectl.sha256")  $dl/kubectl" | sha256sum --check --strict -
+          sudo install -m 0755 "$dl/kubectl" /usr/local/bin/kubectl
+
+          helm_tgz="helm-$HELM_VERSION-linux-amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$dl/$helm_tgz" "https://get.helm.sh/$helm_tgz"
+          curl -fsSL --retry 3 -o "$dl/$helm_tgz.sha256sum" "https://get.helm.sh/$helm_tgz.sha256sum"
+          (cd "$dl" && sha256sum --check --strict "$helm_tgz.sha256sum")
+          tar -xzf "$dl/$helm_tgz" -C "$dl"
+          sudo install -m 0755 "$dl/linux-amd64/helm" /usr/local/bin/helm
+
+          k3d version
+          kubectl version --client
+          helm version
       - name: Create clusters
         run: make dev-up
       - name: Deploy hub, pricing, agents
