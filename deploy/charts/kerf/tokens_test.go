@@ -1,6 +1,7 @@
 package umbrella
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"slices"
@@ -111,7 +112,7 @@ func TestTokenSources(t *testing.T) {
 			out, err := exec.Command(helm, args...).Output()
 			if err != nil {
 				var stderr string
-				if ee, ok := err.(*exec.ExitError); ok {
+				if ee := (*exec.ExitError)(nil); errors.As(err, &ee) {
 					stderr = string(ee.Stderr)
 				}
 				t.Fatalf("helm template: %v\n%s", err, stderr)

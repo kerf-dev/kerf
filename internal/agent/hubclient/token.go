@@ -1,7 +1,6 @@
 package hubclient
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -68,10 +67,10 @@ func (r *RequiredToken) logOnce(err error) {
 	}
 	var missing *MissingTokenError
 	if errors.As(err, &missing) {
-		r.log.LogAttrs(context.Background(), slog.LevelError, err.Error())
+		r.log.Error(err.Error())
 		return
 	}
-	r.log.LogAttrs(context.Background(), slog.LevelError, "hub token unreadable", slog.String("source", r.source), slog.Any("err", err))
+	r.log.Error("hub token unreadable", "source", r.source, "err", err)
 }
 
 // Check is a readiness check (controller-runtime healthz.Checker): an error while the token is missing.
