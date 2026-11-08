@@ -19,20 +19,6 @@ section here. The GitHub Release lists the same section as its highlights, follo
   also re-runs the hub's readiness checks, and every failing metrics check's remediation says how to re-check, so a
   fix no longer waits for the hourly check interval.
 
-### Fixed
-
-- **`metrics.node-labels` judges each node by its newest `kube_node_labels` series.** After a kube-state-metrics
-  allowlist change, the node's old series without the capacity type no longer fails it for up to an hour. Pricing
-  node discovery uses a node's current series the same way. The readiness contract shows the same allowlist as the
-  check (with `eks.amazonaws.com/capacityType`).
-- **`metrics.scrape-interval` reports the real interval for new scrape jobs.** It is estimated over the time each
-  series covers, not the whole 30-minute window: a job started 12 minutes ago at 30 s no longer reads as about 1m18s.
-- **`metrics.freshness` tells absent series from stale ones.** A series without samples reads "no samples of … found
-  in the last 1h" (`details`: `absent`), with a remediation for the missing scrape job or exporter, instead of
-  "last sample is over 1h old".
-- **The `metrics.cadvisor` remediation keeps TLS verification on.** It scrapes cAdvisor through the API server proxy
-  with the service-account CA (`ca_file`) instead of `insecure_skip_verify`, names the `nodes` and `nodes/proxy`
-  RBAC the scraper needs, and shows the job for Prometheus and for Grafana Alloy.
 ### Changed
 
 - **`global.mode: all` installs need no token.** The chart generates the pricing token (modes `hub` and `all`)
@@ -54,6 +40,18 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ### Fixed
 
+- **`metrics.node-labels` judges each node by its newest `kube_node_labels` series.** After a kube-state-metrics
+  allowlist change, the node's old series without the capacity type no longer fails it for up to an hour. Pricing
+  node discovery uses a node's current series the same way. The readiness contract shows the same allowlist as the
+  check (with `eks.amazonaws.com/capacityType`).
+- **`metrics.scrape-interval` reports the real interval for new scrape jobs.** It is estimated over the time each
+  series covers, not the whole 30-minute window: a job started 12 minutes ago at 30 s no longer reads as about 1m18s.
+- **`metrics.freshness` tells absent series from stale ones.** A series without samples reads "no samples of … found
+  in the last 1h" (`details`: `absent`), with a remediation for the missing scrape job or exporter, instead of
+  "last sample is over 1h old".
+- **The `metrics.cadvisor` remediation keeps TLS verification on.** It scrapes cAdvisor through the API server proxy
+  with the service-account CA (`ca_file`) instead of `insecure_skip_verify`, names the `nodes` and `nodes/proxy`
+  RBAC the scraper needs, and shows the job for Prometheus and for Grafana Alloy.
 - **A missing token no longer fails silently.** An agent or pricing pod without its token Secret starts, logs
   `hub token missing: Secret <namespace>/<name> key <key>` at error level, and is not Ready until the token is
   there. Before, the agent ran without a token and pricing waited in `ContainerCreating`.
