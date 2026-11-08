@@ -1,9 +1,23 @@
-# Static prices for the pricing service's `static` provider. Used locally and in tests.
+# Static prices for the pricing service's `static` provider. Used locally and in tests, and baked into the
+# pricing image as the default price file.
 #
-# Values are USD per hour for Linux, shared tenancy, eu-west-1 (Ireland), approximating AWS list
-# prices in late 2026. They are dev data, not a source of truth: production uses `--provider aws`.
+# Values are USD per hour for Linux, shared tenancy. They approximate AWS list prices and are dev data, not a
+# source of truth: production uses `--provider aws`. A node whose instance type or region is missing here is
+# reported as `skipped: no-price` (the pricing log names the instance type), so add the type or switch provider.
 # On-demand prices are per region; spot prices may be set per zone (spotByZone), with `spot` used for
 # any other zone. An instance type needs an entry under instanceTypes (vCPU and GiB as sold).
+#
+# Regions: eu-west-1 (Ireland) holds the x86 families, the older Graviton families and the newer Graviton
+# families below; us-east-1 (N. Virginia) holds the Graviton families only.
+#
+# Graviton families (c7g, c8g, m7g, m8g, r7g, r8g, t4g), sizes up to 4xlarge (t4g up to 2xlarge, its largest):
+#   on-demand: public AWS price list for EC2, Linux, shared tenancy, published 2026-11-07
+#              (https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/<region>/index.json,
+#              the same data as the EC2 on-demand pricing page).
+#   spot:      on-demand price x (1 - savings), with the savings of the EC2 Spot Instance Advisor data
+#              (https://spot-bid-advisor.s3.amazonaws.com/spot-advisor-data.json, published 2026-03-20).
+#              Spot prices move constantly: treat these as a typical level, not a quote.
+# The other rows are older estimates (late 2026, eu-west-1).
 #
 # The real spokes use m6i.xlarge on-demand (ro-spoke-1, eu-west-1a) and c6a.2xlarge spot
 # (ro-spoke-2, eu-west-1b); synth-a/synth-b also use these types. The c/m/r siblings of each family
@@ -64,6 +78,47 @@ instanceTypes:
   r7i.large:    {vcpu: 2, memoryGiB: 16}
   r7i.xlarge:   {vcpu: 4, memoryGiB: 32}
   r7i.2xlarge:  {vcpu: 8, memoryGiB: 64}
+  # Graviton (arm64) general purpose
+  m7g.medium:   {vcpu: 1, memoryGiB: 4}
+  m7g.large:    {vcpu: 2, memoryGiB: 8}
+  m7g.xlarge:   {vcpu: 4, memoryGiB: 16}
+  m7g.2xlarge:  {vcpu: 8, memoryGiB: 32}
+  m7g.4xlarge:  {vcpu: 16, memoryGiB: 64}
+  m8g.medium:   {vcpu: 1, memoryGiB: 4}
+  m8g.large:    {vcpu: 2, memoryGiB: 8}
+  m8g.xlarge:   {vcpu: 4, memoryGiB: 16}
+  m8g.2xlarge:  {vcpu: 8, memoryGiB: 32}
+  m8g.4xlarge:  {vcpu: 16, memoryGiB: 64}
+  # Graviton (arm64) compute optimized
+  c7g.medium:   {vcpu: 1, memoryGiB: 2}
+  c7g.large:    {vcpu: 2, memoryGiB: 4}
+  c7g.xlarge:   {vcpu: 4, memoryGiB: 8}
+  c7g.2xlarge:  {vcpu: 8, memoryGiB: 16}
+  c7g.4xlarge:  {vcpu: 16, memoryGiB: 32}
+  c8g.medium:   {vcpu: 1, memoryGiB: 2}
+  c8g.large:    {vcpu: 2, memoryGiB: 4}
+  c8g.xlarge:   {vcpu: 4, memoryGiB: 8}
+  c8g.2xlarge:  {vcpu: 8, memoryGiB: 16}
+  c8g.4xlarge:  {vcpu: 16, memoryGiB: 32}
+  # Graviton (arm64) memory optimized
+  r7g.medium:   {vcpu: 1, memoryGiB: 8}
+  r7g.large:    {vcpu: 2, memoryGiB: 16}
+  r7g.xlarge:   {vcpu: 4, memoryGiB: 32}
+  r7g.2xlarge:  {vcpu: 8, memoryGiB: 64}
+  r7g.4xlarge:  {vcpu: 16, memoryGiB: 128}
+  r8g.medium:   {vcpu: 1, memoryGiB: 8}
+  r8g.large:    {vcpu: 2, memoryGiB: 16}
+  r8g.xlarge:   {vcpu: 4, memoryGiB: 32}
+  r8g.2xlarge:  {vcpu: 8, memoryGiB: 64}
+  r8g.4xlarge:  {vcpu: 16, memoryGiB: 128}
+  # Graviton (arm64) burstable
+  t4g.nano:     {vcpu: 2, memoryGiB: 0.5}
+  t4g.micro:    {vcpu: 2, memoryGiB: 1}
+  t4g.small:    {vcpu: 2, memoryGiB: 2}
+  t4g.medium:   {vcpu: 2, memoryGiB: 4}
+  t4g.large:    {vcpu: 2, memoryGiB: 8}
+  t4g.xlarge:   {vcpu: 4, memoryGiB: 16}
+  t4g.2xlarge:  {vcpu: 8, memoryGiB: 32}
   # accelerated computing (gpus: NVIDIA GPUs of the instance type)
   g4dn.xlarge:   {vcpu: 4, memoryGiB: 16, gpus: 1}
   g5.xlarge:     {vcpu: 4, memoryGiB: 16, gpus: 1}
@@ -130,8 +185,84 @@ regions:
     r7i.large:   {onDemand: 0.1481, spot: 0.0538}
     r7i.xlarge:  {onDemand: 0.2961, spot: 0.1075}
     r7i.2xlarge: {onDemand: 0.5922, spot: 0.2150}
+    m7g.medium:   {onDemand: 0.0455, spot: 0.0214}
+    m7g.large:    {onDemand: 0.091, spot: 0.04}
+    m7g.xlarge:   {onDemand: 0.1819, spot: 0.0928}
+    m7g.2xlarge:  {onDemand: 0.3638, spot: 0.171}
+    m7g.4xlarge:  {onDemand: 0.7276, spot: 0.3638}
+    m8g.medium:   {onDemand: 0.05002, spot: 0.021}
+    m8g.large:    {onDemand: 0.10004, spot: 0.043}
+    m8g.xlarge:   {onDemand: 0.20008, spot: 0.09}
+    m8g.2xlarge:  {onDemand: 0.40016, spot: 0.1841}
+    m8g.4xlarge:  {onDemand: 0.80032, spot: 0.3762}
+    c7g.medium:   {onDemand: 0.0388, spot: 0.0175}
+    c7g.large:    {onDemand: 0.0775, spot: 0.038}
+    c7g.xlarge:   {onDemand: 0.155, spot: 0.0868}
+    c7g.2xlarge:  {onDemand: 0.3101, spot: 0.1519}
+    c7g.4xlarge:  {onDemand: 0.6202, spot: 0.2419}
+    c8g.medium:   {onDemand: 0.04264, spot: 0.0162}
+    c8g.large:    {onDemand: 0.08528, spot: 0.0392}
+    c8g.xlarge:   {onDemand: 0.17056, spot: 0.087}
+    c8g.2xlarge:  {onDemand: 0.34112, spot: 0.174}
+    c8g.4xlarge:  {onDemand: 0.68224, spot: 0.2797}
+    r7g.medium:   {onDemand: 0.0599, spot: 0.024}
+    r7g.large:    {onDemand: 0.1199, spot: 0.0456}
+    r7g.xlarge:   {onDemand: 0.2397, spot: 0.0983}
+    r7g.2xlarge:  {onDemand: 0.4794, spot: 0.2061}
+    r7g.4xlarge:  {onDemand: 0.9588, spot: 0.4219}
+    r8g.medium:   {onDemand: 0.06592, spot: 0.0218}
+    r8g.large:    {onDemand: 0.13184, spot: 0.0541}
+    r8g.xlarge:   {onDemand: 0.26368, spot: 0.116}
+    r8g.2xlarge:  {onDemand: 0.52736, spot: 0.2742}
+    r8g.4xlarge:  {onDemand: 1.05472, spot: 0.5801}
+    t4g.nano:     {onDemand: 0.0046, spot: 0.0014}
+    t4g.micro:    {onDemand: 0.0092, spot: 0.0044}
+    t4g.small:    {onDemand: 0.0184, spot: 0.0098}
+    t4g.medium:   {onDemand: 0.0368, spot: 0.0166}
+    t4g.large:    {onDemand: 0.0736, spot: 0.0339}
+    t4g.xlarge:   {onDemand: 0.1472, spot: 0.0721}
+    t4g.2xlarge:  {onDemand: 0.2944, spot: 0.1501}
     g4dn.xlarge:  {onDemand: 0.587,  spot: 0.2210}
     g5.xlarge:    {onDemand: 1.123,  spot: 0.4415}
     g5.12xlarge:  {onDemand: 6.240,  spot: 2.4310}
     g6.xlarge:    {onDemand: 0.9776, spot: 0.3780}
     p4d.24xlarge: {onDemand: 25.470, spot: 9.5200}
+
+  us-east-1:
+    m7g.medium:   {onDemand: 0.0408, spot: 0.0184}
+    m7g.large:    {onDemand: 0.0816, spot: 0.0343}
+    m7g.xlarge:   {onDemand: 0.1632, spot: 0.0767}
+    m7g.2xlarge:  {onDemand: 0.3264, spot: 0.1534}
+    m7g.4xlarge:  {onDemand: 0.6528, spot: 0.2676}
+    m8g.medium:   {onDemand: 0.04488, spot: 0.0121}
+    m8g.large:    {onDemand: 0.08976, spot: 0.0332}
+    m8g.xlarge:   {onDemand: 0.17952, spot: 0.0664}
+    m8g.2xlarge:  {onDemand: 0.35904, spot: 0.1364}
+    m8g.4xlarge:  {onDemand: 0.71808, spot: 0.316}
+    c7g.medium:   {onDemand: 0.0363, spot: 0.0105}
+    c7g.large:    {onDemand: 0.0725, spot: 0.0312}
+    c7g.xlarge:   {onDemand: 0.145, spot: 0.0551}
+    c7g.2xlarge:  {onDemand: 0.29, spot: 0.1218}
+    c7g.4xlarge:  {onDemand: 0.58, spot: 0.2668}
+    c8g.medium:   {onDemand: 0.03988, spot: 0.0128}
+    c8g.large:    {onDemand: 0.07976, spot: 0.0319}
+    c8g.xlarge:   {onDemand: 0.15952, spot: 0.059}
+    c8g.2xlarge:  {onDemand: 0.31904, spot: 0.1404}
+    c8g.4xlarge:  {onDemand: 0.63808, spot: 0.2744}
+    r7g.medium:   {onDemand: 0.0536, spot: 0.0182}
+    r7g.large:    {onDemand: 0.1071, spot: 0.0396}
+    r7g.xlarge:   {onDemand: 0.2142, spot: 0.0685}
+    r7g.2xlarge:  {onDemand: 0.4284, spot: 0.1799}
+    r7g.4xlarge:  {onDemand: 0.8568, spot: 0.3342}
+    r8g.medium:   {onDemand: 0.05891, spot: 0.0147}
+    r8g.large:    {onDemand: 0.11782, spot: 0.0436}
+    r8g.xlarge:   {onDemand: 0.23564, spot: 0.0872}
+    r8g.2xlarge:  {onDemand: 0.47128, spot: 0.1697}
+    r8g.4xlarge:  {onDemand: 0.94256, spot: 0.3487}
+    t4g.nano:     {onDemand: 0.0042, spot: 0.0012}
+    t4g.micro:    {onDemand: 0.0084, spot: 0.0031}
+    t4g.small:    {onDemand: 0.0168, spot: 0.0072}
+    t4g.medium:   {onDemand: 0.0336, spot: 0.0171}
+    t4g.large:    {onDemand: 0.0672, spot: 0.0282}
+    t4g.xlarge:   {onDemand: 0.1344, spot: 0.0632}
+    t4g.2xlarge:  {onDemand: 0.2688, spot: 0.1075}
