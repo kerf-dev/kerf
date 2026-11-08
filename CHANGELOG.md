@@ -33,6 +33,30 @@ section here. The GitHub Release lists the same section as its highlights, follo
 - **The `metrics.cadvisor` remediation keeps TLS verification on.** It scrapes cAdvisor through the API server proxy
   with the service-account CA (`ca_file`) instead of `insecure_skip_verify`, names the `nodes` and `nodes/proxy`
   RBAC the scraper needs, and shows the job for Prometheus and for Grafana Alloy.
+### Changed
+
+- **`global.mode: all` installs need no token.** The chart generates the pricing token (modes `hub` and `all`)
+  and the local agent's token (mode `all`) once, in the Secret `<hub name>-local-tokens` (kept across upgrades),
+  and the hub accepts them at start-up. Pricing and the agent use them unless their `hub.tokenSecret` names
+  another source: an ExternalSecret, `create`, or your own Secret (`name`; for the agent another name than
+  `kerf-agent-token`). Revoking one in *Admin → Access* is final; delete the Secret and upgrade for new ones. With
+  Argo CD or `helm template` (no Helm `lookup`), give pricing and the agent their own Secrets.
+- **`pricing.vmURL` defaults to the hub's metrics.** Empty (the new default of the `kerf` chart): pricing reads
+  the node series from `hub.config.prometheusURL`, through the hub. A failed query names the URL and the setting
+  that set it.
+- **The generated bootstrap admin must change its password.** Without a password of yours, the chart generates
+  one (Secret `<hub name>-bootstrap-admin`, kept) and the admin must change it at first sign-in
+  (`mustChangePassword: true`). A password you supply (`existingSecret`, `externalSecret`) is not forced.
+  `hub.auth.bootstrapAdmin.generate: false` keeps the old behaviour (no admin without a password).
+- **Install NOTES.** They mention Secrets Manager and ExternalSecrets only when the External Secrets Operator is
+  configured, print the `kubectl create secret` command for every token Secret you have to create, and show
+  how to read the generated admin password.
+
+### Fixed
+
+- **A missing token no longer fails silently.** An agent or pricing pod without its token Secret starts, logs
+  `hub token missing: Secret <namespace>/<name> key <key>` at error level, and is not Ready until the token is
+  there. Before, the agent ran without a token and pricing waited in `ContainerCreating`.
 
 ## [0.1.0] - 2026-11-07
 

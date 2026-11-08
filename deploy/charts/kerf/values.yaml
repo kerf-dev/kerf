@@ -143,7 +143,10 @@ hub:
   database:
     url: ""                  # inline URL: dev: true only
 
-  # Initial admin, created on an empty database. Production: from Secrets Manager
+  # Initial admin (user admin), created on an empty database. By default the chart generates its
+  # password once (Secret <hub name>-bootstrap-admin, kept; the NOTES show how to read it) and the
+  # admin must change it at first sign-in. Your own password instead, which is not forced:
+  #   auth.bootstrapAdmin.existingSecret: my-admin-secret          # key password
   #   auth.bootstrapAdmin.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/bootstrap-admin, property: password}}
   auth:
     cookieSecure: true       # false: dev: true only (plain-HTTP development)
@@ -151,6 +154,12 @@ hub:
   # Datasource secrets key. The chart generates it once (Helm lookup) unless it comes from
   # Secrets Manager. With Argo CD (no lookup) use the ExternalSecret, or every sync makes a new key:
   #   onboarding.secretsKey.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/datasource-key}}
+
+  # Tokens of this release's pricing service and, in mode all, its agent: generated once (Secret
+  # <hub name>-local-tokens, Helm lookup, kept) and accepted by the hub at start-up, so a fresh
+  # install needs no token. With Argo CD or `helm template` (no lookup) every render makes new ones:
+  # give pricing and the agent their own Secrets there (pricing.hub.tokenSecret, agent.hub.tokenSecret).
+  #   localTokens: {enabled: false}
 
   # Ingress for the hub API (agents of other clusters, pricing over HTTPS). AWS Load Balancer
   # Controller, internal ALB:
@@ -229,9 +238,15 @@ pricing:
   #     athena: {database: kerf_cur, table: data, workgroup: kerf}
   cur:
     source: ""
+  # Where the node series (kube_node_labels) are read. Empty: the hub's own metrics datasource
+  # (hub.config.prometheusURL), through the hub. Set it to read them from elsewhere, e.g.
+  #   vmURL: http://vmsingle.monitoring.svc:8428
+  vmURL: ""
   hub:
-    # Empty: this release's hub Service. The token (role pricing) is read from Secret
-    # tokenSecret.name, default <pricing name>-hub-token. Production:
+    # Empty: this release's hub Service. The token (role pricing): by default the one the chart
+    # generates (hub.localTokens). Your own Secret instead, with a token of role pricing
+    # (Admin -> Access, or POST /v1/admin/tokens):
+    #   tokenSecret: {name: kerf-pricing-token}                  # key token
     #   tokenSecret.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/pricing-token, property: token}}
     url: ""
     tokenSecret:
@@ -254,9 +269,14 @@ agent:
     # https://hub.ro.example.internal (the hub's internal ALB). Empty in mode all: this release's
     # hub Service.
     url: ""
-    # The cluster's agent token (role agent), shown once by the hub's cluster wizard. Secret
-    # kerf-agent-token, key token. Production:
+    # The cluster's agent token (role agent). Mode all: by default the one the chart generates
+    # (hub.localTokens). Mode spoke: the token the hub's cluster wizard shows once, in Secret
+    # kerf-agent-token (key token), which you create:
+    #   kubectl -n <namespace> create secret generic kerf-agent-token --from-literal=token=<agent token>
+    # or from your secret store:
     #   tokenSecret.externalSecret: {enabled: true, remoteRef: {key: kerf/clusters/<cluster>/agent-token, property: token}}
+    # Without a token the agent logs "hub token missing: Secret <namespace>/<name> key <key>" and is not Ready.
+    # Mode all, your own Secret instead: tokenSecret.name with another name than kerf-agent-token.
     tokenSecret:
       create: false          # true + token: dev: true only
       token: ""

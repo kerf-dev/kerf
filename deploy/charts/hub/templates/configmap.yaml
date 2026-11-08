@@ -13,7 +13,11 @@ data:
     {{- end }}
     {{- $auth := omit .Values.auth "bootstrapAdmin" }}
     {{- if include "hub.bootstrapSecret" . }}
-    {{- $_ := set $auth "bootstrapAdmin" (dict "username" .Values.auth.bootstrapAdmin.username "passwordFile" "/etc/hub/bootstrap-admin/password") }}
+    {{- $_ := set $auth "bootstrapAdmin" (dict "username" .Values.auth.bootstrapAdmin.username "passwordFile" "/etc/hub/bootstrap-admin/password" "mustChangePassword" (eq (include "hub.bootstrapGenerated" .) "true")) }}
+    {{- end }}
+    {{- if include "hub.localTokensSecret" . }}
+    {{- $g := .Values.global | default dict }}
+    {{- $_ := set $cfg "localTokens" (dict "dir" "/etc/hub/local-tokens" "cluster" (ternary $g.clusterName "" (eq (toString $g.mode) "all"))) }}
     {{- end }}
     {{- $oidc := omit (default (dict) .Values.auth.oidc) "clientSecret" }}
     {{- if $oidc.enabled }}

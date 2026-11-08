@@ -26,8 +26,13 @@ make test-agent                         # unit + envtest (downloads kube-apiserv
 
 `hub.url` (default `http://hub-api.hub.svc:8080`), bearer token from Secret
 `hub.tokenSecret.name` (default `kerf-agent-token`), key `token`, mounted as a file and
-re-read on every request. The Secret is optional: without it the hub answers 401 and the agent is
-"offline" (nothing new is applied, nothing is reverted, events are buffered).
+re-read on every request. In the umbrella chart with `global.mode: all`, the agent uses the token the
+hub chart generates for its own cluster unless `hub.tokenSecret` names another source.
+
+The volume is optional, so the agent starts without its Secret, but it then logs
+`hub token missing: Secret <namespace>/<name> key <key>` at error level and fails its readiness
+probe until the token is there. Meanwhile it is "offline": nothing new is applied, nothing is
+reverted, events are buffered. With `stubHub.enabled` the token is optional.
 
 ## RBAC (ClusterRole)
 

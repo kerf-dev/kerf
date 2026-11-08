@@ -62,6 +62,8 @@ the table above.
 | `devSeed.users` | `[]` | local users created when missing (Secret `hub-dev-users`); dev: `viewer`, `operator`, `admin` with the passwords in values-dev.yaml |
 | `auth.cookieSecure`, `.sessionTTL`, `.maxFailedLogins`, `.lockoutDuration` | `true`, `12h`, `5`, `15m` | browser sessions; dev: `cookieSecure: false` (plain HTTP) |
 | `auth.bootstrapAdmin.username`, `.password` or `.existingSecret`/`.existingSecretKey` | `admin`, – | initial admin, created only on a database without users |
+| `auth.bootstrapAdmin.generate` | `true` | no password set (and no devSeed): the chart generates one (Secret `<release>-bootstrap-admin`, kept) and the admin must change it at first sign-in |
+| `localTokens.enabled` | `true` | umbrella chart, `global.mode` hub or all: generate the pricing token and (mode all) the local agent's token in Secret `<release>-local-tokens`; the hub accepts them at start-up |
 | `config` | see values.yaml | the hub config file (`internal/hub/config.go`): `prometheusURL`, `corsOrigins`, `agentStaleAfter`, `recommender.*`, `history.*` |
 | `database.externalSecret` (`source: rds\|url`), `.host`, `.port`, `.name`, `.sslmode`, `.params`, `.caBundle` | off, –, 5432, `kerf`, `verify-full` | External Secrets Operator builds Secret `<release>-db` from an RDS-managed secret (JSON username/password) plus host/port/name, `sslmode` and `sslrootcert` = the mounted CA bundle (`/etc/hub/db-ca/ca.pem`) |
 | `auth.bootstrapAdmin.externalSecret`, `onboarding.secretsKey.externalSecret` | off | the same for the first admin's password and the datasource encryption key (kept on uninstall) |

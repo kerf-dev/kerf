@@ -281,8 +281,9 @@ value, so the umbrella chart deploy/charts/kerf selects its components here inst
   nothing below runs, so standalone renders are unchanged (`make charts-diff-dev`).
 
 With global.mode set, the gate also fills in what the umbrella derives (only values left empty):
-clusterName from global.clusterName; web hub.upstream, pricing hub.url (and its token Secret name)
-and, in mode all, agent hub.url from the hub Service of the release. It runs at the top of every
+clusterName from global.clusterName; web hub.upstream, pricing hub.url and, in mode all, agent
+hub.url from the hub Service of the release. The token Secrets of pricing and the agent are chosen
+by "agent.c.tokenSource". It runs at the top of every
 template file, before anything reads those values. */ -}}
 {{- define "agent.c.enabled" -}}
 {{- $mode := dig "mode" "" (.Values.global | default dict) | toString -}}
@@ -319,7 +320,6 @@ prefix (`kerf-agent`): it owns cluster-scoped RBAC, where a bare `agent` could c
 {{- if not .Values.hub.upstream }}{{ $_ := set .Values.hub "upstream" (printf "%s:8080" $hub) }}{{ end -}}
 {{- else if eq .Chart.Name "pricing" -}}
 {{- if not .Values.hub.url }}{{ $_ := set .Values.hub "url" (printf "http://%s:8080" $hub) }}{{ end -}}
-{{- if not .Values.hub.tokenSecret.name }}{{ $_ := set .Values.hub.tokenSecret "name" (printf "%s-hub-token" (include "agent.c.umbrellaName" (dict "ctx" . "component" "pricing"))) }}{{ end -}}
 {{- else if eq .Chart.Name "agent" -}}
 {{- if and (not .Values.hub.url) (not .Values.stubHub.enabled) -}}
 {{- if eq $g.mode "all" }}{{ $_ := set .Values.hub "url" (printf "http://%s:8080" $hub) }}
@@ -327,4 +327,38 @@ prefix (`kerf-agent`): it owns cluster-scoped RBAC, where a bare `agent` could c
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{- /* Secret with the tokens the hub chart generates for its own release (keys pricing and agent):
+`<hub name>-local-tokens`. The hub stores their hashes at start-up. dict: ctx (any chart's root context). */ -}}
+{{- define "agent.c.localTokensSecret" -}}
+{{- printf "%s-local-tokens" (include "agent.c.umbrellaName" (dict "ctx" .ctx "component" "hub")) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- /* Where the hub token of pricing or the agent comes from. dict: ctx (any chart's root context, for the
+release), mode (global.mode), component (pricing or agent), ts (that component's hub.tokenSecret).
+Prints JSON {"name", "key", "source"}, source one of
+  externalSecret  the chart renders an ExternalSecret (ts.externalSecret.enabled)
+  create          the chart renders the Secret from ts.token (development)
+  local           the token the hub chart generates (`<hub name>-local-tokens`, key = component): pricing in
+                  global.mode hub and all, the agent in mode all, unless ts.name is set (for the agent: to
+                  another name than its default kerf-agent-token, which the cluster wizard's snippets set)
+  existing        a Secret the operator creates (ts.name, or the default name)
+The default name is kerf-agent-token for the agent and `<pricing name>-hub-token` for pricing (empty for a
+pricing chart installed on its own). */ -}}
+{{- define "agent.c.tokenSource" -}}
+{{- $ts := .ts | default dict -}}
+{{- $es := dig "externalSecret" "enabled" false $ts -}}
+{{- $mode := toString .mode -}}
+{{- $default := "kerf-agent-token" -}}
+{{- if eq .component "pricing" -}}
+{{- $default = ternary (printf "%s-hub-token" (include "agent.c.umbrellaName" (dict "ctx" .ctx "component" "pricing"))) "" (ne $mode "") -}}
+{{- end -}}
+{{- $out := dict "name" ($ts.name | default $default) "key" ($ts.key | default "token") "source" "existing" -}}
+{{- if $es -}}{{- $_ := set $out "source" "externalSecret" -}}
+{{- else if $ts.create -}}{{- $_ := set $out "source" "create" -}}
+{{- else if and (or (not $ts.name) (and (eq .component "agent") (eq $ts.name $default))) (or (and (eq .component "agent") (eq $mode "all")) (and (eq .component "pricing") (has $mode (list "hub" "all")))) -}}
+{{- $out = dict "name" (include "agent.c.localTokensSecret" (dict "ctx" .ctx)) "key" .component "source" "local" -}}
+{{- end -}}
+{{- toJson $out -}}
 {{- end -}}

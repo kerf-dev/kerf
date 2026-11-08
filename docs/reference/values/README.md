@@ -26,7 +26,7 @@ Component sections are the component charts' values; this schema checks what the
 | `global.imageRegistry` | string | `""` | Registry host prefixed to every image repository (required unless dev: true). |
 | `global.mode` | string | none (required) | hub = hub, web, pricing; spoke = agent, webhook, CRDs; all = everything. one of `hub`, `spoke`, `all` |
 | `hub` | object | see the keys below | hub: API, recommender, readiness (mode hub, all) Object names: see templates/_names.tpl (release kerf -> hub, web, pricing, webhook, kerf-agent; another release R -> R-hub, R-web, ...). |
-| `hub.auth` | object | see the keys below | Initial admin, created on an empty database. Production: from Secrets Manager<br>`auth.bootstrapAdmin.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/bootstrap-admin, property: password}}` |
+| `hub.auth` | object | see the keys below | Initial admin (user admin), created on an empty database. By default the chart generates its password once (Secret <hub name>-bootstrap-admin, kept; the NOTES show how to read it) and the admin must change it at first sign-in. Your own password instead, which is not forced:<br>`auth.bootstrapAdmin.existingSecret: my-admin-secret          # key password`<br>`auth.bootstrapAdmin.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/bootstrap-admin, property: password}}` |
 | `hub.database` | object | see the keys below | The database. Production: RDS through the External Secrets Operator (verify-full):<br>`database:`<br>`host: ro-hub.xxxxxxxx.eu-west-1.rds.amazonaws.com`<br>`caBundle: {existingConfigMap: rds-ca-bundle, key: global-bundle.pem}`<br>`externalSecret:`<br>`enabled: true`<br>`source: rds          # the RDS-managed secret (JSON username/password)`<br>`remoteRef: {key: "kerf/hub/db"}`<br>or your own Secret: database.existingSecret (key DATABASE_URL). A direct connection or a session-mode pooler only: the leader lock needs a session (no RDS Proxy, no transaction pooling). |
 | `hub.image` | object | see the keys below | `enabled: true            # override global.mode for this component` |
 | `pricing` | object | see the keys below | pricing: node prices and cost series (mode hub, all) |
@@ -35,6 +35,7 @@ Component sections are the component charts' values; this schema checks what the
 | `pricing.hub` | object | see the keys below |  |
 | `pricing.image` | object | see the keys below |  |
 | `pricing.provider` | string | `static` | static (the price file in the image) or aws (Pricing API + spot prices; IAM through EKS Pod Identity for ServiceAccount <pricing name>: docs/install/eks.md). |
+| `pricing.vmURL` | string | `""` | Where the node series (kube_node_labels) are read. Empty: the hub's own metrics datasource (hub.config.prometheusURL), through the hub. Set it to read them from elsewhere, e.g.<br>`vmURL: http://vmsingle.monitoring.svc:8428` |
 | `quickstart` | object | see the keys below | The laptop quickstart (bundled PostgreSQL, VictoriaMetrics, demo workloads): enabled only with dev: true. |
 | `quickstart.demo` | object | see the keys below | Demo workloads: each requests far more than it uses. `usage` is the generated history (tools/synth: pattern, base, diurnal, peakHour, weekend, spikesPerDay, noise, ...); the pods themselves only run a pause container. |
 | `quickstart.demo.enabled` | boolean | `true` |  |

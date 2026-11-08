@@ -48,8 +48,13 @@ For chart developers.
   `global.mode`, so it renders as before (`make charts-diff-dev`). That is also why the mode is
   `global.mode` and not a top-level `mode`: Helm passes only `global.*` to the components.
 - **Wiring.** With `global.mode` set, the gate fills in what is left empty:
-  - `web.hub.upstream`, and `pricing.hub.url` with its token Secret `<pricing>-hub-token`, point at this release's hub Service.
+  - `web.hub.upstream` and `pricing.hub.url` point at this release's hub Service.
   - In mode `all`, `agent.hub.url` points at the hub Service too. In mode `spoke` it is required.
+  - Tokens (`"<component>.c.tokenSource"`): the hub chart generates pricing's token (modes `hub`, `all`) and the
+    local agent's (mode `all`) in Secret `<hub>-local-tokens` and accepts them at start-up. Pricing and the agent
+    use it unless their `hub.tokenSecret` sets `externalSecret`, `create` or a `name` (for the agent, another
+    than its default `kerf-agent-token`).
+  - `pricing.vmURL` empty: pricing reads the node series from the hub's own metrics datasource, through the hub.
   - `clusterName` of agent, webhook and pricing comes from `global.clusterName`.
 - **Names** (`templates/_names.tpl`):
   - Release `kerf` gives `hub`, `web`, `pricing`, `webhook` and `kerf-agent`.
@@ -94,7 +99,10 @@ values: see `deploy/charts/<component>/values.yaml` in the [repository](https://
 | `pricing.clusterName` | `""` | empty: `global.clusterName` |
 | `pricing.provider` | `static` | `static` or `aws` (Pod Identity, `iam/pricing-policy.json`) |
 | `pricing.hub.url` | `""` | empty: this release's hub Service |
-| `pricing.hub.tokenSecret.name` | `""` | empty: `<pricing name>-hub-token` |
+| `pricing.vmURL` | `""` | empty: `hub.config.prometheusURL`, read through the hub |
+| `pricing.hub.tokenSecret.name` | `""` | empty: the generated token (`hub.localTokens`); `<pricing name>-hub-token` with `create` or `externalSecret` |
+| `hub.localTokens.enabled` | `true` | generate the pricing and local agent tokens (Secret `<hub>-local-tokens`) |
+| `hub.auth.bootstrapAdmin.generate` | `true` | without a password of yours, generate one (Secret `<hub>-bootstrap-admin`); the admin must change it at first sign-in |
 | `agent.clusterName` | `""` | empty: `global.clusterName` |
 | `agent.hub.url` | `""` | required in `spoke` (the hub's ALB); empty in `all`: this release's hub Service |
 | `agent.replicaCount` | `2` | production default here (component chart: 1) |
