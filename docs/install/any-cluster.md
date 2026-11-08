@@ -24,8 +24,8 @@ cluster (agent, webhook, CRDs) and `all` for everything in one cluster.
 
 ## 1. Hub cluster
 
-Create the Secrets: outside development installs the chart rejects inline secrets. The database and its user
-must exist; the hub applies the schema itself.
+Create the database Secret: outside development installs the chart rejects inline secrets. The database and its
+user must exist; the hub applies the schema itself.
 
 ```bash
 kubectl create namespace kerf
@@ -33,7 +33,6 @@ read -rs DB_PW   # URL-encode it if it holds special characters
 kubectl -n kerf create secret generic hub-db \
   --from-literal=DATABASE_URL="postgres://kerf:${DB_PW}@db.example.com:5432/kerf?sslmode=verify-full"
 unset DB_PW
-kubectl -n kerf create secret generic hub-bootstrap-admin --from-literal=password="$(openssl rand -base64 24)"
 ```
 
 For a private database CA, mount it with `hub.database.caBundle` and add `sslrootcert=/etc/hub/db-ca/ca.pem` to
@@ -43,7 +42,6 @@ the URL. The chart generates the key that encrypts datasource credentials and ke
 global: {mode: hub, clusterName: hub-cluster, imageRegistry: ghcr.io/kerf-dev}
 hub:
   database: {existingSecret: hub-db}
-  auth: {bootstrapAdmin: {existingSecret: hub-bootstrap-admin}}
   config:
     prometheusURL: http://prometheus.monitoring.svc:9090    # the built-in datasource `local`
     onboarding:
@@ -60,9 +58,7 @@ web:
     hosts: [{host: kerf.example.com, paths: [{path: /, pathType: Prefix}]}]
     tls: [{hosts: [kerf.example.com], secretName: kerf-ui-tls}]
 pricing:
-  provider: static
-  vmURL: http://prometheus.monitoring.svc:9090    # holds kube_node_labels of the workload clusters
-  hub: {tokenSecret: {name: kerf-pricing-token}}
+  provider: static    # reads kube_node_labels through the hub, from hub.config.prometheusURL
 ```
 
 ```bash
@@ -71,16 +67,21 @@ helm upgrade --install kerf oci://ghcr.io/kerf-dev/kerf/charts/kerf --version <v
 kubectl -n kerf rollout status deploy/hub
 ```
 
-Released charts pull the images of the same release from `ghcr.io/kerf-dev/kerf`. The `pricing` token does not
-exist yet, so `pricing` waits for its Secret. Sign in at `https://kerf.example.com` as `admin` with the password in
-the Secret `hub-bootstrap-admin`, change it, and create a token with role `pricing` under
-**Admin → Access → Tokens**. A token is shown once. Everyone who uses Kerf signs in with a user of their own or
-through your identity provider ([Sign-in and access](../auth.md)); the UI holds no token. If you used an older
-guide that created a `ui` token, [remove it](../auth.md#upgrading-from-anonymous-read-access).
+Released charts pull the images of the same release from `ghcr.io/kerf-dev/kerf`. The chart generates the
+first admin's password and the `pricing` token itself, so there is no token to create. Read the password, sign in at
+`https://kerf.example.com` as `admin`, and choose a new password when asked:
 
 ```bash
-kubectl -n kerf create secret generic kerf-pricing-token --from-literal=token="<pricing token>"
+kubectl -n kerf get secret hub-bootstrap-admin -o jsonpath='{.data.password}' | base64 -d; echo
 ```
+
+Everyone who uses Kerf signs in with a user of their own or through your identity provider
+([Sign-in and access](../auth.md)); the UI holds no token. If you used an older guide that created a `ui` token,
+[remove it](../auth.md#upgrading-from-anonymous-read-access).
+
+The generated password and token use Helm `lookup`, which does not run under Argo CD or `helm template`: there, set
+`hub.auth.bootstrapAdmin.existingSecret` (key `password`) and `pricing.hub.tokenSecret.name` (key `token`, a token with
+role `pricing` from **Admin → Access → Tokens**), or use ExternalSecrets as the [EKS guide](eks.md) does.
 
 **Check:** `curl -sS https://hub.example.com/readyz` prints `ok`.
 
@@ -201,8 +202,8 @@ A hub certificate from a private CA needs `agent.hub.caBundle`.
 
 The cluster should reach *Metrics OK*, then *Ready for audit* once the recommender has run (daily by default; an admin
 can start a run with `POST /v1/admin/recompute?cluster=<cluster>`), then *Automation ready*. Every check and its fix:
-[Cluster readiness](../operate/readiness.md). The hub repeats its metrics checks every hour and on a re-check
-(`POST /v1/clusters/<cluster>/readiness/recheck`): a recompute alone does not refresh them. Workloads stay in `audit` until you set a policy.
+[Cluster readiness](../operate/readiness.md). The hub repeats its metrics checks every hour, on a recompute and on a re-check
+(**Re-check now** on the cluster's page, or `POST /v1/clusters/<cluster>/readiness/recheck`). Workloads stay in `audit` until you set a policy.
 
 ## Related
 

@@ -12,7 +12,7 @@ layout: one database pod, no backup, no TLS inside the cluster. For production, 
 - A Prometheus-compatible store (Prometheus, VictoriaMetrics, Thanos or Mimir) with cAdvisor and kube-state-metrics
   series of this cluster. [Scrape jobs and kube-state-metrics settings](#2-metrics) follow below.
 
-## 1. Namespace, PostgreSQL and Secrets
+## 1. Namespace and PostgreSQL
 
 ```bash
 kubectl create namespace kerf
@@ -21,7 +21,6 @@ kubectl -n kerf create secret generic hub-db \
   --from-literal=POSTGRES_PASSWORD="$DB_PW" \
   --from-literal=DATABASE_URL="postgres://kerf:${DB_PW}@kerf-db:5432/kerf?sslmode=disable"
 unset DB_PW
-kubectl -n kerf create secret generic hub-bootstrap-admin --from-literal=password="$(openssl rand -base64 24)"
 ```
 
 A minimal PostgreSQL (12 or later; the hub applies its schema itself). Save it as `postgres.yaml` and apply it with
@@ -96,7 +95,6 @@ Expected: a number above 0.
 global: {mode: all, clusterName: lab, imageRegistry: ghcr.io/kerf-dev}   # a DNS label; the name the hub registers
 hub:
   database: {existingSecret: hub-db}
-  auth: {bootstrapAdmin: {existingSecret: hub-bootstrap-admin}}
   config:
     prometheusURL: http://vmsingle.monitoring.svc:8428   # the store from step 2
 ```
@@ -106,9 +104,17 @@ helm upgrade --install kerf oci://ghcr.io/kerf-dev/kerf/charts/kerf --version <v
   -n kerf -f values.yaml --wait --timeout 10m
 ```
 
-In `mode: all` the chart creates the tokens that the local agent and the pricing service use, and `pricing.vmURL`
-defaults to `hub.config.prometheusURL`: neither is in your values. Pricing uses the built-in static price table; on
-EKS, `pricing.provider: aws` prices your node types from the AWS price list ([Pricing](../pricing.md)).
+In `mode: all` the chart generates what you would otherwise create by hand: the agent and pricing tokens (Secret
+`hub-local-tokens`, keys `agent` and `pricing`) and the first admin's password (Secret `hub-bootstrap-admin`, key
+`password`). The hub accepts the tokens at start-up, so there is nothing to register or paste. `pricing.vmURL` is
+not set either: pricing reads the node series through the hub, from `hub.config.prometheusURL`. Set it only to read
+them from another store. Pricing uses the built-in static price table; on EKS, `pricing.provider: aws` prices your
+node types from the AWS price list ([Pricing](../pricing.md)).
+
+The generated values use Helm `lookup`, which does not run under Argo CD or `helm template`. There, set
+`hub.auth.bootstrapAdmin.existingSecret` and give pricing and the agent their own Secrets
+(`pricing.hub.tokenSecret.name`, `agent.hub.tokenSecret.name`, not `kerf-agent-token`). A token Secret that is missing
+shows: the pod is not Ready and logs `hub token missing: Secret kerf/<name> key <key>`.
 
 **Check:** `kubectl -n kerf get pods` shows the hub (two pods), web, pricing, agent (two) and webhook pods `Running`.
 
@@ -119,17 +125,18 @@ kubectl -n kerf port-forward svc/web 8080:8080
 kubectl -n kerf get secret hub-bootstrap-admin -o jsonpath='{.data.password}' | base64 -d; echo
 ```
 
-Open <http://localhost:8080> and sign in as `admin` with that password. Use Chrome or Firefox: they accept the
-session cookie over plain HTTP on `localhost`, and Safari does not. Change the password (user menu, *Change
-password*), then create a user for each person who will look at Kerf under **Admin → Access → Users**
-([Sign-in and access](../auth.md)).
+Open <http://localhost:8080> and sign in as `admin` with that password. The generated password must be changed at
+the first sign-in, and the UI asks for the new one. Use Chrome or Firefox: they accept the session cookie over plain
+HTTP on `localhost`, and Safari does not. Then create a user for each person who will look at Kerf under
+**Admin → Access → Users** ([Sign-in and access](../auth.md)).
 
 ## 5. Readiness
 
 Open the cluster `lab` under **Clusters**: the state moves through *Agent connected* and *Metrics OK* to *Ready for
-audit*. The hub runs its metrics checks when the cluster is registered, on **Re-check now** and then every
-`hub.config.onboarding.checkInterval` (1 hour by default), and the recommender runs once a day. After you fix something in your
-scrape configuration, re-check at once, and start a recommender run:
+audit*. Each check shows when it ran ("checked 23 minutes ago"). The hub runs its metrics checks at registration, on a
+recompute, on a re-check and otherwise every `hub.config.onboarding.checkInterval` (1 hour by default), so a fixed
+scrape job can show its old result for up to an hour. After a fix, click **Re-check now** on the cluster's page
+(Overview or Readiness tab), or call the API. The recommender runs once a day; a recompute starts it:
 
 ```bash
 curl -sS -c cookies -H 'Content-Type: application/json' -d "$(jq -cn --arg p "$ADMIN_PW" '{username:"admin",password:$p}')" \
@@ -138,9 +145,9 @@ curl -sS -b cookies -H "X-CSRF-Token: $(cat csrf)" -X POST http://localhost:8080
 curl -sS -b cookies -H "X-CSRF-Token: $(cat csrf)" -X POST "http://localhost:8080/v1/admin/recompute?cluster=lab"
 ```
 
-Set `ADMIN_PW` to the password you currently use. A recompute refreshes only `metrics.recommendations`, so use the
-re-check for the metrics checks. Every failing check names its fix: [Cluster readiness](../operate/readiness.md).
-Workloads stay in `audit` until you set a policy, so nothing changes in your cluster.
+Set `ADMIN_PW` to your current password. A re-check needs the role `operator` or higher. Every failing check names its
+fix: [Cluster readiness](../operate/readiness.md). Workloads stay in `audit` until you set a policy, so nothing changes
+in your cluster.
 
 ## Remove it
 
