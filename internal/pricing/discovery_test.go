@@ -199,3 +199,17 @@ func TestDiscoveryErrors(t *testing.T) {
 		t.Fatalf("truncate = %q", got)
 	}
 }
+
+// A failed node query names the URL (without its password) and the setting it comes from.
+func TestDiscoveryErrorNamesSetting(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	u := strings.Replace(srv.URL, "http://", "http://user:secret@", 1)
+	d := &Discovery{VMURL: u, VMSource: "pricing.vmURL"}
+	_, err := d.Nodes(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "(set by pricing.vmURL)") || strings.Contains(err.Error(), "secret@") {
+		t.Fatalf("err = %v", err)
+	}
+}
