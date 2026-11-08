@@ -494,10 +494,10 @@ func BootstrapUsers(ctx context.Context, st *store.Store, cfg Config, log interf
 			if err != nil {
 				return fmt.Errorf("bootstrap admin: %w", err)
 			}
-			if _, err := st.EnsureUser(ctx, name, "Administrator", hubapi.UserRoleAdmin, hash, false, now); err != nil {
+			if _, err := st.EnsureUser(ctx, name, "Administrator", hubapi.UserRoleAdmin, hash, ba.MustChangePassword, now); err != nil {
 				return err
 			}
-			log.InfoContext(ctx, "bootstrap admin created", "user", name)
+			log.InfoContext(ctx, "bootstrap admin created", "user", name, "mustChangePassword", ba.MustChangePassword)
 		}
 	}
 	users := cfg.DevSeed.Users

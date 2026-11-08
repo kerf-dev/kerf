@@ -30,11 +30,13 @@ installCRDs: null
 hub:
   # Hub base URL. Spokes reach the hub through a selector-less Service.
   url: http://hub-api.hub.svc:8080
-  # Bearer token for the agent role of this cluster, read from a Secret key and
-  # re-read on every request (rotation needs no restart). The Secret is optional: without it
-  # the hub answers 401 and the agent behaves as offline (nothing new is applied).
+  # Bearer token for the agent role of this cluster, read from a Secret key and re-read on every
+  # request (rotation needs no restart). Without it the agent logs
+  # "hub token missing: Secret <namespace>/<name> key <key>" at error level and is not Ready.
+  # Umbrella chart, global.mode all: with name, create and externalSecret all unset, the agent uses
+  # the token the hub chart generates for its own cluster (Secret <hub name>-local-tokens, key agent).
   tokenSecret:
-    name: kerf-agent-token
+    name: kerf-agent-token  # in mode all, this default name means "the generated token"; any other name is your Secret
     key: token
     # create: true makes the chart create the Secret from `token` (local development only).
     create: false

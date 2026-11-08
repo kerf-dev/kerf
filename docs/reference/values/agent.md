@@ -24,8 +24,8 @@ The values of the `agent` component chart. In the `kerf` chart they sit under `a
 | `installCRDs` | object | `null` | Deprecated alias of crds.install (wins when set). |
 | `hub` | object | see the keys below |  |
 | `hub.url` | string | `http://hub-api.hub.svc:8080` | Hub base URL. Spokes reach the hub through a selector-less Service. |
-| `hub.tokenSecret` | object | see the keys below | Bearer token for the agent role of this cluster, read from a Secret key and re-read on every request (rotation needs no restart). The Secret is optional: without it the hub answers 401 and the agent behaves as offline (nothing new is applied). |
-| `hub.tokenSecret.name` | string | `kerf-agent-token` |  |
+| `hub.tokenSecret` | object | see the keys below | Bearer token for the agent role of this cluster, read from a Secret key and re-read on every request (rotation needs no restart). Without it the agent logs "hub token missing: Secret <namespace>/<name> key <key>" at error level and is not Ready. Umbrella chart, global.mode all: with name, create and externalSecret all unset, the agent uses the token the hub chart generates for its own cluster (Secret <hub name>-local-tokens, key agent). |
+| `hub.tokenSecret.name` | string | `kerf-agent-token` | in mode all, this default name means "the generated token"; any other name is your Secret |
 | `hub.tokenSecret.key` | string | `token` |  |
 | `hub.tokenSecret.create` | boolean | `false` | create: true makes the chart create the Secret from `token` (local development only). |
 | `hub.tokenSecret.token` | string | `""` |  |

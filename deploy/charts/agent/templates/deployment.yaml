@@ -17,11 +17,12 @@ data:
 {{ toYaml (.Values.freeze | default dict) | indent 4 }}
 {{- $tokenES := dig "externalSecret" "enabled" false .Values.hub.tokenSecret }}
 {{- if and .Values.hub.tokenSecret.create $tokenES }}{{ fail "hub.tokenSecret.create and hub.tokenSecret.externalSecret are exclusive" }}{{ end }}
+{{- $tok := include "agent.c.tokenSource" (dict "ctx" . "mode" (dig "mode" "" (.Values.global | default dict)) "component" "agent" "ts" .Values.hub.tokenSecret) | fromJson }}
 {{- $ca := include "agent.caEnabled" . }}
 {{- if $tokenES }}
 ---
 # Hub token of this cluster's agent, re-read on every request: a rotation needs no restart.
-{{ include "agent.c.externalSecret" (dict "ctx" . "name" .Values.hub.tokenSecret.name "es" .Values.hub.tokenSecret.externalSecret "data" (list (dict "secretKey" .Values.hub.tokenSecret.key))) }}
+{{ include "agent.c.externalSecret" (dict "ctx" . "name" $tok.name "es" .Values.hub.tokenSecret.externalSecret "data" (list (dict "secretKey" $tok.key))) }}
 {{- end }}
 {{- with .Values.hub.caBundle }}
 {{- if and .pem (not .existingConfigMap) (not .existingSecret) }}
@@ -42,12 +43,12 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ .Values.hub.tokenSecret.name }}
+  name: {{ $tok.name }}
   namespace: {{ .Release.Namespace }}
   labels: {{- include "agent.labels" . | nindent 4 }}
 type: Opaque
 stringData:
-  {{ .Values.hub.tokenSecret.key }}: {{ required "hub.tokenSecret.token is required with create: true" .Values.hub.tokenSecret.token | quote }}
+  {{ $tok.key }}: {{ required "hub.tokenSecret.token is required with create: true" .Values.hub.tokenSecret.token | quote }}
 {{- end }}
 ---
 apiVersion: apps/v1
@@ -87,7 +88,12 @@ spec:
           args:
             - --cluster-name={{ .Values.clusterName }}
             - --hub-url={{ include "agent.hubURL" . }}
-            - --hub-token-file=/var/run/secrets/kerf/hub/{{ .Values.hub.tokenSecret.key }}
+            - --hub-token-file=/var/run/secrets/kerf/hub/{{ $tok.key }}
+            {{- if .Values.stubHub.enabled }}
+            - --hub-token-optional
+            {{- else }}
+            - --hub-token-source=Secret {{ .Release.Namespace }}/{{ $tok.name }} key {{ $tok.key }}
+            {{- end }}
             - --cluster-defaults=/etc/kerf/cluster-defaults.yaml
             - --freeze-file=/etc/kerf/freeze.yaml
             - --pull-interval={{ .Values.pullInterval }}
@@ -182,9 +188,12 @@ spec:
         - name: config
           configMap:
             name: {{ include "agent.fullname" . }}-config
+        # Optional, so that the agent starts without it: it then logs "hub token missing: Secret <namespace>/<name>
+        # key <key>" and is not Ready. The kubelet fills the volume in when the Secret appears; a rotated token is
+        # re-read on every request.
         - name: hub-token
           secret:
-            secretName: {{ .Values.hub.tokenSecret.name }}
+            secretName: {{ $tok.name }}
             optional: true
         {{- if $ca }}
         {{- $c := .Values.hub.caBundle }}

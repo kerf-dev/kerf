@@ -58,6 +58,7 @@ type Config struct {
 	TokenCacheTTL Duration `json:"tokenCacheTTL"`
 
 	DevSeed     DevSeed           `json:"devSeed"`
+	LocalTokens LocalTokens       `json:"localTokens"`
 	Auth        AuthConfig        `json:"auth"`
 	Recommender RecommenderConfig `json:"recommender"`
 	History     HistoryConfig     `json:"history"`
@@ -185,6 +186,18 @@ func (o OnboardingConfig) InstallChartVersion() string {
 	return o.ChartVersion
 }
 
+// LocalTokens are the tokens the Helm chart generates for the services of its own release: the
+// pricing service (global.mode hub and all) and the agent of the hub's own cluster (mode all). The
+// hub stores their hashes at start-up, so a fresh install needs no manual token. Idempotent: a
+// token already known (also a revoked one) is left as it is.
+type LocalTokens struct {
+	// Dir holds one file per token: "pricing" (role pricing) and "agent" (role agent of Cluster).
+	// Missing files are skipped. Empty: no local tokens.
+	Dir string `json:"dir"`
+	// Cluster is the name of the hub's own cluster, registered when the agent token is seeded.
+	Cluster string `json:"cluster"`
+}
+
 // DevSeed registers clusters and tokens at startup. Development only.
 type DevSeed struct {
 	Enabled bool `json:"enabled"`
@@ -266,6 +279,9 @@ func (a AuthConfig) passwordAllowed(username string) bool {
 type BootstrapAdmin struct {
 	Username     string `json:"username"`
 	PasswordFile string `json:"passwordFile"`
+	// MustChangePassword makes the admin choose a new password at first sign-in. The chart sets it
+	// when it generated the password; a password the operator chose is not forced.
+	MustChangePassword bool `json:"mustChangePassword"`
 }
 
 func (a AuthConfig) cookieSecure() bool { return a.CookieSecure == nil || *a.CookieSecure }

@@ -121,6 +121,8 @@ charts-lint-umbrella: kubeconform yq ## helm lint + kubeconform of the umbrella 
 	  echo "$$msg" | grep -q 'was removed: .*docs/auth.md' || { echo "--set $$set: $$msg"; exit 1; }; \
 	  echo "   --set $$set: refused"; \
 	done; \
+	echo "== $(UMBRELLA): hub tokens, bootstrap admin and pricing metrics URL per mode (defaults, ExternalSecrets, own Secrets)"; \
+	UMBRELLA_TEST_REQUIRE_HELM=1 $(GO) test -count=1 -run 'TestTokenSources' ./$(UMBRELLA_DIR); \
 	echo "== $(UMBRELLA_EXAMPLES): manifests and IAM policies"; \
 	$(KUBECONFORM) -strict -summary -kubernetes-version $(CHARTS_K8S_VERSION) -cache $(KUBECONFORM_CACHE) \
 	  -schema-location default -schema-location '$(CRDS_CATALOG)' \
@@ -154,6 +156,8 @@ charts-check-crds: yq ## Rendered CRD templates (agent; webhook with crds.instal
 CHARTS_NORMALISE = $(YQ) ea -P '[.] | map(select(. != null)) | sort_by(.kind, .metadata.namespace, .metadata.name) | .[] \
   | ... comments="" \
   | with(select(.kind == "Secret" and .metadata.name == "hub-datasource-key"); .data.key = "<random>") \
+  | with(select(.kind == "Secret" and .metadata.name == "hub-bootstrap-admin" and .data.password); .data.password = "<random>") \
+  | with(select(.kind == "Secret" and .metadata.name == "hub-local-tokens"); .data[] = "<random>") \
   | with(select(.kind == "Deployment" and .metadata.name == "hub"); .spec.template.metadata.annotations["checksum/secrets"] = "<random>") \
   | sort_keys(..) | split_doc'
 

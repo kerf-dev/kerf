@@ -58,7 +58,10 @@ cur:
     # for large files too.
     tmpSizeLimit: 1Gi
 
-# Prometheus-compatible query URL holding the spokes' kube-state-metrics node series.
+# Prometheus-compatible query URL holding the spokes' kube-state-metrics node series. Empty (the
+# umbrella chart's default) with hub.url: the hub's own metrics datasource (hub.config.prometheusURL),
+# read through the hub with the pricing token. When a query fails, the log names the URL and the
+# value that set it.
 vmURL: http://victoria-metrics.monitoring.svc:8428
 # Node discovery / pricing interval, and how long a fetched price is reused.
 interval: 5m
@@ -77,8 +80,12 @@ logLevel: info
 # token of role pricing; empty url = only vmURL (clusters without a binding).
 hub:
   url: ""
+  # The token of role pricing. Without it pricing logs "hub token missing: Secret <namespace>/<name>
+  # key <key>" on every refresh and is not Ready. Umbrella chart (global.mode hub and all): with name,
+  # create and externalSecret all unset, the token the hub chart generates (Secret
+  # <hub name>-local-tokens, key pricing); name set: your own Secret.
   tokenSecret:
-    name: ""
+    name: ""                # umbrella default: <pricing name>-hub-token for create / externalSecret
     key: token
     # create: true makes the chart create the Secret from `token` (local development only).
     create: false

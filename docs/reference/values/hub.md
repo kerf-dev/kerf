@@ -107,8 +107,9 @@ The values of the `hub` component chart. In the `kerf` chart they sit under `hub
 | `auth.sessionTTL` | string | `12h` |  |
 | `auth.maxFailedLogins` | integer | `5` |  |
 | `auth.lockoutDuration` | string | `15m` |  |
-| `auth.bootstrapAdmin` | object | see the keys below | The initial admin, created when the database has no users. The password comes from existingSecret/existingSecretKey, externalSecret (Secret <release>-bootstrap-admin) or, if all are empty, from password (rendered into Secret <release>-bootstrap-admin). Leave all empty to skip. |
+| `auth.bootstrapAdmin` | object | see the keys below | The initial admin, created when the database has no users. The password comes from existingSecret/existingSecretKey, externalSecret (Secret <release>-bootstrap-admin) or password (development; rendered into Secret <release>-bootstrap-admin). With none of them, generate: true makes the chart generate one, once (Secret <release>-bootstrap-admin, kept across upgrades and uninstall; Helm lookup, so not with `helm template` or Argo CD), and the admin must change it at first sign-in. A password you set is not forced. generate: false and no password: no bootstrap admin. Not generated with devSeed. |
 | `auth.bootstrapAdmin.username` | string | `admin` |  |
+| `auth.bootstrapAdmin.generate` | boolean | `true` |  |
 | `auth.bootstrapAdmin.password` | string | `""` |  |
 | `auth.bootstrapAdmin.existingSecret` | string | `""` |  |
 | `auth.bootstrapAdmin.existingSecretKey` | string | `password` |  |
@@ -149,6 +150,8 @@ The values of the `hub` component chart. In the `kerf` chart they sit under `hub
 | `auth.oidc.clientSecret.externalSecret.remoteRef.version` | string | `""` |  |
 | `auth.oidc.clientSecret.externalSecret.refreshInterval` | string | `""` |  |
 | `auth.oidc.clientSecret.externalSecret.secretStoreRef` | object | `{}` |  |
+| `localTokens` | object | see the keys below | Tokens of this release's own services, in the umbrella chart (global.mode hub and all): the chart generates them once (Secret <release>-local-tokens, keys pricing and, in mode all, agent; kept across upgrades and uninstall) and the hub stores their hashes at start-up, so pricing and the local agent connect without a manual token. Pricing and the agent use them unless their hub.tokenSecret names another source. Helm lookup keeps them stable: with `helm template` or Argo CD every render makes new ones (the hub restarts and accepts them; the old ones stay valid until revoked), so there give pricing and the agent their own Secrets instead. |
+| `localTokens.enabled` | boolean | `true` |  |
 | `logLevel` | string | `info` |  |
 | `config` | object | see the keys below | Hub configuration file (internal/hub/config.go). databaseURL and devSeed are injected by the chart. |
 | `config.listen` | string | `:8080` |  |

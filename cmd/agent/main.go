@@ -181,6 +181,8 @@ func run(args []string) error {
 		cluster        = fs.String("cluster-name", os.Getenv("CLUSTER_NAME"), "cluster name, as known to the hub (required)")
 		hubURL         = fs.String("hub-url", "http://hub-api.hub.svc:8080", "hub base URL")
 		tokenFile      = fs.String("hub-token-file", "/var/run/secrets/kerf/hub/token", "file with the hub bearer token (re-read on every request)")
+		tokenSource    = fs.String("hub-token-source", "", "where the token file comes from, for the error when it is missing, e.g. \"Secret kerf/kerf-agent-token key token\"")
+		tokenOptional  = fs.Bool("hub-token-optional", false, "run without a hub token (a hub without auth, e.g. the development stub); otherwise a missing token is logged as an error and fails readiness")
 		defaultsFile   = fs.String("cluster-defaults", "", "YAML file with the cluster default policy (a RightsizingPolicy spec)")
 		freezeFile     = fs.String("freeze-file", "", "YAML file with the cluster-wide freeze {now: bool, windows: [TimeWindow]}")
 		pullInterval   = fs.Duration("pull-interval", time.Minute, "how often recommendations are pulled")
@@ -288,7 +290,23 @@ func run(args []string) error {
 		return err
 	}
 
-	hub, err := hubclient.New(*hubURL, *cluster, hubclient.FileToken(*tokenFile), nil)
+	token := hubclient.FileToken(*tokenFile)
+	if !*tokenOptional {
+		src := *tokenSource
+		if src == "" {
+			src = "file " + *tokenFile
+		}
+		req := hubclient.NewRequiredToken(token, src, log.With("component", "hub-token"))
+		// Not Ready without the token: the hub would refuse every call.
+		if err := mgr.AddReadyzCheck("hub-token", req.Check); err != nil {
+			return err
+		}
+		token = req.Token
+		if _, err := token(); err == nil {
+			log.Info("hub token found", "source", src)
+		}
+	}
+	hub, err := hubclient.New(*hubURL, *cluster, token, nil)
 	if err != nil {
 		return err
 	}

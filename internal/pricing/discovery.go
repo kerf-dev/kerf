@@ -35,6 +35,9 @@ type Node struct {
 type Discovery struct {
 	// VMURL is the Prometheus-compatible query base URL, e.g. http://victoria-metrics.monitoring.svc:8428.
 	VMURL string
+	// VMSource names the setting VMURL comes from (e.g. pricing.vmURL): a failed query names it, so the
+	// log says what to change.
+	VMSource string
 	// ClusterRegex limits the clusters priced (PromQL regex on the cluster label); empty = all.
 	ClusterRegex string
 	// DefaultRegion is used for nodes without a region or zone label.
@@ -126,6 +129,9 @@ func (d *Discovery) Nodes(ctx context.Context) ([]Node, error) {
 	}
 	nodes := map[nodeID]*Node{}
 	if err := d.discover(ctx, d.VMURL, d.HTTP, []string{sel}, func(s string) string { return s }, nodes); err != nil {
+		if d.VMSource != "" {
+			return nil, fmt.Errorf("node metrics at %s (set by %s): %w", redactURL(d.VMURL), d.VMSource, err)
+		}
 		return nil, err
 	}
 	if d.Targets != nil {
@@ -316,4 +322,13 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// redactURL hides a password in u.
+func redactURL(u string) string {
+	p, err := url.Parse(u)
+	if err != nil {
+		return u
+	}
+	return p.Redacted()
 }

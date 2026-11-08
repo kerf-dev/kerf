@@ -17,6 +17,9 @@
 {{- fail "pricing is a singleton (replicaCount 1): more replicas would publish every cost series twice" }}
 {{- end }}
 {{- $ca := include "pricing.caEnabled" . }}
+{{- $mode := dig "mode" "" (.Values.global | default dict) }}
+{{- $tok := include "pricing.c.tokenSource" (dict "ctx" . "mode" $mode "component" "pricing" "ts" .Values.hub.tokenSecret) | fromJson }}
+{{- if and (not .Values.vmURL) (not .Values.hub.url) }}{{ fail "vmURL is required: the Prometheus-compatible URL with the kube_node_labels series (or set hub.url to read them through the hub)" }}{{ end }}
 {{- $vols := or .Values.prices .Values.hub.url $ca $curTmp .Values.extraVolumes }}
 {{- $mounts := or .Values.prices .Values.hub.url $ca $curTmp .Values.extraVolumeMounts }}
 apiVersion: apps/v1
@@ -52,7 +55,14 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --provider={{ .Values.provider }}
+            {{- if .Values.vmURL }}
             - --vm-url={{ .Values.vmURL }}
+            - --vm-url-setting={{ ternary "pricing.vmURL" "vmURL" (ne $mode "") }}
+            {{- else }}
+            # vmURL empty: the node series come from the hub's own metrics datasource (hub.config.prometheusURL),
+            # through the hub's query proxy.
+            - --vm-url=
+            {{- end }}
             - --listen=:{{ .Values.service.port }}
             - --interval={{ .Values.interval }}
             - --price-ttl={{ .Values.priceTTL }}
@@ -72,6 +82,7 @@ spec:
             {{- if .Values.hub.url }}
             - --hub-url={{ .Values.hub.url }}
             - --hub-token-file=/etc/kerf/hub-token/token
+            - --hub-token-source=Secret {{ .Release.Namespace }}/{{ $tok.name }} key {{ $tok.key }}
             {{- end }}
             {{- with $cur.source }}
             - --cur-source={{ . }}
@@ -157,11 +168,14 @@ spec:
             name: {{ include "pricing.fullname" . }}-prices
         {{- end }}
         {{- if .Values.hub.url }}
+        # Optional, so that pricing starts without it: it then logs "hub token missing: Secret <namespace>/<name>
+        # key <key>" on every refresh and is not Ready (instead of waiting in ContainerCreating).
         - name: hub-token
           secret:
-            secretName: {{ required "hub.tokenSecret.name is required with hub.url" .Values.hub.tokenSecret.name }}
+            secretName: {{ required "hub.tokenSecret.name is required with hub.url" $tok.name }}
+            optional: true
             items:
-              - key: {{ .Values.hub.tokenSecret.key }}
+              - key: {{ $tok.key }}
                 path: token
         {{- end }}
         {{- if $ca }}
