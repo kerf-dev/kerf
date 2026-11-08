@@ -19,6 +19,55 @@ section here. The GitHub Release lists the same section as its highlights, follo
   [Install on an existing cluster](docs/install/single-cluster.md), covers one namespace with an in-cluster
   PostgreSQL, and one list of the kube-state-metrics collectors and node labels Kerf reads
   ([docs/install/any-cluster.md](docs/install/any-cluster.md#kube-state-metrics-requirements)).
+### Added
+
+- **Re-check now.** The cluster page has a **Re-check now** button on the Overview card and the Readiness tab, and
+  every readiness check shows when it ran ("checked 23 minutes ago"). A recompute (`POST /v1/admin/recompute`)
+  also re-runs the hub's readiness checks, and every failing metrics check's remediation says how to re-check, so a
+  fix no longer waits for the hourly check interval.
+- **Graviton prices in the default static price table.** The price file baked into the pricing image now prices the
+  `c7g`, `c8g`, `m7g`, `m8g`, `r7g`, `r8g` and `t4g` families (up to `4xlarge`; `t4g` up to `2xlarge`) in `eu-west-1`
+  and `us-east-1`, on-demand and spot. Before, a cluster on Graviton nodes had every node skipped as `no-price`.
+- **IRSA in the pricing guide.** `docs/pricing.md` explains how to give the pricing service its AWS role with IRSA
+  (IAM policy, OIDC trust policy and the `pricing.serviceAccount.annotations` annotation), and when to choose it over
+  EKS Pod Identity: organizations that block Pod Identity associations (`Cross-account pass role is not allowed`).
+
+### Changed
+
+- **`global.mode: all` installs need no token.** The chart generates the pricing token (modes `hub` and `all`)
+  and the local agent's token (mode `all`) once, in the Secret `<hub name>-local-tokens` (kept across upgrades),
+  and the hub accepts them at start-up. Pricing and the agent use them unless their `hub.tokenSecret` names
+  another source: an ExternalSecret, `create`, or your own Secret (`name`; for the agent another name than
+  `kerf-agent-token`). Revoking one in *Admin → Access* is final; delete the Secret and upgrade for new ones. With
+  Argo CD or `helm template` (no Helm `lookup`), give pricing and the agent their own Secrets.
+- **`pricing.vmURL` defaults to the hub's metrics.** Empty (the new default of the `kerf` chart): pricing reads
+  the node series from `hub.config.prometheusURL`, through the hub. A failed query names the URL and the setting
+  that set it.
+- **The generated bootstrap admin must change its password.** Without a password of yours, the chart generates
+  one (Secret `<hub name>-bootstrap-admin`, kept) and the admin must change it at first sign-in
+  (`mustChangePassword: true`). A password you supply (`existingSecret`, `externalSecret`) is not forced.
+  `hub.auth.bootstrapAdmin.generate: false` keeps the old behaviour (no admin without a password).
+- **Install NOTES.** They mention Secrets Manager and ExternalSecrets only when the External Secrets Operator is
+  configured, print the `kubectl create secret` command for every token Secret you have to create, and show
+  how to read the generated admin password.
+
+### Fixed
+
+- **`metrics.node-labels` judges each node by its newest `kube_node_labels` series.** After a kube-state-metrics
+  allowlist change, the node's old series without the capacity type no longer fails it for up to an hour. Pricing
+  node discovery uses a node's current series the same way. The readiness contract shows the same allowlist as the
+  check (with `eks.amazonaws.com/capacityType`).
+- **`metrics.scrape-interval` reports the real interval for new scrape jobs.** It is estimated over the time each
+  series covers, not the whole 30-minute window: a job started 12 minutes ago at 30 s no longer reads as about 1m18s.
+- **`metrics.freshness` tells absent series from stale ones.** A series without samples reads "no samples of … found
+  in the last 1h" (`details`: `absent`), with a remediation for the missing scrape job or exporter, instead of
+  "last sample is over 1h old".
+- **The `metrics.cadvisor` remediation keeps TLS verification on.** It scrapes cAdvisor through the API server proxy
+  with the service-account CA (`ca_file`) instead of `insecure_skip_verify`, names the `nodes` and `nodes/proxy`
+  RBAC the scraper needs, and shows the job for Prometheus and for Grafana Alloy.
+- **A missing token no longer fails silently.** An agent or pricing pod without its token Secret starts, logs
+  `hub token missing: Secret <namespace>/<name> key <key>` at error level, and is not Ready until the token is
+  there. Before, the agent ran without a token and pricing waited in `ContainerCreating`.
 
 ## [0.1.0] - 2026-11-07
 

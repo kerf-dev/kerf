@@ -516,7 +516,7 @@ func (s *Server) testDatasource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mc := &readiness.MetricsChecker{Q: res.Q, API: res.API, M: res.Matcher, Jobs: b.JobNames, Local: s.Prom,
-		HistoryWindow: s.historyWindow(), DocsBase: s.docsBase(), Now: s.now}
+		HistoryWindow: s.historyWindow(), DocsBase: s.docsBase(), Preview: true, Now: s.now}
 	rep := mc.Run(r.Context())
 	out := hubapi.DatasourceTestResult{OK: rep.OK(), LatencyMs: int(rep.Latency.Milliseconds()), LabelValues: rep.LabelValues, Checks: rep.Checks}
 	if rep.Found != (hubapi.DatasourceTestFound{}) {

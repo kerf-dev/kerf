@@ -35,6 +35,9 @@ type Node struct {
 type Discovery struct {
 	// VMURL is the Prometheus-compatible query base URL, e.g. http://victoria-metrics.monitoring.svc:8428.
 	VMURL string
+	// VMSource names the setting VMURL comes from (e.g. pricing.vmURL): a failed query names it, so the
+	// log says what to change.
+	VMSource string
 	// ClusterRegex limits the clusters priced (PromQL regex on the cluster label); empty = all.
 	ClusterRegex string
 	// DefaultRegion is used for nodes without a region or zone label.
@@ -67,6 +70,51 @@ const gib = 1 << 30
 // DefaultNodeLookback covers a few missed scrapes without pricing long-gone nodes.
 const DefaultNodeLookback = 10 * time.Minute
 
+// recentNodeWindow is how far back a node's kube_node_labels series counts as current.
+const recentNodeWindow = 5 * time.Minute
+
+// currentNodeLabels returns one kube_node_labels row per node: from the recent rows when the node
+// has any (its current series), else from the lookback rows. Among a node's rows, the one with
+// the most pricing labels wins, so a stale series without the capacity type does not decide.
+func currentNodeLabels(lookback, recent []sample) []sample {
+	pick := func(rows []sample, into map[nodeID]sample) {
+		for _, r := range rows {
+			id := nodeID{r.Metric["cluster"], r.Metric["node"]}
+			if b, ok := into[id]; !ok || labelScore(r.Metric) > labelScore(b.Metric) {
+				into[id] = r
+			}
+		}
+	}
+	cur := map[nodeID]sample{}
+	pick(recent, cur)
+	old := map[nodeID]sample{}
+	pick(lookback, old)
+	for id, r := range old {
+		if _, ok := cur[id]; !ok {
+			cur[id] = r
+		}
+	}
+	out := make([]sample, 0, len(cur))
+	for _, r := range cur {
+		out = append(out, r)
+	}
+	return out
+}
+
+// labelScore counts the pricing labels a kube_node_labels row has.
+func labelScore(m map[string]string) int {
+	n := 0
+	for _, k := range []string{"label_node_kubernetes_io_instance_type", "label_topology_kubernetes_io_region", "label_topology_kubernetes_io_zone"} {
+		if m[k] != "" {
+			n++
+		}
+	}
+	if m["label_karpenter_sh_capacity_type"] != "" || m["label_eks_amazonaws_com_capacity_type"] != "" {
+		n++
+	}
+	return n
+}
+
 // Nodes returns the nodes currently reported, sorted by cluster and name. Nodes with an unknown
 // capacity type are returned with an empty CapacityType so the caller can count them.
 //
@@ -81,6 +129,9 @@ func (d *Discovery) Nodes(ctx context.Context) ([]Node, error) {
 	}
 	nodes := map[nodeID]*Node{}
 	if err := d.discover(ctx, d.VMURL, d.HTTP, []string{sel}, func(s string) string { return s }, nodes); err != nil {
+		if d.VMSource != "" {
+			return nil, fmt.Errorf("node metrics at %s (set by %s): %w", redactURL(d.VMURL), d.VMSource, err)
+		}
 		return nil, err
 	}
 	if d.Targets != nil {
@@ -146,20 +197,30 @@ func (d *Discovery) discover(ctx context.Context, base string, hc *http.Client, 
 		lookback = DefaultNodeLookback
 	}
 	window := "[" + strconv.FormatInt(int64(lookback/time.Second), 10) + "s]"
-	labelsQ := `max by (cluster, node, label_node_kubernetes_io_instance_type, label_karpenter_sh_capacity_type, ` +
-		`label_eks_amazonaws_com_capacity_type, label_topology_kubernetes_io_region, label_topology_kubernetes_io_zone) ` +
-		`(` + rel(`last_over_time(kube_node_labels{`+strings.Join(sel, ", ")+`}`+window+`)`) + `)`
+	labelsQ := func(window string) string {
+		return `max by (cluster, node, label_node_kubernetes_io_instance_type, label_karpenter_sh_capacity_type, ` +
+			`label_eks_amazonaws_com_capacity_type, label_topology_kubernetes_io_region, label_topology_kubernetes_io_zone) ` +
+			`(` + rel(`last_over_time(kube_node_labels{`+strings.Join(sel, ", ")+`}`+window+`)`) + `)`
+	}
 	allocQ := `max by (cluster, node, resource) (` + rel(`last_over_time(kube_node_status_allocatable{`+strings.Join(append(append([]string{}, sel...), `resource=~"cpu|memory"`), ", ")+`}`+window+`)`) + `)`
 
-	labelRows, err := d.query(ctx, base, hc, labelsQ)
+	labelRows, err := d.query(ctx, base, hc, labelsQ(window))
 	if err != nil {
 		return err
+	}
+	// A node keeps its old kube_node_labels series in the lookback after its labels or the
+	// kube-state-metrics allowlist change. Its series of the last few minutes are the current ones.
+	var recentRows []sample
+	if lookback > recentNodeWindow {
+		if recentRows, err = d.query(ctx, base, hc, labelsQ("["+strconv.FormatInt(int64(recentNodeWindow/time.Second), 10)+"s]")); err != nil {
+			return err
+		}
 	}
 	allocRows, err := d.query(ctx, base, hc, allocQ)
 	if err != nil {
 		return err
 	}
-	for _, r := range labelRows {
+	for _, r := range currentNodeLabels(labelRows, recentRows) {
 		m := r.Metric
 		n := &Node{
 			Cluster:      m["cluster"],
@@ -261,4 +322,13 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// redactURL hides a password in u.
+func redactURL(u string) string {
+	p, err := url.Parse(u)
+	if err != nil {
+		return u
+	}
+	return p.Redacted()
 }

@@ -103,6 +103,9 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 				return err
 			}
 		}
+		if err := hub.SeedLocalTokens(ctx, st, cfg.LocalTokens, log); err != nil {
+			return err
+		}
 		if err := hub.BootstrapUsers(ctx, st, cfg, log); err != nil {
 			return err
 		}

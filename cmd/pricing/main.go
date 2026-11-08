@@ -45,6 +45,8 @@ type options struct {
 	logLevel      string
 	hubURL        string
 	hubTokenFile  string
+	hubTokenSrc   string
+	vmURLSetting  string
 	cur           curOptions
 }
 
@@ -69,7 +71,8 @@ func main() {
 	fs := flag.NewFlagSet("pricing", flag.ExitOnError)
 	fs.StringVar(&o.provider, "provider", envOr("PRICING_PROVIDER", "static"), "price provider: static or aws")
 	fs.StringVar(&o.pricesFile, "prices", envOr("PRICING_PRICES_FILE", "/etc/kerf/prices.yaml"), "static provider: price file")
-	fs.StringVar(&o.vmURL, "vm-url", envOr("PRICING_VM_URL", "http://localhost:8428"), "VictoriaMetrics/Prometheus query URL holding spoke node metrics")
+	fs.StringVar(&o.vmURL, "vm-url", envOr("PRICING_VM_URL", "http://localhost:8428"), "VictoriaMetrics/Prometheus query URL holding spoke node metrics; empty with --hub-url: the hub's own metrics datasource, through the hub")
+	fs.StringVar(&o.vmURLSetting, "vm-url-setting", "", "the setting --vm-url comes from (e.g. pricing.vmURL), named when a query fails")
 	fs.StringVar(&o.listen, "listen", envOr("PRICING_LISTEN", ":9090"), "address serving /metrics, /healthz, /readyz")
 	fs.DurationVar(&o.interval, "interval", 5*time.Minute, "node discovery and pricing interval")
 	fs.DurationVar(&o.nodeLookback, "node-lookback", pricing.DefaultNodeLookback, "keep pricing a node this long after its last kube_node_labels sample")
@@ -82,6 +85,7 @@ func main() {
 	fs.StringVar(&o.logLevel, "log-level", envOr("LOG_LEVEL", "info"), "debug, info, warn or error")
 	fs.StringVar(&o.hubURL, "hub-url", envOr("PRICING_HUB_URL", ""), "hub API URL: clusters with a metrics binding are discovered in their datasource through the hub's query proxy; empty = only --vm-url")
 	fs.StringVar(&o.hubTokenFile, "hub-token-file", envOr("PRICING_HUB_TOKEN_FILE", ""), "file with the hub token of role pricing (needed with --hub-url)")
+	fs.StringVar(&o.hubTokenSrc, "hub-token-source", "", "where the token file comes from, for the error when it is missing, e.g. \"Secret kerf/pricing-hub-token key token\"")
 	fs.StringVar(&o.cur.source, "cur-source", envOr("PRICING_CUR_SOURCE", ""), "AWS Cost and Usage Report reader: athena, s3, or empty for none (list prices only)")
 	fs.StringVar(&o.cur.region, "cur-region", envOr("PRICING_CUR_REGION", ""), "region of the Athena workgroup or the export bucket (default: the SDK's region)")
 	fs.DurationVar(&o.cur.interval, "cur-interval", pricing.DefaultCURInterval, "how often the report is read")
@@ -129,14 +133,23 @@ func run(ctx context.Context, o options, log *slog.Logger) error {
 	if cur != nil {
 		provider = cur
 	}
-	disc := &pricing.Discovery{VMURL: o.vmURL, ClusterRegex: o.clusters, DefaultRegion: o.defaultRegion, Lookback: o.nodeLookback, Log: log}
+	vmURL, vmSrc, viaHub, err := vmSource(o.vmURL, o.vmURLSetting, o.hubURL)
+	if err != nil {
+		return err
+	}
+	disc := &pricing.Discovery{VMURL: vmURL, VMSource: vmSrc, ClusterRegex: o.clusters, DefaultRegion: o.defaultRegion, Lookback: o.nodeLookback, Log: log}
+	var token *hubToken
 	if o.hubURL != "" {
 		if o.hubTokenFile == "" {
 			return errors.New("--hub-url needs --hub-token-file")
 		}
+		token = newHubToken(o.hubTokenFile, o.hubTokenSrc, log)
 		// The User-Agent tells the hub this service's version (Admin -> Maintenance).
 		hc := &http.Client{Timeout: 60 * time.Second, Transport: userAgent{ua: hubUserAgent()}}
-		disc.Targets = &pricing.HubTargets{HubURL: o.hubURL, Token: pricing.FileToken(o.hubTokenFile), HTTP: hc}
+		disc.Targets = &pricing.HubTargets{HubURL: o.hubURL, Token: token.Token, HTTP: hc}
+		if viaHub {
+			disc.HTTP = &http.Client{Timeout: 60 * time.Second, Transport: bearerTransport{next: userAgent{ua: hubUserAgent()}, token: token.Token}}
+		}
 	}
 	exp := pricing.NewExporter(disc, provider, splitter, log)
 
@@ -157,6 +170,12 @@ func run(ctx context.Context, o options, log *slog.Logger) error {
 	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
+		if token != nil {
+			if _, err := token.Token(); err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			}
+		}
 		if !exp.Ready() {
 			http.Error(w, "no successful refresh yet", http.StatusServiceUnavailable)
 			return
@@ -168,7 +187,7 @@ func run(ctx context.Context, o options, log *slog.Logger) error {
 	go exp.Run(ctx, o.interval)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
-	log.InfoContext(ctx, "pricing started", "version", version, "provider", base.Name(), "cur_source", o.cur.source, "listen", o.listen, "vm_url", o.vmURL, "interval", o.interval.String())
+	log.InfoContext(ctx, "pricing started", "version", version, "provider", base.Name(), "cur_source", o.cur.source, "listen", o.listen, "vm_url", disc.VMURL, "vm_url_source", vmSrc, "interval", o.interval.String())
 
 	select {
 	case err := <-errc:

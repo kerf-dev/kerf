@@ -101,6 +101,11 @@ spec:
               mountPath: /etc/hub/datasource-key
               readOnly: true
             {{- end }}
+            {{- if include "hub.localTokensSecret" . }}
+            - name: local-tokens
+              mountPath: /etc/hub/local-tokens
+              readOnly: true
+            {{- end }}
             {{- if and .Values.auth.oidc.enabled (include "hub.oidcSecret" .) }}
             - name: oidc
               mountPath: /etc/hub/oidc
@@ -144,6 +149,11 @@ spec:
             items:
               - key: {{ .Values.auth.oidc.clientSecret.existingSecretKey }}
                 path: client-secret
+        {{- end }}
+        {{- with include "hub.localTokensSecret" . }}
+        - name: local-tokens
+          secret:
+            secretName: {{ . }}
         {{- end }}
         {{- if $dsKey }}
         - name: datasource-key

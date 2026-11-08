@@ -19,6 +19,102 @@ Every node's series carry a `source` label. The workload page ("Why this recomme
 
 On top of these rates, **Admin → Pricing** applies a discount or a fixed rate per cluster.
 
+### The static price file
+
+The default `static` file baked into the pricing image holds approximate list prices for development: common x86
+families in `eu-west-1`, and the Graviton families (`c7g`, `c8g`, `m7g`, `m8g`, `r7g`, `r8g`, `t4g`) in `eu-west-1` and
+`us-east-1`. A node whose instance type or region is not in the file is skipped with the reason `no-price`
+(`kerf_pricing_nodes{status="skipped",reason="no-price"}`), and the pricing log names it:
+
+```text
+level=WARN msg="no price for node" instance_type=c9g.xlarge key=us-east-1/c9g.xlarge/on-demand
+```
+
+Switch to `provider: aws` (below) for real list and spot prices in any region, or set the `prices` value of the
+pricing chart to a file in the format of [`dev/prices.yaml`](../dev/prices.yaml) with your types and regions.
+
+## Give the pricing service AWS access
+
+`provider: aws` (list and spot prices) and the Cost and Usage Report readers call AWS with the default credential
+chain, so the pricing pod needs an IAM role. The role's policy is
+[`deploy/examples/eks/iam/pricing-policy.json`](../deploy/examples/eks/iam/pricing-policy.json) (`pricing:GetProducts`
+and `ec2:DescribeSpotPriceHistory`), plus the CUR statements [below](#3-iam) when you use effective rates. There are two
+ways to hand the role to the pod:
+
+| | EKS Pod Identity | IRSA (IAM roles for service accounts) |
+|---|---|---|
+| How | An association between the ServiceAccount and the role, made with the EKS API. Needs the `eks-pod-identity-agent` add-on. | The role trusts the cluster's OIDC provider, and the ServiceAccount carries the `eks.amazonaws.com/role-arn` annotation. |
+| Trust policy principal | `pods.eks.amazonaws.com` | The cluster's IAM OIDC provider |
+| Choose it when | You can create Pod Identity associations (the default in the [EKS install guide](install/eks.md)). | Your organization blocks Pod Identity associations, or the add-on can't run. |
+
+Some organizations block `eks:CreatePodIdentityAssociation` through a service control policy or a permission
+boundary. The call then fails with `Cross-account pass role is not allowed`, and IRSA works as a replacement because it
+needs no association. IRSA also works on clusters without the Pod Identity agent.
+
+### With IRSA
+
+1. Find the cluster's OIDC provider. Use its issuer without `https://` as `<OIDC_PROVIDER>`, and create the IAM OIDC
+   provider if the second command prints nothing:
+
+   ```bash
+   OIDC_ISSUER=$(aws eks describe-cluster --name <cluster> --query cluster.identity.oidc.issuer --output text)
+   aws iam list-open-id-connect-providers --query "OpenIDConnectProviderList[?ends_with(Arn, '${OIDC_ISSUER#https://}')]"
+   eksctl utils associate-iam-oidc-provider --cluster <cluster> --approve   # only if none is listed
+   ```
+
+2. Create the role with this trust policy. `<NAMESPACE>` is the namespace of the release, and `pricing` is the
+   ServiceAccount name (the release name of the `pricing` chart, or `pricing` in the `kerf` chart; check it with
+   `kubectl -n <namespace> get serviceaccount`):
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Principal": {"Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/<OIDC_PROVIDER>"},
+         "Action": "sts:AssumeRoleWithWebIdentity",
+         "Condition": {
+           "StringEquals": {
+             "<OIDC_PROVIDER>:aud": "sts.amazonaws.com",
+             "<OIDC_PROVIDER>:sub": "system:serviceaccount:<NAMESPACE>:pricing"
+           }
+         }
+       }
+     ]
+   }
+   ```
+
+   ```bash
+   aws iam create-role --role-name kerf-pricing --assume-role-policy-document file://irsa-trust.json
+   aws iam put-role-policy --role-name kerf-pricing --policy-name kerf-pricing --policy-document file://pricing-policy.json
+   ```
+
+3. Annotate the ServiceAccount in the `kerf` chart's values (or the `pricing` chart's, without the `pricing:` level),
+   and upgrade the release:
+
+   ```yaml
+   pricing:
+     provider: aws
+     serviceAccount:
+       annotations:
+         eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/kerf-pricing
+   ```
+
+4. Check that the pricing pod assumed the role and prices every node:
+
+   ```bash
+   kubectl -n <namespace> rollout status deploy/pricing
+   kubectl -n <namespace> logs deploy/pricing | grep "pricing refreshed"
+   ```
+
+   Expected: `"pricing refreshed"` with `"priced"` equal to `"nodes"`. `AccessDenied`, `WebIdentityErr` or a
+   credentials timeout in the log means the trust policy's `sub` (namespace or ServiceAccount name) or the
+   annotation does not match, or the pod started before the annotation (restart it).
+
+With Pod Identity, make no annotation and create the association instead; see
+[the EKS install guide](install/eks.md#34-iam-and-eks-pod-identity). Do not use both for the same ServiceAccount.
+
 ## Effective rates from the AWS Cost and Usage Report
 
 List prices overstate the savings of teams that pay less, through Savings Plans, Reserved Instances or a
@@ -111,8 +207,8 @@ several times a day.
 
 ### 3. IAM
 
-The pricing service uses the default credential chain: EKS Pod Identity, as for the price list
-([install guide, 3.4](install/eks.md#34-iam-and-eks-pod-identity)). Add one of these statements to the
+The pricing service uses the default credential chain, with the same role as for the price list: EKS Pod Identity
+or [IRSA](#give-the-pricing-service-aws-access). Add one of these statements to the
 `kerf-pricing` role's policy, next to `pricing:GetProducts` and `ec2:DescribeSpotPriceHistory`.
 
 Athena (replace the region, account, workgroup, database, table and buckets):

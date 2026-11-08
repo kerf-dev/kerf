@@ -52,8 +52,13 @@ curl / CI / agents ──(Authorization: Bearer <token>)────────
 | `operator` | workload overrides and exclusions, approve once, pause a cluster or the fleet, impact previews |
 | `admin` | defaults and policies, recommender and pricing settings, clusters, tokens, users |
 
-- **The first admin** is created on an empty database from a Secret (`hub.auth.bootstrapAdmin`, see
-  [Install on Amazon EKS](install/eks.md), section 4.5). Change its password after the first sign-in.
+- **The first admin** (`admin`) is created on an empty database (`hub.auth.bootstrapAdmin`). If you give
+  no password, the chart generates one, once, in the Secret `<hub name>-bootstrap-admin` (key `password`;
+  `hub-bootstrap-admin` for a release named `kerf`), and the admin **must choose a new password at the
+  first sign-in**. The install NOTES show the command that reads it. A password you supply yourself
+  (`existingSecret` or `externalSecret`, see [Install on Amazon EKS](install/eks.md), section 4.5) is not
+  forced: you already chose it. With `generate: false` and no password there is no bootstrap admin. The
+  generated password uses Helm `lookup`, so with Argo CD or `helm template` supply your own.
 - **More users:** *Admin → Access → Users*. A new user gets a temporary password and must change it at the
   first sign-in. An admin can disable a user (their sessions end at once) or reset a password.
 - Everyone who needs to see Kerf needs a user, at least a `viewer`. With an identity provider the

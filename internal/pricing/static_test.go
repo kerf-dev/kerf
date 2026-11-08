@@ -28,13 +28,72 @@ func TestDevPricesFile(t *testing.T) {
 			if p.Spot >= p.OnDemand {
 				t.Errorf("%s/%s: spot %v >= on-demand %v", region, it, p.Spot, p.OnDemand)
 			}
-			if s.file.InstanceTypes[it].GPUs > 0 {
-				continue // GPU families have no c/m/r siblings: the fallback weight applies
+			if s.file.InstanceTypes[it].GPUs > 0 || siblings(it) == nil {
+				continue // GPU and burstable (t) families have no c/m/r siblings: the fallback weight applies
 			}
 			if w, src := sp.Weight(context.Background(), region, it); src != WeightDerived || w < 4 || w > 20 {
 				t.Errorf("%s/%s: weight %v (%s)", region, it, w, src)
 			}
 		}
+	}
+}
+
+func TestDevPricesGraviton(t *testing.T) {
+	s, err := LoadStatic("../../dev/prices.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	tests := []struct {
+		name         string
+		key          Key
+		wantUSD      float64
+		wantVCPU     float64
+		wantMemoryGB float64
+	}{
+		{"c7g.xlarge on-demand us-east-1", Key{"us-east-1", "us-east-1a", "c7g.xlarge", OnDemand}, 0.145, 4, 8},
+		{"c7g.xlarge spot us-east-1", Key{"us-east-1", "us-east-1a", "c7g.xlarge", Spot}, 0.0551, 4, 8},
+		{"m8g.large on-demand us-east-1", Key{"us-east-1", "us-east-1b", "m8g.large", OnDemand}, 0.08976, 2, 8},
+		{"m8g.large spot us-east-1", Key{"us-east-1", "us-east-1b", "m8g.large", Spot}, 0.0332, 2, 8},
+		{"c7g.xlarge on-demand eu-west-1", Key{"eu-west-1", "eu-west-1a", "c7g.xlarge", OnDemand}, 0.155, 4, 8},
+		{"c7g.xlarge spot eu-west-1", Key{"eu-west-1", "eu-west-1a", "c7g.xlarge", Spot}, 0.0868, 4, 8},
+		{"m8g.large on-demand eu-west-1", Key{"eu-west-1", "eu-west-1b", "m8g.large", OnDemand}, 0.10004, 2, 8},
+		{"m8g.large spot eu-west-1", Key{"eu-west-1", "eu-west-1b", "m8g.large", Spot}, 0.043, 2, 8},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := s.Price(ctx, tt.key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.HourlyUSD != tt.wantUSD || p.Shape.VCPU != tt.wantVCPU || p.Shape.MemoryGiB != tt.wantMemoryGB {
+				t.Fatalf("got %v USD/h, %v vCPU, %v GiB; want %v, %v, %v", p.HourlyUSD, p.Shape.VCPU, p.Shape.MemoryGiB, tt.wantUSD, tt.wantVCPU, tt.wantMemoryGB)
+			}
+		})
+	}
+
+	// Every requested family and size is priced in both regions, on-demand and spot.
+	sizes := []string{"medium", "large", "xlarge", "2xlarge", "4xlarge"}
+	for _, fam := range []string{"c7g", "c8g", "m7g", "m8g", "r7g", "r8g"} {
+		for _, size := range sizes {
+			for _, region := range []string{"eu-west-1", "us-east-1"} {
+				for _, ct := range []CapacityType{OnDemand, Spot} {
+					if _, err := s.Price(ctx, Key{Region: region, InstanceType: fam + "." + size, CapacityType: ct}); err != nil {
+						t.Errorf("%s %s.%s %s: %v", region, fam, size, ct, err)
+					}
+				}
+			}
+		}
+	}
+	for _, size := range []string{"nano", "micro", "small", "medium", "large", "xlarge", "2xlarge"} {
+		if _, err := s.Price(ctx, Key{Region: "us-east-1", InstanceType: "t4g." + size, CapacityType: OnDemand}); err != nil {
+			t.Errorf("t4g.%s: %v", size, err)
+		}
+	}
+
+	// An unknown type is still ErrNotFound, so the exporter reports it as no-price.
+	if _, err := s.Price(ctx, Key{Region: "us-east-1", InstanceType: "c9g.xlarge", CapacityType: OnDemand}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown type: err = %v, want ErrNotFound", err)
 	}
 }
 

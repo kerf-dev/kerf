@@ -1,8 +1,10 @@
 package pricing
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"math"
 	"strings"
 	"testing"
@@ -98,6 +100,33 @@ kerf_pricing_nodes{cluster="ro-hub",reason="unknown-capacity-type",status="skipp
 	}
 	if v := testutil.ToFloat64(e.refreshes.WithLabelValues("error")); v != 1 {
 		t.Fatalf("error refreshes = %v", v)
+	}
+}
+
+func TestExporterNamesUnpricedInstanceType(t *testing.T) {
+	static, err := LoadStatic("../../dev/prices.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes := &fakeNodes{nodes: []Node{
+		{Cluster: "c", Name: "priced", InstanceType: "c7g.xlarge", CapacityType: OnDemand, Region: "us-east-1", Zone: "us-east-1a", AllocatableCores: 3.9, AllocatableGiB: 7},
+		{Cluster: "c", Name: "unpriced", InstanceType: "c9g.xlarge", CapacityType: Spot, Region: "us-east-1", Zone: "us-east-1a", AllocatableCores: 3.9, AllocatableGiB: 7},
+	}}
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
+	prov := NewCached(static, time.Hour, nil)
+	e := NewExporter(nodes, prov, &Splitter{Provider: prov}, log)
+	if err := e.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.Costs()) != 1 {
+		t.Fatalf("priced %d nodes, want 1", len(e.Costs()))
+	}
+	out := buf.String()
+	for _, want := range []string{"no price for node", "instance_type=c9g.xlarge", "us-east-1/c9g.xlarge/spot/us-east-1a", "no-price:1"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log lacks %q:\n%s", want, out)
+		}
 	}
 }
 

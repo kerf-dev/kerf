@@ -15,7 +15,34 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- /* Secret with the bootstrap admin's password ("" = none). */ -}}
 {{- define "hub.bootstrapSecret" -}}
 {{- if .Values.auth.bootstrapAdmin.existingSecret -}}{{ .Values.auth.bootstrapAdmin.existingSecret }}
-{{- else if or .Values.auth.bootstrapAdmin.password (dig "externalSecret" "enabled" false .Values.auth.bootstrapAdmin) -}}{{ include "hub.fullname" . }}-bootstrap-admin
+{{- else if or .Values.auth.bootstrapAdmin.password (dig "externalSecret" "enabled" false .Values.auth.bootstrapAdmin) (include "hub.bootstrapGenerated" .) -}}{{ include "hub.fullname" . }}-bootstrap-admin
+{{- end -}}
+{{- end -}}
+
+{{- /* "true" when the chart generates the bootstrap admin's password (auth.bootstrapAdmin.generate and no
+other source; not with devSeed, whose users include their own admin). The admin must change it at first sign-in. */ -}}
+{{- define "hub.bootstrapGenerated" -}}
+{{- $ba := .Values.auth.bootstrapAdmin -}}
+{{- if and (dig "generate" true $ba) $ba.username (not $ba.password) (not $ba.existingSecret) (not (dig "externalSecret" "enabled" false $ba)) (not .Values.devSeed.enabled) -}}true{{- end -}}
+{{- end -}}
+
+{{- /* Secret with the tokens of this release's pricing service and (mode all) agent ("" = none): umbrella
+chart, global.mode hub or all, localTokens.enabled. */ -}}
+{{- define "hub.localTokensSecret" -}}
+{{- $mode := dig "mode" "" (.Values.global | default dict) | toString -}}
+{{- if and (has $mode (list "hub" "all")) (dig "enabled" true (.Values.localTokens | default dict)) -}}
+{{- include "hub.c.localTokensSecret" (dict "ctx" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* A random value kept across upgrades: key of Secret name when it exists (Helm lookup), else a new
+one. Printed base64-encoded, for a Secret's data. dict: ctx, name, key, length. */ -}}
+{{- define "hub.stableSecretValue" -}}
+{{- $existing := lookup "v1" "Secret" .ctx.Release.Namespace .name -}}
+{{- if and $existing $existing.data (index $existing.data .key) -}}
+{{- index $existing.data .key -}}
+{{- else -}}
+{{- randAlphaNum (.length | default 40) | b64enc -}}
 {{- end -}}
 {{- end -}}
 

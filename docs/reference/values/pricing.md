@@ -40,7 +40,7 @@ The values of the `pricing` component chart. In the `kerf` chart they sit under 
 | `cur.s3.bucket` | string | `""` |  |
 | `cur.s3.prefix` | string | `""` | the export's data path: <S3 path prefix>/<export name>/data/ |
 | `cur.s3.tmpSizeLimit` | string | `1Gi` | Scratch space for one Parquet file at a time (emptyDir at /tmp); raise resources.limits.memory for large files too. |
-| `vmURL` | string | `http://victoria-metrics.monitoring.svc:8428` | Prometheus-compatible query URL holding the spokes' kube-state-metrics node series. |
+| `vmURL` | string | `http://victoria-metrics.monitoring.svc:8428` | Prometheus-compatible query URL holding the spokes' kube-state-metrics node series. Empty (the umbrella chart's default) with hub.url: the hub's own metrics datasource (hub.config.prometheusURL), read through the hub with the pricing token. When a query fails, the log names the URL and the value that set it. |
 | `interval` | string | `5m` | Node discovery / pricing interval, and how long a fetched price is reused. |
 | `priceTTL` | string | `24h` |  |
 | `nodeLookback` | string | `10m` | A node is priced until this long after its last kube_node_labels sample. |
@@ -50,8 +50,8 @@ The values of the `pricing` component chart. In the `kerf` chart they sit under 
 | `logLevel` | string | `info` |  |
 | `hub` | object | see the keys below | Clusters bound to other datasources are discovered through the hub's query proxy with a token of role pricing; empty url = only vmURL (clusters without a binding). |
 | `hub.url` | string | `""` |  |
-| `hub.tokenSecret` | object | see the keys below |  |
-| `hub.tokenSecret.name` | string | `""` |  |
+| `hub.tokenSecret` | object | see the keys below | The token of role pricing. Without it pricing logs "hub token missing: Secret <namespace>/<name> key <key>" on every refresh and is not Ready. Umbrella chart (global.mode hub and all): with name, create and externalSecret all unset, the token the hub chart generates (Secret <hub name>-local-tokens, key pricing); name set: your own Secret. |
+| `hub.tokenSecret.name` | string | `""` | umbrella default: <pricing name>-hub-token for create / externalSecret |
 | `hub.tokenSecret.key` | string | `token` |  |
 | `hub.tokenSecret.create` | boolean | `false` | create: true makes the chart create the Secret from `token` (local development only). |
 | `hub.tokenSecret.token` | string | `""` |  |

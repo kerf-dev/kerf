@@ -251,3 +251,34 @@ func decode(t *testing.T, b []byte, v any) {
 		t.Fatalf("decode %s: %v", b, err)
 	}
 }
+
+// TestRecomputeRechecksReadiness: a recompute also queues the hub's readiness checks, of its
+// cluster or of every cluster, so a metrics fix does not wait for the check interval.
+func TestRecomputeRechecksReadiness(t *testing.T) {
+	e := newEnv(t)
+	e.initOnboarding()
+	runner := e.srv.Onb.Runner
+	if n := runner.Queued(); n != 0 {
+		t.Fatalf("queued before: %d", n)
+	}
+	r := e.do("POST", "/v1/admin/recompute?cluster=c1", tokAdmin, nil)
+	if r.code != http.StatusAccepted {
+		t.Fatalf("recompute: %d %s", r.code, r.body)
+	}
+	e.job.WaitTriggered()
+	if n := runner.Queued(); n != 1 {
+		t.Errorf("queued after a one-cluster recompute: %d, want 1", n)
+	}
+	clusters, err := e.srv.clusterNames(e.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = e.do("POST", "/v1/admin/recompute", tokAdmin, nil)
+	if r.code != http.StatusAccepted {
+		t.Fatalf("recompute all: %d %s", r.code, r.body)
+	}
+	e.job.WaitTriggered()
+	if n := runner.Queued(); n != 1+len(clusters) {
+		t.Errorf("queued after an all-cluster recompute: %d, want %d", n, 1+len(clusters))
+	}
+}
