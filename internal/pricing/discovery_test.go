@@ -90,13 +90,79 @@ func TestDiscoveryClusterRegex(t *testing.T) {
 	if _, err := d.Nodes(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if len(queries) != 2 {
+	if len(queries) != 3 {
 		t.Fatalf("%d queries", len(queries))
 	}
-	for _, q := range queries {
-		if !strings.Contains(q, `cluster=~"ro-spoke-.*|synth-.*"`) || !strings.Contains(q, "[21600s]))") {
-			t.Errorf("query %q lacks the cluster selector or lookback", q)
+	for i, q := range queries {
+		window := "[21600s]))"
+		if i == 1 { // the node labels of the last few minutes
+			window = "[300s]))"
 		}
+		if !strings.Contains(q, `cluster=~"ro-spoke-.*|synth-.*"`) || !strings.Contains(q, window) {
+			t.Errorf("query %q lacks the cluster selector or window %s", q, window)
+		}
+	}
+}
+
+// TestDiscoveryCurrentNodeLabels: after a kube-state-metrics allowlist change a node has two
+// kube_node_labels series in the lookback; the current one (seen in the last minutes) decides.
+func TestDiscoveryCurrentNodeLabels(t *testing.T) {
+	eks := func(node, ct string) string {
+		return fmt.Sprintf(`{"metric":{"cluster":"lab","node":%q,"label_node_kubernetes_io_instance_type":"m8g.large",`+
+			`"label_topology_kubernetes_io_zone":"eu-west-1a","label_eks_amazonaws_com_capacity_type":%q},"value":[1,"1"]}`, node, ct)
+	}
+	tests := []struct {
+		name           string
+		lookback       []string
+		recent         []string
+		want           map[string]CapacityType
+		wantRecentCall bool
+	}{
+		{
+			name:     "old series without capacity type, current with it",
+			lookback: []string{eks("mng-1", ""), eks("mng-1", "ON_DEMAND"), eks("mng-2", "ON_DEMAND"), eks("mng-2", "")},
+			recent:   []string{eks("mng-1", "ON_DEMAND"), eks("mng-2", "ON_DEMAND")},
+			want:     map[string]CapacityType{"mng-1": OnDemand, "mng-2": OnDemand},
+		},
+		{
+			name:     "current series lost the label: it decides (default capacity type)",
+			lookback: []string{eks("n", "SPOT"), eks("n", "")},
+			recent:   []string{eks("n", "")},
+			want:     map[string]CapacityType{"n": OnDemand},
+		},
+		{
+			name:     "a node gone from the recent window keeps its most complete series",
+			lookback: []string{eks("gone", ""), eks("gone", "SPOT")},
+			want:     map[string]CapacityType{"gone": Spot},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				q := r.URL.Query().Get("query")
+				var rows []string
+				switch {
+				case strings.Contains(q, "kube_node_labels") && strings.Contains(q, "[300s]"):
+					rows = tt.recent
+				case strings.Contains(q, "kube_node_labels"):
+					rows = tt.lookback
+				}
+				fmt.Fprintf(w, `{"status":"success","data":{"resultType":"vector","result":[%s]}}`, strings.Join(rows, ","))
+			}))
+			defer vm.Close()
+			got, err := (&Discovery{VMURL: vm.URL, DefaultRegion: "eu-west-1"}).Nodes(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %+v", got)
+			}
+			for _, n := range got {
+				if want, ok := tt.want[n.Name]; !ok || n.CapacityType != want {
+					t.Errorf("%s: capacity type %q, want %q", n.Name, n.CapacityType, want)
+				}
+			}
+		})
 	}
 }
 

@@ -12,6 +12,28 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+### Added
+
+- **Re-check now.** The cluster page has a **Re-check now** button on the Overview card and the Readiness tab, and
+  every readiness check shows when it ran ("checked 23 minutes ago"). A recompute (`POST /v1/admin/recompute`)
+  also re-runs the hub's readiness checks, and every failing metrics check's remediation says how to re-check, so a
+  fix no longer waits for the hourly check interval.
+
+### Fixed
+
+- **`metrics.node-labels` judges each node by its newest `kube_node_labels` series.** After a kube-state-metrics
+  allowlist change, the node's old series without the capacity type no longer fails it for up to an hour. Pricing
+  node discovery uses a node's current series the same way. The readiness contract shows the same allowlist as the
+  check (with `eks.amazonaws.com/capacityType`).
+- **`metrics.scrape-interval` reports the real interval for new scrape jobs.** It is estimated over the time each
+  series covers, not the whole 30-minute window: a job started 12 minutes ago at 30 s no longer reads as about 1m18s.
+- **`metrics.freshness` tells absent series from stale ones.** A series without samples reads "no samples of … found
+  in the last 1h" (`details`: `absent`), with a remediation for the missing scrape job or exporter, instead of
+  "last sample is over 1h old".
+- **The `metrics.cadvisor` remediation keeps TLS verification on.** It scrapes cAdvisor through the API server proxy
+  with the service-account CA (`ca_file`) instead of `insecure_skip_verify`, names the `nodes` and `nodes/proxy`
+  RBAC the scraper needs, and shows the job for Prometheus and for Grafana Alloy.
+
 ## [0.1.0] - 2026-11-07
 
 First public version.

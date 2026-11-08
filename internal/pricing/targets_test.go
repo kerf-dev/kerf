@@ -56,6 +56,7 @@ func TestDiscoveryDefaultQueriesUnchanged(t *testing.T) {
 	}
 	want := []string{
 		`max by (cluster, node, label_node_kubernetes_io_instance_type, label_karpenter_sh_capacity_type, label_eks_amazonaws_com_capacity_type, label_topology_kubernetes_io_region, label_topology_kubernetes_io_zone) (last_over_time(kube_node_labels{cluster!=""}[600s]))`,
+		`max by (cluster, node, label_node_kubernetes_io_instance_type, label_karpenter_sh_capacity_type, label_eks_amazonaws_com_capacity_type, label_topology_kubernetes_io_region, label_topology_kubernetes_io_zone) (last_over_time(kube_node_labels{cluster!=""}[300s]))`,
 		`max by (cluster, node, resource) (last_over_time(kube_node_status_allocatable{cluster!="", resource=~"cpu|memory"}[600s]))`,
 	}
 	if strings.Join(vm.queries, "\n") != strings.Join(want, "\n") {

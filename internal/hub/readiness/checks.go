@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,7 +49,10 @@ type MetricsChecker struct {
 	HistoryWindow time.Duration
 	// DocsBase is the hub docs base URL (docsURL = DocsBase/readiness#<id>).
 	DocsBase string
-	Now      func() time.Time
+	// Preview marks a run whose results are not stored (the datasource test of the cluster
+	// wizard): remediations then do not end with the re-check hint.
+	Preview bool
+	Now     func() time.Time
 }
 
 // Report is the result of a run.
@@ -128,7 +132,29 @@ var metricsCheckIDs = []string{
 func MetricsCheckIDs() []string { return append([]string(nil), metricsCheckIDs...) }
 
 func (r *run) add(id string, st rd.Status, msg, remediation, remType string, details map[string]string) {
+	if (st == rd.StatusWarn || st == rd.StatusFail) && remediation != "" && !r.c.Preview {
+		remediation = WithRecheckHint(remediation, remType, r.c.M.Cluster)
+	}
 	r.out.Checks = append(r.out.Checks, NewCheck(id, st, msg, remediation, remType, r.c.DocsBase, r.now, details))
+}
+
+// RecheckHint is the sentence that ends every warn/fail remediation of a metrics check: the hub
+// re-runs these checks only every check interval (1h by default), so a fix shows up sooner on a
+// re-check.
+func RecheckHint(cluster string) string {
+	if cluster == "" {
+		cluster = "<cluster>"
+	}
+	return "After the fix, re-check: Re-check now on the cluster's Readiness tab, or POST /v1/clusters/" + cluster + "/readiness/recheck (operator)."
+}
+
+// WithRecheckHint appends RecheckHint to a remediation; YAML remediations get it as a comment so
+// they stay valid to paste.
+func WithRecheckHint(remediation, remType, cluster string) string {
+	if remType == hubapi.RemediationYAML || remType == hubapi.RemediationCommand {
+		return remediation + "\n# " + RecheckHint(cluster)
+	}
+	return remediation + " " + RecheckHint(cluster)
 }
 
 // NewCheck builds a result with the catalog's category, severity, source and gates.
@@ -288,14 +314,83 @@ func (r *run) cadvisor() {
 	if mem == 0 {
 		missing = append(missing, "container_memory_working_set_bytes")
 	}
-	r.add(rd.CheckCAdvisor, rd.StatusFail, "missing "+strings.Join(missing, ", "),
-		`Scrape the kubelet's cAdvisor endpoint (job `+r.jobs(false)+`), e.g. for Prometheus:
-- job_name: kubelet-cadvisor
+	r.add(rd.CheckCAdvisor, rd.StatusFail, "missing "+strings.Join(missing, ", "), CAdvisorRemediation(r.cadvisorJob()), hubapi.RemediationYAML, d)
+}
+
+// cadvisorJob is the job name the cAdvisor remediation uses: cadvisor when the binding lists it
+// (or lists nothing), else the binding's first cAdvisor job.
+func (r *run) cadvisorJob() string {
+	if j := r.c.Jobs; j != nil && len(j.CAdvisor) > 0 && !slices.Contains(j.CAdvisor, "cadvisor") {
+		return j.CAdvisor[0]
+	}
+	return "cadvisor"
+}
+
+// CAdvisorRemediation is the metrics.cadvisor fix: scrape each node's cAdvisor through the API
+// server proxy, verifying the API server with the service-account CA. It has three snippets, each
+// headed by a comment: the Prometheus job, the same job for Grafana Alloy, and the RBAC rules the
+// scraper needs.
+func CAdvisorRemediation(job string) string {
+	return `# Scrape the kubelet's cAdvisor endpoint through the API server proxy, with TLS verified
+# against the service-account CA. Prometheus (scrape_configs):
+- job_name: ` + job + `
+  scrape_interval: 30s
   scheme: https
-  metrics_path: /metrics/cadvisor
   kubernetes_sd_configs: [{role: node}]
   bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-  tls_config: {insecure_skip_verify: true}`, hubapi.RemediationYAML, d)
+  tls_config:
+    ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  relabel_configs:
+    - target_label: __address__
+      replacement: kubernetes.default.svc:443
+    - source_labels: [__meta_kubernetes_node_name]
+      target_label: __metrics_path__
+      replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+    - source_labels: [__meta_kubernetes_node_name]
+      target_label: node
+    - source_labels: [__meta_kubernetes_node_name]
+      target_label: instance
+
+# Grafana Alloy (the same job in Alloy syntax):
+discovery.kubernetes "nodes" {
+  role = "node"
+}
+discovery.relabel "cadvisor" {
+  targets = discovery.kubernetes.nodes.targets
+  rule {
+    target_label = "__address__"
+    replacement  = "kubernetes.default.svc:443"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "__metrics_path__"
+    replacement   = "/api/v1/nodes/$1/proxy/metrics/cadvisor"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "node"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "instance"
+  }
+}
+prometheus.scrape "cadvisor" {
+  job_name          = "` + job + `"
+  targets           = discovery.relabel.cadvisor.output
+  scrape_interval   = "30s"
+  scheme            = "https"
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  tls_config {
+    ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+  }
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+# RBAC: the scraper's service account (Prometheus or Alloy) needs these ClusterRole rules:
+- apiGroups: [""]
+  resources: [nodes, nodes/proxy]
+  verbs: [get, list, watch]`
 }
 
 func (r *run) ksmOwners() {
@@ -364,29 +459,62 @@ func (r *run) ksmResources() {
 	r.add(rd.CheckKSMResources, rd.StatusPass, msg, "", "", d)
 }
 
+// freshnessSeries are the series the freshness check reads, with the source that exports them.
+var freshnessSeries = []struct{ metric, source string }{
+	{"container_memory_working_set_bytes", "cadvisor"},
+	{"kube_pod_owner", "ksm"},
+}
+
+// Absent is the details value of a series without any sample in the lookback.
+const Absent = "absent"
+
 func (r *run) freshness() {
 	worst := time.Duration(0)
 	d := map[string]string{}
-	for _, m := range []string{"container_memory_working_set_bytes", "kube_pod_owner"} {
-		ts, ok, err := r.value(r.c.Q, fmt.Sprintf("max(max_over_time(timestamp(%s%s)[1h:1m]))", m, r.sel()))
+	var absent, absentSources []string
+	for _, f := range freshnessSeries {
+		ts, ok, err := r.value(r.c.Q, fmt.Sprintf("max(max_over_time(timestamp(%s%s)[1h:1m]))", f.metric, r.sel()))
 		if err != nil {
 			r.queryFailed(rd.CheckFreshness, err)
 			return
 		}
-		age := time.Hour
-		if ok {
-			age = r.now.Sub(time.Unix(0, int64(ts*1e9)))
-			if age < 0 {
-				age = 0
-			}
+		if !ok {
+			// No sample in the lookback is not an age: the series is missing.
+			d[f.metric] = Absent
+			absent = append(absent, f.metric)
+			absentSources = append(absentSources, f.source)
+			continue
 		}
-		d[m] = age.Truncate(time.Second).String()
+		age := max(r.now.Sub(time.Unix(0, int64(ts*1e9))), 0)
+		d[f.metric] = age.Truncate(time.Second).String()
 		worst = max(worst, age)
 	}
-	d["lastSampleAge"] = worst.Truncate(time.Second).String()
+	if len(absent) == len(freshnessSeries) {
+		d["lastSampleAge"] = Absent
+	} else {
+		d["lastSampleAge"] = worst.Truncate(time.Second).String()
+	}
+	if len(absent) > 0 {
+		msg := fmt.Sprintf("no samples of %s found in the last 1h", strings.Join(absent, " or "))
+		if worst > MaxStaleness {
+			msg += fmt.Sprintf("; the other series' last sample is %s old", humanAge(worst))
+		}
+		var rem []string
+		for _, src := range absentSources {
+			switch src {
+			case "cadvisor":
+				rem = append(rem, "Add a scrape job for the kubelet's cAdvisor endpoint (job "+r.jobs(false)+", see metrics.cadvisor) and check that its targets are up.")
+			case "ksm":
+				rem = append(rem, "Install kube-state-metrics with the pods collector, add a scrape job for it (job "+r.jobs(true)+") and check that its target is up.")
+			}
+		}
+		rem = append(rem, "If the scraper writes to this datasource by remote-write, check its remote-write errors.")
+		r.add(rd.CheckFreshness, rd.StatusFail, msg, strings.Join(rem, " "), hubapi.RemediationText, d)
+		return
+	}
 	if worst > MaxStaleness {
 		r.add(rd.CheckFreshness, rd.StatusFail, fmt.Sprintf("last sample is %s old (limit %s): scraping or remote-write stopped", humanAge(worst), MaxStaleness),
-			"Check the scraper (vmagent/Prometheus) of the cluster: its targets page, remote-write errors and the kube-state-metrics pod.", hubapi.RemediationText, d)
+			"Check the scraper (vmagent/Prometheus/Alloy) of the cluster: its targets page, remote-write errors and the kube-state-metrics pod.", hubapi.RemediationText, d)
 		return
 	}
 	r.add(rd.CheckFreshness, rd.StatusPass, fmt.Sprintf("last sample %s ago", humanAge(worst)), "", "", d)
@@ -419,18 +547,109 @@ func (r *run) ownerJoin() {
 	r.add(rd.CheckOwnerJoin, rd.StatusPass, fmt.Sprintf("%s %% of cAdvisor pods resolve to an owner", d["coverage"]), "", "", d)
 }
 
+// Scrape interval estimate: each cAdvisor series is judged over the time it actually covers in
+// the window (its newest minus its oldest sample), not over the whole window, so a job that
+// started a few minutes ago, or a pod that came or went, does not look coarse.
+const (
+	scrapeWindow = 30 * time.Minute
+	// scrapeStep is the subquery resolution that finds each series' oldest sample in the window;
+	// the error it adds is under one step over the series' sample count.
+	scrapeStep = 15 * time.Second
+	// minScrapeSamples is the least number of samples a series needs to count.
+	minScrapeSamples = 3
+)
+
+// seriesCoverage is what the scrape-interval queries return for one series.
+type seriesCoverage struct {
+	span    time.Duration // newest minus oldest sample in the window
+	samples int           // samples in the window
+}
+
+// estimateScrapeInterval is the median over series of span / (samples-1). Series with fewer than
+// minScrapeSamples samples are skipped; used is the number of series that count.
+func estimateScrapeInterval(series []seriesCoverage) (interval time.Duration, used int) {
+	var per []float64
+	for _, s := range series {
+		if s.samples < minScrapeSamples || s.span <= 0 {
+			continue
+		}
+		per = append(per, float64(s.span)/float64(s.samples-1))
+	}
+	if len(per) == 0 {
+		return 0, 0
+	}
+	sort.Float64s(per)
+	m := per[len(per)/2]
+	if len(per)%2 == 0 {
+		m = (per[len(per)/2-1] + per[len(per)/2]) / 2
+	}
+	return time.Duration(m).Round(time.Second), len(per)
+}
+
+// scrapeIntervalQueries returns the PromQL of the per-series span (seconds) and sample count, both
+// evaluated at at (aligned to scrapeStep, so the subquery's last step is at). Only functions that
+// Prometheus and VictoriaMetrics both support.
+func scrapeIntervalQueries(selector string, at time.Time) (span, count string) {
+	w, step := promDuration(scrapeWindow), promDuration(scrapeStep)
+	start := strconv.FormatInt(at.Add(-scrapeWindow).Unix(), 10)
+	ts := fmt.Sprintf("(timestamp(container_memory_working_set_bytes%s) > %s)", selector, start)
+	span = fmt.Sprintf("max_over_time(%s[%s:%s]) - min_over_time(%s[%s:%s])", ts, w, step, ts, w, step)
+	count = fmt.Sprintf("count_over_time(container_memory_working_set_bytes%s[%s])", selector, w)
+	return span, count
+}
+
+func labelKey(l recommender.Labels) string {
+	keys := make([]string, 0, len(l))
+	for k := range l {
+		if k != "__name__" {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteByte(0)
+		b.WriteString(l[k])
+		b.WriteByte(0)
+	}
+	return b.String()
+}
+
 func (r *run) scrapeInterval() {
-	n, ok, err := r.value(r.c.Q, fmt.Sprintf("quantile(0.5, count_over_time(container_memory_working_set_bytes%s[30m]))", r.sel(`container!=""`, `container!="POD"`)))
+	at := r.now.Truncate(scrapeStep)
+	spanQ, countQ := scrapeIntervalQueries(r.sel(`container!=""`, `container!="POD"`), at)
+	spans, err := r.c.Q.Instant(r.ctx, spanQ, at)
 	if err != nil {
 		r.queryFailed(rd.CheckScrapeInterval, err)
 		return
 	}
-	if !ok || n < 1 {
+	counts, err := r.c.Q.Instant(r.ctx, countQ, at)
+	if err != nil {
+		r.queryFailed(rd.CheckScrapeInterval, err)
+		return
+	}
+	if len(counts) == 0 {
 		r.add(rd.CheckScrapeInterval, rd.StatusUnknown, "no samples in the last 30 minutes", "", "", nil)
 		return
 	}
-	interval := time.Duration(float64(30*time.Minute) / n).Round(time.Second)
-	d := map[string]string{"interval": interval.String()}
+	n := make(map[string]int, len(counts))
+	for _, c := range counts {
+		n[labelKey(c.Labels)] = int(c.Sample.V)
+	}
+	series := make([]seriesCoverage, 0, len(spans))
+	for _, s := range spans {
+		if c, ok := n[labelKey(s.Labels)]; ok {
+			series = append(series, seriesCoverage{span: time.Duration(s.Sample.V * float64(time.Second)), samples: c})
+		}
+	}
+	interval, used := estimateScrapeInterval(series)
+	if used == 0 {
+		r.add(rd.CheckScrapeInterval, rd.StatusUnknown, fmt.Sprintf("not enough data yet: no cAdvisor series has %d samples in the last 30 minutes", minScrapeSamples), "", "",
+			map[string]string{"series": strconv.Itoa(len(counts))})
+		return
+	}
+	d := map[string]string{"interval": interval.String(), "series": strconv.Itoa(used)}
 	if interval > MaxScrapeInterval+5*time.Second {
 		r.add(rd.CheckScrapeInterval, rd.StatusWarn, fmt.Sprintf("cAdvisor is scraped about every %s: P95/P99 are unreliable above 60 s", interval),
 			"Set scrape_interval: 30s (or at most 60s) on the "+r.jobs(false)+" job.", hubapi.RemediationText, d)
@@ -559,17 +778,48 @@ func (r *run) hpa() {
 	r.add(rd.CheckHPASeries, rd.StatusPass, fmt.Sprintf("%d HPAs", n), "", "", d)
 }
 
+// nodeLabelKeys are the kube_node_labels labels the node-label check and pricing read.
+var nodeLabelKeys = []string{"label_node_kubernetes_io_instance_type", "label_karpenter_sh_capacity_type", "label_eks_amazonaws_com_capacity_type", "label_topology_kubernetes_io_zone", "label_topology_kubernetes_io_region"}
+
+// newestNodeLabels keeps, per node, the kube_node_labels series with the newest sample (the sample
+// value is the series' last timestamp). A node keeps old series in the lookback after an allowlist
+// change; only its current series counts. On a tie the series with more labels wins.
+func newestNodeLabels(res []recommender.VectorSample) map[string]recommender.Labels {
+	type pick struct {
+		ts     float64
+		filled int
+		labels recommender.Labels
+	}
+	best := map[string]pick{}
+	for _, s := range res {
+		node := s.Labels["node"]
+		filled := 0
+		for _, k := range nodeLabelKeys {
+			if s.Labels[k] != "" {
+				filled++
+			}
+		}
+		b, ok := best[node]
+		if !ok || s.Sample.V > b.ts || (s.Sample.V == b.ts && filled > b.filled) {
+			best[node] = pick{ts: s.Sample.V, filled: filled, labels: s.Labels}
+		}
+	}
+	out := make(map[string]recommender.Labels, len(best))
+	for n, b := range best {
+		out[n] = b.labels
+	}
+	return out
+}
+
 func (r *run) nodeLabels() {
-	res, err := r.c.Q.Instant(r.ctx, fmt.Sprintf("max by (node, label_node_kubernetes_io_instance_type, label_karpenter_sh_capacity_type, label_eks_amazonaws_com_capacity_type, label_topology_kubernetes_io_zone, label_topology_kubernetes_io_region) (last_over_time(kube_node_labels%s[1h]))", r.sel()), r.now)
+	res, err := r.c.Q.Instant(r.ctx, fmt.Sprintf("max by (node, %s) (max_over_time(timestamp(kube_node_labels%s)[1h:1m]))", strings.Join(nodeLabelKeys, ", "), r.sel()), r.now)
 	if err != nil {
 		r.queryFailed(rd.CheckNodeLabels, err)
 		return
 	}
-	nodes := map[string]bool{}
+	nodes := newestNodeLabels(res)
 	missing := map[string]int{}
-	for _, s := range res {
-		nodes[s.Labels["node"]] = true
-		l := s.Labels
+	for _, l := range nodes {
 		if l["label_node_kubernetes_io_instance_type"] == "" {
 			missing["instance type"]++
 		}
