@@ -12,6 +12,14 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+### Documentation
+
+- **Install guides.** The install guide for any cluster no longer tells you to create a `ui` token or set `web.token`,
+  which the chart rejects; it sets `global.imageRegistry` and the web UI needs no token. A new page,
+  [Install on an existing cluster](docs/install/single-cluster.md), covers one namespace with an in-cluster
+  PostgreSQL, and one list of the kube-state-metrics collectors and node labels Kerf reads
+  ([docs/install/any-cluster.md](docs/install/any-cluster.md#kube-state-metrics-requirements)).
+
 ## [0.1.0] - 2026-11-07
 
 First public version.

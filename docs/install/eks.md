@@ -1,5 +1,8 @@
 # Installing kerf on Amazon EKS
 
+> **Just evaluating?** [Install on an existing cluster](single-cluster.md) needs one namespace and an in-cluster
+> PostgreSQL, and no RDS, ALB, External Secrets or Secrets Manager.
+
 This guide installs kerf from a release in your ECR. One chart,
 `kerf` (`deploy/charts/kerf`), covers every cluster. `global.mode` selects
 what a release installs:
@@ -97,7 +100,8 @@ Metrics sources* and pick it in the cluster wizard. Required series (the readine
 `docs/contracts/readiness.md` test each one): `container_cpu_usage_seconds_total`,
 `container_memory_working_set_bytes`, `container_cpu_cfs_*` (cAdvisor), and from kube-state-metrics
 `kube_pod_owner`, `kube_replicaset_owner`, `kube_job_owner`, `kube_pod_container_resource_requests/limits`,
-`kube_node_labels`. kube-state-metrics must export the node labels pricing uses:
+`kube_node_labels`. [kube-state-metrics requirements](any-cluster.md#kube-state-metrics-requirements) has the
+collectors to enable (for the kube-state-metrics chart and kube-prometheus-stack). It must export the node labels pricing uses:
 
 ```
 --metric-labels-allowlist=nodes=[node.kubernetes.io/instance-type,topology.kubernetes.io/region,topology.kubernetes.io/zone,eks.amazonaws.com/capacityType,karpenter.sh/capacity-type]

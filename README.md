@@ -165,6 +165,9 @@ hack/quickstart.sh down     # removes everything it created
 It is for evaluation only: a single PostgreSQL pod, a self-signed webhook certificate and generated data.
 [The quickstart guide](docs/quickstart.md) says what it installs and how to move to a real install.
 
+**Already have a cluster?** [Install on an existing cluster](docs/install/single-cluster.md): one namespace, an in-cluster
+PostgreSQL, no RDS, ALB or Secrets Manager.
+
 **See the UI with a sample fleet** (no cluster needed; Node.js 22 and `make`):
 
 ```bash
