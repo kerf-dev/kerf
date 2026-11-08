@@ -18,6 +18,12 @@ section here. The GitHub Release lists the same section as its highlights, follo
   every readiness check shows when it ran ("checked 23 minutes ago"). A recompute (`POST /v1/admin/recompute`)
   also re-runs the hub's readiness checks, and every failing metrics check's remediation says how to re-check, so a
   fix no longer waits for the hourly check interval.
+- **Graviton prices in the default static price table.** The price file baked into the pricing image now prices the
+  `c7g`, `c8g`, `m7g`, `m8g`, `r7g`, `r8g` and `t4g` families (up to `4xlarge`; `t4g` up to `2xlarge`) in `eu-west-1`
+  and `us-east-1`, on-demand and spot. Before, a cluster on Graviton nodes had every node skipped as `no-price`.
+- **IRSA in the pricing guide.** `docs/pricing.md` explains how to give the pricing service its AWS role with IRSA
+  (IAM policy, OIDC trust policy and the `pricing.serviceAccount.annotations` annotation), and when to choose it over
+  EKS Pod Identity: organizations that block Pod Identity associations (`Cross-account pass role is not allowed`).
 
 ### Fixed
 
