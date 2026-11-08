@@ -3,6 +3,9 @@
 This guide installs Kerf on a conformant Kubernetes cluster that is not Amazon EKS. The difference from the
 [EKS guide](eks.md) is prices: instead of the AWS price list, the pricing service reads a price table you supply.
 
+> **Just evaluating?** [Install on an existing cluster](single-cluster.md) needs one namespace and an in-cluster
+> PostgreSQL, and nothing else from AWS.
+
 > **Note.** EKS is the tested platform. The agent, webhook and recommender use only the Kubernetes API, PromQL and
 > PostgreSQL, but Kerf's tests do not cover other distributions (the local development setup uses k3d).
 
@@ -15,14 +18,14 @@ cluster (agent, webhook, CRDs) and `all` for everything in one cluster.
 |---|---|
 | Kubernetes | 1.35 is the tested version. In-place resize needs 1.33 or later; before that Kerf falls back to `rollout`. |
 | PostgreSQL | 12 or later, for the hub. Connect directly or through a session-mode pooler, never a transaction-mode one: the hub elects its leader with an advisory lock. |
-| Metrics store | Prometheus, VictoriaMetrics, Thanos or Mimir, holding cAdvisor and kube-state-metrics series of every workload cluster ([list](eks.md#1-prerequisites)). Simplest: every cluster remote-writes to one store with the label `cluster=<cluster name>`, which `hub.config.prometheusURL` points at. Other sources: **Admin → Metrics sources**. |
+| Metrics store | Prometheus, VictoriaMetrics, Thanos or Mimir, holding cAdvisor and kube-state-metrics series of every workload cluster ([what Kerf reads](#kube-state-metrics-requirements)). Simplest: every cluster remote-writes to one store with the label `cluster=<cluster name>`, which `hub.config.prometheusURL` points at. Other sources: **Admin → Metrics sources**. |
 | cert-manager | On every workload cluster, for the webhook's serving certificate. |
 | Network | Workload clusters reach the hub API over HTTPS. The API server reaches the nodes on port 9443 (the webhook). NetworkPolicies are off by default (`networkPolicy.enabled`). |
 
 ## 1. Hub cluster
 
-Create the Secrets: outside development installs the chart rejects inline secrets. The database and its user
-must exist; the hub applies the schema itself.
+Create the database Secret: outside development installs the chart rejects inline secrets. The database and its
+user must exist; the hub applies the schema itself.
 
 ```bash
 kubectl create namespace kerf
@@ -30,17 +33,15 @@ read -rs DB_PW   # URL-encode it if it holds special characters
 kubectl -n kerf create secret generic hub-db \
   --from-literal=DATABASE_URL="postgres://kerf:${DB_PW}@db.example.com:5432/kerf?sslmode=verify-full"
 unset DB_PW
-kubectl -n kerf create secret generic hub-bootstrap-admin --from-literal=password="$(openssl rand -base64 24)"
 ```
 
 For a private database CA, mount it with `hub.database.caBundle` and add `sslrootcert=/etc/hub/db-ca/ca.pem` to
 the URL. The chart generates the key that encrypts datasource credentials and keeps it on uninstall: [back it up](../operate/backup.md). Write `values-hub.yaml`:
 
 ```yaml
-global: {mode: hub, clusterName: hub-cluster}
+global: {mode: hub, clusterName: hub-cluster, imageRegistry: ghcr.io/kerf-dev}
 hub:
   database: {existingSecret: hub-db}
-  auth: {bootstrapAdmin: {existingSecret: hub-bootstrap-admin}}
   config:
     prometheusURL: http://prometheus.monitoring.svc:9090    # the built-in datasource `local`
     onboarding:
@@ -52,15 +53,12 @@ hub:
     hosts: [{host: hub.example.com, paths: [{path: /, pathType: Prefix}]}]
     tls: [{hosts: [hub.example.com], secretName: hub-tls}]
 web:
-  token: {existingSecret: kerf-ui-token}
   ingress:
     enabled: true
     hosts: [{host: kerf.example.com, paths: [{path: /, pathType: Prefix}]}]
     tls: [{hosts: [kerf.example.com], secretName: kerf-ui-tls}]
 pricing:
-  provider: static
-  vmURL: http://prometheus.monitoring.svc:9090    # holds kube_node_labels of the workload clusters
-  hub: {tokenSecret: {name: kerf-pricing-token}}
+  provider: static    # reads kube_node_labels through the hub, from hub.config.prometheusURL
 ```
 
 ```bash
@@ -69,18 +67,70 @@ helm upgrade --install kerf oci://ghcr.io/kerf-dev/kerf/charts/kerf --version <v
 kubectl -n kerf rollout status deploy/hub
 ```
 
-Released charts pull the images of the same release from `ghcr.io/kerf-dev/kerf`. The `ui` and `pricing` tokens
-do not exist yet, so `web` and `pricing` wait for their Secrets. Sign in as `admin` with the password in the
-Secret `hub-bootstrap-admin`, change it, and create a token with role `ui` and one with role `pricing` under
-**Admin → Access → Tokens**. A token is shown once.
+Released charts pull the images of the same release from `ghcr.io/kerf-dev/kerf`. The chart generates the
+first admin's password and the `pricing` token itself, so there is no token to create. Read the password, sign in at
+`https://kerf.example.com` as `admin`, and choose a new password when asked:
 
 ```bash
-kubectl -n kerf create secret generic kerf-ui-token --from-literal=token="<ui token>"
-kubectl -n kerf create secret generic kerf-pricing-token --from-literal=token="<pricing token>"
-kubectl -n kerf rollout restart deploy/web      # nginx reads the token at start
+kubectl -n kerf get secret hub-bootstrap-admin -o jsonpath='{.data.password}' | base64 -d; echo
 ```
 
+Everyone who uses Kerf signs in with a user of their own or through your identity provider
+([Sign-in and access](../auth.md)); the UI holds no token. If you used an older guide that created a `ui` token,
+[remove it](../auth.md#upgrading-from-anonymous-read-access).
+
+The generated password and token use Helm `lookup`, which does not run under Argo CD or `helm template`: there, set
+`hub.auth.bootstrapAdmin.existingSecret` (key `password`) and `pricing.hub.tokenSecret.name` (key `token`, a token with
+role `pricing` from **Admin → Access → Tokens**), or use ExternalSecrets as the [EKS guide](eks.md) does.
+
 **Check:** `curl -sS https://hub.example.com/readyz` prints `ok`.
+
+## kube-state-metrics requirements
+
+Kerf reads these kube-state-metrics series. The readiness checks `metrics.ksm-owners`, `metrics.ksm-resources`,
+`metrics.node-labels`, `metrics.hpa` and `metrics.node-allocatable` test them, and
+[Cluster readiness](../operate/readiness.md) lists the fixes. Enable these collectors (the `--resources` flag):
+
+```
+nodes,pods,replicasets,deployments,statefulsets,daemonsets,jobs,cronjobs,horizontalpodautoscalers
+```
+
+| Collector | Series Kerf reads |
+|---|---|
+| `pods` | `kube_pod_owner`, `kube_pod_container_resource_requests`, `kube_pod_container_resource_limits`, `kube_pod_container_status_restarts_total`, `kube_pod_container_status_last_terminated_reason`, `kube_pod_container_info` |
+| `replicasets`, `jobs` | `kube_replicaset_owner`, `kube_job_owner`: they resolve a pod to its Deployment or CronJob |
+| `nodes` | `kube_node_labels`, `kube_node_status_allocatable` |
+| `horizontalpodautoscalers` | `kube_horizontalpodautoscaler_info`, `kube_horizontalpodautoscaler_spec_target_metric` |
+| `deployments`, `statefulsets`, `daemonsets`, `cronjobs` | replica counts and owners, for the workload views |
+
+Pricing and the node estimate also need the node labels below in `kube_node_labels`. Allow them in kube-state-metrics:
+
+```
+nodes=[node.kubernetes.io/instance-type,karpenter.sh/capacity-type,eks.amazonaws.com/capacityType,topology.kubernetes.io/zone,topology.kubernetes.io/region]
+```
+
+With the **kube-state-metrics Helm chart** (`prometheus-community/kube-state-metrics`), in its values:
+
+```yaml
+collectors: [nodes, pods, replicasets, deployments, statefulsets, daemonsets, jobs, cronjobs, horizontalpodautoscalers]
+metricLabelsAllowlist:
+  - nodes=[node.kubernetes.io/instance-type,karpenter.sh/capacity-type,eks.amazonaws.com/capacityType,topology.kubernetes.io/zone,topology.kubernetes.io/region]
+```
+
+With **kube-prometheus-stack**, the same keys sit under `kube-state-metrics:`:
+
+```yaml
+kube-state-metrics:
+  collectors: [nodes, pods, replicasets, deployments, statefulsets, daemonsets, jobs, cronjobs, horizontalpodautoscalers]
+  metricLabelsAllowlist:
+    - nodes=[node.kubernetes.io/instance-type,karpenter.sh/capacity-type,eks.amazonaws.com/capacityType,topology.kubernetes.io/zone,topology.kubernetes.io/region]
+```
+
+A kube-state-metrics you run yourself takes the same lists as `--resources=…` and `--metric-labels-allowlist=…`.
+Do not drop these series with `metric_relabel_configs` or a remote-write filter. Kubernetes labels turn into
+`label_<name>` with dots and slashes as underscores, so `eks.amazonaws.com/capacityType` arrives as
+`label_eks_amazonaws_com_capacity_type`. After a change, re-check readiness
+([how](single-cluster.md#5-readiness)); the hub repeats its metrics checks every hour.
 
 ## Supply a price table
 
@@ -130,7 +180,7 @@ read -rs AGENT_TOKEN && kubectl -n kerf create secret generic kerf-agent-token -
 ```
 
 ```yaml
-global: {mode: spoke, clusterName: prod-eu1}
+global: {mode: spoke, clusterName: prod-eu1, imageRegistry: ghcr.io/kerf-dev}
 agent:
   hub:
     url: https://hub.example.com
@@ -152,9 +202,11 @@ A hub certificate from a private CA needs `agent.hub.caBundle`.
 
 The cluster should reach *Metrics OK*, then *Ready for audit* once the recommender has run (daily by default; an admin
 can start a run with `POST /v1/admin/recompute?cluster=<cluster>`), then *Automation ready*. Every check and its fix:
-[Cluster readiness](../operate/readiness.md). Workloads stay in `audit` until you set a policy.
+[Cluster readiness](../operate/readiness.md). The hub repeats its metrics checks every hour, on a recompute and on a re-check
+(**Re-check now** on the cluster's page, or `POST /v1/clusters/<cluster>/readiness/recheck`). Workloads stay in `audit` until you set a policy.
 
 ## Related
 
+- [Install on an existing cluster: one namespace, in-cluster PostgreSQL](single-cluster.md)
 - [Install on Amazon EKS](eks.md)
 - [Cluster readiness](../operate/readiness.md), [chart values](../reference/values/README.md), [pricing values](../reference/values/pricing.md)
