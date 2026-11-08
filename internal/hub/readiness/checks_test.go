@@ -72,12 +72,13 @@ func nodeSample(node string, full bool) recommender.VectorSample {
 // healthy is a datasource where every check passes.
 func healthy() *fakeQ {
 	f := &fakeQ{}
+	spans, counts := coverageSamples(regularSeries(20, 30*time.Second, 2*time.Hour))
+	f.onSamples(spans, "min_over_time(").onSamples(counts, "count_over_time(container_memory_working_set_bytes")
 	f.on(0, "nvidia_com_gpu"). // no GPUs in the cluster
 					on(1, "vector(1)").
 					on(1500, `__name__=~`).
 					on(float64(now.Add(-30*time.Second).Unix()), "timestamp(container_memory_working_set_bytes").
 					on(float64(now.Add(-20*time.Second).Unix()), "timestamp(kube_pod_owner").
-					on(60, "quantile(0.5, count_over_time(").
 					on(200, " and on (namespace, pod) ").
 					on(200, "count(count by (namespace, pod) (last_over_time(container_memory_working_set_bytes").
 					on(180, "count(count by (namespace, pod) (last_over_time(kube_pod_owner").
@@ -167,10 +168,11 @@ func TestMetricsCheckerKSMDown(t *testing.T) {
 
 func TestMetricsCheckerKSMMissing(t *testing.T) {
 	q := &fakeQ{}
+	spans, counts := coverageSamples(regularSeries(3, 30*time.Second, time.Hour))
+	q.onSamples(spans, "min_over_time(").onSamples(counts, "count_over_time(container_memory_working_set_bytes")
 	q.on(1, "vector(1)").on(10, `__name__=~`).
 		on(float64(now.Unix()), "timestamp(container_memory_working_set_bytes").
-		on(400, "container_cpu_usage_seconds_total").on(400, "count(last_over_time(container_memory_working_set_bytes").
-		on(60, "quantile(0.5")
+		on(400, "container_cpu_usage_seconds_total").on(400, "count(last_over_time(container_memory_working_set_bytes")
 	rep := (&MetricsChecker{Q: q, M: datasource.DefaultMatcher("c"), Now: func() time.Time { return now }}).Run(context.Background())
 	got := byID(rep)
 	for id, want := range map[string]string{
@@ -185,6 +187,15 @@ func TestMetricsCheckerKSMMissing(t *testing.T) {
 			t.Errorf("%s: no remediation", id)
 		}
 	}
+	if f := got[rd.CheckFreshness]; f.Message != "no samples of kube_pod_owner found in the last 1h" || f.Details["kube_pod_owner"] != Absent ||
+		f.Details["lastSampleAge"] != "0s" || !strings.Contains(f.Remediation, "kube-state-metrics") {
+		t.Errorf("freshness with kube_pod_owner absent: %+v", f)
+	}
+	for _, c := range rep.Checks {
+		if (c.Status == "warn" || c.Status == "fail") && !strings.HasSuffix(c.Remediation, RecheckHint("c")) {
+			t.Errorf("%s: remediation does not end with the re-check hint: %q", c.ID, c.Remediation)
+		}
+	}
 	if !strings.Contains(got[rd.CheckKSMOwners].Remediation, "kube-state-metrics") {
 		t.Errorf("ksm remediation %q", got[rd.CheckKSMOwners].Remediation)
 	}
@@ -195,12 +206,14 @@ func TestMetricsCheckerKSMMissing(t *testing.T) {
 
 func TestMetricsCheckerPartial(t *testing.T) {
 	q := healthy()
+	coarseSpans, coarseCounts := coverageSamples(regularSeries(5, 2*time.Minute, 2*time.Hour))
 	// pods owned by Jobs, but no kube_job_owner; cAdvisor without container label; coarse scrape;
 	// 3 days of history; one node without capacity type; poor owner join; 1 of 2 nodes priced.
 	q.rules = append([]rule{
 		{has: []string{"count(last_over_time(kube_job_owner"}, res: nil},
 		{has: []string{"container_cpu_usage_seconds_total", `container!=""`}, res: nil},
-		{has: []string{"quantile(0.5"}, res: []recommender.VectorSample{{Sample: recommender.Sample{V: 15}}}},
+		{has: []string{"min_over_time("}, res: coarseSpans},
+		{has: []string{"count_over_time(container_memory_working_set_bytes"}, res: coarseCounts},
 		{has: []string{"offset 167h"}, res: nil},
 		{has: []string{" and on (namespace, pod) "}, res: []recommender.VectorSample{{Sample: recommender.Sample{V: 100}}}},
 		{has: []string{"kube_node_labels"}, res: []recommender.VectorSample{nodeSample("n1", true), nodeSample("n2", false)}},

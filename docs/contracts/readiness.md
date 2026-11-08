@@ -146,7 +146,7 @@ datasource_in_use` while a cluster is bound to it, and `409 builtin` for `local`
    "labelValues": ["prod-eu1", "prod-eu2"],
    "checks": [{"id": "metrics.node-labels", "category": "metrics", "severity": "warning", "source": "hub", "status": "warn",
                "message": "kube_node_labels has no label_node_kubernetes_io_instance_type",
-               "remediation": "kube-state-metrics:\n  metricLabelsAllowlist:\n    - nodes=[node.kubernetes.io/instance-type,karpenter.sh/capacity-type,topology.kubernetes.io/zone,topology.kubernetes.io/region]",
+               "remediation": "kube-state-metrics:\n  metricLabelsAllowlist:\n    - nodes=[node.kubernetes.io/instance-type,karpenter.sh/capacity-type,eks.amazonaws.com/capacityType,topology.kubernetes.io/zone,topology.kubernetes.io/region]",
                "remediationType": "yaml", "docsURL": "…/readiness#metrics.node-labels", "checkedAt": "…"}]}
 ```
 Without `binding`, only `datasource.reachable` runs, plus `labelValues` for `clusterLabel` `cluster`.

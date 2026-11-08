@@ -300,6 +300,20 @@ export function StatusIcon({
   )
 }
 
+/** "checked 23 minutes ago", with the exact time on hover; nothing for a check without a result. */
+export function CheckAge({ checkedAt, now }: { checkedAt?: string; now?: number }) {
+  if (!checkedAt) return null
+  return (
+    <span
+      className="text-[11px] whitespace-nowrap text-muted-foreground"
+      title={formatDateTime(checkedAt)}
+      data-testid="check-age"
+    >
+      checked {relativeTime(checkedAt, now)}
+    </span>
+  )
+}
+
 function CheckRow({ check, capability }: { check: ReadinessCheck; capability?: AgentCapability }) {
   const problem = isProblem(check)
   const pending = isPending(check)
@@ -333,14 +347,13 @@ function CheckRow({ check, capability }: { check: ReadinessCheck; capability?: A
                 info
               </Badge>
             ) : null}
+            <CheckAge checkedAt={check.checkedAt} />
           </span>
           <span className="mt-0.5 block text-[13px] text-pretty text-muted-foreground">{check.message}</span>
         </span>
-        <span
-          className="hidden shrink-0 text-[11px] text-muted-foreground sm:block"
-          title={check.checkedAt ? formatDateTime(check.checkedAt) : undefined}
-        >
-          {check.source} · {check.checkedAt ? relativeTime(check.checkedAt) : 'waiting'}
+        <span className="hidden shrink-0 text-[11px] text-muted-foreground sm:block">
+          {check.source}
+          {check.checkedAt ? '' : ' · waiting'}
         </span>
         {expandable ? (
           <ChevronRightIcon

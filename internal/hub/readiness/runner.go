@@ -107,6 +107,12 @@ func (r *Runner) Trigger(cluster string) bool {
 	}
 }
 
+// Queued returns the number of triggered runs that have not started yet.
+func (r *Runner) Queued() int {
+	r.init()
+	return len(r.trigger)
+}
+
 // Run blocks until ctx is done. The first full run starts immediately.
 func (r *Runner) Run(ctx context.Context) {
 	r.init()

@@ -92,6 +92,7 @@ These drive the hub API like the web UI: logged in as the dev users `viewer`, `o
 | A9 | `TestReadiness/*` | both spokes | after a recheck (answered by the agent) the state is `AutomationReady`, no blocking failures, every capability granted |
 | A10 | `TestReadinessRBAC` | spoke-2 | the agent's `pods/resize` rule removed from its ClusterRole → recheck → `ReadyAudit`, `rbac.resize` fail, `ReadinessChanged` row (actor system/readiness), auto-patch policy refused (409); rule restored (also on failure, and by `make e2e-unblock`) → `AutomationReady` again |
 | A11 | `TestReadinessKSMDown` | spoke-2 | **skipped unless `KERF_E2E_DISRUPTIVE=1`** (needs the user's OK): kube-state-metrics scaled to 0 → `metrics.freshness` fails (blocking), state below `MetricsOK`, `summary.blocking > 0` (banner); scaled back at the end |
+| A12 | `TestReadinessRecheck` | spoke-1 | a recompute (`POST /v1/admin/recompute?cluster=`) and then a re-check each re-run the hub's metrics checks within 2 minutes (`metrics.freshness` `checkedAt` after the request), instead of after the 1h check interval; on the fresh results `metrics.scrape-interval` passes with an interval of 65 s or less, `metrics.freshness` never reports `1h0m0s`, and every failing hub metrics check's remediation names the re-check endpoint and never `insecure_skip_verify` |
 
 ### GPU visibility
 

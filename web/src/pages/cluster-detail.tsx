@@ -93,11 +93,14 @@ function OverviewTab({ c }: { c: ClusterAdmin }) {
               <CardTitle>Readiness</CardTitle>
               <CardDescription>{STATE_INFO[c.readiness.state].desc}</CardDescription>
             </div>
-            <Button asChild size="xs" variant="outline">
-              <Link to="?tab=readiness">
-                Checklist <ArrowRightIcon />
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <RecheckButton cluster={c.name} pending={!!r?.recheckRequestedAt} size="xs" />
+              <Button asChild size="xs" variant="outline">
+                <Link to="?tab=readiness">
+                  Checklist <ArrowRightIcon />
+                </Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <ReadinessStepper state={c.readiness.state} nextState={r?.nextState} blockedBy={r?.blockedBy} />
@@ -252,11 +255,46 @@ function OverviewTab({ c }: { c: ClusterAdmin }) {
   )
 }
 
-function ReadinessTab({ cluster }: { cluster: string }) {
+/**
+ * Re-runs the hub's checks now and asks the agent for its self-checks (operator). The hub reruns
+ * its metrics checks only every check interval (1h by default), so this is how a fix shows up.
+ */
+function RecheckButton({
+  cluster,
+  pending,
+  size = 'sm',
+}: {
+  cluster: string
+  pending: boolean
+  size?: 'sm' | 'xs'
+}) {
   const auth = useAuth()
+  const recheck = useWrite(() => writes.recheck(cluster))
+  if (pending) return <Pending label="Re-checking… agent checks arrive with its next pull" />
+  if (!auth.can('operator')) return null
+  return (
+    <Button
+      size={size}
+      variant="outline"
+      disabled={recheck.isPending}
+      aria-busy={recheck.isPending || undefined}
+      data-testid="recheck"
+      onClick={() =>
+        recheck.mutate(undefined, {
+          onSuccess: () =>
+            toast.info('Re-check requested', 'Hub checks run now; agent checks on its next pull.'),
+          onError: (e) => toast.error('Could not request a re-check', e.message),
+        })
+      }
+    >
+      <RefreshCwIcon className={cn(recheck.isPending && 'animate-spin')} /> Re-check now
+    </Button>
+  )
+}
+
+export function ReadinessTab({ cluster }: { cluster: string }) {
   const q = useReadiness(cluster, { poll: true })
   const history = useReadinessHistory(cluster)
-  const recheck = useWrite(() => writes.recheck(cluster))
   const r = q.data
   if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />
   if (!r) return <Skeleton className="h-96 rounded-xl" />
@@ -277,29 +315,12 @@ function ReadinessTab({ cluster }: { cluster: string }) {
                   {r.summary.unknown ? ` · ${r.summary.unknown} not reported yet` : ''}
                 </div>
               </div>
-              {r.recheckRequestedAt ? (
-                <Pending label="Re-checking… agent checks arrive with its next pull" />
-              ) : auth.can('operator') ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={recheck.isPending}
-                  data-testid="recheck"
-                  onClick={() =>
-                    recheck.mutate(undefined, {
-                      onSuccess: () =>
-                        toast.info(
-                          'Re-check requested',
-                          'Hub checks run now; agent checks on its next pull.',
-                        ),
-                      onError: (e) => toast.error('Could not request a re-check', e.message),
-                    })
-                  }
-                >
-                  <RefreshCwIcon className={cn(recheck.isPending && 'animate-spin')} /> Re-check
-                </Button>
-              ) : null}
+              <RecheckButton cluster={cluster} pending={!!r.recheckRequestedAt} />
             </div>
+            <p className="text-xs text-muted-foreground" data-testid="recheck-hint">
+              The hub reruns its metrics checks every hour by default and the agent its checks every 10
+              minutes. After a fix, re-check now to see the result.
+            </p>
             <ReadinessStepper state={r.state} nextState={r.nextState} blockedBy={r.blockedBy} />
           </CardContent>
         </Card>

@@ -356,6 +356,15 @@ func (s *Server) recompute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Log.InfoContext(r.Context(), "recompute requested", "run", id, "cluster", cluster, "coalesced", coalesced)
+	// A recompute usually follows a metrics fix: re-run the hub's readiness checks too, so they do
+	// not wait for the next check interval.
+	if cluster != "" {
+		s.triggerChecks(cluster)
+	} else if names, err := s.clusterNames(r.Context()); err == nil {
+		s.triggerChecks(names...)
+	} else {
+		s.Log.WarnContext(r.Context(), "recompute: list clusters for the readiness re-check", "err", err)
+	}
 	writeJSONStatus(w, http.StatusAccepted, hubapi.RecomputeAccepted{RunID: id.String(), Cluster: cluster, RequestedAt: at.UTC(), Coalesced: coalesced})
 }
 
