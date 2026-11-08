@@ -12,15 +12,37 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-08
+
+This release fixes what a first install on EKS showed ([#59](https://github.com/kerf-dev/kerf/issues/59)): Graviton
+nodes priced, installs that need no hand-made token Secrets, readiness checks that tell the truth and can be re-run,
+a bootstrap admin that must change its password, and install guides that match the chart.
+
+**Upgrading from 0.1.0.** Nothing is required, but three defaults change for an existing install, and one note:
+
+- `pricing.vmURL` now defaults to empty: pricing reads the node series through the hub
+  (`hub.config.prometheusURL`) instead of `http://victoria-metrics.monitoring.svc:8428`. A value you set keeps working.
+- In `global.mode: all` the chart generates the pricing and agent tokens (Secret `<hub name>-local-tokens`; in `hub`
+  mode only the pricing token) and uses them, so the Secrets you created for 0.1.0 are no longer read unless you name them: `pricing.hub.tokenSecret.name`
+  for pricing (any name), and `agent.hub.tokenSecret.name` for the agent with a name other than `kerf-agent-token`
+  (in `mode: all` that name means the generated token; copy your token to a Secret with another name). An
+  ExternalSecret setting keeps working. The old tokens stay valid until you revoke them in *Admin → Access*. Mode
+  `spoke` is unchanged: the agent still reads `kerf-agent-token`.
+- A generated bootstrap admin password must be changed at first sign-in. This applies to a new database only (the
+  admin is created once, on an empty one); an admin that exists, or a password you supply, is not forced.
+  `hub.auth.bootstrapAdmin.generate: false` keeps the old behaviour (no admin without a password of yours).
+- `web.token` was already removed in 0.1.0. If you copied it from an install guide, delete it from your values; the
+  guides no longer show it.
+
 ### Added
 
+- **Graviton prices in the default static price table.** The price file baked into the pricing image now prices the
+  `c7g`, `c8g`, `m7g`, `m8g`, `r7g`, `r8g` and `t4g` families (up to `4xlarge`; `t4g` up to `2xlarge`) in `eu-west-1`
+  and `us-east-1`, on-demand and spot. Before, a cluster on Graviton nodes had every node skipped as `no-price`.
 - **Re-check now.** The cluster page has a **Re-check now** button on the Overview card and the Readiness tab, and
   every readiness check shows when it ran ("checked 23 minutes ago"). A recompute (`POST /v1/admin/recompute`)
   also re-runs the hub's readiness checks, and every failing metrics check's remediation says how to re-check, so a
   fix no longer waits for the hourly check interval.
-- **Graviton prices in the default static price table.** The price file baked into the pricing image now prices the
-  `c7g`, `c8g`, `m7g`, `m8g`, `r7g`, `r8g` and `t4g` families (up to `4xlarge`; `t4g` up to `2xlarge`) in `eu-west-1`
-  and `us-east-1`, on-demand and spot. Before, a cluster on Graviton nodes had every node skipped as `no-price`.
 - **IRSA in the pricing guide.** `docs/pricing.md` explains how to give the pricing service its AWS role with IRSA
   (IAM policy, OIDC trust policy and the `pricing.serviceAccount.annotations` annotation), and when to choose it over
   EKS Pod Identity: organizations that block Pod Identity associations (`Cross-account pass role is not allowed`).
@@ -33,34 +55,35 @@ section here. The GitHub Release lists the same section as its highlights, follo
   another source: an ExternalSecret, `create`, or your own Secret (`name`; for the agent another name than
   `kerf-agent-token`). Revoking one in *Admin → Access* is final; delete the Secret and upgrade for new ones. With
   Argo CD or `helm template` (no Helm `lookup`), give pricing and the agent their own Secrets.
-- **`pricing.vmURL` defaults to the hub's metrics.** Empty (the new default of the `kerf` chart): pricing reads
-  the node series from `hub.config.prometheusURL`, through the hub. A failed query names the URL and the setting
-  that set it.
 - **The generated bootstrap admin must change its password.** Without a password of yours, the chart generates
   one (Secret `<hub name>-bootstrap-admin`, kept) and the admin must change it at first sign-in
   (`mustChangePassword: true`). A password you supply (`existingSecret`, `externalSecret`) is not forced.
   `hub.auth.bootstrapAdmin.generate: false` keeps the old behaviour (no admin without a password).
+- **`pricing.vmURL` defaults to the hub's metrics.** Empty (the new default of the `kerf` chart): pricing reads
+  the node series from `hub.config.prometheusURL`, through the hub. A failed query names the URL and the setting
+  that set it.
 - **Install NOTES.** They mention Secrets Manager and ExternalSecrets only when the External Secrets Operator is
   configured, print the `kubectl create secret` command for every token Secret you have to create, and show
   how to read the generated admin password.
 
 ### Fixed
 
+- **A missing token no longer fails silently.** An agent or pricing pod without its token Secret starts, logs
+  `hub token missing: Secret <namespace>/<name> key <key>` at error level, and is not Ready until the token is
+  there. Before, the agent ran without a token and pricing waited in `ContainerCreating`.
+- **`metrics.freshness` tells absent series from stale ones.** A series without samples reads "no samples of … found
+  in the last 1h" (`details`: `absent`), with a remediation for the missing scrape job or exporter, instead of
+  "last sample is over 1h old".
 - **`metrics.node-labels` judges each node by its newest `kube_node_labels` series.** After a kube-state-metrics
   allowlist change, the node's old series without the capacity type no longer fails it for up to an hour. Pricing
   node discovery uses a node's current series the same way. The readiness contract shows the same allowlist as the
   check (with `eks.amazonaws.com/capacityType`).
 - **`metrics.scrape-interval` reports the real interval for new scrape jobs.** It is estimated over the time each
   series covers, not the whole 30-minute window: a job started 12 minutes ago at 30 s no longer reads as about 1m18s.
-- **`metrics.freshness` tells absent series from stale ones.** A series without samples reads "no samples of … found
-  in the last 1h" (`details`: `absent`), with a remediation for the missing scrape job or exporter, instead of
-  "last sample is over 1h old".
 - **The `metrics.cadvisor` remediation keeps TLS verification on.** It scrapes cAdvisor through the API server proxy
   with the service-account CA (`ca_file`) instead of `insecure_skip_verify`, names the `nodes` and `nodes/proxy`
   RBAC the scraper needs, and shows the job for Prometheus and for Grafana Alloy.
-- **A missing token no longer fails silently.** An agent or pricing pod without its token Secret starts, logs
-  `hub token missing: Secret <namespace>/<name> key <key>` at error level, and is not Ready until the token is
-  there. Before, the agent ran without a token and pricing waited in `ContainerCreating`.
+
 ### Documentation
 
 - **Install guides.** The install guide for any cluster no longer tells you to create a `ui` token or set `web.token`,
