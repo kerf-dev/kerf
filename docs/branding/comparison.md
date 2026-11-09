@@ -22,7 +22,7 @@ cell, and open an issue or a pull request when something here is wrong or out of
 | **Maintenance windows** | yes, plus freeze windows | not stated | not stated | not stated | schedule settings | yes | yes | not stated |
 | **JVM heap aware** | yes | not stated | not stated | not stated | not stated | yes | yes | yes |
 | **Alerts in chat** | yes: Slack, Teams, signed webhook | not stated | not stated (Slack only in Fairwinds Insights, a separate product) | Slack (through a Robusta install), Teams (report export) | Slack, Teams, email | webhook after each apply; Slack incoming webhook as an example | Slack, Teams | Slack, Teams, webhook |
-| **SSO** | OIDC (SAML through Dex) | not stated | not stated | not stated | SAML (Enterprise plans) | not stated | SAML and OpenID (Expert plan) | OIDC |
+| **SSO** | OIDC and SAML 2.0 | not stated | not stated | not stated | SAML (Enterprise plans) | not stated | SAML and OpenID (Expert plan) | OIDC |
 | **Realized savings** | yes: from applied changes, apart from the estimate | not stated | not stated | not stated | not stated | not stated | not stated | yes: projected minus actual cost, from a baseline |
 
 ## Notes
@@ -44,7 +44,7 @@ cell, and open an issue or a pull request when something here is wrong or out of
   apply; its docs show a Slack incoming webhook, ServiceNow and Amazon SNS as destinations, and a vendor blog post
   (2026-05-18) walks through the Slack case. Neither is a rules engine like Kerf's, which filters events by type,
   cluster and namespace; CAST AI filters by category, severity and cluster.
-- **SSO.** Kerf signs in through OpenID Connect; a SAML-only identity provider works through Dex. Kubecost's docs
+- **SSO.** Kerf signs in through OpenID Connect or SAML 2.0, with the same group-to-role mappings. Kubecost's docs
   describe SAML only. PerfectScale's SSO is a paid-plan feature and lists SAML and OpenID providers. CAST AI's docs
   describe OpenID Connect; its docs say multi-tenant SSO and group sync are Enterprise features. For StormForge we
   found SSO only in a [2022 press release](https://stormforge.io/press-releases/stormforge-optimize-live/), not in the docs.

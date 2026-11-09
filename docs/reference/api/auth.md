@@ -11,6 +11,10 @@ Login, logout and the caller's identity.
 | [`GET /v1/auth/providers`](#getAuthProviders) | How the sign-in page offers to sign in |
 | [`GET /v1/auth/oidc/login`](#oidcLogin) | Start a sign-in with the identity provider |
 | [`GET /v1/auth/oidc/callback`](#oidcCallback) | The provider's redirect back after sign-in |
+| [`GET /v1/auth/saml/metadata`](#samlMetadata) | Kerf's SAML service provider metadata |
+| [`GET /v1/auth/saml/login`](#samlLogin) | Start a sign-in with the SAML identity provider |
+| [`POST /v1/auth/saml/acs`](#samlACS) | The assertion consumer service (the IdP's response) |
+| [`GET /v1/auth/saml/finish`](#samlFinish) | Start the session of a verified SAML sign-in |
 | [`GET /v1/me`](#getMe) | The caller's identity, role and CSRF token |
 | [`POST /v1/me/password`](#changeOwnPassword) | Change the caller's own password |
 
@@ -73,7 +77,7 @@ only clears the cookie. Always `204` otherwise; returns no data.
 Accepts: no authentication.
 
 Whether every local user may sign in with a password (`local`; false = only the
-break-glass admin) and the identity provider, when one is configured.
+break-glass admin) and the identity providers that are configured (`oidc`, `saml`).
 
 **Responses**
 
@@ -134,6 +138,105 @@ user), `oidc_unavailable`.
 | Status | Description | Body |
 |---|---|---|
 | `302` | To `next` with a session cookie, or to the sign-in page with an error. |  |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+
+### Kerf's SAML service provider metadata { #samlMetadata }
+
+`GET /v1/auth/saml/metadata`
+
+Accepts: no authentication.
+
+The SP metadata to import at the SAML identity provider: the entity ID
+(`auth.saml.entityID`, default this URL), the assertion consumer service (HTTP-POST binding,
+`auth.saml.acsURL`), the requested NameID format and, with an SP key, the certificate that
+signs the authentication requests. `404` when SAML sign-in is not configured.
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | The metadata (an `EntityDescriptor`). | string |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+
+### Start a sign-in with the SAML identity provider { #samlLogin }
+
+`GET /v1/auth/saml/login`
+
+Accepts: no authentication.
+
+Redirects the browser to the IdP's single sign-on service (HTTP-Redirect binding) with an
+`AuthnRequest` (signed when an SP key is configured) and a random `RelayState`, and sets the
+`kerf_saml` cookie (`HttpOnly; SameSite=Lax; Path=/v1/auth/saml`, 10 minutes) that holds the
+same RelayState and binds the sign-in to this browser. When the IdP's metadata cannot be read
+it redirects to `/login?error=saml_unavailable` instead.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `next` | query | string | Path to return to after sign-in (same site only; anything else gives `/`). |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `302` | To the IdP, or to the sign-in page with an error. |  |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+| `429` | Too many attempts (code `rate_limited`). | [Problem](schemas.md#problem) |
+
+### The assertion consumer service (the IdP's response) { #samlACS }
+
+`POST /v1/auth/saml/acs`
+
+Accepts: no authentication.
+
+The IdP posts its `SAMLResponse` here with the `RelayState` of a sign-in started at
+`/v1/auth/saml/login` (HTTP-POST binding; IdP-initiated sign-ins are refused). The hub
+verifies the XML signature (the assertion must be signed unless
+`auth.saml.requireSignedAssertions` is false; then a signed response suffices), the issuer, the
+audience, the destination, `InResponseTo`, `NotBefore` and `NotOnOrAfter` (with
+`auth.saml.clockSkew`), and records the assertion ID so it is accepted once by every replica.
+It stores the identity and redirects (`303`) to `/v1/auth/saml/finish`; it starts no session
+itself. On failure it redirects to `/login?error=<code>`: `saml_expired` (unknown, used or
+expired RelayState), `saml_failed` (an invalid, unsigned or replayed response, or the IdP
+refused), `saml_unavailable`.
+
+**Request body** (`application/x-www-form-urlencoded`, required): object
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `SAMLResponse` | string, required |  | The base64-encoded `samlp:Response`. |
+| `RelayState` | string, required |  |  |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `303` | To `/v1/auth/saml/finish`, or to the sign-in page with an error. |  |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+| `429` | Too many attempts (code `rate_limited`). | [Problem](schemas.md#problem) |
+
+### Start the session of a verified SAML sign-in { #samlFinish }
+
+`GET /v1/auth/saml/finish`
+
+Accepts: no authentication.
+
+Needs the `kerf_saml` cookie of the browser that started the sign-in: takes its verified
+identity (once), maps the groups to a role, creates or updates the user (`source: saml`) and
+starts a session (cookie `kerf_session`, as `POST /v1/auth/login`; it ends at `sessionTTL` or
+at the IdP's `SessionNotOnOrAfter`, whichever is first), then redirects to `next`. On failure
+it redirects to `/login?error=<code>`: `saml_expired` (no answered sign-in for this browser),
+`saml_denied` (no mapped group and no default role, or a disabled user; the user's other
+sessions end), `saml_conflict` (the username belongs to a local user or to a user of the other
+identity provider).
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `302` | To `next` with a session cookie, or to the sign-in page with an error. |  |
+| `303` | To the sign-in page with an error. |  |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
 ### The caller's identity, role and CSRF token { #getMe }

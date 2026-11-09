@@ -12,6 +12,26 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+### Added
+
+- **Sign in with SAML 2.0** ([#65](https://github.com/kerf-dev/kerf/issues/65)). The hub is a SAML service provider
+  next to OpenID Connect, with no extra component: `hub.auth.saml` (off by default) takes the IdP's metadata (a URL or
+  a Secret), optional SP signing key and certificate from a Secret, the user name and groups attributes, and
+  `roleMappings` like OIDC (team mappings included). The SP metadata is published at `/v1/auth/saml/metadata`, and
+  the sign-in page shows **Sign in with &lt;name&gt;** next to the password form and the OIDC button. Assertions must
+  be signed by default; the issuer, audience, destination, `InResponseTo`, `NotBefore` and `NotOnOrAfter` are
+  checked with a configurable clock skew, and each assertion is accepted once by every hub replica (replay cache in
+  PostgreSQL). The `RelayState` is bound to the browser with the `kerf_saml` cookie, which the web proxy forwards.
+  The groups are read at each sign-in: a user removed from its groups is refused at the next sign-in and loses its
+  sessions. The audit log records the IdP subject (NameID) and e-mail. Admin → Access marks SAML users. Database
+  migration `0024_saml`; `GET /v1/auth/providers` gains `saml` and users gain `source: saml` (additive).
+
+### Documentation
+
+- **Sign in with SAML** in [docs/auth.md](docs/auth.md#sign-in-with-saml): the flow and its checks, the chart values,
+  settings for Okta, Microsoft Entra ID and Keycloak, moving from Dex to native SAML, and troubleshooting (clock
+  skew, wrong audience, missing groups).
+
 ## [0.2.0] - 2026-11-09
 
 ### Added
