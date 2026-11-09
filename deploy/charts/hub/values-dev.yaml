@@ -50,6 +50,20 @@ auth:
     refreshInterval: 1m
     clientSecret:
       value: ro-dev-oidc-3f9a6c1e8b2d7054e1a9c6b3
+  # Keycloak (dev/manifests/hub/keycloak.yaml): the dev SAML IdP for "Sign in with Keycloak". The hub
+  # reads its metadata in the cluster; browsers reach Keycloak at http://localhost:18180.
+  saml:
+    enabled: true
+    name: Keycloak
+    acsURL: http://localhost:19090/v1/auth/saml/acs
+    idpMetadataURL: http://keycloak.keycloak.svc.cluster.local:8080/realms/kerf/protocol/saml/descriptor
+    allowHTTPMetadata: true
+    metadataRefreshInterval: 5m
+    nameIDFormat: persistent
+    roleMappings:
+      - {group: kerf-admins, role: admin}
+      - {group: kerf-operators, role: operator}
+      - {group: kerf-viewers, role: viewer}
 
 # Notifications: messages link to the web UI on localhost; plain-HTTP receivers are allowed so the e2e
 # suite can run a fake one on the host (test/e2e/notifications_test.go, via host.k3d.internal).

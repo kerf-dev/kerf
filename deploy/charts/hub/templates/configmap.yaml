@@ -25,6 +25,20 @@ data:
     {{- $_ := set $oidc "clientSecretFile" "/etc/hub/oidc/client-secret" }}
     {{- end }}
     {{- $_ := set $auth "oidc" $oidc }}
+    {{- $samlIn := default (dict) .Values.auth.saml }}
+    {{- $saml := omit $samlIn "idpMetadataSecret" "spKeySecret" }}
+    {{- if $saml.enabled }}
+    {{- $mdSecret := dig "idpMetadataSecret" "existingSecret" "" $samlIn }}
+    {{- if and $saml.idpMetadataURL $mdSecret }}{{ fail "auth.saml: idpMetadataURL and idpMetadataSecret.existingSecret are exclusive" }}{{ end }}
+    {{- if not (or $saml.idpMetadataURL $mdSecret) }}{{ fail "auth.saml.enabled needs the IdP's metadata: auth.saml.idpMetadataURL or auth.saml.idpMetadataSecret.existingSecret" }}{{ end }}
+    {{- if not $saml.acsURL }}{{ fail "auth.saml.enabled needs auth.saml.acsURL: https://<UI host>/v1/auth/saml/acs" }}{{ end }}
+    {{- if $mdSecret }}{{ $_ := set $saml "idpMetadataFile" "/etc/hub/saml-idp/metadata.xml" }}{{ end }}
+    {{- if dig "spKeySecret" "existingSecret" "" $samlIn }}
+    {{- $_ := set $saml "spKeyFile" "/etc/hub/saml-sp/tls.key" }}
+    {{- $_ := set $saml "spCertFile" "/etc/hub/saml-sp/tls.crt" }}
+    {{- end }}
+    {{- end }}
+    {{- $_ := set $auth "saml" $saml }}
     {{- $_ := set $cfg "auth" $auth }}
     {{- $onb := deepCopy (default (dict) .Values.config.onboarding) }}
     {{- if include "hub.datasourceKeyEnabled" . }}

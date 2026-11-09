@@ -546,6 +546,18 @@ export function seedAdmin(db: MockDb): AdminState {
     },
     14,
   )
+  user(
+    {
+      username: 'priya.shah@example.com',
+      role: 'operator',
+      displayName: 'Priya Shah',
+      createdBy: 'saml',
+      source: 'saml',
+      email: 'priya.shah@example.com',
+      scope: 'fleet',
+    },
+    6,
+  )
 
   // Teams: a few namespaces each; accounts, lending, observability and platform stay unassigned.
   const team = (rec: Partial<TeamRec> & Pick<TeamRec, 'id'>, createdDaysAgo: number) =>

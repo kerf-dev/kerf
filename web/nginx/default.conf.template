@@ -10,8 +10,8 @@
 #   exactly that user and role.
 # - Without one, forward no credentials at all: the hub answers 401 to everything but sign-in, and the
 #   UI shows its sign-in page.
-# - `kerf_oidc` (the state of a sign-in with the identity provider) is forwarded too: the callback
-#   only completes in the browser that started the sign-in.
+# - `kerf_oidc` and `kerf_saml` (the state of a sign-in with the OpenID Connect or SAML identity
+#   provider) are forwarded too: a sign-in only completes in the browser that started it.
 # This proxy holds no token, and whatever the browser sends in Authorization is never forwarded.
 map $cookie_kerf_session $hub_cookie_session {
     ""      "";
@@ -19,7 +19,11 @@ map $cookie_kerf_session $hub_cookie_session {
 }
 map $cookie_kerf_oidc $hub_cookie_oidc {
     ""      "";
-    default "kerf_oidc=$cookie_kerf_oidc";
+    default "kerf_oidc=$cookie_kerf_oidc; ";
+}
+map $cookie_kerf_saml $hub_cookie_saml {
+    ""      "";
+    default "kerf_saml=$cookie_kerf_saml";
 }
 
 server_tokens off;
@@ -67,7 +71,7 @@ server {
         # An empty value drops the header: the browser's own Authorization never reaches the hub, and
         # the hub sees no cookie but the session.
         proxy_set_header Authorization "";
-        proxy_set_header Cookie "$hub_cookie_session$hub_cookie_oidc";
+        proxy_set_header Cookie "$hub_cookie_session$hub_cookie_oidc$hub_cookie_saml";
         # One entry, the client as nginx saw it (after TRUSTED_PROXIES): the hub rate-limits sign-ins by
         # the last X-Forwarded-For entry, so a client-sent header must not reach it.
         proxy_set_header X-Forwarded-For $remote_addr;

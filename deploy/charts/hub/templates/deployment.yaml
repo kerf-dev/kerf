@@ -111,6 +111,16 @@ spec:
               mountPath: /etc/hub/oidc
               readOnly: true
             {{- end }}
+            {{- if and (dig "saml" "enabled" false .Values.auth) (dig "saml" "idpMetadataSecret" "existingSecret" "" .Values.auth) }}
+            - name: saml-idp
+              mountPath: /etc/hub/saml-idp
+              readOnly: true
+            {{- end }}
+            {{- if and (dig "saml" "enabled" false .Values.auth) (dig "saml" "spKeySecret" "existingSecret" "" .Values.auth) }}
+            - name: saml-sp
+              mountPath: /etc/hub/saml-sp
+              readOnly: true
+            {{- end }}
             {{- range $i, $c := .Values.notifications.channels }}
             - name: notification-{{ $i }}
               mountPath: /etc/hub/notifications/{{ $i }}
@@ -154,6 +164,26 @@ spec:
             items:
               - key: {{ .Values.auth.oidc.clientSecret.existingSecretKey }}
                 path: client-secret
+        {{- end }}
+        {{- with .Values.auth.saml }}
+        {{- if and .enabled (dig "idpMetadataSecret" "existingSecret" "" .) }}
+        - name: saml-idp
+          secret:
+            secretName: {{ .idpMetadataSecret.existingSecret }}
+            items:
+              - key: {{ .idpMetadataSecret.existingSecretKey | default "metadata.xml" }}
+                path: metadata.xml
+        {{- end }}
+        {{- if and .enabled (dig "spKeySecret" "existingSecret" "" .) }}
+        - name: saml-sp
+          secret:
+            secretName: {{ .spKeySecret.existingSecret }}
+            items:
+              - key: {{ .spKeySecret.keyKey | default "tls.key" }}
+                path: tls.key
+              - key: {{ .spKeySecret.certKey | default "tls.crt" }}
+                path: tls.crt
+        {{- end }}
         {{- end }}
         {{- with include "hub.localTokensSecret" . }}
         - name: local-tokens

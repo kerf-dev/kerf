@@ -150,6 +150,14 @@ hub:
   #   auth.bootstrapAdmin.externalSecret: {enabled: true, remoteRef: {key: kerf/hub/bootstrap-admin, property: password}}
   auth:
     cookieSecure: true       # false: dev: true only (plain-HTTP development)
+    # Single sign-on (docs/auth.md), off by default: auth.oidc (OpenID Connect) and/or auth.saml (SAML
+    # 2.0; secrets from Secrets you create), e.g.
+    #   saml:
+    #     enabled: true
+    #     name: Okta
+    #     acsURL: https://kerf.example.com/v1/auth/saml/acs
+    #     idpMetadataURL: https://example.okta.com/app/<app id>/sso/saml/metadata
+    #     roleMappings: [{group: platform-admins, role: admin}, {group: engineering, role: viewer}]
 
   # Datasource secrets key. The chart generates it once (Helm lookup) unless it comes from
   # Secrets Manager. With Argo CD (no lookup) use the ExternalSecret, or every sync makes a new key:

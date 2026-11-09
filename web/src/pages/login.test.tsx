@@ -44,4 +44,34 @@ describe('Sign-in page', () => {
     expect(screen.getByText('No access to Kerf')).toBeInTheDocument()
     expect(screen.getByTestId('password-form')).toBeInTheDocument()
   })
+
+  it('offers the SAML identity provider and names it in its errors', async () => {
+    localStorage.setItem('ro-mock-saml', 'on')
+    renderLogin('/login?next=%2Fclusters&error=saml_denied')
+    const sso = await screen.findByTestId('saml-sign-in')
+    expect(sso).toHaveTextContent('Sign in with Microsoft Entra ID')
+    expect(sso).toHaveAttribute('href', '/v1/auth/saml/login?next=%2Fclusters')
+    expect(screen.queryByTestId('oidc-sign-in')).not.toBeInTheDocument()
+    expect(screen.getByText('No access to Kerf')).toBeInTheDocument()
+    expect(screen.getByText(/Microsoft Entra ID signed you in/)).toBeInTheDocument()
+    expect(screen.getByTestId('password-form')).toBeInTheDocument()
+  })
+
+  it('offers both identity providers, OpenID Connect first', async () => {
+    localStorage.setItem('ro-mock-oidc', 'on')
+    localStorage.setItem('ro-mock-saml', 'on')
+    renderLogin('/login?error=saml_unavailable')
+    const oidc = await screen.findByTestId('oidc-sign-in')
+    const saml = screen.getByTestId('saml-sign-in')
+    expect(oidc.compareDocumentPosition(saml) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText('Cannot reach Microsoft Entra ID')).toBeInTheDocument()
+  })
+
+  it('hides the password form behind the break-glass toggle when only SAML signs in', async () => {
+    localStorage.setItem('ro-mock-saml', 'only')
+    renderLogin()
+    expect(await screen.findByTestId('saml-sign-in')).toBeInTheDocument()
+    expect(screen.queryByTestId('password-form')).not.toBeInTheDocument()
+    expect(screen.getByTestId('break-glass-toggle')).toBeInTheDocument()
+  })
 })
