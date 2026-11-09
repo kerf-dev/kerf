@@ -64,7 +64,7 @@ func (r *run) runDynatrace(src *dynatrace.Source) {
 		}
 		return
 	}
-	r.dtContainers(cpu, mem, counts)
+	r.dtContainers(cpu, mem)
 	r.dtOwners(counts)
 	r.dtResources(counts)
 	samples := r.dtFreshness(src, cluster)
@@ -117,7 +117,7 @@ func (r *run) dtClusterLabel(src *dynatrace.Source, cluster string, n int, count
 	return false
 }
 
-func (r *run) dtContainers(cpu, mem int, counts dynatrace.Counts) {
+func (r *run) dtContainers(cpu, mem int) {
 	d := map[string]string{"cpuSeries": strconv.Itoa(cpu), "memorySeries": strconv.Itoa(mem)}
 	if cpu > 0 && mem > 0 {
 		r.add(rd.CheckCAdvisor, rd.StatusPass, fmt.Sprintf("%d %s and %d %s series", cpu, dynatrace.KeyCPUUsage, mem, dynatrace.KeyMemoryWorkingSet), "", "", d)
