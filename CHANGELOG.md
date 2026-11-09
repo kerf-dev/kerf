@@ -12,12 +12,14 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-09
+
 ### Documentation
 
-- Two guides, [How to rightsize Kubernetes resource requests](docs/guides/rightsize-kubernetes-resource-requests.md)
-  and [Reduce Kubernetes costs with rightsizing](docs/guides/reduce-kubernetes-costs.md), and comparisons of Kerf with
-  [the Vertical Pod Autoscaler](docs/compare/kerf-vs-vpa.md), [Goldilocks](docs/compare/kerf-vs-goldilocks.md) and
-  [Kubecost and OpenCost](docs/compare/kerf-vs-kubecost.md).
+- **Search engines can find the docs.** `robots.txt` now names a sitemap for the documentation of the latest release
+  (`https://getkerf.dev/docs/sitemap.xml`, written by the Pages workflow) next to the homepage sitemap; the dev build
+  and older versions are not advertised. The homepage's "Read the docs" button opens the documentation site, and the
+  README opens with a link to [getkerf.dev](https://getkerf.dev).
 
 ## [0.1.1] - 2026-11-08
 
