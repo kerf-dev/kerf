@@ -10,7 +10,7 @@ const dir = process.env.SCREENSHOTS_DIR
 
 // Every page but the sign-in page needs a session: a viewer unless a shot signs in as someone else.
 test.beforeEach(async ({ page }, info) => {
-  if (!info.title.startsWith('login ')) await seedSession(page, 'viewer')
+  if (!info.title.startsWith('login')) await seedSession(page, 'viewer')
 })
 const pages = [
   ['overview', '/'],
@@ -107,6 +107,19 @@ type Shot = {
 
 const adminShots: Shot[] = [
   { name: 'login', path: '/login' },
+  {
+    // Both identity providers offered: OpenID Connect and SAML, above the password form.
+    name: 'login-saml',
+    path: '/login',
+    act: async (p) => {
+      await p.evaluate(() => {
+        localStorage.setItem('ro-mock-oidc', 'on')
+        localStorage.setItem('ro-mock-saml', 'on')
+      })
+      await p.reload()
+      await expect(p.getByTestId('saml-sign-in')).toBeVisible()
+    },
+  },
   { name: 'admin-automation', user: 'admin', path: '/admin', tablet: true },
   { name: 'admin-policies', user: 'admin', path: '/admin/policies' },
   {

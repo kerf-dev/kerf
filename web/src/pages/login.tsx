@@ -41,25 +41,33 @@ function loginError(e: unknown): { title: string; detail?: string } | undefined 
   return { title: 'Sign-in failed', detail: String(e) }
 }
 
-/** The sign-in page's `?error=` after a sign-in with the identity provider (hub: oidcFail). */
-function oidcError(code: string | null, provider: string): { title: string; detail?: string } | undefined {
-  switch (code) {
-    case null:
-    case '':
-      return undefined
-    case 'oidc_denied':
+/**
+ * The sign-in page's `?error=` after a sign-in with an identity provider (hub: oidcFail, samlFail):
+ * `oidc_<reason>` or `saml_<reason>`, named after the provider that failed.
+ */
+function idpError(
+  code: string | null,
+  names: { oidc?: string; saml?: string },
+): { title: string; detail?: string } | undefined {
+  if (!code) return undefined
+  const [kind, reason] = code.startsWith('saml_')
+    ? ['saml', code.slice(5)]
+    : ['oidc', code.replace(/^oidc_/, '')]
+  const provider = (kind === 'saml' ? names.saml : names.oidc) ?? 'the identity provider'
+  switch (reason) {
+    case 'denied':
       return {
         title: 'No access to Kerf',
         detail: `${provider} signed you in, but none of your groups gives a Kerf role. Ask an admin to add you to a group with access.`,
       }
-    case 'oidc_expired':
+    case 'expired':
       return { title: 'The sign-in took too long', detail: 'Start again from this page.' }
-    case 'oidc_conflict':
+    case 'conflict':
       return {
         title: 'This account name is taken',
-        detail: `A local Kerf user has the name ${provider} gives you. Ask an admin to rename or delete that user.`,
+        detail: `Another Kerf user has the name ${provider} gives you. Ask an admin to rename or delete that user.`,
       }
-    case 'oidc_unavailable':
+    case 'unavailable':
       return {
         title: `Cannot reach ${provider}`,
         detail: 'The identity provider does not answer. Try again in a moment.',
@@ -92,6 +100,13 @@ export default function LoginPage() {
   const [touched, setTouched] = useState(false)
   const providers = useAuthProviders()
   const oidc = providers.data?.oidc
+  const saml = providers.data?.saml
+  // The identity providers the hub offers, each a "Sign in with <name>" button.
+  const idps = [
+    ...(oidc ? [{ kind: 'oidc' as const, ...oidc }] : []),
+    ...(saml ? [{ kind: 'saml' as const, ...saml }] : []),
+  ]
+  const idpNames = idps.map((p) => p.name).join(' or ') || 'the identity provider'
   // Local sign-in off: only the break-glass admin uses a password, behind a disclosure.
   const localOff = providers.data?.local === false
   const [showLocal, setShowLocal] = useState(false)
@@ -107,7 +122,7 @@ export default function LoginPage() {
 
   if (auth.signedIn && !login.isPending) return <Navigate to={next} replace />
 
-  const err = loginError(login.error) ?? oidcError(params.get('error'), oidc?.name ?? 'the identity provider')
+  const err = loginError(login.error) ?? idpError(params.get('error'), { oidc: oidc?.name, saml: saml?.name })
   const passwordForm = !localOff || showLocal
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -150,14 +165,16 @@ export default function LoginPage() {
               </Callout>
             </div>
           ) : null}
-          {oidc ? (
+          {idps.length ? (
             <>
-              <Button asChild className="h-9 w-full" data-testid="oidc-sign-in">
-                {/* A full page load: the hub redirects to the provider. */}
-                <a href={`${oidc.loginURL}?next=${encodeURIComponent(next)}`}>
-                  <LogInIcon /> Sign in with {oidc.name}
-                </a>
-              </Button>
+              {idps.map((p) => (
+                <Button asChild className="h-9 w-full" data-testid={`${p.kind}-sign-in`} key={p.kind}>
+                  {/* A full page load: the hub redirects to the provider. */}
+                  <a href={`${p.loginURL}?next=${encodeURIComponent(next)}`}>
+                    <LogInIcon /> Sign in with {p.name}
+                  </a>
+                </Button>
+              ))}
               {passwordForm ? (
                 <div className="flex items-center gap-3 text-xs text-muted-foreground" aria-hidden>
                   <span className="h-px flex-1 bg-border" />
@@ -182,8 +199,7 @@ export default function LoginPage() {
             <form onSubmit={submit} className="flex flex-col gap-4" noValidate data-testid="password-form">
               {localOff ? (
                 <p className="text-xs text-muted-foreground">
-                  Password sign-in is only for the break-glass administrator, when{' '}
-                  {oidc?.name ?? 'the identity provider'} is down.
+                  Password sign-in is only for the break-glass administrator, when {idpNames} is down.
                 </p>
               ) : null}
               <Field
@@ -197,7 +213,7 @@ export default function LoginPage() {
                   autoComplete="username"
                   autoCapitalize="none"
                   spellCheck={false}
-                  autoFocus={!oidc || localOff}
+                  autoFocus={!idps.length || localOff}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="h-9"
@@ -232,7 +248,7 @@ export default function LoginPage() {
               </Field>
               <Button
                 type="submit"
-                variant={oidc ? 'outline' : 'default'}
+                variant={idps.length ? 'outline' : 'default'}
                 className="mt-1 h-9 w-full"
                 disabled={login.isPending}
                 data-testid="login-submit"

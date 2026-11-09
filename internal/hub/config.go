@@ -245,15 +245,17 @@ type AuthConfig struct {
 	// BootstrapAdmin is created on a database without users. The password comes from
 	// PasswordFile (a mounted Secret) or env HUB_BOOTSTRAP_ADMIN_PASSWORD.
 	BootstrapAdmin BootstrapAdmin `json:"bootstrapAdmin"`
-	// Local sign-in with passwords; OIDC sign-in with an OpenID Connect provider (docs/auth.md).
+	// Local sign-in with passwords; sign-in with an OpenID Connect provider or a SAML 2.0 identity
+	// provider (docs/auth.md).
 	Local LocalAuth       `json:"local"`
 	OIDC  auth.OIDCConfig `json:"oidc"`
+	SAML  auth.SAMLConfig `json:"saml"`
 }
 
 // LocalAuth configures sign-in with a password.
 type LocalAuth struct {
 	// Enabled (default true). false: only BreakGlassUser may sign in with a password, for when the
-	// identity provider is down; everyone else signs in with OIDC.
+	// identity provider is down; everyone else signs in with OIDC or SAML.
 	Enabled *bool `json:"enabled"`
 	// BreakGlassUser is the one local user who can still use a password (default: the bootstrap
 	// admin's username, else "admin").
@@ -438,8 +440,11 @@ func LoadConfig(path string) (Config, error) {
 	if err := cfg.Auth.OIDC.Validate(); err != nil {
 		return cfg, err
 	}
-	if !cfg.Auth.localEnabled() && !cfg.Auth.OIDC.Enabled {
-		return cfg, fmt.Errorf("auth.local.enabled is false but auth.oidc is not enabled: only %s could sign in", cfg.Auth.breakGlassUser())
+	if err := cfg.Auth.SAML.Validate(); err != nil {
+		return cfg, err
+	}
+	if !cfg.Auth.localEnabled() && !cfg.Auth.OIDC.Enabled && !cfg.Auth.SAML.Enabled {
+		return cfg, fmt.Errorf("auth.local.enabled is false but neither auth.oidc nor auth.saml is enabled: only %s could sign in", cfg.Auth.breakGlassUser())
 	}
 	if l := cfg.Teams.OwnerLabel; l != "" && !labelKeyRE.MatchString(l) {
 		return cfg, fmt.Errorf("teams.ownerLabel %q is not a Kubernetes label key", l)

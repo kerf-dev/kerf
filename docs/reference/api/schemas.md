@@ -966,14 +966,14 @@ Type: string. pattern `^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$`; example `10m
 
 Who made a change. `user`: a user (`name` = username). `token`: an API token
 (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc`
-for the users the identity provider creates and the roles it changes).
+or `saml` for the users the identity provider creates and the roles it changes).
 
 | Field | Type | Constraints | Description |
 |---|---|---|---|
 | `type` | string, required | one of `user`, `token`, `system` |  |
 | `name` | string, required |  |  |
 | `role` | string |  | The user role or token role at the time of the change. |
-| `subject` | string |  | A user signed in with the identity provider - its subject (`sub`) there. |
+| `subject` | string |  | A user signed in with the identity provider - its subject there (OIDC `sub`, SAML NameID). |
 | `email` | string |  | A user signed in with the identity provider - its e-mail there. |
 | `teams` | array of string |  | The scope used: the team whose binding allowed the action (docs/teams.md). Absent when a fleet-wide role allowed it. |
 
@@ -996,6 +996,16 @@ for the users the identity provider creates and the roles it changes).
 |---|---|---|---|
 | `local` | boolean, required |  | Every local user may sign in with a password; false = only the break-glass admin. |
 | `oidc` | [OIDCProvider](schemas.md#oidcprovider) |  |  |
+| `saml` | [SAMLProvider](schemas.md#samlprovider) |  | The SAML 2.0 identity provider offered on the sign-in page, when configured. |
+
+## SAMLProvider { #samlprovider }
+
+The SAML 2.0 identity provider offered on the sign-in page, when configured.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `name` | string, required | example `Okta` | Shown as "Sign in with <name>". |
+| `loginURL` | string, required | example `/v1/auth/saml/login` | Where the browser starts the sign-in (add `?next=<path>`). |
 
 ## OIDCProvider { #oidcprovider }
 
@@ -1040,8 +1050,8 @@ for the users the identity provider creates and the roles it changes).
 | `lockedUntil` | string (date-time) |  | Present while login is locked after failed attempts. |
 | `deletedAt` | string (date-time) |  |  |
 | `version` | integer, required | min 1 |  |
-| `source` | string | one of `local`, `oidc` | `local`: signs in with a password. `oidc`: signs in with the identity provider, which created the user at its first sign-in; its role comes from its groups there (`auth.oidc.roleMappings`), so it has no password and its role is not edited here (`409` `idp_managed`). |
-| `email` | string |  | The e-mail at the identity provider (`oidc` users). |
+| `source` | string | one of `local`, `oidc`, `saml` | `local`: signs in with a password. `oidc` and `saml`: signs in with the identity provider (OpenID Connect or SAML 2.0), which created the user at its first sign-in; its role comes from its groups there (`auth.oidc.roleMappings`, `auth.saml.roleMappings`), so it has no password and its role is not edited here (`409` `idp_managed`). |
+| `email` | string |  | The e-mail at the identity provider (`oidc` and `saml` users). |
 | `scope` | UserScope (enum) | one of `fleet`, `teams` | `fleet`: the user's `role` applies to every workload (`teamRoles` may raise it on some teams); it is stored as given and team roles never change it. `teams`: the user sees and acts only on the workloads of its `teamRoles`; it has no fleet-wide role, so its `role` is derived (the highest team role) and a `role` sent with it is ignored. Moving a `teams` user to `fleet` needs `role` in the same request (`400` `role_required`). Admins are always `fleet` (docs/teams.md). |
 | `teamRoles` | array of [TeamRole](schemas.md#teamrole) |  | Roles on teams (each team once; viewer or operator). With `scope: fleet` they raise the fleet-wide `role` on those teams; with `scope: teams` they are all the user has. |
 
@@ -1158,7 +1168,7 @@ One recommender profile. Fractions are 0.15 for +15 %.
 |---|---|---|---|
 | `version` | integer, required | min 0 | 0 = never saved (values from the hub configuration file). |
 | `updatedAt` | string (date-time) |  |  |
-| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `reason` | string |  |  |
 | `value` | [RecommenderSettings](schemas.md#recommendersettings), required |  |  |
 
@@ -1194,7 +1204,7 @@ Adjusts the rates of one cluster. A fixed rate replaces the rate from the pricin
 |---|---|---|---|
 | `version` | integer, required | min 0 |  |
 | `updatedAt` | string (date-time) |  |  |
-| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `reason` | string |  |  |
 | `value` | [PricingSettings](schemas.md#pricingsettings), required |  |  |
 | `rates` | [PricingRates](schemas.md#pricingrates) |  | Read-only, on GET: where the pricing service's rates come from now, read from its series in the hub's metrics store. Absent when the store cannot be queried. |
@@ -1251,7 +1261,7 @@ every node falls back to list prices.
 | `version` | integer, required | min 1 |  |
 | `value` | object, required |  | `RecommenderSettings` or `PricingSettings`, by `section`. |
 | `createdAt` | string (date-time), required |  |  |
-| `actor` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `actor` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `reason` | string, required |  |  |
 
 ## SettingsVersionList { #settingsversionlist }
@@ -1448,9 +1458,9 @@ A policy as in `PolicyInput`, without reason, for `POST /v1/admin/preview`.
 | `spec` | [RightsizingPolicySpec](schemas.md#rightsizingpolicyspec), required |  | Mirrors `RightsizingPolicy.spec` (api/v1alpha1, `kubectl explain rsp.spec`). Unset fields inherit from the next lower layer. Validated by the shared validator (`api/v1alpha1/validate`) exactly like the CRD. |
 | `version` | integer, required | min 1 | Increases with every change; the ETag is `"<version>"`. |
 | `createdAt` | string (date-time), required |  |  |
-| `createdBy` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `createdBy` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `updatedAt` | string (date-time), required |  |  |
-| `updatedBy` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `updatedBy` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `deletedAt` | string (date-time) |  |  |
 
 ## AdminPolicyList { #adminpolicylist }
@@ -1473,7 +1483,7 @@ A policy as in `PolicyInput`, without reason, for `POST /v1/admin/preview`.
 | `spec` | [RightsizingPolicySpec](schemas.md#rightsizingpolicyspec), required |  | Mirrors `RightsizingPolicy.spec` (api/v1alpha1, `kubectl explain rsp.spec`). Unset fields inherit from the next lower layer. Validated by the shared validator (`api/v1alpha1/validate`) exactly like the CRD. |
 | `deleted` | boolean, required |  | True if the policy was deleted in this version. |
 | `createdAt` | string (date-time), required |  |  |
-| `actor` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `actor` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `reason` | string, required |  |  |
 
 ## PolicyVersionList { #policyversionlist }
@@ -1580,7 +1590,7 @@ Pause state of one cluster (or of the fleet).
 |---|---|---|---|
 | `paused` | boolean, required |  |  |
 | `reason` | string |  |  |
-| `by` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `by` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `since` | string (date-time) |  | When the current state was set. |
 | `resumeAt` | string (date-time) |  | Only while paused; the hub resumes at this time. |
 | `version` | integer, required | min 0 | 0 = never changed. The ETag is `"<version>"`. |
@@ -1625,7 +1635,7 @@ Pause state of one cluster (or of the fleet).
 | `policySource` | ClusterPolicySource (enum), required | one of `hub`, `git`, `both` | Where a cluster's policies come from. `hub`: hub-managed policies only (Git CRs are still reported). `git`: no hub-managed policies are sent and the admin pages are read-only for that cluster. `both`: both. |
 | `createdAt` | string (date-time) |  |  |
 | `updatedAt` | string (date-time) |  |  |
-| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `deletedAt` | string (date-time) |  |  |
 | `version` | integer, required | min 1 | Version of the metadata; the ETag is `"<version>"`. |
 | `automation` | [Automation](schemas.md#automation), required |  | Pause state of one cluster (or of the fleet). |
@@ -1742,7 +1752,7 @@ stops sending it.
 | `id` | string (uuid), required |  |  |
 | `workloadId` | string, required | pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?/[^/]+/(Deployment\|StatefulSet\|DaemonSet\|CronJob)/[^/]+$`; example `ro-spoke-1/payments/Deployment/checkout` | `<cluster>/<namespace>/<kind>/<name>` |
 | `recommendationID` | string (uuid), required |  |  |
-| `approvedBy` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `approvedBy` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `approvedAt` | string (date-time), required |  |  |
 | `expiresAt` | string (date-time), required |  |  |
 | `reason` | string, required |  |  |
@@ -1836,7 +1846,7 @@ never including password hashes or token values.
 | `id` | string (uuid), required |  |  |
 | `type` | string, required | one of `config_changed` |  |
 | `time` | string (date-time), required |  |  |
-| `actor` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `actor` | [Actor](schemas.md#actor), required |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `action` | ConfigAction (enum), required | one of `SettingsUpdated`, `PolicyCreated`, `PolicyUpdated`, `PolicyDeleted`, `PolicyReverted`, `OverrideSet`, `OverrideCleared`, `WorkloadApproved`, `ClusterCreated`, `ClusterUpdated`, `ClusterDeleted`, `AutomationPaused`, `AutomationResumed`, `TokenCreated`, `TokenRevoked`, `UserCreated`, `UserUpdated`, `UserDeleted`, `PasswordReset`, `DatasourceCreated`, `DatasourceUpdated`, `DatasourceDeleted`, `ReadinessChanged`, `NotificationChannelCreated`, `NotificationChannelUpdated`, `NotificationChannelDeleted`, `NotificationRuleCreated`, `NotificationRuleUpdated`, `NotificationRuleDeleted`, `NotificationDigestUpdated`, `TeamCreated`, `TeamUpdated`, `TeamDeleted` | CamelCase action of a configuration change (`docs/contracts/events.md`). |
 | `target` | [ConfigTarget](schemas.md#configtarget), required |  |  |
 | `reason` | string, required |  | The reason given with the change. |
@@ -1943,9 +1953,9 @@ The stored auth without secrets.
 | `usedBy` | array of string, required |  | Clusters bound to it. |
 | `version` | integer, required | min 1 |  |
 | `createdAt` | string (date-time) |  |  |
-| `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `updatedAt` | string (date-time) |  |  |
-| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 
 ## DatasourceDynatrace { #datasourcedynatrace }
 
@@ -2576,9 +2586,9 @@ Type: string. one of `pending`, `sent`, `failed`.
 | `lastSuccessAt` | string (date-time) |  |  |
 | `version` | integer, required |  |  |
 | `createdAt` | string (date-time), required |  |  |
-| `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `updatedAt` | string (date-time), required |  |  |
-| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 
 ## NotificationChannelList { #notificationchannellist }
 
@@ -2620,9 +2630,9 @@ Type: string. one of `pending`, `sent`, `failed`.
 | `channelIds` | array of string (uuid), required |  |  |
 | `version` | integer, required |  |  |
 | `createdAt` | string (date-time), required |  |  |
-| `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 | `updatedAt` | string (date-time), required |  |  |
-| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 
 ## NotificationRuleList { #notificationrulelist }
 
@@ -2654,7 +2664,7 @@ Type: string. one of `pending`, `sent`, `failed`.
 | `lastSentAt` | string (date-time) |  | The scheduled time of the last digest that was queued. |
 | `version` | integer, required |  |  |
 | `updatedAt` | string (date-time), required |  |  |
-| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+| `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` or `saml` for the users the identity provider creates and the roles it changes). |
 
 ## NotificationDigestQueued { #notificationdigestqueued }
 

@@ -74,6 +74,8 @@ exclude_docs: |
   screenshots/*
   !screenshots/overview-*.png
   !screenshots/dynatrace-*.png
+  !screenshots/login-saml-*.png
+  !screenshots/admin-access-*.png
 
 extra:
   homepage: https://getkerf.dev/

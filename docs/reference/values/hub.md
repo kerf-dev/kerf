@@ -121,7 +121,7 @@ The values of the `hub` component chart. In the `kerf` chart they sit under `hub
 | `auth.bootstrapAdmin.externalSecret.remoteRef.version` | string | `""` |  |
 | `auth.bootstrapAdmin.externalSecret.refreshInterval` | string | `""` |  |
 | `auth.bootstrapAdmin.externalSecret.secretStoreRef` | object | `{}` |  |
-| `auth.local` | object | see the keys below | Sign-in with a password. enabled: false keeps it only for the break-glass admin (breakGlassUser, default bootstrapAdmin.username), for when the identity provider is down; needs oidc.enabled. |
+| `auth.local` | object | see the keys below | Sign-in with a password. enabled: false keeps it only for the break-glass admin (breakGlassUser, default bootstrapAdmin.username), for when the identity provider is down; needs oidc.enabled or saml.enabled. |
 | `auth.local.enabled` | boolean | `true` |  |
 | `auth.local.breakGlassUser` | string | `""` |  |
 | `auth.oidc` | object | see the keys below | Sign-in with an OpenID Connect provider (Okta, Microsoft Entra ID, Google, Keycloak, Dex, ...): authorization code flow with PKCE. Settings per provider: docs/auth.md. |
@@ -150,6 +150,31 @@ The values of the `hub` component chart. In the `kerf` chart they sit under `hub
 | `auth.oidc.clientSecret.externalSecret.remoteRef.version` | string | `""` |  |
 | `auth.oidc.clientSecret.externalSecret.refreshInterval` | string | `""` |  |
 | `auth.oidc.clientSecret.externalSecret.secretStoreRef` | object | `{}` |  |
+| `auth.saml` | object | see the keys below | Sign-in with a SAML 2.0 identity provider (Okta, Microsoft Entra ID, Keycloak, AD FS, ...), next to or instead of OIDC. Kerf is the service provider: import https://<UI host>/v1/auth/saml/metadata at the IdP. Settings per provider: docs/auth.md#sign-in-with-saml. |
+| `auth.saml.enabled` | boolean | `false` |  |
+| `auth.saml.name` | string | `""` | the sign-in button: "Sign in with <name>" (default SSO) |
+| `auth.saml.acsURL` | string | `""` | This UI's assertion consumer service, registered with the IdP: https://<UI host>/v1/auth/saml/acs |
+| `auth.saml.entityID` | string | `""` | Kerf's entity ID (the audience); default https://<UI host>/v1/auth/saml/metadata |
+| `auth.saml.idpMetadataURL` | string | `""` | The IdP's metadata, one of: a URL (refreshed every metadataRefreshInterval) or the XML from a Secret you create (re-read as often). e.g. https://example.okta.com/app/<app id>/sso/saml/metadata |
+| `auth.saml.idpMetadataSecret` | object | see the keys below |  |
+| `auth.saml.idpMetadataSecret.existingSecret` | string | `""` |  |
+| `auth.saml.idpMetadataSecret.existingSecretKey` | string | `metadata.xml` |  |
+| `auth.saml.idpEntityID` | string | `""` | optional: picks the IdP out of an aggregate, and must match the metadata |
+| `auth.saml.allowHTTPMetadata` | boolean | `false` | accept an http:// idpMetadataURL (development or a trusted network only) |
+| `auth.saml.metadataRefreshInterval` | string | `24h` |  |
+| `auth.saml.spKeySecret` | object | see the keys below | Optional SP key and certificate (a kubernetes.io/tls Secret): the hub then signs its authentication requests, publishes the certificate in its metadata and decrypts encrypted assertions. |
+| `auth.saml.spKeySecret.existingSecret` | string | `""` |  |
+| `auth.saml.spKeySecret.keyKey` | string | `tls.key` |  |
+| `auth.saml.spKeySecret.certKey` | string | `tls.crt` |  |
+| `auth.saml.nameIDFormat` | string | `unspecified` | or persistent, emailAddress; the NameID must be stable (not transient) |
+| `auth.saml.usernameAttribute` | string | `email` | Attributes of the assertion (by Name or FriendlyName). The user is named after usernameAttribute (lowercased; "NameID" uses the NameID). |
+| `auth.saml.emailAttribute` | string | `email` |  |
+| `auth.saml.nameAttribute` | string | `displayName` |  |
+| `auth.saml.groupsAttribute` | string | `groups` |  |
+| `auth.saml.roleMappings` | array | `[]` | Groups to roles, as for OIDC; the highest matching role wins. e.g. - {group: platform-admins, role: admin} - {group: platform, role: operator} |
+| `auth.saml.defaultRole` | string | `""` | ole when no group matches; "" denies the sign-in |
+| `auth.saml.requireSignedAssertions` | boolean | `true` | false also accepts an unsigned assertion in a signed response |
+| `auth.saml.clockSkew` | string | `3m` | allowed difference between the IdP's clock and the hub's (at most 10m) |
 | `localTokens` | object | see the keys below | Tokens of this release's own services, in the umbrella chart (global.mode hub and all): the chart generates them once (Secret <release>-local-tokens, keys pricing and, in mode all, agent; kept across upgrades and uninstall) and the hub stores their hashes at start-up, so pricing and the local agent connect without a manual token. Pricing and the agent use them unless their hub.tokenSecret names another source. Helm lookup keeps them stable: with `helm template` or Argo CD every render makes new ones (the hub restarts and accepts them; the old ones stay valid until revoked), so there give pricing and the agent their own Secrets instead. |
 | `localTokens.enabled` | boolean | `true` |  |
 | `logLevel` | string | `info` |  |

@@ -4,7 +4,7 @@ Kerf takes ideas from the tools below. They are good tools: pick the one that fi
 
 | | License | Your data stays in your infrastructure | Applies changes | In-place resize | Rollback on bad health | Savings in $ | HPA and JVM aware | Alerts in chat | SSO | Realized savings |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **Kerf** | Apache-2.0 | ✓ | ✓ policies, maintenance windows | ✓ | ✓ | ✓ | ✓ both | ✓ [Slack, Teams, webhook](notifications.md) | ✓ [OIDC](auth.md#sign-in-with-openid-connect) | ✓ [from applied changes](realized-savings.md) |
+| **Kerf** | Apache-2.0 | ✓ | ✓ policies, maintenance windows | ✓ | ✓ | ✓ | ✓ both | ✓ [Slack, Teams, webhook](notifications.md) | ✓ [OIDC](auth.md#sign-in-with-openid-connect), [SAML](auth.md#sign-in-with-saml) | ✓ [from applied changes](realized-savings.md) |
 | [Vertical Pod Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler) | Apache-2.0 | ✓ | ✓ evict and webhook | ✓ `InPlaceOrRecreate` | – | – | not with an HPA on the same metric | – | – | – |
 | [Goldilocks](https://github.com/FairwindsOps/goldilocks) | Apache-2.0 | ✓ | through VPA, opt-in | through VPA | – | – | – | – | – | – |
 | [Robusta KRR](https://github.com/robusta-dev/krr) | MIT | ✓ CLI; the UI is SaaS | optional webhook, with a Robusta account | – | – | – | `--allow-hpa` | ✓ Slack (through Robusta), Teams | – | – |

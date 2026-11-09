@@ -155,4 +155,21 @@ describe('Access page: teams', () => {
     expect(screen.queryByRole('menuitem', { name: 'Edit scope and teams' })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /Make / })).not.toBeInTheDocument()
   })
+
+  it('shows SAML users as identity-provider users, read-only, without a password', async () => {
+    await signIn('admin')
+    renderPage()
+    const erin = await screen.findByTestId('user-erin.example@example.com')
+    expect(within(erin).getByTestId('idp-user')).toHaveTextContent('identity provider · SAML')
+    expect(within(await screen.findByTestId('user-idp-cards')).getByTestId('idp-user')).toHaveTextContent(
+      'OIDC',
+    )
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Actions for erin.example@example.com' }), {
+      button: 0,
+    })
+    await screen.findByRole('menuitem', { name: 'Disable' })
+    expect(screen.queryByRole('menuitem', { name: /Reset password/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Make / })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Edit scope and teams' })).not.toBeInTheDocument()
+  })
 })

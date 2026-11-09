@@ -18,6 +18,8 @@ cat <<'URLS'
   Postgres         postgres://kerf:kerf@localhost:15432/kerf
   Dex (OIDC)       http://localhost:15556/dex    (Sign in with Dex: dex-admin@example.com / ro-dev-dex-admin-pass,
                                                   dex-operator, dex-viewer, dex-nobody; dev/manifests/hub/dex.yaml)
+  Keycloak (SAML)  http://localhost:18180        (Sign in with Keycloak: kc-admin / ro-dev-kc-admin-pass, kc-operator,
+                                                  kc-viewer, kc-nobody; dev/manifests/hub/keycloak.yaml)
   Argo CD          http://localhost:18090        (ro-spoke-1; admin/admin123)
   Git server       git://localhost:19418/workloads.git (ro-spoke-1, seeded from dev/workloads/)
   Registry         push localhost:5005/<image>, pull k3d-ro-registry:5005/<image>

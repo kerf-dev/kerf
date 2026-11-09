@@ -45,6 +45,9 @@ func (s *Server) authProviders(w http.ResponseWriter, _ *http.Request) {
 	if s.OIDC != nil {
 		p.OIDC = &hubapi.OIDCProvider{Name: s.OIDC.Cfg.DisplayName(), LoginURL: "/v1/auth/oidc/login"}
 	}
+	if s.SAML != nil {
+		p.SAML = &hubapi.SAMLProvider{Name: s.SAML.Cfg.DisplayName(), LoginURL: samlCookiePath + "/login"}
+	}
 	writeJSON(w, p)
 }
 
@@ -142,7 +145,7 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	ou := oidcAccess(access)
 	ou.Issuer, ou.Subject, ou.Username, ou.Email = id.Issuer, id.Subject, id.Username, id.Email
 	ou.DisplayName, ou.Groups, ou.Provider = id.Name, id.Groups, s.OIDC.Cfg.DisplayName()
-	u, err := s.Store.UpsertOIDCUser(ctx, ou, now)
+	u, err := s.Store.UpsertIdPUser(ctx, ou, now)
 	if errors.Is(err, store.ErrUsernameTaken) {
 		s.Log.WarnContext(ctx, "oidc sign-in refused: the username belongs to another user", "user", id.Username, "subject", id.Subject)
 		s.oidcFail(w, r, oidcErrConflict, login.Next)
@@ -300,8 +303,8 @@ func truncate(s string, n int) string {
 // oidcAccess turns what the group mappings give into the user's role and bindings: with a fleet role
 // the user is fleet-wide (team roles may raise it on some teams); without one it is team-scoped and
 // its role is the highest team role.
-func oidcAccess(a auth.Access) store.OIDCUser {
-	u := store.OIDCUser{Role: a.FleetRole, Scope: hubapi.ScopeFleet}
+func oidcAccess(a auth.Access) store.IdPUser {
+	u := store.IdPUser{Role: a.FleetRole, Scope: hubapi.ScopeFleet}
 	for _, t := range slices.Sorted(maps.Keys(a.TeamRoles)) {
 		u.TeamRoles = append(u.TeamRoles, hubapi.TeamRole{Team: t, Role: a.TeamRoles[t]})
 	}

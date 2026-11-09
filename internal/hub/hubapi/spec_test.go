@@ -118,6 +118,7 @@ var schemaTypes = map[string]any{
 	"Me":                         Me{},
 	"AuthProviders":              AuthProviders{},
 	"OIDCProvider":               OIDCProvider{},
+	"SAMLProvider":               SAMLProvider{},
 	"PasswordChange":             PasswordChange{},
 	"User":                       User{},
 	"UserList":                   UserList{},

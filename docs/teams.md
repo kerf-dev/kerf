@@ -73,8 +73,9 @@ node cost trend, covers the whole fleet and needs a fleet-wide role: the API ans
 
 ## Sign-in with an identity provider
 
-With [OpenID Connect sign-in](auth.md#sign-in-with-openid-connect), a group mapping can name teams. The mapping then
-gives its role on those teams only:
+With [OpenID Connect](auth.md#sign-in-with-openid-connect) or [SAML](auth.md#sign-in-with-saml) sign-in, a group
+mapping can name teams. The mapping then gives its role on those teams only (`auth.saml.roleMappings` take the same
+form):
 
 ```yaml
 hub:
@@ -91,8 +92,9 @@ hub:
 - A member of `payments-devs` only is team-scoped: it sees `payments` and nothing else.
 - The highest role per team wins; `defaultRole` applies only when no mapping matches at all.
 - Team mappings give `viewer` or `operator`. `admin` cannot have `teams`: the hub refuses to start.
-- The groups are re-read at every refresh (`refreshInterval`), so losing a group removes the team role within that
-  interval. A mapping may name a team that does not exist yet; it takes effect once the team is created.
+- With OIDC the groups are re-read at every refresh (`refreshInterval`), so losing a group removes the team role within
+  that interval. With SAML they are read at each sign-in. A mapping may name a team that does not exist yet; it takes
+  effect once the team is created.
 
 IdP users' scope and team roles come from their groups, so Admin → Access shows them read-only.
 

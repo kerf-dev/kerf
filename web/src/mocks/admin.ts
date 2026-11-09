@@ -1026,12 +1026,16 @@ export const adminHandlers = [
 
   // `localStorage['ro-mock-oidc']`: `on` offers "Sign in with Okta" (the redirect itself needs a real
   // hub), `only` also turns password sign-in off but for the break-glass admin.
+  // `localStorage['ro-mock-saml']`: the same for "Sign in with Microsoft Entra ID" (SAML).
   http.get('*/v1/auth/providers', async () => {
     const g = await gate(undefined, null)
     if (g instanceof Response) return g
     const mode = readLocal('ro-mock-oidc')
-    const out: S['AuthProviders'] = { local: mode !== 'only' }
+    const saml = readLocal('ro-mock-saml')
+    const out: S['AuthProviders'] = { local: mode !== 'only' && saml !== 'only' }
     if (mode === 'on' || mode === 'only') out.oidc = { name: 'Okta', loginURL: '/v1/auth/oidc/login' }
+    if (saml === 'on' || saml === 'only')
+      out.saml = { name: 'Microsoft Entra ID', loginURL: '/v1/auth/saml/login' }
     return json(out)
   }),
 
@@ -2108,7 +2112,7 @@ export const adminHandlers = [
     if (r) return r
     if (b!.role && !['viewer', 'operator', 'admin'].includes(b!.role))
       return badRequest('invalid_user', `role: Unsupported value: ${JSON.stringify(b!.role)}`)
-    if (u.source === 'oidc' && (b!.role || b!.scope || b!.teamRoles))
+    if ((u.source === 'oidc' || u.source === 'saml') && (b!.role || b!.scope || b!.teamRoles))
       return conflict(
         'idp_managed',
         `${u.username} signs in with the identity provider; its access comes from its groups`,

@@ -488,7 +488,7 @@ export interface paths {
     /**
      * How the sign-in page offers to sign in
      * @description Whether every local user may sign in with a password (`local`; false = only the
-     *     break-glass admin) and the identity provider, when one is configured.
+     *     break-glass admin) and the identity providers that are configured (`oidc`, `saml`).
      */
     get: operations['getAuthProviders']
     put?: never
@@ -541,6 +541,109 @@ export interface paths {
      *     user), `oidc_unavailable`.
      */
     get: operations['oidcCallback']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/auth/saml/metadata': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Kerf's SAML service provider metadata
+     * @description The SP metadata to import at the SAML identity provider: the entity ID
+     *     (`auth.saml.entityID`, default this URL), the assertion consumer service (HTTP-POST binding,
+     *     `auth.saml.acsURL`), the requested NameID format and, with an SP key, the certificate that
+     *     signs the authentication requests. `404` when SAML sign-in is not configured.
+     */
+    get: operations['samlMetadata']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/auth/saml/login': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Start a sign-in with the SAML identity provider
+     * @description Redirects the browser to the IdP's single sign-on service (HTTP-Redirect binding) with an
+     *     `AuthnRequest` (signed when an SP key is configured) and a random `RelayState`, and sets the
+     *     `kerf_saml` cookie (`HttpOnly; SameSite=Lax; Path=/v1/auth/saml`, 10 minutes) that holds the
+     *     same RelayState and binds the sign-in to this browser. When the IdP's metadata cannot be read
+     *     it redirects to `/login?error=saml_unavailable` instead.
+     */
+    get: operations['samlLogin']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/auth/saml/acs': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * The assertion consumer service (the IdP's response)
+     * @description The IdP posts its `SAMLResponse` here with the `RelayState` of a sign-in started at
+     *     `/v1/auth/saml/login` (HTTP-POST binding; IdP-initiated sign-ins are refused). The hub
+     *     verifies the XML signature (the assertion must be signed unless
+     *     `auth.saml.requireSignedAssertions` is false; then a signed response suffices), the issuer, the
+     *     audience, the destination, `InResponseTo`, `NotBefore` and `NotOnOrAfter` (with
+     *     `auth.saml.clockSkew`), and records the assertion ID so it is accepted once by every replica.
+     *     It stores the identity and redirects (`303`) to `/v1/auth/saml/finish`; it starts no session
+     *     itself. On failure it redirects to `/login?error=<code>`: `saml_expired` (unknown, used or
+     *     expired RelayState), `saml_failed` (an invalid, unsigned or replayed response, or the IdP
+     *     refused), `saml_unavailable`.
+     */
+    post: operations['samlACS']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/auth/saml/finish': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Start the session of a verified SAML sign-in
+     * @description Needs the `kerf_saml` cookie of the browser that started the sign-in: takes its verified
+     *     identity (once), maps the groups to a role, creates or updates the user (`source: saml`) and
+     *     starts a session (cookie `kerf_session`, as `POST /v1/auth/login`; it ends at `sessionTTL` or
+     *     at the IdP's `SessionNotOnOrAfter`, whichever is first), then redirects to `next`. On failure
+     *     it redirects to `/login?error=<code>`: `saml_expired` (no answered sign-in for this browser),
+     *     `saml_denied` (no mapped group and no default role, or a disabled user; the user's other
+     *     sessions end), `saml_conflict` (the username belongs to a local user or to a user of the other
+     *     identity provider).
+     */
+    get: operations['samlFinish']
     put?: never
     post?: never
     delete?: never
@@ -2758,7 +2861,7 @@ export interface components {
     /**
      * @description Who made a change. `user`: a user (`name` = username). `token`: an API token
      *     (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc`
-     *     for the users the identity provider creates and the roles it changes).
+     *     or `saml` for the users the identity provider creates and the roles it changes).
      */
     Actor: {
       /** @enum {string} */
@@ -2766,7 +2869,7 @@ export interface components {
       name: string
       /** @description The user role or token role at the time of the change. */
       role?: string
-      /** @description A user signed in with the identity provider - its subject (`sub`) there. */
+      /** @description A user signed in with the identity provider - its subject there (OIDC `sub`, SAML NameID). */
       subject?: string
       /** @description A user signed in with the identity provider - its e-mail there. */
       email?: string
@@ -2787,6 +2890,20 @@ export interface components {
       /** @description Every local user may sign in with a password; false = only the break-glass admin. */
       local: boolean
       oidc?: components['schemas']['OIDCProvider']
+      saml?: components['schemas']['SAMLProvider']
+    }
+    /** @description The SAML 2.0 identity provider offered on the sign-in page, when configured. */
+    SAMLProvider: {
+      /**
+       * @description Shown as "Sign in with <name>".
+       * @example Okta
+       */
+      name: string
+      /**
+       * @description Where the browser starts the sign-in (add `?next=<path>`).
+       * @example /v1/auth/saml/login
+       */
+      loginURL: string
     }
     OIDCProvider: {
       /**
@@ -2843,14 +2960,14 @@ export interface components {
       deletedAt?: string
       version: number
       /**
-       * @description `local`: signs in with a password. `oidc`: signs in with the identity provider, which
-       *     created the user at its first sign-in; its role comes from its groups there
-       *     (`auth.oidc.roleMappings`), so it has no password and its role is not edited here
-       *     (`409` `idp_managed`).
+       * @description `local`: signs in with a password. `oidc` and `saml`: signs in with the identity provider
+       *     (OpenID Connect or SAML 2.0), which created the user at its first sign-in; its role comes
+       *     from its groups there (`auth.oidc.roleMappings`, `auth.saml.roleMappings`), so it has no
+       *     password and its role is not edited here (`409` `idp_managed`).
        * @enum {string}
        */
-      source?: 'local' | 'oidc'
-      /** @description The e-mail at the identity provider (`oidc` users). */
+      source?: 'local' | 'oidc' | 'saml'
+      /** @description The e-mail at the identity provider (`oidc` and `saml` users). */
       email?: string
       scope?: components['schemas']['UserScope']
       /**
@@ -5493,6 +5610,109 @@ export interface operations {
         headers: {
           Location?: string
           'Set-Cookie'?: string
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: components['responses']['NotFound']
+    }
+  }
+  samlMetadata: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description The metadata (an `EntityDescriptor`). */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/samlmetadata+xml': string
+        }
+      }
+      404: components['responses']['NotFound']
+    }
+  }
+  samlLogin: {
+    parameters: {
+      query?: {
+        /** @description Path to return to after sign-in (same site only; anything else gives `/`). */
+        next?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description To the IdP, or to the sign-in page with an error. */
+      302: {
+        headers: {
+          Location?: string
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: components['responses']['NotFound']
+      429: components['responses']['TooManyRequests']
+    }
+  }
+  samlACS: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/x-www-form-urlencoded': {
+          /** @description The base64-encoded `samlp:Response`. */
+          SAMLResponse: string
+          RelayState: string
+        }
+      }
+    }
+    responses: {
+      /** @description To `/v1/auth/saml/finish`, or to the sign-in page with an error. */
+      303: {
+        headers: {
+          Location?: string
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: components['responses']['NotFound']
+      429: components['responses']['TooManyRequests']
+    }
+  }
+  samlFinish: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description To `next` with a session cookie, or to the sign-in page with an error. */
+      302: {
+        headers: {
+          Location?: string
+          'Set-Cookie'?: string
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description To the sign-in page with an error. */
+      303: {
+        headers: {
+          Location?: string
           [name: string]: unknown
         }
         content?: never

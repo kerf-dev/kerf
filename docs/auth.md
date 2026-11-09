@@ -9,6 +9,10 @@ answers `401` to everything except sign-in itself.
 - [Sign in with OpenID Connect](#sign-in-with-openid-connect)
   - [Provider settings](#provider-settings): [Dex](#dex), [Keycloak](#keycloak), [Okta](#okta),
     [Microsoft Entra ID](#microsoft-entra-id), [Google](#google)
+- [Sign in with SAML](#sign-in-with-saml)
+  - [IdP settings](#idp-settings): [Okta](#okta-saml), [Microsoft Entra ID](#microsoft-entra-id-saml),
+    [Keycloak](#keycloak-saml)
+  - [Moving from Dex to native SAML](#moving-from-dex-to-native-saml)
 - [Sign-in protection](#sign-in-protection)
 - [Automation: bearer tokens](#automation-bearer-tokens)
 - [Behind a load balancer](#behind-a-load-balancer)
@@ -26,7 +30,8 @@ curl / CI / agents ──(Authorization: Bearer <token>)────────
   `kerf_session` (`HttpOnly`, `SameSite=Strict`, `Path=/`, and `Secure` behind TLS). The hub stores only a
   SHA-256 of the session token. Every write made with a session also needs the `X-CSRF-Token` header,
   which the UI gets at sign-in.
-- **The web proxy holds no token.** nginx forwards only the `kerf_session` cookie to the hub. It never
+- **The web proxy holds no token.** nginx forwards only the `kerf_session` cookie to the hub (and, during a sign-in
+  with an identity provider, its `kerf_oidc` or `kerf_saml` state cookie). It never
   forwards a browser's `Authorization` header and never adds credentials of its own, so a visitor without
   a session reads nothing.
 - **The UI checks the session first.** Until `GET /v1/me` answers, the UI shows a neutral loading screen:
@@ -62,7 +67,7 @@ curl / CI / agents ──(Authorization: Bearer <token>)────────
 - **More users:** *Admin → Access → Users*. A new user gets a temporary password and must change it at the
   first sign-in. An admin can disable a user (their sessions end at once) or reset a password.
 - Everyone who needs to see Kerf needs a user, at least a `viewer`. With an identity provider the
-  users come from there (next section).
+  users come from there: [OpenID Connect](#sign-in-with-openid-connect) or [SAML](#sign-in-with-saml).
 
 ## Sign in with OpenID Connect
 
@@ -231,6 +236,174 @@ authParams: {access_type: offline, prompt: consent}   # ...and gives a refresh t
 defaultRole: viewer
 ```
 
+## Sign in with SAML
+
+Kerf is also a SAML 2.0 service provider (SP), for identity providers that offer SAML only, or where OIDC is turned
+off for some apps: Okta, Microsoft Entra ID, Keycloak, AD FS, PingFederate, Google Workspace and others. No extra
+component is needed. The sign-in page shows **Sign in with &lt;name&gt;** above the password form, next to the OIDC
+button when both are configured.
+
+| Light | Dark |
+|---|---|
+| ![The sign-in page with an OIDC and a SAML button above the password form](screenshots/login-saml-light.png) | ![The same page in the dark theme](screenshots/login-saml-dark.png) |
+
+- **Flow.** SP-initiated: `/v1/auth/saml/login` sends the browser to the IdP with an `AuthnRequest`
+  (HTTP-Redirect binding, signed when you give the SP a key) and a random `RelayState`. The IdP posts its response
+  to the assertion consumer service (ACS) `/v1/auth/saml/acs` (HTTP-POST binding). IdP-initiated sign-ins (from
+  the IdP's app dashboard) are refused: start at Kerf, or point the IdP's tile at
+  `https://kerf.example.com/v1/auth/saml/login`.
+- **What the hub checks.** The XML signature against the IdP's certificate from its metadata (only what the
+  signature covers is read, so a wrapped or tampered response is refused), the issuer, the audience (Kerf's entity
+  ID), the destination, that the response answers the request this browser started (`InResponseTo`), and
+  `NotBefore`, `NotOnOrAfter` and the issue instant, with `clockSkew` (default `3m`) of leeway.
+- **Signed assertions.** By default the **assertion** must be signed. With `requireSignedAssertions: false` a signed
+  response around an unsigned assertion is accepted too. An unsigned response with an unsigned assertion is always
+  refused.
+- **Replay.** Each accepted assertion ID is kept in PostgreSQL until the assertion expires, so every hub replica
+  refuses a second use.
+- **Bound to the browser.** The `RelayState` is also kept in the `kerf_saml` cookie (`HttpOnly`, `SameSite=Lax`,
+  `Path=/v1/auth/saml`, 10 minutes, one use). The IdP's POST is cross-site, so it carries no such cookie: the ACS
+  only verifies the response and stores the identity, then sends the browser on to `/v1/auth/saml/finish`, which
+  starts the session only in the browser holding the cookie of that sign-in.
+- **Users.** The first sign-in creates a Kerf user named after the `email` attribute (`usernameAttribute`,
+  lowercased; when the attribute is missing and the NameID is an e-mail address, the NameID), linked to the IdP's
+  entity ID and the **NameID**. The NameID must be stable (`persistent`, `emailAddress` or the username); a
+  `transient` NameID is refused. The audit log records the IdP subject (the NameID) and e-mail of every action, as
+  for OIDC. Admin → Access shows these users as **identity provider · SAML**: no password, and their role is not
+  edited in Kerf.
+
+  ![Admin → Access with a SAML user next to an OIDC user and local users](screenshots/admin-access-light.png)
+- **Roles from groups.** `roleMappings` map the `groups` attribute (`groupsAttribute`) to roles exactly like the OIDC
+  mappings: the highest matching role wins, `teams: [...]` gives team roles, and without a match `defaultRole`
+  applies or the sign-in is denied.
+- **Removing access.** A SAML IdP has no refresh token, so the groups are read at **each sign-in**. A user moved to
+  another group gets the new role at the next sign-in (all its sessions follow, since the role is the user's). A
+  user removed from every mapped group is refused at the next sign-in, and its other sessions end at that moment.
+  Until then a session lasts `hub.auth.sessionTTL` (default `12h`), or less when the IdP sets
+  `SessionNotOnOrAfter`. To cut access at once, disable the user in Admin → Access; lower `sessionTTL` to make the
+  next sign-in come sooner.
+- **Session.** A SAML session is a normal Kerf session: `kerf_session` cookie, `X-CSRF-Token`, `sessionTTL`,
+  sign-out. Signing out of Kerf does not sign you out of the IdP (no single logout).
+- **Secrets.** The optional SP key and the IdP metadata come from Kubernetes Secrets; neither is logged or returned
+  by the API. The hub logs why a response was refused, never the response itself.
+- **IdP down.** The hub reads the IdP's metadata at the first sign-in and every `metadataRefreshInterval` (default
+  `24h`); a failed refresh keeps the metadata it has. Without any, the sign-in page shows "Cannot reach
+  &lt;name&gt;". Signed-in users are not affected. Keep the [break-glass admin](#break-glass-admin).
+
+Chart values (the component chart's `auth.*`; with the kerf chart, `hub.auth.*`):
+
+```yaml
+hub:
+  auth:
+    saml:
+      enabled: true
+      name: Okta                       # "Sign in with Okta"
+      acsURL: https://kerf.example.com/v1/auth/saml/acs        # the UI's host
+      # entityID: https://kerf.example.com/v1/auth/saml/metadata  # the default: the SP metadata URL
+      idpMetadataURL: https://example.okta.com/app/exk1example/sso/saml/metadata
+      # or the metadata XML from a Secret you create (key metadata.xml):
+      # idpMetadataSecret: {existingSecret: kerf-saml-idp}
+      usernameAttribute: email
+      groupsAttribute: groups
+      roleMappings:
+        - {group: platform-admins, role: admin}
+        - {group: platform, role: operator}
+        - {group: engineering, role: viewer}
+      defaultRole: ""                  # "" denies users without a mapped group
+      # requireSignedAssertions: true  # the default
+      # clockSkew: 3m
+      # Optional: sign the authentication requests (and decrypt encrypted assertions) with this key.
+      # spKeySecret: {existingSecret: kerf-saml-sp}             # a kubernetes.io/tls Secret
+    local:
+      enabled: false                   # optional: passwords only for the break-glass admin
+```
+
+- **Kerf's SP metadata** is at `https://kerf.example.com/v1/auth/saml/metadata` (public). Import it at the IdP, or
+  enter its two values by hand: the **entity ID** (also called Audience URI or Identifier) and the **ACS URL**
+  (Single sign-on URL, Reply URL). Both are on the host users open (the web UI), not the hub's API host.
+- **The IdP's metadata.** `idpMetadataURL` must be `https`; `allowHTTPMetadata: true` accepts `http` for a network
+  you trust (whoever can change the metadata in transit chooses the signing certificate). With an aggregate
+  (several entities), set `idpEntityID`.
+- **An SP key** is optional: create it with
+  `openssl req -x509 -newkey rsa:3072 -nodes -days 1095 -subj /CN=kerf-saml -keyout tls.key -out tls.crt` and
+  `kubectl create secret tls kerf-saml-sp --key tls.key --cert tls.crt`. The hub then signs its requests and
+  publishes the certificate in its metadata; turn on "requests must be signed" at the IdP after importing it.
+
+### IdP settings
+
+Every IdP needs: the ACS URL `https://kerf.example.com/v1/auth/saml/acs` with the HTTP-POST binding, the audience
+(entity ID) `https://kerf.example.com/v1/auth/saml/metadata`, a stable NameID, **signed assertions**, and the
+attributes `email` and `groups` (or point `usernameAttribute` and `groupsAttribute` at the names the IdP uses).
+
+<a id="okta-saml"></a>
+
+#### Okta
+
+1. **Applications → Create App Integration → SAML 2.0.** **Single sign-on URL**: the ACS URL (keep **Use this for
+   Recipient URL and Destination URL**). **Audience URI (SP Entity ID)**: the entity ID. **Name ID format**:
+   Persistent (or EmailAddress); **Application username**: Email.
+2. **Attribute Statements:** `email` = `user.email`, `displayName` = `user.displayName`. **Group Attribute
+   Statements:** name `groups`, filter e.g. *Matches regex* `.*` (or *Starts with* `platform`).
+3. Okta signs the assertion by default. Assign the groups that may use Kerf, then copy the **Metadata URL** from the
+   **Sign On** tab.
+
+```yaml
+idpMetadataURL: https://<your-org>.okta.com/app/<app id>/sso/saml/metadata
+nameIDFormat: persistent
+```
+
+<a id="microsoft-entra-id-saml"></a>
+
+#### Microsoft Entra ID
+
+1. **Enterprise applications → New application → Create your own application** (non-gallery) → **Single sign-on →
+   SAML.** **Identifier (Entity ID)**: the entity ID. **Reply URL (Assertion Consumer Service URL)**: the ACS URL.
+2. **Attributes & Claims.** **Unique User Identifier (Name ID)**: `user.objectid`, format Persistent. **Add a group
+   claim**: Security groups, source attribute **Group ID**. Entra sends group **object IDs**, so `roleMappings` use
+   the IDs, and its claims have URI names (below). A user in more than 150 groups gets no groups in the assertion:
+   send only *Groups assigned to the application*.
+3. **SAML Certificates.** Signing option **Sign SAML assertion** (the default). Copy the **App Federation Metadata
+   Url**. Assign the users or groups that may use Kerf.
+
+```yaml
+idpMetadataURL: https://login.microsoftonline.com/<tenant ID>/federationmetadata/2007-06/federationmetadata.xml?appid=<application ID>
+usernameAttribute: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name           # the UPN
+emailAttribute: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress
+groupsAttribute: http://schemas.microsoft.com/ws/2008/06/identity/claims/groups
+roleMappings:
+  - {group: 6a1c0b5e-0000-4000-8000-000000000001, role: admin}   # object ID of platform-admins
+```
+
+<a id="keycloak-saml"></a>
+
+#### Keycloak
+
+Tested (the e2e suite, against the development environment's Keycloak 26.8: `dev/manifests/hub/keycloak.yaml`).
+
+1. In your realm, **Clients → Create client**: client type **SAML**, **Client ID** = the entity ID. **Valid redirect
+   URIs**: the ACS URL, and the same under **Advanced → Assertion Consumer Service POST Binding URL**. **Name ID format** `persistent` with
+   **Force name ID format** on. **Signature and Encryption:** **Sign documents** and **Sign assertions** on
+   (Keycloak signs only the document by default; Kerf wants the assertion signed).
+2. **Keys:** **Client signature required** off (on, with Kerf's certificate, when you give Kerf an SP key).
+3. **Client scopes → &lt;client&gt;-dedicated → Add mapper → By configuration:** **User Property** `email` → SAML
+   attribute name `email`; **Group list** → attribute name `groups`, **Full group path** off.
+
+```yaml
+idpMetadataURL: https://keycloak.example.com/realms/<realm>/protocol/saml/descriptor
+nameIDFormat: persistent
+```
+
+### Moving from Dex to native SAML
+
+Earlier, a SAML-only IdP needed Dex as a bridge (Dex's SAML connector, Kerf on OIDC). To drop Dex:
+
+1. Configure `auth.saml` for the IdP as above, next to `auth.oidc`, and check a sign-in with an account that has no
+   Kerf user yet.
+2. Kerf never gives the name of a live user of one provider to another: users Dex created sign in with SAML only
+   after an admin deletes them in Admin → Access ("This account name is taken" until then). Their audit history
+   stays; the next SAML sign-in creates the user again from the IdP's groups.
+3. Remove `auth.oidc` and Dex. Sessions that came through Dex end at their next refresh.
+
 ## Sign-in protection
 
 - **One answer for every failure.** A wrong password, an unknown user, a disabled user and a locked user
@@ -299,12 +472,35 @@ back.
   and `defaultRole` is empty. Check the group names (Entra ID: object IDs) and `groupsClaim`; the hub logs
   `oidc sign-in denied: no mapped group` with the number of groups it got (0: the provider sends no groups
   claim, see the provider's settings above).
-- **"This account name is taken".** A local user has the IdP user's name (`usernameClaim`). Rename or
-  delete the local user.
+- **"This account name is taken".** A local user, or a user of the other identity provider, has the IdP user's
+  name (`usernameClaim`, `usernameAttribute`). Rename or delete that user.
 - **"The sign-in took too long".** More than 10 minutes at the provider, a second tab, or a browser that
   drops the `kerf_oidc` cookie. Start again.
 - **"Cannot reach &lt;name&gt;".** The hub cannot read `<issuer>/.well-known/openid-configuration`: check
   `issuer` and the hub's egress (NetworkPolicy, proxy).
+
+SAML (the hub logs the reason as `saml sign-in failed` with `err`; the response itself is never logged):
+
+- **"Sign-in with &lt;name&gt; failed" and `expired` or `IssueInstant ... is in the future` in the log: clock skew.**
+  The IdP's clock and the hub's differ by more than `clockSkew` (default `3m`). Fix the time (NTP) on the IdP side
+  or the nodes; raise `clockSkew` (at most `10m`) only as a stopgap.
+- **`AudienceRestriction does not contain ...`: wrong audience.** The IdP's entity ID / Audience URI / Identifier for
+  Kerf is not Kerf's `entityID` (default `https://<UI host>/v1/auth/saml/metadata`, the exact string, scheme and
+  path included).
+- **`Destination does not match`.** The IdP posts to another ACS URL than `acsURL`: make both
+  `https://<UI host>/v1/auth/saml/acs`.
+- **"No access to Kerf": missing groups.** No `groups` attribute reached Kerf. The log line `saml sign-in denied: no
+  mapped group` says how many groups arrived (0: add the group attribute or mapper at the IdP, or set
+  `groupsAttribute` to the IdP's attribute name; Entra ID: the URI name and object IDs, above).
+- **`the assertion is not signed (only the response is)`.** Turn on assertion signing at the IdP (Keycloak: **Sign
+  assertions**), or set `requireSignedAssertions: false`.
+- **`cannot validate signature`.** The IdP's signing certificate changed and the hub still has the old metadata:
+  wait for `metadataRefreshInterval`, restart the hub, or update the metadata Secret.
+- **`the NameID is transient`.** Choose a persistent or e-mail NameID at the IdP.
+- **"The sign-in took too long".** More than 10 minutes at the IdP, an IdP-initiated sign-in, or a browser that drops
+  the `kerf_saml` cookie. Start again from Kerf's sign-in page.
+- **"Cannot reach &lt;name&gt;".** The hub cannot read the IdP's metadata (`idpMetadataURL`, or the Secret behind
+  `idpMetadataSecret`): check the URL, `https`, and the hub's egress.
 
 - **Every page shows the sign-in page right after signing in.** The session cookie does not come back.
   Behind plain HTTP the cookie must not be `Secure`: `hub.auth.cookieSecure: false` (development only).

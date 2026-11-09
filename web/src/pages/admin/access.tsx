@@ -39,6 +39,9 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { formatDateTime, relativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+/** Users the identity provider (OpenID Connect or SAML) manages: no password, access from its groups. */
+const isIdP = (u: User) => u.source === 'oidc' || u.source === 'saml'
+
 const ROLE_DESC: Record<UserRole, string> = {
   viewer: 'Everything the read-only UI shows',
   operator: 'Plus workload actions (mode, exclude, approve once) and pausing',
@@ -321,10 +324,12 @@ function UsersTab() {
                             </Tooltip>
                           ) : null}
                           {u.mustChangePassword ? <Badge variant="info">must change password</Badge> : null}
-                          {u.source === 'oidc' ? (
-                            <Tooltip content="Signs in with the identity provider; the role, scope and team roles come from its groups">
+                          {isIdP(u) ? (
+                            <Tooltip
+                              content={`Signs in with the identity provider (${u.source === 'saml' ? 'SAML' : 'OpenID Connect'}); the role, scope and team roles come from its groups`}
+                            >
                               <Badge variant="info" data-testid="idp-user">
-                                identity provider
+                                identity provider · {u.source === 'saml' ? 'SAML' : 'OIDC'}
                               </Badge>
                             </Tooltip>
                           ) : null}
@@ -342,13 +347,13 @@ function UsersTab() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
                             {/* An IdP user's role comes from its groups and it has no password. */}
-                            {u.source === 'oidc' ? null : (
+                            {isIdP(u) ? null : (
                               <DropdownMenuItem onSelect={() => setEditAccess(u)}>
                                 Edit scope and teams
                               </DropdownMenuItem>
                             )}
                             {(['viewer', 'operator', 'admin'] as UserRole[])
-                              .filter((r) => r !== u.role && u.source !== 'oidc' && u.scope !== 'teams')
+                              .filter((r) => r !== u.role && !isIdP(u) && u.scope !== 'teams')
                               .map((r) => (
                                 <DropdownMenuItem
                                   key={r}
@@ -357,7 +362,7 @@ function UsersTab() {
                                   Make {r}
                                 </DropdownMenuItem>
                               ))}
-                            {u.source === 'oidc' ? null : (
+                            {isIdP(u) ? null : (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onSelect={() => setAct({ kind: 'reset', user: u })}>

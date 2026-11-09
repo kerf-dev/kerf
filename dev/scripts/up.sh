@@ -57,6 +57,7 @@ install_hub() {
   "$DEV/scripts/sync-dashboards.sh" >/dev/null
   kc "$HUB" apply -f "$DEV/manifests/hub/postgres.yaml" >/dev/null
   kc "$HUB" apply -f "$DEV/manifests/hub/dex.yaml" >/dev/null
+  kc "$HUB" apply -f "$DEV/manifests/hub/keycloak.yaml" >/dev/null
   helm_install "$HUB" monitoring vm victoria-metrics-single "$VM_REPO" "$VM_SINGLE_CHART_VERSION" \
     -f "$DEV/helm/victoria-metrics.yaml"
   helm_install "$HUB" monitoring grafana grafana "$GRAFANA_REPO" "$GRAFANA_CHART_VERSION" \
@@ -65,6 +66,7 @@ install_hub() {
     -f "$DEV/helm/vmagent-hub.yaml"
   kc "$HUB" -n postgres rollout status statefulset/postgres --timeout=5m >/dev/null
   kc "$HUB" -n dex rollout status deployment/dex --timeout=5m >/dev/null
+  kc "$HUB" -n keycloak rollout status deployment/keycloak --timeout=5m >/dev/null
   log "hub ready"
 }
 

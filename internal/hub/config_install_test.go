@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/kerf-dev/kerf/internal/hub/auth"
 )
 
 // TestInstallConfigFromCharts: the hub config the charts render (EKS example, dev values) loads
@@ -24,6 +26,7 @@ func TestInstallConfigFromCharts(t *testing.T) {
 	for name, tc := range map[string]struct {
 		args                  []string
 		chart, version, store string
+		saml                  *auth.SAMLConfig // the SAML files the chart sets
 	}{
 		"eks example": {
 			args:  []string{filepath.Join(root, "charts/kerf"), "-f", filepath.Join(root, "examples/eks/values-hub.yaml"), "--show-only", "charts/hub/templates/configmap.yaml"},
@@ -32,6 +35,13 @@ func TestInstallConfigFromCharts(t *testing.T) {
 		"dev": {
 			args:  []string{filepath.Join(root, "charts/hub"), "-f", filepath.Join(root, "charts/hub/values-dev.yaml"), "--show-only", "templates/configmap.yaml"},
 			chart: "deploy/charts/kerf", version: "",
+		},
+		"saml from secrets": {
+			args: []string{filepath.Join(root, "charts/hub"), "-f", filepath.Join(root, "charts/hub/values-dev.yaml"), "--show-only", "templates/configmap.yaml",
+				"--set", "auth.saml.idpMetadataURL=", "--set", "auth.saml.idpMetadataSecret.existingSecret=kerf-saml-idp",
+				"--set", "auth.saml.spKeySecret.existingSecret=kerf-saml-sp"},
+			chart: "deploy/charts/kerf", version: "",
+			saml: &auth.SAMLConfig{IdPMetadataFile: "/etc/hub/saml-idp/metadata.xml", SPKeyFile: "/etc/hub/saml-sp/tls.key", SPCertFile: "/etc/hub/saml-sp/tls.crt"},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -67,6 +77,13 @@ func TestInstallConfigFromCharts(t *testing.T) {
 			}
 			if store != tc.store {
 				t.Errorf("token store %q", store)
+			}
+			if tc.saml != nil {
+				sc := cfg.Auth.SAML
+				if !sc.Enabled || sc.IdPMetadataURL != "" || sc.IdPMetadataFile != tc.saml.IdPMetadataFile || sc.SPKeyFile != tc.saml.SPKeyFile ||
+					sc.SPCertFile != tc.saml.SPCertFile {
+					t.Errorf("saml config %+v", sc)
+				}
 			}
 		})
 	}

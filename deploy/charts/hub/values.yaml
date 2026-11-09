@@ -201,7 +201,8 @@ auth:
       refreshInterval: ""
       secretStoreRef: {}
   # Sign-in with a password. enabled: false keeps it only for the break-glass admin (breakGlassUser,
-  # default bootstrapAdmin.username), for when the identity provider is down; needs oidc.enabled.
+  # default bootstrapAdmin.username), for when the identity provider is down; needs oidc.enabled or
+  # saml.enabled.
   local:
     enabled: true
     breakGlassUser: ""
@@ -244,6 +245,45 @@ auth:
           version: ""
         refreshInterval: ""
         secretStoreRef: {}
+  # Sign-in with a SAML 2.0 identity provider (Okta, Microsoft Entra ID, Keycloak, AD FS, ...), next to
+  # or instead of OIDC. Kerf is the service provider: import https://<UI host>/v1/auth/saml/metadata at
+  # the IdP. Settings per provider: docs/auth.md#sign-in-with-saml.
+  saml:
+    enabled: false
+    name: ""                # the sign-in button: "Sign in with <name>" (default SSO)
+    # This UI's assertion consumer service, registered with the IdP: https://<UI host>/v1/auth/saml/acs
+    acsURL: ""
+    entityID: ""            # Kerf's entity ID (the audience); default https://<UI host>/v1/auth/saml/metadata
+    # The IdP's metadata, one of: a URL (refreshed every metadataRefreshInterval) or the XML from a
+    # Secret you create (re-read as often).
+    idpMetadataURL: ""      # e.g. https://example.okta.com/app/<app id>/sso/saml/metadata
+    idpMetadataSecret:
+      existingSecret: ""
+      existingSecretKey: metadata.xml
+    idpEntityID: ""         # optional: picks the IdP out of an aggregate, and must match the metadata
+    allowHTTPMetadata: false  # accept an http:// idpMetadataURL (development or a trusted network only)
+    metadataRefreshInterval: 24h
+    # Optional SP key and certificate (a kubernetes.io/tls Secret): the hub then signs its
+    # authentication requests, publishes the certificate in its metadata and decrypts encrypted
+    # assertions.
+    spKeySecret:
+      existingSecret: ""
+      keyKey: tls.key
+      certKey: tls.crt
+    nameIDFormat: unspecified   # or persistent, emailAddress; the NameID must be stable (not transient)
+    # Attributes of the assertion (by Name or FriendlyName). The user is named after usernameAttribute
+    # (lowercased; "NameID" uses the NameID).
+    usernameAttribute: email
+    emailAttribute: email
+    nameAttribute: displayName
+    groupsAttribute: groups
+    # Groups to roles, as for OIDC; the highest matching role wins. e.g.
+    #   - {group: platform-admins, role: admin}
+    #   - {group: platform, role: operator}
+    roleMappings: []
+    defaultRole: ""         # role when no group matches; "" denies the sign-in
+    requireSignedAssertions: true   # false also accepts an unsigned assertion in a signed response
+    clockSkew: 3m           # allowed difference between the IdP's clock and the hub's (at most 10m)
 
 # Tokens of this release's own services, in the umbrella chart (global.mode hub and all): the chart
 # generates them once (Secret <release>-local-tokens, keys pricing and, in mode all, agent; kept
