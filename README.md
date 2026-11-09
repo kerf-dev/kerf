@@ -24,7 +24,7 @@
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
-**Kerf is an open-source, self-hosted Kubernetes rightsizing tool.** It recommends CPU and memory requests and
+**[Kerf](https://getkerf.dev) is open source Kubernetes rightsizing you run yourself.** It recommends CPU and memory requests and
 limits for every container from your Prometheus or VictoriaMetrics history, prices the savings per node type,
 and, where you allow it, applies the change with an in-place pod resize or a rollout, inside your maintenance
 windows and with automatic rollback. Everything runs in your own clusters.
