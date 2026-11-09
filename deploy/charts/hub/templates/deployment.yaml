@@ -116,9 +116,9 @@ spec:
               mountPath: /etc/hub/notifications/{{ $i }}
               readOnly: true
             {{- end }}
-            {{- range .Values.onboarding.datasourceSecrets }}
-            - name: datasource-secret-{{ .name }}
-              mountPath: /etc/hub/datasource-secrets/{{ .name }}
+            {{- range $i, $d := .Values.onboarding.datasourceSecrets }}
+            - name: datasource-secret-{{ $i }}
+              mountPath: /etc/hub/datasource-secrets/{{ $d.name }}
               readOnly: true
             {{- end }}
             {{- if $dbCA }}
@@ -168,12 +168,12 @@ spec:
               - key: {{ .Values.onboarding.secretsKey.existingSecretKey }}
                 path: key
         {{- end }}
-        {{- range .Values.onboarding.datasourceSecrets }}
-        - name: datasource-secret-{{ .name }}
+        {{- range $i, $d := .Values.onboarding.datasourceSecrets }}
+        - name: datasource-secret-{{ $i }}
           secret:
-            secretName: {{ .existingSecret }}
+            secretName: {{ $d.existingSecret }}
             items:
-              - key: {{ .key | default "token" }}
+              - key: {{ $d.key | default "token" }}
                 path: token
         {{- end }}
         {{- range $i, $c := .Values.notifications.channels }}

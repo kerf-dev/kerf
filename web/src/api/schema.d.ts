@@ -3751,7 +3751,7 @@ export interface components {
       token?: string
       /**
        * @description For `bearer`, instead of `token`: the name of a datasource Secret mounted into the hub
-       *     (hub chart `onboarding.datasourceSecrets`). The hub reads the token from that Secret
+       *     (hub chart `onboarding.datasourceSecrets`), a Kubernetes Secret name. The hub reads the token from that Secret
        *     and re-reads it when it changes; nothing is stored in the database.
        */
       tokenSecret?: string

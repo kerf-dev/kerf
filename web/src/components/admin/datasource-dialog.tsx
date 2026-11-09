@@ -23,7 +23,9 @@ export const AUTH_LABEL: Record<DatasourceAuthType, string> = {
 }
 
 type TokenSource = 'secret' | 'paste'
-const DNS_LABEL = /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/
+/** A Kubernetes Secret name (DNS-1123 subdomain), as the hub accepts for auth.tokenSecret. */
+const SECRET_NAME = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/
+const validSecretName = (s: string) => s.length <= 253 && SECRET_NAME.test(s)
 
 interface Form {
   name: string
@@ -145,8 +147,8 @@ export function DatasourceDialog({
       auth === 'bearer' && f.tokenSource === 'secret'
         ? !f.tokenSecret
           ? 'Required.'
-          : !DNS_LABEL.test(f.tokenSecret)
-            ? 'Lowercase letters, digits and "-", up to 63 characters.'
+          : !validSecretName(f.tokenSecret)
+            ? 'A Secret name: lowercase letters, digits, "-" and ".", up to 253 characters.'
             : undefined
         : undefined,
     token: auth === 'bearer' && f.tokenSource === 'paste' && !f.token && !secret ? 'Required.' : undefined,

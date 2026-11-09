@@ -99,19 +99,47 @@ type cachedClient struct {
 	token string
 }
 
-// TokenFile is the file of a mounted datasource Secret's token.
+// secretNameRE is a Kubernetes Secret name (DNS-1123 subdomain): lower-case alphanumerics, '-'
+// and '.', no empty, leading or trailing labels, so never "..", "/" or an absolute path.
+var secretNameRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
+
+// ValidSecretName reports whether name is a valid datasource Secret name (a Kubernetes Secret name,
+// at most 253 characters). Only such names are joined to SecretsDir.
+func ValidSecretName(name string) bool {
+	return len(name) > 0 && len(name) <= 253 && secretNameRE.MatchString(name) && !strings.Contains(name, "..")
+}
+
+// secretNameProblem is the problem of an invalid auth.tokenSecret.
+func secretNameProblem(name string) string {
+	return fmt.Sprintf("auth.tokenSecret %q must be a Kubernetes Secret name (lower-case letters, digits, '-' and '.'; at most 253)", name)
+}
+
+// TokenFile is the file of a mounted datasource Secret's token; "" for an invalid name.
 func (r *Registry) TokenFile(name string) string {
+	if !ValidSecretName(name) {
+		return ""
+	}
 	return filepath.Join(r.SecretsDir, name, "token")
 }
 
-// mountedToken reads the token of a mounted datasource Secret.
+// mountedToken reads the token of a mounted datasource Secret. The name is validated again and
+// the file is opened through an os.Root at SecretsDir, so no name can reach a file outside it.
 func (r *Registry) mountedToken(name string) (string, error) {
+	if !ValidSecretName(name) {
+		return "", &ValidationError{Problems: []string{secretNameProblem(name)}}
+	}
 	if r.SecretsDir == "" {
 		return "", &ValidationError{Problems: []string{fmt.Sprintf("auth.tokenSecret %s: the hub has no datasource Secrets mounted (hub chart onboarding.datasourceSecrets)", name)}}
 	}
-	b, err := os.ReadFile(r.TokenFile(name))
+	missing := &ValidationError{Problems: []string{fmt.Sprintf("auth.tokenSecret %s: no token at %s: add it to the hub chart's onboarding.datasourceSecrets (key token)", name, r.TokenFile(name))}}
+	root, err := os.OpenRoot(r.SecretsDir)
 	if err != nil {
-		return "", &ValidationError{Problems: []string{fmt.Sprintf("auth.tokenSecret %s: no token at %s: add it to the hub chart's onboarding.datasourceSecrets (key token)", name, r.TokenFile(name))}}
+		return "", missing
+	}
+	defer root.Close()
+	b, err := root.ReadFile(name + "/token")
+	if err != nil {
+		return "", missing
 	}
 	tok := strings.TrimSpace(string(b))
 	if tok == "" {
@@ -195,8 +223,8 @@ func apply(in hubapi.DatasourceInput, prev *Record, prevSecrets Secrets) (Record
 		p = append(p, "auth.type must be one of none, bearer, basic, sigv4, mtls")
 	}
 	r.Auth = AuthConfig{Username: auth.Username, SigV4: auth.SigV4, TokenSecret: strings.TrimSpace(auth.TokenSecret)}
-	if r.Auth.TokenSecret != "" && !nameRE.MatchString(r.Auth.TokenSecret) {
-		p = append(p, "auth.tokenSecret must be a DNS label (the name of a mounted datasource Secret)")
+	if r.Auth.TokenSecret != "" && !ValidSecretName(r.Auth.TokenSecret) {
+		p = append(p, secretNameProblem(r.Auth.TokenSecret))
 	}
 	if r.Type == hubapi.DatasourceDynatrace {
 		if r.AuthType != hubapi.AuthBearer {

@@ -261,6 +261,7 @@ const DURATION = /^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$/
 const RATIO01 = /^(0(\.[0-9]{1,3})?|1(\.0{1,3})?)$/
 const QUANTITY = /^[0-9]+(\.[0-9]+)?(m|k|M|G|T|Ki|Mi|Gi|Ti)?$/
 const DNS1123 = /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/
+const SECRET_NAME = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/
 const POLICY_NAME = /^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/
 const LABEL_KEY = /^([a-z0-9]([-a-z0-9.]*[a-z0-9])?\/)?[A-Za-z0-9]([-A-Za-z0-9_.]*[A-Za-z0-9])?$/
 const MODES: Mode[] = ['off', 'audit', 'auto-patch']
@@ -739,8 +740,10 @@ function validateDatasource(st: AdminState, d: S['DatasourceInput'], existing?: 
     if (a.type === 'mtls' && (!a.tls?.clientCert || (!a.tls.clientKey && !existing?.auth.secretConfigured)))
       errs.push('auth.tls.clientCert, auth.tls.clientKey: Required value for mTLS')
   }
-  if (a?.tokenSecret && !DNS1123.test(a.tokenSecret))
-    errs.push(`auth.tokenSecret: Invalid value: ${JSON.stringify(a.tokenSecret)}: lower-case DNS label`)
+  if (a?.tokenSecret && !(a.tokenSecret.length <= 253 && SECRET_NAME.test(a.tokenSecret)))
+    errs.push(
+      `auth.tokenSecret: Invalid value: ${JSON.stringify(a.tokenSecret)}: must be a Kubernetes Secret name`,
+    )
   if (d.type === 'dynatrace') {
     if (a?.type !== 'bearer') errs.push('auth.type: Invalid value: Dynatrace needs bearer (a platform token)')
     const ag = d.dynatrace?.activeGateURL

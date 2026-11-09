@@ -100,11 +100,13 @@ describe('Datasource form: Dynatrace', () => {
     fireEvent.change(within(dialog).getByLabelText('Environment URL'), {
       target: { value: 'https://abc12345.apps.dynatrace.com' },
     })
-    fireEvent.change(within(dialog).getByLabelText('Secret name'), { target: { value: 'Not A Label' } })
+    fireEvent.change(within(dialog).getByLabelText('Secret name'), { target: { value: '../token' } })
     fireEvent.change(within(dialog).getByLabelText(/ActiveGate URL/), { target: { value: 'not a url' } })
     fireEvent.change(within(dialog).getByTestId('reason'), { target: { value: 'new environment' } })
     fireEvent.click(within(dialog).getByTestId('confirm-write'))
-    expect(await within(dialog).findByText(/Lowercase letters, digits and "-"/)).toBeInTheDocument()
+    expect(
+      await within(dialog).findByText(/A Secret name: lowercase letters, digits, "-" and "."/),
+    ).toBeInTheDocument()
     expect(within(dialog).getByText('An http(s) URL.')).toBeInTheDocument()
     expect(getAdmin().datasources.some((d) => d.name === 'dt-staging')).toBe(false)
   })

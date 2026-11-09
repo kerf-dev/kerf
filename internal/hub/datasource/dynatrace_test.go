@@ -43,7 +43,7 @@ func TestDynatraceDatasourceValidation(t *testing.T) {
 		{"basic auth", dt(&hubapi.DatasourceAuthInput{Type: hubapi.AuthBasic, Username: "u", Password: "p"}, ""), "needs auth.type bearer"},
 		{"token and secret", dt(&hubapi.DatasourceAuthInput{Type: hubapi.AuthBearer, Token: "x", TokenSecret: "dynatrace"}, ""), "not both"},
 		{"secret not mounted", dt(&hubapi.DatasourceAuthInput{Type: hubapi.AuthBearer, TokenSecret: "other"}, ""), "onboarding.datasourceSecrets"},
-		{"secret name", dt(&hubapi.DatasourceAuthInput{Type: hubapi.AuthBearer, TokenSecret: "../key"}, ""), "DNS label"},
+		{"secret name", dt(&hubapi.DatasourceAuthInput{Type: hubapi.AuthBearer, TokenSecret: "../key"}, ""), "Kubernetes Secret name"},
 		{"activegate url", dt(&hubapi.DatasourceAuthInput{Type: hubapi.AuthBearer, TokenSecret: "dynatrace"}, "activegate:9999"), "activeGateURL"},
 		{"dynatrace settings on prometheus", hubapi.DatasourceInput{Name: "p", Type: hubapi.DatasourcePrometheus, URL: "http://prometheus:9090", Reason: "test",
 			Dynatrace: &hubapi.DynatraceSettings{ActiveGateURL: "https://ag.example.internal"}}, "only for a dynatrace"},
@@ -110,5 +110,70 @@ func TestMountedTokenRotation(t *testing.T) {
 		URL: "https://abc12345.apps.dynatrace.com", Reason: "rename"}, hubapi.Actor{Type: "user", Name: "admin"})
 	if err != nil || after.Auth.TokenSecret != "dynatrace" {
 		t.Errorf("update: %v %+v", err, after.Auth)
+	}
+}
+
+// TestTokenSecretNames: only Kubernetes Secret names are accepted, at the API and when the token
+// is read, so no name reaches a file outside the Secrets directory.
+func TestTokenSecretNames(t *testing.T) {
+	dir := t.TempDir()
+	mountSecret(t, dir, "dynatrace", "dt0s16.ONE.secret")
+	mountSecret(t, dir, "dynatrace.prod-eu1", "dt0s16.TWO.secret")
+	// a token outside the Secrets directory that a traversal would reach
+	outside := filepath.Join(filepath.Dir(dir), "outside")
+	mountSecret(t, filepath.Dir(dir), "outside", "dt0s16.OUTSIDE.secret")
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+	for _, tc := range []struct {
+		name  string
+		token string // "" = rejected
+	}{
+		{"dynatrace", "dt0s16.ONE.secret"},
+		{"dynatrace.prod-eu1", "dt0s16.TWO.secret"},
+		{"../outside", ""},
+		{"..", ""},
+		{"a/b", ""},
+		{"/abs", ""},
+		{outside, ""},
+		{"a..b", ""},
+		{".hidden", ""},
+		{"Dynatrace", ""},
+		{"", ""},
+		{strings.Repeat("a", 254), ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := newRegistry(t, newMemRepo())
+			reg.SecretsDir = dir
+			tok, err := reg.mountedToken(tc.name)
+			if tc.token != "" {
+				if err != nil || tok != tc.token {
+					t.Fatalf("mountedToken = %q, %v", tok, err)
+				}
+			} else {
+				var ve *ValidationError
+				if !errors.As(err, &ve) || tok != "" {
+					t.Fatalf("mountedToken(%q) = %q, %v: want a validation error", tc.name, tok, err)
+				}
+				if strings.Contains(err.Error(), "OUTSIDE") {
+					t.Fatal("the error shows the outside token")
+				}
+			}
+			if tc.name == "" {
+				return // empty = no tokenSecret: the API then asks for a token
+			}
+			_, err = reg.Create(context.Background(), hubapi.DatasourceInput{Name: "dt", Type: hubapi.DatasourceDynatrace, URL: "https://abc12345.apps.dynatrace.com",
+				Auth: &hubapi.DatasourceAuthInput{Type: hubapi.AuthBearer, TokenSecret: tc.name}, Reason: "test"}, hubapi.Actor{Type: "user", Name: "admin"})
+			if tc.token != "" && err != nil {
+				t.Fatalf("create: %v", err)
+			}
+			if tc.token == "" {
+				var ve *ValidationError
+				if !errors.As(err, &ve) || !strings.Contains(err.Error(), "Kubernetes Secret name") {
+					t.Fatalf("create with %q: %v", tc.name, err)
+				}
+			}
+		})
+	}
+	if !ValidSecretName(strings.Repeat("a", 253)) || ValidSecretName(strings.Repeat("a", 254)) {
+		t.Error("length limit is 253")
 	}
 }
