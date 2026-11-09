@@ -44,6 +44,7 @@ The root `Makefile` includes `make/*.mk`; until it exists use `make -f make/dev.
 | Grafana | http://localhost:13000 (anonymous admin, or `admin`/`admin`) | `grafana.monitoring.svc:80` (hub) |
 | Postgres | `postgres://kerf:kerf@localhost:15432/kerf?sslmode=disable` | `postgres.postgres.svc:5432` (hub), Secret `postgres/postgres` has `DATABASE_URL` |
 | Dex (OIDC provider for "Sign in with Dex") | issuer http://localhost:15556/dex; users `dex-admin@example.com`, `dex-operator@`, `dex-viewer@`, `dex-nobody@` (password `ro-dev-dex-<name>-pass`; groups map to admin, operator, viewer, none) | `dex.dex.svc.cluster.local:5556` (the hub's `auth.oidc.connectAddress`) |
+| Keycloak (SAML IdP for "Sign in with Keycloak") | http://localhost:18180, realm `kerf` (admin console `/admin`: `admin` / `ro-dev-kc-console-pass`); users `kc-admin`, `kc-operator`, `kc-viewer`, `kc-nobody` (`@example.com`; password `ro-dev-kc-<name>-pass`; groups map to admin, operator, viewer, none). A fleet created before the 18180 mapping: `kubectl --context k3d-ro-hub -n keycloak port-forward svc/keycloak 18180:8080` | `keycloak.keycloak.svc.cluster.local:8080` (the hub's `auth.saml.idpMetadataURL`) |
 | Hub API (NodePort 30080 on the hub) | http://localhost:18080 | `hub-api.hub.svc:8080` (spokes) |
 | Web UI (NodePort 30090 on the hub) | http://localhost:19090 | – |
 | Argo CD (spoke-1) | http://localhost:18090 (`admin`/`admin123`) | `argocd-server.argocd.svc` |

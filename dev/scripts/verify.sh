@@ -35,4 +35,7 @@ code="$(curl -s -o /dev/null -w '%{http_code}' localhost:13000/api/health)"
 code="$(curl -s -o /dev/null -w '%{http_code}' localhost:15556/dex/.well-known/openid-configuration)"
 [[ "$code" == 200 ]] && log "ok   Dex discovery" || { log "FAIL Dex discovery (http://localhost:15556/dex): $code"; fail=1; }
 
+code="$(curl -s -o /dev/null -w '%{http_code}' localhost:18180/realms/kerf/protocol/saml/descriptor)"
+[[ "$code" == 200 ]] && log "ok   Keycloak SAML metadata" || { log "FAIL Keycloak SAML metadata (http://localhost:18180/realms/kerf): $code"; fail=1; }
+
 exit "$fail"

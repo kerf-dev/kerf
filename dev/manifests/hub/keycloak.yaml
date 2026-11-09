@@ -1,0 +1,145 @@
+# Keycloak: the dev SAML 2.0 identity provider for "Sign in with Keycloak" (docs/auth.md). ro-hub namespace
+# `keycloak`. Browsers reach it at http://localhost:18180 (k3d maps 18180 -> NodePort 30180; on a fleet created
+# before that mapping: kubectl --context k3d-ro-hub -n keycloak port-forward svc/keycloak 18180:8080). The hub reads
+# the realm's SAML metadata in the cluster (deploy/charts/hub/values-dev.yaml, auth.saml.idpMetadataURL).
+# Development only: the users, passwords and the admin password are in Git. Realm `kerf`, client = Kerf's entity
+# ID http://localhost:19090/v1/auth/saml/metadata (signed assertions, persistent NameID, attributes email,
+# displayName and groups).
+#
+#   user                     password                group           Kerf role
+#   kc-admin@example.com     ro-dev-kc-admin-pass    kerf-admins     admin
+#   kc-operator@example.com  ro-dev-kc-operator-pass kerf-operators  operator
+#   kc-viewer@example.com    ro-dev-kc-viewer-pass   kerf-viewers    viewer
+#   kc-nobody@example.com    ro-dev-kc-nobody-pass   saml-users      none (sign-in denied)
+#
+# Keycloak's own admin console: http://localhost:18180/admin (admin / ro-dev-kc-console-pass).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keycloak
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm
+  namespace: keycloak
+data:
+  kerf-realm.json: |
+    {
+      "realm": "kerf",
+      "enabled": true,
+      "sslRequired": "none",
+      "groups": [
+        {"name": "kerf-admins"}, {"name": "kerf-operators"}, {"name": "kerf-viewers"}, {"name": "saml-users"}
+      ],
+      "users": [
+        {"username": "kc-admin", "email": "kc-admin@example.com", "emailVerified": true, "firstName": "Kc", "lastName": "Admin",
+         "enabled": true, "groups": ["/kerf-admins"],
+         "credentials": [{"type": "password", "value": "ro-dev-kc-admin-pass", "temporary": false}]},
+        {"username": "kc-operator", "email": "kc-operator@example.com", "emailVerified": true, "firstName": "Kc", "lastName": "Operator",
+         "enabled": true, "groups": ["/kerf-operators"],
+         "credentials": [{"type": "password", "value": "ro-dev-kc-operator-pass", "temporary": false}]},
+        {"username": "kc-viewer", "email": "kc-viewer@example.com", "emailVerified": true, "firstName": "Kc", "lastName": "Viewer",
+         "enabled": true, "groups": ["/kerf-viewers"],
+         "credentials": [{"type": "password", "value": "ro-dev-kc-viewer-pass", "temporary": false}]},
+        {"username": "kc-nobody", "email": "kc-nobody@example.com", "emailVerified": true, "firstName": "Kc", "lastName": "Nobody",
+         "enabled": true, "groups": ["/saml-users"],
+         "credentials": [{"type": "password", "value": "ro-dev-kc-nobody-pass", "temporary": false}]}
+      ],
+      "clients": [
+        {
+          "clientId": "http://localhost:19090/v1/auth/saml/metadata",
+          "name": "Kerf (dev)",
+          "protocol": "saml",
+          "enabled": true,
+          "frontchannelLogout": false,
+          "redirectUris": ["http://localhost:19090/v1/auth/saml/acs"],
+          "attributes": {
+            "saml.assertion.signature": "true",
+            "saml.server.signature": "true",
+            "saml.client.signature": "false",
+            "saml.force.post.binding": "true",
+            "saml.authnstatement": "true",
+            "saml.signature.algorithm": "RSA_SHA256",
+            "saml_force_name_id_format": "true",
+            "saml_name_id_format": "persistent",
+            "saml_assertion_consumer_url_post": "http://localhost:19090/v1/auth/saml/acs"
+          },
+          "protocolMappers": [
+            {"name": "email", "protocol": "saml", "protocolMapper": "saml-user-property-mapper",
+             "config": {"user.attribute": "email", "attribute.name": "email", "attribute.nameformat": "Basic", "friendly.name": "email"}},
+            {"name": "displayName", "protocol": "saml", "protocolMapper": "saml-user-property-mapper",
+             "config": {"user.attribute": "firstName", "attribute.name": "displayName", "attribute.nameformat": "Basic"}},
+            {"name": "groups", "protocol": "saml", "protocolMapper": "saml-group-membership-mapper",
+             "config": {"attribute.name": "groups", "attribute.nameformat": "Basic", "full.path": "false", "single": "false"}}
+          ]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: keycloak}
+  template:
+    metadata:
+      labels: {app: keycloak}
+      annotations:
+        # Restart when the realm changes: the realm is imported at start (dev mode keeps no data).
+        kerf.getkerf.dev/config-version: "1"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 0
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: keycloak
+          # 26.8.2 by digest (KEYCLOAK_IMAGE in dev/versions.env).
+          image: quay.io/keycloak/keycloak:26.8.2@sha256:723b1d6e254c0fc96d5cffec860c7e0744d6a3277822b865bb538cf891575e41
+          args: [start-dev, --import-realm]
+          env:
+            - {name: KC_HOSTNAME, value: "http://localhost:18180"}
+            - {name: KC_HOSTNAME_STRICT, value: "false"}
+            - {name: KC_HTTP_ENABLED, value: "true"}
+            - {name: KC_HEALTH_ENABLED, value: "true"}
+            - {name: KC_BOOTSTRAP_ADMIN_USERNAME, value: admin}
+            - {name: KC_BOOTSTRAP_ADMIN_PASSWORD, value: ro-dev-kc-console-pass}
+            - {name: JAVA_OPTS_KC_HEAP, value: "-XX:MaxRAMPercentage=60"}
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: management, containerPort: 9000}
+          readinessProbe:
+            httpGet: {path: /health/ready, port: management}
+            periodSeconds: 5
+            failureThreshold: 60
+          resources:
+            requests: {cpu: 100m, memory: 512Mi}
+            limits: {memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: realm, mountPath: /opt/keycloak/data/import, readOnly: true}
+      volumes:
+        - name: realm
+          configMap: {name: keycloak-realm}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  type: NodePort
+  selector: {app: keycloak}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: 30180
