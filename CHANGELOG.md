@@ -12,6 +12,8 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-09
+
 ### Added
 
 - **Sign in with SAML 2.0** ([#65](https://github.com/kerf-dev/kerf/issues/65)). The hub is a SAML service provider
