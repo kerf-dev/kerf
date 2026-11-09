@@ -12,7 +12,7 @@ Pages by [.github/workflows/pages.yaml](../.github/workflows/pages.yaml) on ever
 | `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`, `icon-*.png`, `site.webmanifest` | icons (`.svg` and the manifest by hand, PNG and ICO generated) |
 | `social-preview.png` | Open Graph and Twitter image, a copy of `docs/branding/social-preview.png` |
 | `robots.txt`, `sitemap.xml`, `llms.txt`, `CNAME` | search engines, AI assistants, the custom domain |
-| `tools/` | `render-assets.mjs` (generated files), `check-links.mjs` (link check); not published |
+| `tools/` | `render-assets.mjs` (generated files), `check-links.mjs` (link check), `docs-sitemap.mjs` (docs sitemap); not published |
 
 ## Preview
 
@@ -42,6 +42,9 @@ make web-install && node site/tools/render-assets.mjs
 
 It uses the web UI's Playwright Chromium and `@fontsource-variable` packages; commit the results.
 
-## Update the sitemap
+## Sitemaps
 
-Set `<lastmod>` in `sitemap.xml` when the page's content changes.
+`sitemap.xml` lists the homepage: set its `<lastmod>` when the page's content changes. The documentation has its own
+sitemap, `/docs/sitemap.xml`, written by the Pages workflow (`tools/docs-sitemap.mjs`) from the sitemap of the version
+the `latest` alias points at. mike publishes one sitemap per version and none at `/docs/`; the dev build is `noindex`
+and older minors are not advertised. `robots.txt` names both files.
