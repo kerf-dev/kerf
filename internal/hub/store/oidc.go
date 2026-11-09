@@ -43,7 +43,9 @@ func sameAccess(u UserRow, role, scope string, roles []hubapi.TeamRole) bool {
 
 // systemActor is the actor of the user changes the provider drives (first sign-in, role from groups):
 // the system "oidc" or "saml".
-func systemActor(source string) hubapi.Actor { return hubapi.Actor{Type: hubapi.ActorSystem, Name: source} }
+func systemActor(source string) hubapi.Actor {
+	return hubapi.Actor{Type: hubapi.ActorSystem, Name: source}
+}
 
 func (in IdPUser) source() string {
 	if in.Source == "" {

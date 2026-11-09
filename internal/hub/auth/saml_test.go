@@ -206,7 +206,9 @@ func TestSAMLMetadataURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The IdP is down: a sign-in fails with ErrSAMLUnavailable, and the hub keeps metadata it read before.
-	down := newTestSAML(t, idp, func(c *SAMLConfig) { c.IdPMetadataFile, c.IdPMetadataURL, c.AllowHTTPMetadata = "", "http://127.0.0.1:1/md", true })
+	down := newTestSAML(t, idp, func(c *SAMLConfig) {
+		c.IdPMetadataFile, c.IdPMetadataURL, c.AllowHTTPMetadata = "", "http://127.0.0.1:1/md", true
+	})
 	if _, _, err := down.AuthnRequestURL(context.Background(), "rs"); !errors.Is(err, ErrSAMLUnavailable) {
 		t.Errorf("IdP down: %v", err)
 	}
@@ -229,7 +231,9 @@ func TestSAMLConfigValidate(t *testing.T) {
 		{"key without certificate", func(c *SAMLConfig) { c.SPKeyFile = "/k" }, "go together"},
 		{"transient", func(c *SAMLConfig) { c.NameIDFormat = "transient" }, "nameIDFormat"},
 		{"no mapping", func(c *SAMLConfig) { c.DefaultRole = "" }, "nobody can sign in"},
-		{"admin on teams", func(c *SAMLConfig) { c.RoleMappings = []RoleMapping{{Group: "g", Role: "admin", Teams: []string{"pay"}}} }, "fleet-wide"},
+		{"admin on teams", func(c *SAMLConfig) {
+			c.RoleMappings = []RoleMapping{{Group: "g", Role: "admin", Teams: []string{"pay"}}}
+		}, "fleet-wide"},
 		{"skew", func(c *SAMLConfig) { c.ClockSkew = "1h" }, "clockSkew"},
 		{"refresh", func(c *SAMLConfig) { c.MetadataRefreshInterval = "10s" }, "metadataRefreshInterval"},
 	} {
