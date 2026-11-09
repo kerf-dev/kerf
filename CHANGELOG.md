@@ -12,6 +12,13 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+### Documentation
+
+- Two guides, [How to rightsize Kubernetes resource requests](docs/guides/rightsize-kubernetes-resource-requests.md)
+  and [Reduce Kubernetes costs with rightsizing](docs/guides/reduce-kubernetes-costs.md), and comparisons of Kerf with
+  [the Vertical Pod Autoscaler](docs/compare/kerf-vs-vpa.md), [Goldilocks](docs/compare/kerf-vs-goldilocks.md) and
+  [Kubecost and OpenCost](docs/compare/kerf-vs-kubecost.md).
+
 ## [0.1.1] - 2026-11-08
 
 This release fixes what a first install on EKS showed ([#59](https://github.com/kerf-dev/kerf/issues/59)): Graviton
