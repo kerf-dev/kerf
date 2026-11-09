@@ -2,10 +2,18 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -245,5 +253,61 @@ func TestSAMLConfigValidate(t *testing.T) {
 				t.Errorf("Validate() = %v, want %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func writeKeyPair(t *testing.T, dir, name string) (keyFile, certFile string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tpl := &x509.Certificate{SerialNumber: big.NewInt(7), Subject: pkix.Name{CommonName: "kerf-saml"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour)}
+	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kb, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyFile, certFile = filepath.Join(dir, name+".key"), filepath.Join(dir, name+".crt")
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: kb}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return keyFile, certFile
+}
+
+// TestSAMLSPKey: with an SP key the requests are signed and the metadata carries the certificate.
+func TestSAMLSPKey(t *testing.T) {
+	idp := samltest.New(t)
+	dir := t.TempDir()
+	key, cert := writeKeyPair(t, dir, "sp")
+	s := newTestSAML(t, idp, func(c *SAMLConfig) { c.SPKeyFile, c.SPCertFile = key, cert })
+	target, _, err := s.AuthnRequestURL(context.Background(), "rs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := idp.ParseRedirect(target)
+	if err != nil || !req.Signed || !strings.Contains(target, "SigAlg=") {
+		t.Errorf("request %+v (%v): want a signed HTTP-Redirect request", req, err)
+	}
+	md, err := s.SPMetadata()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(md), `AuthnRequestsSigned="true"`) || !strings.Contains(string(md), "X509Certificate") {
+		t.Errorf("SP metadata without the signing certificate:\n%s", md)
+	}
+	// A certificate of another key is refused at start.
+	_, otherCert := writeKeyPair(t, dir, "other")
+	cfg := s.Cfg
+	cfg.SPCertFile = otherCert
+	if _, err := NewSAML(cfg); err == nil || !strings.Contains(err.Error(), "not the certificate") {
+		t.Errorf("mismatched key and certificate: %v", err)
 	}
 }
