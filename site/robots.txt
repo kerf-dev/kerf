@@ -1,4 +1,6 @@
 User-agent: *
 Allow: /
 
+# The homepage, and the documentation of the latest release (not the dev build, which is noindex).
 Sitemap: https://getkerf.dev/sitemap.xml
+Sitemap: https://getkerf.dev/docs/sitemap.xml

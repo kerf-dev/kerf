@@ -18,6 +18,9 @@ with search and a version switch, at [getkerf.dev/docs](https://getkerf.dev/docs
 | [Operate](operate/README.md) | Upgrade, backup, alerts and dashboards, readiness checks and their fixes, troubleshooting |
 | [Reference](reference/README.md) | Generated pages: chart values, custom resources, hub API; plus metrics and events |
 | [FAQ](faq.md) and [comparison](comparison.md) | Short answers, and how Kerf differs from VPA, Goldilocks, KRR and the commercial tools |
+| [How to rightsize Kubernetes resource requests](guides/rightsize-kubernetes-resource-requests.md) | Requests vs limits, usage percentiles, headroom, in-place resize, HPA and JVM traps, rollback |
+| [Reduce Kubernetes costs with rightsizing](guides/reduce-kubernetes-costs.md) | From oversized requests to fewer nodes: find, price, change, consolidate, prove |
+| Kerf compared with [the VPA](compare/kerf-vs-vpa.md), [Goldilocks](compare/kerf-vs-goldilocks.md) and [Kubecost and OpenCost](compare/kerf-vs-kubecost.md) | What each tool does, where it is the better fit, and what we could not verify |
 | [Example values](../deploy/examples/eks) | `values-hub.yaml`, `values-spoke.yaml`, IAM policies, External Secrets, an Argo CD ApplicationSet |
 | [The `kerf` command-line tool](cli.md) | `kerf report`: recommendations and savings from your existing Prometheus, without installing the hub; install, authentication (including Amazon Managed Service for Prometheus), prices |
 | [Helm chart reference](../deploy/charts/kerf/README.md) | `global.mode`, the umbrella values, opt-in features |

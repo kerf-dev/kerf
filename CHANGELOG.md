@@ -30,6 +30,14 @@ section here. The GitHub Release lists the same section as its highlights, follo
 - **Use Dynatrace as the metrics source** (`docs/install/dynatrace.md`): dual-write with the OpenTelemetry Collector
   or Grafana Alloy, or the native datasource, with the mapping from Kerf's series to Dynatrace metric keys, the gaps
   and the limits.
+## [0.1.2] - 2026-11-09
+
+### Documentation
+
+- **Search engines can find the docs.** `robots.txt` now names a sitemap for the documentation of the latest release
+  (`https://getkerf.dev/docs/sitemap.xml`, written by the Pages workflow) next to the homepage sitemap; the dev build
+  and older versions are not advertised. The homepage's "Read the docs" button opens the documentation site, and the
+  README opens with a link to [getkerf.dev](https://getkerf.dev).
 
 ## [0.1.1] - 2026-11-08
 

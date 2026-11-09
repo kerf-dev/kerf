@@ -79,6 +79,8 @@ jobs:
         run: rsync -a --exclude tools/ --exclude '.*' --exclude README.md site/ _site/
       - name: Build the documentation, every version, into _site/docs
         run: make docs-site DOCS_PYTHON=python DOCS_OUT="$PWD/_site/docs"
+      - name: Documentation sitemap (the latest release only, never dev)
+        run: node site/tools/docs-sitemap.mjs _site
       - name: Links of the assembled site and docs
         run: node tools/docs/check-links.mjs _site
       - name: Published files

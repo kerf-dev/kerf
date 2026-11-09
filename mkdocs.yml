@@ -152,8 +152,14 @@ nav:
       - Admin area: contracts/admin.md
       - Readiness: contracts/readiness.md
       - Notifications: contracts/notifications.md
+  - Guides:
+      - guides/rightsize-kubernetes-resource-requests.md
+      - guides/reduce-kubernetes-costs.md
   - Comparison and FAQ:
       - comparison.md
+      - compare/kerf-vs-vpa.md
+      - compare/kerf-vs-goldilocks.md
+      - compare/kerf-vs-kubecost.md
       - faq.md
   - Project:
       - architecture.md
