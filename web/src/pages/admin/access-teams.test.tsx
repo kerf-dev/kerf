@@ -159,12 +159,12 @@ describe('Access page: teams', () => {
   it('shows SAML users as identity-provider users, read-only, without a password', async () => {
     await signIn('admin')
     renderPage()
-    const priya = await screen.findByTestId('user-priya.shah@example.com')
-    expect(within(priya).getByTestId('idp-user')).toHaveTextContent('identity provider · SAML')
+    const erin = await screen.findByTestId('user-erin.example@example.com')
+    expect(within(erin).getByTestId('idp-user')).toHaveTextContent('identity provider · SAML')
     expect(within(await screen.findByTestId('user-idp-cards')).getByTestId('idp-user')).toHaveTextContent(
       'OIDC',
     )
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Actions for priya.shah@example.com' }), {
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Actions for erin.example@example.com' }), {
       button: 0,
     })
     await screen.findByRole('menuitem', { name: 'Disable' })

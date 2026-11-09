@@ -548,12 +548,12 @@ export function seedAdmin(db: MockDb): AdminState {
   )
   user(
     {
-      username: 'priya.shah@example.com',
+      username: 'erin.example@example.com',
       role: 'operator',
-      displayName: 'Priya Shah',
+      displayName: 'Erin Example',
       createdBy: 'saml',
       source: 'saml',
-      email: 'priya.shah@example.com',
+      email: 'erin.example@example.com',
       scope: 'fleet',
     },
     6,
