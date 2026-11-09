@@ -177,6 +177,21 @@ func TestSAMLParseResponse(t *testing.T) {
 	}
 }
 
+// TestSAMLOnlyPostBinding: an artifact (HTTP-Artifact binding) or an empty form is refused before
+// anything is fetched or parsed.
+func TestSAMLOnlyPostBinding(t *testing.T) {
+	s := newTestSAML(t, samltest.New(t), nil)
+	for name, form := range map[string]url.Values{
+		"artifact": {"SAMLart": {"AAQAAMFbLinlXaCM+FIxiDwGOLAy2T71gbpO7ZhNzAgEANlB90ECfpNEVLg="}, "RelayState": {"rs"}},
+		"empty":    {"RelayState": {"rs"}},
+	} {
+		_, err := s.ParseResponse(context.Background(), post(t, testACS, form), "id-1", (&memReplay{}).consume)
+		if err == nil || !strings.Contains(err.Error(), "HTTP-POST") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
 func TestSAMLRequestAndMetadata(t *testing.T) {
 	idp := samltest.New(t)
 	s := newTestSAML(t, idp, nil)

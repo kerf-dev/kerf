@@ -469,6 +469,11 @@ func (s *SAML) AuthnRequestURL(ctx context.Context, relayState string) (target, 
 // the assertion in replay. Errors carry the reason for the logs, never the response or a value
 // from it.
 func (s *SAML) ParseResponse(ctx context.Context, r *http.Request, requestID string, replay ReplayCache) (SAMLIdentity, error) {
+	// Only the HTTP-POST binding: an artifact would make the hub call the IdP's artifact resolution
+	// service on behalf of whoever posted it.
+	if r.Form.Get("SAMLart") != "" || r.Form.Get("SAMLResponse") == "" {
+		return SAMLIdentity{}, errors.New("invalid response: want a SAMLResponse posted with the HTTP-POST binding")
+	}
 	md, err := s.idpMetadata(ctx)
 	if err != nil {
 		return SAMLIdentity{}, err
