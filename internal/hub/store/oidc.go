@@ -14,8 +14,14 @@ import (
 // ErrUsernameTaken: an IdP user would get the name of a local user or of another identity.
 var ErrUsernameTaken = errors.New("username taken by another user")
 
-// OIDCUser is an identity-provider user as the hub records it at sign-in or refresh.
-type OIDCUser struct {
+// IdPUser is an identity-provider user (OpenID Connect or SAML) as the hub records it at sign-in or
+// refresh.
+type IdPUser struct {
+	// Source is hubapi.UserSourceOIDC (default) or hubapi.UserSourceSAML: the user's source and the
+	// protocol of its identity.
+	Source string
+	// Issuer and Subject identify the user at the provider: the OIDC issuer and sub, or the SAML IdP's
+	// entity ID and the NameID.
 	Issuer, Subject string
 	Username, Email string
 	DisplayName     string
@@ -35,23 +41,34 @@ func sameAccess(u UserRow, role, scope string, roles []hubapi.TeamRole) bool {
 	return u.Role == role && u.Scope == scope && slices.Equal(u.TeamRoles, roles)
 }
 
-// systemOIDC is the actor of the user changes the provider drives (first sign-in, role from groups).
-var systemOIDC = hubapi.Actor{Type: hubapi.ActorSystem, Name: "oidc"}
+// systemActor is the actor of the user changes the provider drives (first sign-in, role from groups):
+// the system "oidc" or "saml".
+func systemActor(source string) hubapi.Actor { return hubapi.Actor{Type: hubapi.ActorSystem, Name: source} }
 
-// UpsertOIDCUser creates the user of an identity at its first sign-in, or updates its role, e-mail and
+func (in IdPUser) source() string {
+	if in.Source == "" {
+		return hubapi.UserSourceOIDC
+	}
+	return in.Source
+}
+
+// UpsertIdPUser creates the user of an identity at its first sign-in, or updates its role, e-mail and
 // display name. Creation and role changes are recorded in the audit log. A deleted user is restored
-// (the provider is the source of truth); a disabled one stays disabled (the caller refuses it).
-func (s *Store) UpsertOIDCUser(ctx context.Context, in OIDCUser, now time.Time) (UserRow, error) {
+// (the provider is the source of truth); a disabled one stays disabled (the caller refuses it). The
+// name of a live user of another source (a local user, or an IdP user of the other protocol) is never
+// taken over: ErrUsernameTaken.
+func (s *Store) UpsertIdPUser(ctx context.Context, in IdPUser, now time.Time) (UserRow, error) {
 	var out UserRow
+	src := in.source()
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		var username string
-		err := tx.QueryRow(ctx, `SELECT username FROM user_identities WHERE issuer = $1 AND subject = $2 FOR UPDATE`,
-			in.Issuer, in.Subject).Scan(&username)
+		err := tx.QueryRow(ctx, `SELECT username FROM user_identities WHERE protocol = $1 AND issuer = $2 AND subject = $3 FOR UPDATE`,
+			src, in.Issuer, in.Subject).Scan(&username)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			cur, err := scanUser(tx.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE username = $1 FOR UPDATE`, in.Username))
 			switch {
-			case err == nil && (cur.Source != hubapi.UserSourceOIDC || cur.DeletedAt == nil):
+			case err == nil && (cur.Source == hubapi.UserSourceLocal || cur.DeletedAt == nil):
 				return ErrUsernameTaken
 			case err == nil: // a deleted IdP user of another identity: replaced, like CreateUser
 				if _, err := tx.Exec(ctx, `DELETE FROM user_identities WHERE username = $1`, in.Username); err != nil {
@@ -63,29 +80,29 @@ func (s *Store) UpsertOIDCUser(ctx context.Context, in OIDCUser, now time.Time) 
 			scope, roles := userBindings(in.Scope, in.TeamRoles)
 			out, err = scanUser(tx.QueryRow(ctx, `INSERT INTO users (username, display_name, role, password_hash, must_change_password,
 					password_changed_at, created_at, created_by, updated_at, last_login_at, source, email, scope, team_roles)
-				VALUES ($1, $2, $3, '', false, $4, $4, 'oidc', $4, $4, 'oidc', $5, $6, $7)
+				VALUES ($1, $2, $3, '', false, $4, $4, $8, $4, $4, $8, $5, $6, $7)
 				ON CONFLICT (username) DO UPDATE SET display_name = excluded.display_name, role = excluded.role,
-					scope = excluded.scope, team_roles = excluded.team_roles,
+					scope = excluded.scope, team_roles = excluded.team_roles, source = excluded.source,
 					created_at = excluded.created_at, created_by = excluded.created_by, updated_at = excluded.updated_at,
 					last_login_at = excluded.last_login_at, email = excluded.email, disabled = false, deleted_at = NULL,
 					version = users.version + 1
-				RETURNING `+userColumns, in.Username, in.DisplayName, in.Role, now, in.Email, scope, roles))
+				RETURNING `+userColumns, in.Username, in.DisplayName, in.Role, now, in.Email, scope, roles, src))
 			if err != nil {
 				return err
 			}
-			if _, err := tx.Exec(ctx, `INSERT INTO user_identities (issuer, subject, username, email, groups, created_at, last_login_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $6)`, in.Issuer, in.Subject, in.Username, in.Email, nonNil(in.Groups), now); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO user_identities (protocol, issuer, subject, username, email, groups, created_at, last_login_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`, src, in.Issuer, in.Subject, in.Username, in.Email, nonNil(in.Groups), now); err != nil {
 				return err
 			}
-			return recordChange(ctx, tx, Change{Actor: systemOIDC, Action: hubapi.ActionUserCreated, Time: now,
+			return recordChange(ctx, tx, Change{Actor: systemActor(src), Action: hubapi.ActionUserCreated, Time: now,
 				Reason:  "first sign-in with " + in.Provider,
 				Target:  hubapi.ConfigTarget{Type: hubapi.TargetUser, ID: out.Username, Name: out.Username},
 				Version: out.Version, After: out.User})
 		case err != nil:
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE user_identities SET email = $3, groups = $4, last_login_at = $5 WHERE issuer = $1 AND subject = $2`,
-			in.Issuer, in.Subject, in.Email, nonNil(in.Groups), now); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE user_identities SET email = $4, groups = $5, last_login_at = $6
+			WHERE protocol = $1 AND issuer = $2 AND subject = $3`, src, in.Issuer, in.Subject, in.Email, nonNil(in.Groups), now); err != nil {
 			return err
 		}
 		cur, err := scanUser(tx.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE username = $1 FOR UPDATE`, username))
@@ -110,7 +127,7 @@ func (s *Store) UpsertOIDCUser(ctx context.Context, in OIDCUser, now time.Time) 
 		if access {
 			reason = "role from the groups at " + in.Provider
 		}
-		return recordChange(ctx, tx, Change{Actor: systemOIDC, Action: hubapi.ActionUserUpdated, Time: now, Reason: reason,
+		return recordChange(ctx, tx, Change{Actor: systemActor(src), Action: hubapi.ActionUserUpdated, Time: now, Reason: reason,
 			Target:  hubapi.ConfigTarget{Type: hubapi.TargetUser, ID: out.Username, Name: out.Username},
 			Version: out.Version, Before: cur.User, After: out.User})
 	})
@@ -119,11 +136,11 @@ func (s *Store) UpsertOIDCUser(ctx context.Context, in OIDCUser, now time.Time) 
 
 // SetOIDCRole applies the role and team bindings re-read at a session refresh (no last_login_at
 // change). It records the change when they differ.
-func (s *Store) SetOIDCRole(ctx context.Context, issuer, subject string, in OIDCUser, groups []string, provider string, now time.Time) (UserRow, error) {
+func (s *Store) SetOIDCRole(ctx context.Context, issuer, subject string, in IdPUser, groups []string, provider string, now time.Time) (UserRow, error) {
 	var out UserRow
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		var username string
-		if err := tx.QueryRow(ctx, `UPDATE user_identities SET groups = $3 WHERE issuer = $1 AND subject = $2 RETURNING username`,
+		if err := tx.QueryRow(ctx, `UPDATE user_identities SET groups = $3 WHERE protocol = 'oidc' AND issuer = $1 AND subject = $2 RETURNING username`,
 			issuer, subject, nonNil(groups)).Scan(&username); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return ErrNotFound
@@ -141,7 +158,7 @@ func (s *Store) SetOIDCRole(ctx context.Context, issuer, subject string, in OIDC
 		if err != nil {
 			return err
 		}
-		return recordChange(ctx, tx, Change{Actor: systemOIDC, Action: hubapi.ActionUserUpdated, Time: now,
+		return recordChange(ctx, tx, Change{Actor: systemActor(hubapi.UserSourceOIDC), Action: hubapi.ActionUserUpdated, Time: now,
 			Reason:  "role from the groups at " + provider,
 			Target:  hubapi.ConfigTarget{Type: hubapi.TargetUser, ID: out.Username, Name: out.Username},
 			Version: out.Version, Before: cur.User, After: out.User})

@@ -23,6 +23,13 @@ var publicRoutes = []string{
 	"GET /v1/auth/providers",
 	"GET /v1/auth/oidc/login",
 	"GET /v1/auth/oidc/callback",
+	// SAML: the SP metadata the IdP imports, the redirect to the IdP, the assertion consumer service
+	// (the IdP's signed response, bound to a sign-in started here) and the step that starts the
+	// session (which needs the kerf_saml cookie of that browser).
+	"GET /v1/auth/saml/metadata",
+	"GET /v1/auth/saml/login",
+	"POST /v1/auth/saml/acs",
+	"GET /v1/auth/saml/finish",
 }
 
 var pathParam = regexp.MustCompile(`\{[^}]+\}`)

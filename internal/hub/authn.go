@@ -63,8 +63,8 @@ type Principal struct {
 func (p Principal) Actor() hubapi.Actor {
 	if p.Session != nil {
 		a := hubapi.Actor{Type: hubapi.ActorUser, Name: p.Session.User.Username, Role: p.Session.User.Role}
-		if p.Session.IsOIDC() {
-			a.Subject, a.Email = p.Session.OIDCSubject, p.Session.User.Email
+		if sub := p.Session.IdPSubject(); sub != "" {
+			a.Subject, a.Email = sub, p.Session.User.Email
 		}
 		a.Teams = p.usedTeams
 		return a
@@ -107,6 +107,8 @@ func (s *Server) authenticate(a access, next http.HandlerFunc) http.Handler {
 			switch {
 			case err == nil && sess.IsOIDC() && s.refreshOIDC(r.Context(), &sess):
 				// The provider ended the session: treated as no session (401).
+			case err == nil && sess.IsSAML() && s.endSAMLSession(r.Context(), &sess):
+				// SAML sign-in is no longer configured: treated as no session (401).
 			case err == nil:
 				sc := sessionScope(sess.User)
 				p = Principal{Method: hubapi.AuthMethodSession, Role: sc.MaxRole(), Session: &sess, Scope: sc}
@@ -341,7 +343,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	// the same bcrypt work, so a response never tells whether a username exists.
 	locked := err == nil && u.LockedUntil != nil && now.Before(*u.LockedUntil)
 	// IdP users have no password; with local sign-in off only the break-glass admin has one.
-	noPassword := err == nil && (u.Source == hubapi.UserSourceOIDC || !s.Cfg.Auth.passwordAllowed(username))
+	noPassword := err == nil && (hubapi.IsIdPSource(u.Source) || !s.Cfg.Auth.passwordAllowed(username))
 	if err != nil || u.DeletedAt != nil || u.Disabled || locked || noPassword {
 		auth.BurnPasswordCheck(req.Password)
 		if locked {
@@ -433,7 +435,7 @@ func (s *Server) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	if p.Session.User.Source == hubapi.UserSourceOIDC {
+	if hubapi.IsIdPSource(p.Session.User.Source) {
 		writeProblem(w, r, http.StatusConflict, hubapi.CodeIdPManaged, "You sign in with the identity provider: there is no Kerf password to change.")
 		return
 	}

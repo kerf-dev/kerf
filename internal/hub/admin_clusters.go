@@ -628,7 +628,7 @@ func (s *Server) localUser(w http.ResponseWriter, r *http.Request, detail string
 	case err != nil:
 		s.internal(w, r, err)
 		return false
-	case u.Source == hubapi.UserSourceOIDC:
+	case hubapi.IsIdPSource(u.Source):
 		writeProblem(w, r, http.StatusConflict, hubapi.CodeIdPManaged, detail)
 		return false
 	}

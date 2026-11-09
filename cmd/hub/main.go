@@ -83,6 +83,13 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 		}
 		log.Info("sign-in with OpenID Connect enabled", "provider", cfg.Auth.OIDC.DisplayName(), "issuer", cfg.Auth.OIDC.Issuer)
 	}
+	if cfg.Auth.SAML.Enabled {
+		if srv.SAML, err = auth.NewSAML(cfg.Auth.SAML); err != nil {
+			return err
+		}
+		log.Info("sign-in with SAML enabled", "provider", cfg.Auth.SAML.DisplayName(), "entityID", cfg.Auth.SAML.SPEntityID(),
+			"acs", cfg.Auth.SAML.ACSURL, "signedRequests", cfg.Auth.SAML.SPKeyFile != "")
+	}
 	// Notifications (docs/notifications.md): the counter is per replica, the last-success gauge is
 	// read from the database by the leader.
 	nmetrics := notify.NewMetrics()

@@ -94,25 +94,7 @@ func (c OIDCConfig) Validate() error {
 		!strings.HasSuffix(u.Path, "/v1/auth/oidc/callback") {
 		errs = append(errs, fmt.Errorf("auth.oidc.redirectURL %q must be the absolute URL of /v1/auth/oidc/callback", c.RedirectURL))
 	}
-	for _, m := range c.RoleMappings {
-		if m.Group == "" || roleRank[m.Role] == 0 {
-			errs = append(errs, fmt.Errorf("auth.oidc.roleMappings: {group: %q, role: %q}: want a group and viewer, operator or admin", m.Group, m.Role))
-		}
-		if len(m.Teams) > 0 && m.Role == "admin" {
-			errs = append(errs, fmt.Errorf("auth.oidc.roleMappings: {group: %q}: admin is fleet-wide, it cannot have teams", m.Group))
-		}
-		for _, t := range m.Teams {
-			if !teamIDRE.MatchString(t) || t == "unassigned" {
-				errs = append(errs, fmt.Errorf("auth.oidc.roleMappings: {group: %q}: invalid team id %q", m.Group, t))
-			}
-		}
-	}
-	if c.DefaultRole != "" && roleRank[c.DefaultRole] == 0 {
-		errs = append(errs, fmt.Errorf("auth.oidc.defaultRole %q: want viewer, operator, admin or empty (deny)", c.DefaultRole))
-	}
-	if len(c.RoleMappings) == 0 && c.DefaultRole == "" {
-		errs = append(errs, errors.New("auth.oidc: set roleMappings or defaultRole, or nobody can sign in"))
-	}
+	errs = append(errs, validateRoleMappings("auth.oidc", c.RoleMappings, c.DefaultRole)...)
 	if c.ConnectAddress != "" {
 		if _, _, err := net.SplitHostPort(c.ConnectAddress); err != nil {
 			errs = append(errs, fmt.Errorf("auth.oidc.connectAddress %q: want host:port", c.ConnectAddress))
@@ -159,8 +141,39 @@ type Access struct {
 // team roles (the highest per team of the matching mappings with teams). DefaultRole applies when no
 // mapping matches. ok is false when the user gets nothing (deny).
 func (c OIDCConfig) MapAccess(groups []string) (a Access, ok bool) {
+	return mapAccess(c.RoleMappings, c.DefaultRole, groups)
+}
+
+// validateRoleMappings checks the group mappings and default role of a provider (prefix: its
+// configuration key, e.g. auth.oidc).
+func validateRoleMappings(prefix string, mappings []RoleMapping, defaultRole string) []error {
+	var errs []error
+	for _, m := range mappings {
+		if m.Group == "" || roleRank[m.Role] == 0 {
+			errs = append(errs, fmt.Errorf("%s.roleMappings: {group: %q, role: %q}: want a group and viewer, operator or admin", prefix, m.Group, m.Role))
+		}
+		if len(m.Teams) > 0 && m.Role == "admin" {
+			errs = append(errs, fmt.Errorf("%s.roleMappings: {group: %q}: admin is fleet-wide, it cannot have teams", prefix, m.Group))
+		}
+		for _, t := range m.Teams {
+			if !teamIDRE.MatchString(t) || t == "unassigned" {
+				errs = append(errs, fmt.Errorf("%s.roleMappings: {group: %q}: invalid team id %q", prefix, m.Group, t))
+			}
+		}
+	}
+	if defaultRole != "" && roleRank[defaultRole] == 0 {
+		errs = append(errs, fmt.Errorf("%s.defaultRole %q: want viewer, operator, admin or empty (deny)", prefix, defaultRole))
+	}
+	if len(mappings) == 0 && defaultRole == "" {
+		errs = append(errs, fmt.Errorf("%s: set roleMappings or defaultRole, or nobody can sign in", prefix))
+	}
+	return errs
+}
+
+// mapAccess is MapAccess for any provider's mappings.
+func mapAccess(mappings []RoleMapping, defaultRole string, groups []string) (a Access, ok bool) {
 	matched := false
-	for _, m := range c.RoleMappings {
+	for _, m := range mappings {
 		if !slices.Contains(groups, m.Group) {
 			continue
 		}
@@ -181,7 +194,7 @@ func (c OIDCConfig) MapAccess(groups []string) (a Access, ok bool) {
 		}
 	}
 	if !matched {
-		a.FleetRole = c.DefaultRole
+		a.FleetRole = defaultRole
 	}
 	return a, a.FleetRole != "" || len(a.TeamRoles) > 0
 }

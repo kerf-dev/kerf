@@ -284,10 +284,24 @@ type Session struct {
 	OIDCIssuer, OIDCSubject string
 	OIDCRefreshToken        []byte
 	OIDCRefreshedAt         *time.Time
+	// SAML sessions: the IdP's entity ID and the NameID of the user.
+	SAMLIssuer, SAMLSubject string
 }
 
-// IsOIDC reports whether the session came from the identity provider.
+// IsOIDC reports whether the session came from the OpenID Connect provider.
 func (s Session) IsOIDC() bool { return s.OIDCSubject != "" }
+
+// IsSAML reports whether the session came from the SAML identity provider.
+func (s Session) IsSAML() bool { return s.SAMLSubject != "" }
+
+// IdPSubject is the user's subject at its identity provider (OIDC sub or SAML NameID); "" for a
+// local session.
+func (s Session) IdPSubject() string {
+	if s.IsOIDC() {
+		return s.OIDCSubject
+	}
+	return s.SAMLSubject
+}
 
 // CreateSession stores a session (only the SHA-256 of its token).
 func (s *Store) CreateSession(ctx context.Context, idHash []byte, username, csrf string, expires time.Time, userAgent, remote string, now time.Time) error {
@@ -307,7 +321,7 @@ func (s *Store) LookupSession(ctx context.Context, idHash []byte, now time.Time)
 	row := s.Pool.QueryRow(ctx, `SELECT s.csrf_token, s.expires_at, s.last_seen_at, u.username, u.display_name, u.role, u.password_hash, u.disabled, u.must_change_password,
 			u.failed_logins, u.locked_until, u.last_login_at, u.created_at, coalesce(u.created_by, ''), u.updated_at, u.version, u.deleted_at,
 			u.source, coalesce(u.email, ''), coalesce(s.oidc_issuer, ''), coalesce(s.oidc_subject, ''), s.oidc_refresh_token, s.oidc_refreshed_at,
-			u.scope, u.team_roles
+			u.scope, u.team_roles, coalesce(s.saml_issuer, ''), coalesce(s.saml_subject, '')
 		FROM sessions s JOIN users u ON u.username = s.username
 		WHERE s.id_sha256 = $1 AND s.revoked_at IS NULL AND s.expires_at > $2 AND u.deleted_at IS NULL AND NOT u.disabled`, idHash, now)
 	var u UserRow
@@ -315,7 +329,8 @@ func (s *Store) LookupSession(ctx context.Context, idHash []byte, now time.Time)
 	var roles []byte
 	err := row.Scan(&sess.CSRFToken, &sess.ExpiresAt, &lastSeen, &u.Username, &u.DisplayName, &u.Role, &u.PasswordHash, &u.Disabled,
 		&u.MustChangePassword, &u.FailedLogins, &u.LockedUntil, &u.LastLoginAt, &u.CreatedAt, &u.CreatedBy, &updated, &u.Version, &u.DeletedAt,
-		&u.Source, &u.Email, &sess.OIDCIssuer, &sess.OIDCSubject, &sess.OIDCRefreshToken, &sess.OIDCRefreshedAt, &u.Scope, &roles)
+		&u.Source, &u.Email, &sess.OIDCIssuer, &sess.OIDCSubject, &sess.OIDCRefreshToken, &sess.OIDCRefreshedAt, &u.Scope, &roles,
+		&sess.SAMLIssuer, &sess.SAMLSubject)
 	u.TeamRoles = parseTeamRoles(roles)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sess, ErrNotFound

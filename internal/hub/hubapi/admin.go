@@ -266,8 +266,8 @@ type User struct {
 	LockedUntil        *time.Time `json:"lockedUntil,omitempty"`
 	DeletedAt          *time.Time `json:"deletedAt,omitempty"`
 	Version            int        `json:"version"`
-	// Source: UserSourceLocal (password) or UserSourceOIDC (signs in with the identity provider; the
-	// role comes from its groups). Email is set for IdP users.
+	// Source: UserSourceLocal (password), UserSourceOIDC or UserSourceSAML (signs in with the identity
+	// provider; the role comes from its groups). Email is set for IdP users.
 	Source string `json:"source,omitempty"`
 	Email  string `json:"email,omitempty"`
 	// Scope: fleet (Role everywhere; TeamRoles may raise it on some teams) or teams (only the teams
@@ -280,14 +280,27 @@ type User struct {
 const (
 	UserSourceLocal = "local"
 	UserSourceOIDC  = "oidc"
+	UserSourceSAML  = "saml"
 )
+
+// IsIdPSource reports whether users of source sign in with an identity provider (no password; the
+// role comes from the IdP's groups).
+func IsIdPSource(source string) bool { return source == UserSourceOIDC || source == UserSourceSAML }
 
 // AuthProviders is the response of GET /v1/auth/providers: how the sign-in page offers to sign in.
 type AuthProviders struct {
 	// Local: everyone may sign in with a password. false: only the break-glass admin can.
 	Local bool `json:"local"`
-	// OIDC is set when sign-in with the identity provider is configured.
+	// OIDC is set when sign-in with an OpenID Connect provider is configured.
 	OIDC *OIDCProvider `json:"oidc,omitempty"`
+	// SAML is set when sign-in with a SAML 2.0 identity provider is configured.
+	SAML *SAMLProvider `json:"saml,omitempty"`
+}
+
+// SAMLProvider is the SAML identity provider offered on the sign-in page.
+type SAMLProvider struct {
+	Name     string `json:"name"`
+	LoginURL string `json:"loginURL"`
 }
 
 // OIDCProvider is the identity provider offered on the sign-in page.
