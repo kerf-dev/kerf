@@ -1,0 +1,29 @@
+[
+ {
+  "k8s.node.name": "ip-10-0-1-10.eu-west-1.compute.internal",
+  "labels": {
+   "node.kubernetes.io/instance-type": "m6i.large",
+   "karpenter.sh/capacity-type": "spot",
+   "topology.kubernetes.io/zone": "eu-west-1a",
+   "topology.kubernetes.io/region": "eu-west-1"
+  },
+  "tagLabels": null
+ },
+ {
+  "k8s.node.name": "ip-10-0-2-20.eu-west-1.compute.internal",
+  "labels": null,
+  "tagLabels": [
+   "node.kubernetes.io/instance-type=m6g.xlarge",
+   "eks.amazonaws.com/capacityType=ON_DEMAND",
+   "topology.kubernetes.io/zone=eu-west-1b",
+   "topology.kubernetes.io/region=eu-west-1"
+  ]
+ },
+ {
+  "k8s.node.name": "ip-10-0-3-30.eu-west-1.compute.internal",
+  "labels": {
+   "topology.kubernetes.io/zone": "eu-west-1c"
+  },
+  "tagLabels": null
+ }
+]

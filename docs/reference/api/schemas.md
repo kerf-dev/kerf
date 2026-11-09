@@ -1634,7 +1634,7 @@ Pause state of one cluster (or of the fleet).
 | `policyInventory` | [ClusterPolicyInventory](schemas.md#clusterpolicyinventory) |  |  |
 | `provider` | string | max length 64 | Informational, e.g. `aws`. |
 | `region` | string | max length 64 | Informational. |
-| `metrics` | [MetricsBinding](schemas.md#metricsbinding), required |  | Where a cluster's metrics are. Every query uses `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster Prometheus). Defaults: `local`, `cluster`, the cluster name. |
+| `metrics` | [MetricsBinding](schemas.md#metricsbinding), required |  | Where a cluster's metrics are. Every query uses `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster Prometheus). Defaults: `local`, `cluster`, the cluster name. For a `dynatrace` datasource, `clusterLabelValue` is the Dynatrace `k8s.cluster.name` (default the cluster name), `clusterLabel` is not used and `extraMatchers` must be empty. |
 | `readiness` | [ReadinessSummary](schemas.md#readinesssummary), required |  |  |
 
 ## ClusterCreate { #clustercreate }
@@ -1669,7 +1669,7 @@ Pause state of one cluster (or of the fleet).
 | `policySource` | ClusterPolicySource (enum) | one of `hub`, `git`, `both` | Where a cluster's policies come from. `hub`: hub-managed policies only (Git CRs are still reported). `git`: no hub-managed policies are sent and the admin pages are read-only for that cluster. `both`: both. |
 | `provider` | string | max length 64 | Informational, e.g. `aws`. |
 | `region` | string | max length 64 | Informational. |
-| `metrics` | [MetricsBinding](schemas.md#metricsbinding) |  | Where a cluster's metrics are. Every query uses `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster Prometheus). Defaults: `local`, `cluster`, the cluster name. |
+| `metrics` | [MetricsBinding](schemas.md#metricsbinding) |  | Where a cluster's metrics are. Every query uses `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster Prometheus). Defaults: `local`, `cluster`, the cluster name. For a `dynatrace` datasource, `clusterLabelValue` is the Dynatrace `k8s.cluster.name` (default the cluster name), `clusterLabel` is not used and `extraMatchers` must be empty. |
 | `reason` | string, required | min length 1; max length 1024 | Why the change is made; stored in the audit log. |
 
 ## ClusterConfig { #clusterconfig }
@@ -1853,7 +1853,10 @@ never including password hashes or token values.
 
 ## DatasourceType { #datasourcetype }
 
-Type: string. one of `prometheus`, `victoriametrics`, `thanos`, `mimir`, `amp`.
+`dynatrace` reads Kubernetes metrics from a Dynatrace environment with DQL (Grail) instead
+of PromQL; see docs/install/dynatrace.md for the metric mapping and its limits.
+
+Type: string. one of `prometheus`, `victoriametrics`, `thanos`, `mimir`, `amp`, `dynatrace`.
 
 ## DatasourceAuthType { #datasourceauthtype }
 
@@ -1887,6 +1890,7 @@ secret fields keep the stored values.
 |---|---|---|---|
 | `type` | DatasourceAuthType (enum), required | one of `none`, `bearer`, `basic`, `sigv4`, `mtls` |  |
 | `token` | string | write-only | For `bearer`. |
+| `tokenSecret` | string | pattern `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`; max length 253 | For `bearer`, instead of `token`: the name of a datasource Secret mounted into the hub (hub chart `onboarding.datasourceSecrets`), a Kubernetes Secret name. The hub reads the token from that Secret and re-reads it when it changes; nothing is stored in the database. |
 | `username` | string |  | For `basic`. |
 | `password` | string | write-only | For `basic`. |
 | `sigv4` | [DatasourceSigV4](schemas.md#datasourcesigv4) |  | AWS SigV4 (Amazon Managed Prometheus); credentials come from IRSA / Pod Identity. |
@@ -1901,6 +1905,7 @@ The stored auth without secrets.
 | `type` | DatasourceAuthType (enum), required | one of `none`, `bearer`, `basic`, `sigv4`, `mtls` |  |
 | `username` | string |  |  |
 | `sigv4` | [DatasourceSigV4](schemas.md#datasourcesigv4) |  | AWS SigV4 (Amazon Managed Prometheus); credentials come from IRSA / Pod Identity. |
+| `tokenSecret` | string |  | The mounted datasource Secret the bearer token is read from. |
 | `secretConfigured` | boolean, required |  | A token, password or client key is stored. |
 | `caConfigured` | boolean |  |  |
 | `clientCertConfigured` | boolean |  |  |
@@ -1911,9 +1916,10 @@ The stored auth without secrets.
 | Field | Type | Constraints | Description |
 |---|---|---|---|
 | `name` | string, required | pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$` |  |
-| `type` | DatasourceType (enum), required | one of `prometheus`, `victoriametrics`, `thanos`, `mimir`, `amp` |  |
-| `url` | string (uri), required |  | Query base URL (`/api/v1/query` is appended). |
+| `type` | DatasourceType (enum), required | one of `prometheus`, `victoriametrics`, `thanos`, `mimir`, `amp`, `dynatrace` | `dynatrace` reads Kubernetes metrics from a Dynatrace environment with DQL (Grail) instead of PromQL; see docs/install/dynatrace.md for the metric mapping and its limits. |
+| `url` | string (uri), required |  | Query base URL (`/api/v1/query` is appended). For `dynatrace`: the environment URL, e.g. `https://<environment-id>.apps.dynatrace.com`. |
 | `auth` | [DatasourceAuthInput](schemas.md#datasourceauthinput) |  | Secret fields (`token`, `password`, `tls.clientKey`) are write-only. On update, omitted secret fields keep the stored values. |
+| `dynatrace` | [DatasourceDynatrace](schemas.md#datasourcedynatrace) |  | Settings of a `dynatrace` datasource (auth is `bearer` with a platform token). |
 | `clearSecrets` | boolean |  | On update, remove the stored secrets. |
 | `headers` | map of string |  | Extra request headers, e.g. `X-Scope-OrgID`. Not secret. |
 | `timeout` | string | pattern `^([0-9]+(\.[0-9]+)?(ns\|us\|µs\|ms\|s\|m\|h))+$`; example `10m`, `168h` | Go duration. |
@@ -1926,10 +1932,11 @@ The stored auth without secrets.
 |---|---|---|---|
 | `id` | string, required |  | `local` for the built-in datasource, otherwise a UUID. |
 | `name` | string, required |  |  |
-| `type` | DatasourceType (enum), required | one of `prometheus`, `victoriametrics`, `thanos`, `mimir`, `amp` |  |
+| `type` | DatasourceType (enum), required | one of `prometheus`, `victoriametrics`, `thanos`, `mimir`, `amp`, `dynatrace` | `dynatrace` reads Kubernetes metrics from a Dynatrace environment with DQL (Grail) instead of PromQL; see docs/install/dynatrace.md for the metric mapping and its limits. |
 | `url` | string, required |  |  |
 | `builtIn` | boolean, required |  |  |
 | `auth` | [DatasourceAuthInfo](schemas.md#datasourceauthinfo), required |  | The stored auth without secrets. |
+| `dynatrace` | [DatasourceDynatrace](schemas.md#datasourcedynatrace) |  | Settings of a `dynatrace` datasource (auth is `bearer` with a platform token). |
 | `headers` | map of string, required |  |  |
 | `timeout` | string | pattern `^([0-9]+(\.[0-9]+)?(ns\|us\|µs\|ms\|s\|m\|h))+$`; example `10m`, `168h` | Go duration. |
 | `maxPoints` | integer |  |  |
@@ -1939,6 +1946,14 @@ The stored auth without secrets.
 | `createdBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
 | `updatedAt` | string (date-time) |  |  |
 | `updatedBy` | [Actor](schemas.md#actor) |  | Who made a change. `user`: a user (`name` = username). `token`: an API token (`name` = `token:<id>`). `system`: the hub itself (e.g. an auto-resume at `resumeAt`; `oidc` for the users the identity provider creates and the roles it changes). |
+
+## DatasourceDynatrace { #datasourcedynatrace }
+
+Settings of a `dynatrace` datasource (auth is `bearer` with a platform token).
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `activeGateURL` | string (uri) |  | Optional. The hub sends its queries here instead of to the environment URL, for a hub that reaches Dynatrace only through an ActiveGate or an egress proxy. It must forward the platform query API (`/platform/storage/query/v1/`) to the environment. |
 
 ## DatasourceList { #datasourcelist }
 
@@ -1962,14 +1977,33 @@ A cluster's metrics binding for the pricing service.
 | Field | Type | Constraints | Description |
 |---|---|---|---|
 | `cluster` | string, required |  |  |
-| `binding` | [MetricsBinding](schemas.md#metricsbinding), required |  | Where a cluster's metrics are. Every query uses `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster Prometheus). Defaults: `local`, `cluster`, the cluster name. |
+| `binding` | [MetricsBinding](schemas.md#metricsbinding), required |  | Where a cluster's metrics are. Every query uses `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster Prometheus). Defaults: `local`, `cluster`, the cluster name. For a `dynatrace` datasource, `clusterLabelValue` is the Dynatrace `k8s.cluster.name` (default the cluster name), `clusterLabel` is not used and `extraMatchers` must be empty. |
 | `bound` | boolean, required |  | false = no stored binding (datasource local, label cluster = the name). |
+| `datasourceType` | DatasourceType (enum) | one of `prometheus`, `victoriametrics`, `thanos`, `mimir`, `amp`, `dynatrace` | `dynatrace` reads Kubernetes metrics from a Dynatrace environment with DQL (Grail) instead of PromQL; see docs/install/dynatrace.md for the metric mapping and its limits. |
 
 ## MetricsBindingList { #metricsbindinglist }
 
 | Field | Type | Constraints | Description |
 |---|---|---|---|
 | `items` | array of [ClusterMetricsBinding](schemas.md#clustermetricsbinding), required |  |  |
+
+## NodeInventoryItem { #nodeinventoryitem }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `node` | string, required |  |  |
+| `instanceType` | string |  | Label node.kubernetes.io/instance-type. |
+| `capacityType` | string |  | Label karpenter.sh/capacity-type, else eks.amazonaws.com/capacityType, as set on the node. |
+| `zone` | string |  |  |
+| `region` | string |  |  |
+| `allocatableCores` | number | min 0 |  |
+| `allocatableMemoryBytes` | number | min 0 |  |
+
+## NodeInventory { #nodeinventory }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `items` | array of [NodeInventoryItem](schemas.md#nodeinventoryitem), required |  |  |
 
 ## PromQueryForm { #promqueryform }
 
@@ -1998,7 +2032,9 @@ Prometheus HTTP API response (`status`, `data`, `errorType`, `error`), passed th
 Where a cluster's metrics are. Every query uses
 `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the
 registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster
-Prometheus). Defaults: `local`, `cluster`, the cluster name.
+Prometheus). Defaults: `local`, `cluster`, the cluster name. For a `dynatrace` datasource,
+`clusterLabelValue` is the Dynatrace `k8s.cluster.name` (default the cluster name),
+`clusterLabel` is not used and `extraMatchers` must be empty.
 
 | Field | Type | Constraints | Description |
 |---|---|---|---|
@@ -2012,7 +2048,7 @@ Prometheus). Defaults: `local`, `cluster`, the cluster name.
 
 | Field | Type | Constraints | Description |
 |---|---|---|---|
-| `binding` | [MetricsBinding](schemas.md#metricsbinding) |  | Where a cluster's metrics are. Every query uses `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster Prometheus). Defaults: `local`, `cluster`, the cluster name. |
+| `binding` | [MetricsBinding](schemas.md#metricsbinding) |  | Where a cluster's metrics are. Every query uses `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster Prometheus). Defaults: `local`, `cluster`, the cluster name. For a `dynatrace` datasource, `clusterLabelValue` is the Dynatrace `k8s.cluster.name` (default the cluster name), `clusterLabel` is not used and `extraMatchers` must be empty. |
 
 ## DatasourceTestResult { #datasourcetestresult }
 
@@ -2025,7 +2061,19 @@ Prometheus). Defaults: `local`, `cluster`, the cluster name.
 | `found.pods` | integer | min 0 |  |
 | `found.nodes` | integer | min 0 |  |
 | `labelValues` | array of string |  | Existing values of the cluster label (suggestions when it does not match). |
+| `metrics` | array of [DatasourceMetricStatus](schemas.md#datasourcemetricstatus) |  | For datasources that map their own metrics to Kerf's inputs (`dynatrace`): each input, the source metric it is read from and whether it was found. Without a binding the whole environment is searched. |
 | `checks` | array of [ReadinessCheck](schemas.md#readinesscheck), required |  |  |
+
+## DatasourceMetricStatus { #datasourcemetricstatus }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `input` | string, required |  | The series Kerf needs, by its Prometheus name (e.g. container_memory_working_set_bytes). |
+| `sourceMetric` | string |  | Where the datasource holds it (a Dynatrace metric key or Smartscape field); absent when it has none. |
+| `usedFor` | string |  |  |
+| `status` | string, required | one of `found`, `missing`, `notAvailable` | `found`: series exist in the last hour (the last day for restarts and OOM kills); `missing`: the mapping names a source metric but it has no series; `notAvailable`: the datasource has no equivalent. |
+| `series` | integer | min 0 |  |
+| `note` | string |  |  |
 
 ## ReadinessState { #readinessstate }
 

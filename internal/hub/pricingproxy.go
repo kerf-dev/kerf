@@ -1,6 +1,8 @@
 package hub
 
 import (
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -8,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/datasource/dynatrace"
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
@@ -29,6 +32,12 @@ func (s *Server) listMetricsBindings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sort.Strings(names)
+	types := map[string]string{}
+	if ds, err := s.Onb.DS.List(r.Context()); err == nil {
+		for _, d := range ds {
+			types[d.ID] = d.Type
+		}
+	}
 	out := hubapi.MetricsBindingList{Items: make([]hubapi.ClusterMetricsBinding, 0, len(names))}
 	for _, c := range names {
 		b, ok := stored[c]
@@ -39,7 +48,7 @@ func (s *Server) listMetricsBindings(w http.ResponseWriter, r *http.Request) {
 		if b.ClusterLabel != "" && b.ClusterLabelValue == "" {
 			b.ClusterLabelValue = c
 		}
-		out.Items = append(out.Items, hubapi.ClusterMetricsBinding{Cluster: c, Binding: b, Bound: true})
+		out.Items = append(out.Items, hubapi.ClusterMetricsBinding{Cluster: c, Binding: b, Bound: true, DatasourceType: types[b.DatasourceID]})
 	}
 	writeJSON(w, out)
 }
@@ -75,6 +84,14 @@ func (s *Server) proxyQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	base, hc, err := s.Onb.Bind.HTTP(r.Context(), id, s.Cfg.PrometheusURL)
+	if errors.Is(err, ErrNotPromQL) {
+		// the Prometheus error format, so a PromQL client reports it as a query error
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "error", "errorType": "bad_data",
+			"error": "datasource " + id + " is a dynatrace datasource: use GET /v1/internal/clusters/{cluster}/nodes"})
+		return
+	}
 	if err != nil {
 		s.dsError(w, r, err)
 		return
@@ -100,4 +117,39 @@ func (s *Server) proxyQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(res.StatusCode)
 	_, _ = io.Copy(w, io.LimitReader(res.Body, 256<<20))
+}
+
+// clusterNodeInventory serves GET /v1/internal/clusters/{cluster}/nodes (pricing service): the
+// nodes of a cluster bound to a dynatrace datasource, with their pricing labels and
+// allocatable capacity. Other clusters are read through the query proxy (409 not_supported).
+func (s *Server) clusterNodeInventory(w http.ResponseWriter, r *http.Request) {
+	s.recordPricing(r)
+	if !s.onb(w, r) {
+		return
+	}
+	cluster := r.PathValue("cluster")
+	if _, err := s.Store.GetCluster(r.Context(), cluster); err != nil {
+		writeProblem(w, r, http.StatusNotFound, "not_found", "Unknown cluster.")
+		return
+	}
+	res, err := s.Onb.Bind.Resolve(r.Context(), cluster)
+	if err != nil {
+		s.dsError(w, r, err)
+		return
+	}
+	src, ok := res.Q.(*dynatrace.Source)
+	if !ok {
+		writeProblem(w, r, http.StatusConflict, hubapi.CodeNotSupported, "The cluster's datasource is Prometheus-compatible: read its nodes through the query proxy.")
+		return
+	}
+	cl := res.Matcher.Value
+	if cl == "" {
+		cl = cluster
+	}
+	nodes, err := src.Nodes(r.Context(), cl, s.now())
+	if err != nil {
+		writeProblem(w, r, http.StatusBadGateway, "datasource_unreachable", "Dynatrace: "+err.Error())
+		return
+	}
+	writeJSON(w, hubapi.NodeInventory{Items: nodes})
 }

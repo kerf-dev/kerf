@@ -7,7 +7,7 @@
 import type { components } from '@/api/schema'
 import { CLUSTERS, iso, POLICIES, type MockDb, type WorkloadModel } from './data'
 import { hash, mulberry32, uuid, type Rng } from './random'
-import { buildReadiness, type ReadinessModel } from './readiness'
+import { buildReadiness, DYNATRACE_ENV_URL, dynatraceResults, type ReadinessModel } from './readiness'
 import { seedNotifications, type NotificationModel } from './notifications-state'
 import { overridePolicyName } from './sha256'
 
@@ -158,6 +158,13 @@ export const BUILT_IN: Spec = {
 }
 
 const DEFAULT_JOBS = { cadvisor: ['kubelet', 'cadvisor'], kubeStateMetrics: ['kube-state-metrics'] }
+/** Binding of a cluster read from Dynatrace: only the `k8s.cluster.name` value counts. */
+export const dynatraceBinding = (name: string, datasourceId: string): MetricsBinding => ({
+  datasourceId,
+  clusterLabel: 'cluster',
+  clusterLabelValue: name,
+  extraMatchers: [],
+})
 export const defaultBinding = (name: string, datasourceId = 'local'): MetricsBinding => ({
   datasourceId,
   clusterLabel: 'cluster',
@@ -597,6 +604,7 @@ export function seedAdmin(db: MockDb): AdminState {
     knownLabelValues: ['prod-eu-west-1', 'prod-us-east-1', 'staging-eu-west-1'],
   })
   const ampId = uuid(r)
+  const dynatraceId = uuid(r)
   if (!empty)
     st.datasources.push({
       id: ampId,
@@ -623,6 +631,24 @@ export function seedAdmin(db: MockDb): AdminState {
       updatedAt: t(14),
       updatedBy: alice,
       knownLabelValues: ['dr-eu-central-1', 'eks-prod-eu1'],
+    })
+  if (!empty)
+    st.datasources.push({
+      id: dynatraceId,
+      name: 'dynatrace-prod',
+      type: 'dynatrace',
+      url: DYNATRACE_ENV_URL,
+      builtIn: false,
+      auth: { type: 'bearer', tokenSecret: 'dynatrace', secretConfigured: false },
+      headers: {},
+      timeout: '30s',
+      usedBy: [],
+      version: 1,
+      createdAt: t(9),
+      createdBy: alice,
+      updatedAt: t(9),
+      updatedBy: alice,
+      knownLabelValues: ['dt-prod-eu1'],
     })
 
   // Clusters ---------------------------------------------------------------------------------
@@ -653,6 +679,13 @@ export function seedAdmin(db: MockDb): AdminState {
       updatedAt: t(14),
       updatedBy: alice,
       metrics: defaultBinding('dr-eu-central-1', ampId),
+    },
+    'dt-prod-eu1': {
+      environment: 'prod',
+      owner: 'platform',
+      policySource: 'both',
+      region: 'eu-west-1',
+      metrics: dynatraceBinding('dt-prod-eu1', dynatraceId),
     },
   }
   for (const c of db.clusters) {
@@ -692,6 +725,7 @@ export function seedAdmin(db: MockDb): AdminState {
         { now, createdAt: Date.parse(cm.createdAt), workloads },
       ),
     )
+    if (c.name === 'dt-prod-eu1') Object.assign(st.readiness.get(c.name)!.results, dynatraceResults(c.name))
   }
 
   // Tokens -----------------------------------------------------------------------------------

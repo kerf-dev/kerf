@@ -199,3 +199,44 @@ func TestHubTargets(t *testing.T) {
 		t.Error("token error ignored")
 	}
 }
+
+// TestHubTargetsDynatrace: a cluster bound to a dynatrace datasource is read from the hub's
+// node inventory (both capacity-type labels), not through the query proxy.
+func TestHubTargetsDynatrace(t *testing.T) {
+	var paths []string
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch r.URL.Path {
+		case "/v1/internal/metrics-bindings":
+			fmt.Fprint(w, `{"items":[{"cluster":"dt-prod","binding":{"datasourceId":"ds-dt","clusterLabel":"cluster","clusterLabelValue":"prod-eu1"},"bound":true,"datasourceType":"dynatrace"}]}`)
+		case "/v1/internal/clusters/dt-prod/nodes":
+			fmt.Fprint(w, `{"items":[`+
+				`{"node":"n1","instanceType":"m6i.large","capacityType":"spot","zone":"eu-west-1a","allocatableCores":1.93,"allocatableMemoryBytes":7516192768},`+
+				`{"node":"n2","instanceType":"m6g.xlarge","capacityType":"ON_DEMAND","region":"eu-west-1","allocatableCores":3.92,"allocatableMemoryBytes":15032385536}]}`)
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer hub.Close()
+	vm := &recordingVM{labels: func(string) []string { return nil }, alloc: func(string) []string { return nil }}
+	vs := vm.server(t)
+	defer vs.Close()
+	ht := &HubTargets{HubURL: hub.URL, Token: func() (string, error) { return "pricing-tok", nil }}
+	nodes, err := (&Discovery{VMURL: vs.URL, Targets: ht, DefaultRegion: "us-east-1"}).Nodes(context.Background())
+	if err != nil || len(nodes) != 2 {
+		t.Fatalf("nodes %v %+v", err, nodes)
+	}
+	n1, n2 := nodes[0], nodes[1]
+	if n1.Cluster != "dt-prod" || n1.CapacityType != Spot || n1.Region != "eu-west-1" || n1.AllocatableCores != 1.93 || n1.AllocatableGiB != 7 {
+		t.Errorf("n1 = %+v", n1)
+	}
+	if n2.CapacityType != OnDemand || n2.InstanceType != "m6g.xlarge" || n2.AllocatableGiB != 14 {
+		t.Errorf("n2 = %+v", n2)
+	}
+	for _, p := range paths {
+		if strings.Contains(p, "/api/v1/query") {
+			t.Errorf("PromQL proxied for a dynatrace cluster: %s", p)
+		}
+	}
+}

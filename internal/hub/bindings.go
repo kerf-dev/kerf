@@ -2,10 +2,12 @@ package hub
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/datasource/dynatrace"
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
@@ -68,7 +70,12 @@ func (b *Bindings) ResolveBinding(ctx context.Context, cluster string, bind huba
 	return out, nil
 }
 
-// Datasource returns the querier and API of a datasource.
+// ErrNotPromQL: the datasource is not queried with PromQL (dynatrace), so the query proxy and
+// the Prometheus probe do not apply.
+var ErrNotPromQL = errors.New("the datasource is not Prometheus-compatible (dynatrace): PromQL queries are not supported")
+
+// Datasource returns the querier and API of a datasource. A dynatrace datasource returns a
+// *dynatrace.Source and no API.
 func (b *Bindings) Datasource(ctx context.Context, id string) (recommender.Querier, *datasource.API, error) {
 	if id == hubapi.LocalDatasourceID {
 		return b.Local, b.LocalAPI, nil
@@ -81,6 +88,13 @@ func (b *Bindings) Datasource(ctx context.Context, id string) (recommender.Queri
 		c := *hc
 		c.Timeout = b.Timeout
 		hc = &c
+	}
+	if cfg.Type == hubapi.DatasourceDynatrace {
+		ag := ""
+		if cfg.Auth.Dynatrace != nil {
+			ag = cfg.Auth.Dynatrace.ActiveGateURL
+		}
+		return dynatrace.New(cfg.URL, ag, hc), nil, nil
 	}
 	maxPoints := 2016
 	if cfg.MaxPoints > 0 && cfg.MaxPoints < maxPoints {
@@ -97,6 +111,9 @@ func (b *Bindings) HTTP(ctx context.Context, id string, localURL string) (string
 	cfg, hc, err := b.Registry.Client(ctx, id)
 	if err != nil {
 		return "", nil, err
+	}
+	if cfg.Type == hubapi.DatasourceDynatrace {
+		return "", nil, ErrNotPromQL
 	}
 	return cfg.URL, hc, nil
 }

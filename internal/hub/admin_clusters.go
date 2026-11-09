@@ -166,9 +166,15 @@ func validEnum(w http.ResponseWriter, r *http.Request, field, v string, allowed 
 	return true
 }
 
-func validBinding(w http.ResponseWriter, r *http.Request, b *hubapi.MetricsBinding) bool {
+func (s *Server) validBinding(w http.ResponseWriter, r *http.Request, b *hubapi.MetricsBinding) bool {
 	if b == nil {
 		return true
+	}
+	if s.Onb != nil && b.DatasourceID != "" && b.DatasourceID != hubapi.LocalDatasourceID && len(b.ExtraMatchers) > 0 {
+		if d, err := s.Onb.DS.Get(r.Context(), b.DatasourceID); err == nil && d.Type == hubapi.DatasourceDynatrace {
+			badRequest(w, r, "invalid_metrics", "metrics.extraMatchers: a dynatrace datasource selects the cluster by clusterLabelValue (its k8s.cluster.name) only.")
+			return false
+		}
 	}
 	if err := datasource.ValidateBinding(*b); err != nil {
 		badRequest(w, r, "invalid_metrics", "metrics: "+err.Error())
@@ -205,7 +211,7 @@ func (s *Server) createCluster(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validEnum(w, r, "environment", in.Environment, hubapi.EnvironmentProd, hubapi.EnvironmentNonProd) ||
 		!validEnum(w, r, "policySource", in.PolicySource, hubapi.PolicySourceHub, hubapi.PolicySourceGit, hubapi.PolicySourceBoth) ||
-		!validBinding(w, r, in.Metrics) {
+		!s.validBinding(w, r, in.Metrics) {
 		return
 	}
 	var value string
@@ -266,7 +272,7 @@ func (s *Server) updateCluster(w http.ResponseWriter, r *http.Request) {
 	}
 	if (in.Environment != nil && !validEnum(w, r, "environment", *in.Environment, hubapi.EnvironmentProd, hubapi.EnvironmentNonProd)) ||
 		(in.PolicySource != nil && !validEnum(w, r, "policySource", *in.PolicySource, hubapi.PolicySourceHub, hubapi.PolicySourceGit, hubapi.PolicySourceBoth)) ||
-		!validBinding(w, r, in.Metrics) {
+		!s.validBinding(w, r, in.Metrics) {
 		return
 	}
 	c, err := s.Store.UpdateCluster(r.Context(), r.PathValue("cluster"), ver, in, s.Cfg.PrometheusURL, s.change(r, hubapi.ActionClusterUpdated, in.Reason))

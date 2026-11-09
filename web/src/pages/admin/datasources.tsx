@@ -13,6 +13,7 @@ import { useDatasources, useWrite, writes } from '@/api/admin'
 import type { Datasource, DatasourceTestResult } from '@/api/types'
 import { ActorChip } from '@/components/admin/common'
 import { AUTH_LABEL, DatasourceDialog, DS_TYPE_LABEL } from '@/components/admin/datasource-dialog'
+import { MetricMapping } from '@/components/admin/metric-mapping'
 import { isProblem, ReadinessChecklist } from '@/components/admin/readiness'
 import { WriteDialog, WriteError } from '@/components/admin/write-dialog'
 import { EmptyState, ErrorState, PageHeader } from '@/components/states'
@@ -51,9 +52,15 @@ function DatasourceCard({
             <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <LockIcon className="size-3" /> {AUTH_LABEL[d.auth.type]}
+                {d.auth.tokenSecret ? ` · token from Secret ${d.auth.tokenSecret}` : ''}
                 {d.auth.secretConfigured ? ' · secret stored' : ''}
                 {d.auth.sigv4?.region ? ` · ${d.auth.sigv4.region}` : ''}
               </span>
+              {d.dynatrace?.activeGateURL ? (
+                <span>
+                  ActiveGate <span className="font-mono">{d.dynatrace.activeGateURL}</span>
+                </span>
+              ) : null}
               {Object.keys(d.headers).length ? <span>{Object.keys(d.headers).join(', ')}</span> : null}
               {d.timeout ? <span>timeout {d.timeout}</span> : null}
               {d.updatedBy ? (
@@ -136,6 +143,7 @@ function DatasourceCard({
             {result.latencyMs != null ? `${result.latencyMs} ms. ` : ''}
             {result.labelValues?.length ? `Cluster label values: ${result.labelValues.join(', ')}` : ''}
           </Callout>
+          {result.metrics?.length ? <MetricMapping metrics={result.metrics} /> : null}
           {result.checks.some(isProblem) ? <ReadinessChecklist checks={result.checks} onlyProblems /> : null}
         </div>
       ) : null}

@@ -42,6 +42,10 @@ type AuthConfig struct {
 	CACert             string                  `json:"caCert,omitempty"`
 	ClientCert         string                  `json:"clientCert,omitempty"`
 	InsecureSkipVerify bool                    `json:"insecureSkipVerify,omitempty"`
+	// TokenSecret names the mounted datasource Secret holding the bearer token (not stored).
+	TokenSecret string `json:"tokenSecret,omitempty"`
+	// Dynatrace are the settings of a dynatrace datasource.
+	Dynatrace *hubapi.DynatraceSettings `json:"dynatrace,omitempty"`
 }
 
 // Config is a resolved datasource: stored settings plus decrypted secrets. Never log it.

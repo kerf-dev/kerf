@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
 
@@ -328,6 +329,12 @@ func replicasAt(ps []replicaPoint, t time.Time) (float64, bool) {
 	return r, ok
 }
 
+// hourlyReplicas is a datasource that is not queried with PromQL (Dynatrace) and reads the
+// average replicas per workload and hour itself.
+type hourlyReplicas interface {
+	HourlyReplicas(ctx context.Context, registered, cluster string, from, to time.Time) (map[hubapi.WorkloadKey]map[time.Time]float64, map[time.Time]bool, error)
+}
+
 // ReplicasQuery is the average number of scheduled pods per workload over the hour ending at
 // each evaluation time (kube-state-metrics requests with a node; one sample per 5 minutes, a
 // missing sample counts as zero pods).
@@ -370,6 +377,21 @@ func (w *Worker) metricReplicas(ctx context.Context, cluster string, from, to ti
 	if err != nil {
 		return nil, nil, err
 	}
+	if hr, ok := prom.(hourlyReplicas); ok {
+		src := cluster
+		if binding != nil && binding.Value != "" {
+			src = binding.Value
+		}
+		byKey, covered, err := hr.HourlyReplicas(ctx, cluster, src, from, to)
+		if err != nil {
+			return nil, nil, err
+		}
+		out := make(map[WorkloadKey]map[time.Time]float64, len(byKey))
+		for k, v := range byKey {
+			out[WorkloadKey{Namespace: k.Namespace, Kind: k.Kind, Name: k.Name}] = v
+		}
+		return out, covered, nil
+	}
 	// The sample at T is the hour [T-1h, T).
 	res, err := prom.Range(ctx, ReplicasQuery(cluster, binding), from.Add(time.Hour), to, time.Hour)
 	if err != nil {
@@ -399,6 +421,10 @@ func (w *Worker) computeNodeCost(ctx context.Context, cluster string, from, to t
 	prom, binding, err := w.MetricsFor(ctx, cluster)
 	if err != nil {
 		return nil, err
+	}
+	if _, ok := prom.(hourlyReplicas); ok {
+		// not a PromQL datasource (Dynatrace): the requested ratios are left out
+		prom = nil
 	}
 	costQ, nodesQ, cpuQ, memQ := NodeCostQueries(cluster, binding)
 	byHour := map[time.Time]*NodeCostHour{}

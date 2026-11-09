@@ -648,6 +648,7 @@ describe('clusters, automation, readiness', () => {
       'AutomationReady',
       'ReadyAudit',
       'Registered',
+      'AutomationReady',
     ])
 
     await login('operator')
@@ -740,7 +741,7 @@ describe('clusters, automation, readiness', () => {
 
   it('readiness, recheck and history', async () => {
     const states: Record<string, string> = {}
-    for (const c of ['prod-eu-west-1', 'prod-us-east-1', 'dr-eu-central-1']) {
+    for (const c of ['prod-eu-west-1', 'prod-us-east-1', 'dr-eu-central-1', 'dt-prod-eu1']) {
       const r = await call('GET', `/v1/clusters/${c}/readiness`)
       expectValid('ClusterReadiness', r.json)
       // Connected agents report every check; without an agent, its checks have no row (hub semantics)
@@ -762,6 +763,7 @@ describe('clusters, automation, readiness', () => {
       'prod-eu-west-1': 'AutomationReady',
       'prod-us-east-1': 'ReadyAudit',
       'dr-eu-central-1': 'Registered',
+      'dt-prod-eu1': 'AutomationReady',
     })
     const us = (await call('GET', '/v1/clusters/prod-us-east-1/readiness')).json
     expect(us.blockedBy).toEqual(['rbac.resize', 'rbac.policies'])

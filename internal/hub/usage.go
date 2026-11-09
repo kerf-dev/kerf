@@ -9,6 +9,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/datasource/dynatrace"
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
@@ -43,65 +45,35 @@ func (s *Server) getWorkloadUsage(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, err)
 		return
 	}
-	qb := recommender.Queries{Cluster: key.Cluster, RateWindow: s.RecCfg.RateWindow, Binding: binding}
-	f := &recommender.Filter{Namespace: key.Namespace}
-	inner := s.RecCfg.Step
-	var usageQ, avgQ string
-	if resource == "cpu" {
-		usageQ, avgQ = qb.CPUUsage("max", f), qb.CPUUsage("avg", f)
-		if step > inner {
-			// Keep peaks between steps: max/avg over the step at the recommender's resolution.
-			usageQ = fmt.Sprintf("max_over_time((%s)[%s:%s])", usageQ, promDur(step), promDur(inner))
-			avgQ = fmt.Sprintf("avg_over_time((%s)[%s:%s])", avgQ, promDur(step), promDur(inner))
-		}
-	} else {
-		win := max(step, inner)
-		usageQ, avgQ = qb.MemoryUsage("max", f, win), qb.MemoryUsage("avg", f, win)
-	}
-
 	type series = map[string][]hubapi.Point
 	usage, avg, req, lim := series{}, series{}, series{}, series{}
-	match := func(l recommender.Labels) (string, bool) {
-		c := l["container"]
-		return c, l["workload_kind"] == key.Kind && l["workload"] == key.Name && (onlyContainer == "" || c == onlyContainer)
-	}
-	var mu sync.Mutex
-	g, ctx := errgroup.WithContext(r.Context())
-	run := func(query string, dst series, filterResource bool) {
-		g.Go(func() error {
-			res, err := prom.Range(ctx, query, from, to, step)
-			if err != nil {
-				return err
-			}
-			for _, sr := range res {
-				c, ok := match(sr.Labels)
-				if !ok || (filterResource && sr.Labels["resource"] != resource) {
+	if src, ok := prom.(*dynatrace.Source); ok {
+		cl := key.Cluster
+		if binding != nil && binding.Value != "" {
+			cl = binding.Value
+		}
+		u, err := src.WorkloadUsage(r.Context(), cl, key.Namespace, key.Kind, key.Name, resource, from, to, step)
+		if err != nil {
+			s.Log.WarnContext(r.Context(), "usage query", "workload", key.ID(), "err", err)
+			writeProblem(w, r, http.StatusBadGateway, "metrics_unavailable", "Metrics backend query failed: "+err.Error())
+			return
+		}
+		for _, x := range []struct {
+			src map[string][]recommender.Sample
+			dst series
+		}{{u.Usage, usage}, {u.Avg, avg}, {u.Request, req}, {u.Limit, lim}} {
+			for c, sm := range x.src {
+				if onlyContainer != "" && c != onlyContainer {
 					continue
 				}
-				pts := make([]hubapi.Point, len(sr.Samples))
-				for i, p := range sr.Samples {
+				pts := make([]hubapi.Point, len(sm))
+				for i, p := range sm {
 					pts[i] = hubapi.Point{float64(p.T.Unix()), p.V}
 				}
-				// Init and app containers are separate queries writing the same map; never merge two
-				// series per name.
-				mu.Lock()
-				if len(dst[c]) == 0 {
-					dst[c] = pts
-				}
-				mu.Unlock()
+				x.dst[c] = pts
 			}
-			return nil
-		})
-	}
-	run(usageQ, usage, false)
-	run(avgQ, avg, false)
-	for _, init := range []bool{false, true} {
-		run(qb.Resources("requests", init, 0, f), req, true)
-		run(qb.Resources("limits", init, 0, f), lim, true)
-	}
-	if err := g.Wait(); err != nil {
-		s.Log.WarnContext(r.Context(), "usage query", "workload", key.ID(), "err", err)
-		writeProblem(w, r, http.StatusBadGateway, "metrics_unavailable", "Metrics backend query failed: "+err.Error())
+		}
+	} else if !s.promUsage(w, r, prom, binding, key, resource, onlyContainer, from, to, step, usage, avg, req, lim) {
 		return
 	}
 	steps, err := s.Store.RecommendationSteps(r.Context(), v.DBID, from.Add(-step), to)
@@ -233,4 +205,71 @@ func promDur(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%ds", max(1, d/time.Second))
 	}
+}
+
+// promUsage fills the usage chart series of a workload from a PromQL datasource; false when it
+// has written an error.
+func (s *Server) promUsage(w http.ResponseWriter, r *http.Request, prom recommender.Querier, binding *datasource.Matcher, key hubapi.WorkloadKey,
+	resource, onlyContainer string, from, to time.Time, step time.Duration, usage, avg, req, lim map[string][]hubapi.Point) bool {
+	type series = map[string][]hubapi.Point
+	qb := recommender.Queries{Cluster: key.Cluster, RateWindow: s.RecCfg.RateWindow, Binding: binding}
+	f := &recommender.Filter{Namespace: key.Namespace}
+	inner := s.RecCfg.Step
+	var usageQ, avgQ string
+	if resource == "cpu" {
+		usageQ, avgQ = qb.CPUUsage("max", f), qb.CPUUsage("avg", f)
+		if step > inner {
+			// Keep peaks between steps: max/avg over the step at the recommender's resolution.
+			usageQ = fmt.Sprintf("max_over_time((%s)[%s:%s])", usageQ, promDur(step), promDur(inner))
+			avgQ = fmt.Sprintf("avg_over_time((%s)[%s:%s])", avgQ, promDur(step), promDur(inner))
+		}
+	} else {
+		win := max(step, inner)
+		usageQ, avgQ = qb.MemoryUsage("max", f, win), qb.MemoryUsage("avg", f, win)
+	}
+
+	match := func(l recommender.Labels) (string, bool) {
+		c := l["container"]
+		return c, l["workload_kind"] == key.Kind && l["workload"] == key.Name && (onlyContainer == "" || c == onlyContainer)
+	}
+	var mu sync.Mutex
+	g, ctx := errgroup.WithContext(r.Context())
+	run := func(query string, dst series, filterResource bool) {
+		g.Go(func() error {
+			res, err := prom.Range(ctx, query, from, to, step)
+			if err != nil {
+				return err
+			}
+			for _, sr := range res {
+				c, ok := match(sr.Labels)
+				if !ok || (filterResource && sr.Labels["resource"] != resource) {
+					continue
+				}
+				pts := make([]hubapi.Point, len(sr.Samples))
+				for i, p := range sr.Samples {
+					pts[i] = hubapi.Point{float64(p.T.Unix()), p.V}
+				}
+				// Init and app containers are separate queries writing the same map; never merge two
+				// series per name.
+				mu.Lock()
+				if len(dst[c]) == 0 {
+					dst[c] = pts
+				}
+				mu.Unlock()
+			}
+			return nil
+		})
+	}
+	run(usageQ, usage, false)
+	run(avgQ, avg, false)
+	for _, init := range []bool{false, true} {
+		run(qb.Resources("requests", init, 0, f), req, true)
+		run(qb.Resources("limits", init, 0, f), lim, true)
+	}
+	if err := g.Wait(); err != nil {
+		s.Log.WarnContext(r.Context(), "usage query", "workload", key.ID(), "err", err)
+		writeProblem(w, r, http.StatusBadGateway, "metrics_unavailable", "Metrics backend query failed: "+err.Error())
+		return false
+	}
+	return true
 }

@@ -1,0 +1,17 @@
+[
+ {
+  "timeframe": {
+   "start": "2026-11-09T09:00:00Z",
+   "end": "2026-11-09T11:00:00Z"
+  },
+  "interval": "3600000000000",
+  "k8s.namespace.name": "shop",
+  "k8s.workload.kind": "deployment",
+  "k8s.workload.name": "web",
+  "k8s.container.name": "app",
+  "vmax": [
+   12.5,
+   7.5
+  ]
+ }
+]

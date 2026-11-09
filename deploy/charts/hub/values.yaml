@@ -338,6 +338,14 @@ notifications:
 # one key per line; the first encrypts, the others still decrypt during a rotation), or let
 # externalSecret build Secret <release>-datasource-key from Secrets Manager (wins over create).
 onboarding:
+  # Tokens of datasources from Secrets you create, instead of pasting them in the UI (nothing is
+  # stored in the database). Each entry mounts key `key` (default token) of `existingSecret` at
+  # /etc/hub/datasource-secrets/<name>/token; a datasource then uses it with
+  # auth.tokenSecret: <name>. A rotated Secret is picked up without a restart. E.g. a Dynatrace
+  # platform token (docs/install/dynatrace.md):
+  #   datasourceSecrets:
+  #     - {name: dynatrace, existingSecret: kerf-dynatrace}
+  datasourceSecrets: []
   secretsKey:
     create: true
     existingSecret: ""

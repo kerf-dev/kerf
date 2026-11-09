@@ -11,6 +11,7 @@ Service endpoints for the pricing service (token role `pricing`).
 | [`POST /v1/internal/datasources/{datasourceId}/api/v1/query`](#proxyInstantQueryPost) | Instant PromQL query against a datasource (form body) |
 | [`GET /v1/internal/datasources/{datasourceId}/api/v1/query_range`](#proxyRangeQuery) | Range PromQL query against a datasource (pricing service) |
 | [`POST /v1/internal/datasources/{datasourceId}/api/v1/query_range`](#proxyRangeQueryPost) | Range PromQL query against a datasource (form body) |
+| [`GET /v1/internal/clusters/{cluster}/nodes`](#getClusterNodeInventory) | Node inventory of a cluster bound to a Dynatrace datasource (pricing service) |
 
 ### Metrics binding of every registered cluster (pricing service) { #listMetricsBindings }
 
@@ -140,4 +141,33 @@ Accepts: bearer token with role `pricing`.
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
 | `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown datasource id. | [Problem](schemas.md#problem) |
+| `502` | The datasource could not be reached. | [Problem](schemas.md#problem) |
+
+### Node inventory of a cluster bound to a Dynatrace datasource (pricing service) { #getClusterNodeInventory }
+
+`GET /v1/internal/clusters/{cluster}/nodes`
+
+Accepts: bearer token with role `pricing`.
+
+The cluster's current nodes with the labels pricing needs and their allocatable capacity,
+read by the hub from the cluster's datasource. Only for clusters bound to a datasource that
+is not queried with PromQL (`dynatrace`, see `ClusterMetricsBinding.datasourceType`):
+`409` with code `not_supported` for the others, which the pricing service queries through
+the query proxy. An `admin` token may call it too.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `cluster` | path | string, required | Cluster name. pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`; example `ro-spoke-1` |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Nodes, ordered by name. | [NodeInventory](schemas.md#nodeinventory) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+| `409` | The change conflicts with the current state (`code` says how). | [Problem](schemas.md#problem) |
 | `502` | The datasource could not be reached. | [Problem](schemas.md#problem) |

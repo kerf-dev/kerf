@@ -106,7 +106,11 @@ func (h *HubTargets) Targets(ctx context.Context) ([]Target, error) {
 		if ds == "" {
 			ds = hubapi.LocalDatasourceID
 		}
-		out = append(out, Target{Cluster: it.Cluster, BaseURL: base + "/v1/internal/datasources/" + url.PathEscape(ds), HTTP: hc, Matcher: m})
+		t := Target{Cluster: it.Cluster, BaseURL: base + "/v1/internal/datasources/" + url.PathEscape(ds), HTTP: hc, Matcher: m}
+		if it.DatasourceType == hubapi.DatasourceDynatrace {
+			t.NodesURL = base + "/v1/internal/clusters/" + url.PathEscape(it.Cluster) + "/nodes"
+		}
+		out = append(out, t)
 	}
 	return out, nil
 }

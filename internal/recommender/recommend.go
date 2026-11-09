@@ -91,6 +91,12 @@ func Recommend(req Request, strategy Strategy, cfg Config) (Result, bool) {
 	return Result{Recommendation: rec, Pricing: req.Pricing}, true
 }
 
+// Explanation notes of a metrics source without CFS period counters or HPA data (Dynatrace).
+const (
+	NoteThrottleDerived = "throttling input: the metrics source's derived throttling ratio (it has no CFS period counters)"
+	NoteHPAUnknown      = "HPA coupling unknown: the metrics source has no HPA data, so an HPA scaling this workload is not detected"
+)
+
 func recommendContainer(c ContainerData, w WorkloadData, req Request, strategy Strategy, cfg Config) (hubapi.ContainerRecommendation, float64) {
 	p, s := req.Profile, req.Settings
 	prop := strategy.Propose(c, p)
@@ -163,6 +169,12 @@ func recommendContainer(c ContainerData, w WorkloadData, req Request, strategy S
 					e.Notes = append(e.Notes, "limit raised to the request")
 				}
 			}
+		}
+		if w.ThrottleDerived {
+			e.Notes = append(e.Notes, NoteThrottleDerived)
+		}
+		if w.HPAUnknown {
+			e.Notes = append(e.Notes, NoteHPAUnknown)
 		}
 		expl.CPU = e
 	}

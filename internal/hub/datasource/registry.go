@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -81,6 +83,9 @@ type Registry struct {
 	Credentials CredentialsFunc
 	// Now is the clock; nil = time.Now.
 	Now func() time.Time
+	// SecretsDir holds the mounted datasource Secrets: <SecretsDir>/<name>/token is the bearer
+	// token of a datasource with auth.tokenSecret <name>. "" = none can be used.
+	SecretsDir string
 
 	mu    sync.Mutex
 	cache map[string]cachedClient
@@ -90,6 +95,57 @@ type cachedClient struct {
 	version int
 	cfg     Config
 	hc      *http.Client
+	// token is the token read from the mounted Secret when the client was built.
+	token string
+}
+
+// secretNameRE is a Kubernetes Secret name (DNS-1123 subdomain): lower-case alphanumerics, '-'
+// and '.', no empty, leading or trailing labels, so never "..", "/" or an absolute path.
+var secretNameRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
+
+// ValidSecretName reports whether name is a valid datasource Secret name (a Kubernetes Secret name,
+// at most 253 characters). Only such names are joined to SecretsDir.
+func ValidSecretName(name string) bool {
+	return len(name) > 0 && len(name) <= 253 && secretNameRE.MatchString(name) && !strings.Contains(name, "..")
+}
+
+// secretNameProblem is the problem of an invalid auth.tokenSecret.
+func secretNameProblem(name string) string {
+	return fmt.Sprintf("auth.tokenSecret %q must be a Kubernetes Secret name (lower-case letters, digits, '-' and '.'; at most 253)", name)
+}
+
+// TokenFile is the file of a mounted datasource Secret's token; "" for an invalid name.
+func (r *Registry) TokenFile(name string) string {
+	if !ValidSecretName(name) {
+		return ""
+	}
+	return filepath.Join(r.SecretsDir, name, "token")
+}
+
+// mountedToken reads the token of a mounted datasource Secret. The name is validated again and
+// the file is opened through an os.Root at SecretsDir, so no name can reach a file outside it.
+func (r *Registry) mountedToken(name string) (string, error) {
+	if !ValidSecretName(name) {
+		return "", &ValidationError{Problems: []string{secretNameProblem(name)}}
+	}
+	if r.SecretsDir == "" {
+		return "", &ValidationError{Problems: []string{fmt.Sprintf("auth.tokenSecret %s: the hub has no datasource Secrets mounted (hub chart onboarding.datasourceSecrets)", name)}}
+	}
+	missing := &ValidationError{Problems: []string{fmt.Sprintf("auth.tokenSecret %s: no token at %s: add it to the hub chart's onboarding.datasourceSecrets (key token)", name, r.TokenFile(name))}}
+	root, err := os.OpenRoot(r.SecretsDir)
+	if err != nil {
+		return "", missing
+	}
+	defer root.Close()
+	b, err := root.ReadFile(name + "/token")
+	if err != nil {
+		return "", missing
+	}
+	tok := strings.TrimSpace(string(b))
+	if tok == "" {
+		return "", &ValidationError{Problems: []string{fmt.Sprintf("auth.tokenSecret %s: the token file is empty", name)}}
+	}
+	return tok, nil
 }
 
 func (r *Registry) now() time.Time {
@@ -105,7 +161,7 @@ var (
 	// headers the hub sets itself
 	reservedHeaders = map[string]bool{"authorization": true, "host": true, "content-length": true, "content-type": true,
 		"x-amz-date": true, "x-amz-security-token": true, "x-amz-content-sha256": true}
-	types     = map[string]bool{hubapi.DatasourcePrometheus: true, hubapi.DatasourceVictoriaMetrics: true, hubapi.DatasourceThanos: true, hubapi.DatasourceMimir: true, hubapi.DatasourceAMP: true}
+	types     = map[string]bool{hubapi.DatasourcePrometheus: true, hubapi.DatasourceVictoriaMetrics: true, hubapi.DatasourceThanos: true, hubapi.DatasourceMimir: true, hubapi.DatasourceAMP: true, hubapi.DatasourceDynatrace: true}
 	authTypes = map[string]bool{hubapi.AuthNone: true, hubapi.AuthBearer: true, hubapi.AuthBasic: true, hubapi.AuthSigV4: true, hubapi.AuthMTLS: true}
 )
 
@@ -119,7 +175,7 @@ func apply(in hubapi.DatasourceInput, prev *Record, prevSecrets Secrets) (Record
 		p = append(p, "name must be a DNS label (lower case letters, digits, '-'; at most 63)")
 	}
 	if !types[r.Type] {
-		p = append(p, "type must be one of prometheus, victoriametrics, thanos, mimir, amp")
+		p = append(p, "type must be one of prometheus, victoriametrics, thanos, mimir, amp, dynatrace")
 	}
 	if u, err := url.Parse(r.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		p = append(p, "url must be an absolute http(s) URL")
@@ -153,7 +209,7 @@ func apply(in hubapi.DatasourceInput, prev *Record, prevSecrets Secrets) (Record
 		auth = &hubapi.DatasourceAuthInput{Type: hubapi.AuthNone}
 		if prev != nil {
 			// auth omitted on update: keep it
-			auth = &hubapi.DatasourceAuthInput{Type: prev.AuthType, Username: prev.Auth.Username, SigV4: prev.Auth.SigV4}
+			auth = &hubapi.DatasourceAuthInput{Type: prev.AuthType, Username: prev.Auth.Username, SigV4: prev.Auth.SigV4, TokenSecret: prev.Auth.TokenSecret}
 			if prev.Auth.CACert != "" || prev.Auth.ClientCert != "" || prev.Auth.InsecureSkipVerify {
 				auth.TLS = &hubapi.DatasourceTLSInput{CACert: prev.Auth.CACert, ClientCert: prev.Auth.ClientCert, InsecureSkipVerify: prev.Auth.InsecureSkipVerify}
 			}
@@ -166,7 +222,26 @@ func apply(in hubapi.DatasourceInput, prev *Record, prevSecrets Secrets) (Record
 	if !authTypes[r.AuthType] {
 		p = append(p, "auth.type must be one of none, bearer, basic, sigv4, mtls")
 	}
-	r.Auth = AuthConfig{Username: auth.Username, SigV4: auth.SigV4}
+	r.Auth = AuthConfig{Username: auth.Username, SigV4: auth.SigV4, TokenSecret: strings.TrimSpace(auth.TokenSecret)}
+	if r.Auth.TokenSecret != "" && !ValidSecretName(r.Auth.TokenSecret) {
+		p = append(p, secretNameProblem(r.Auth.TokenSecret))
+	}
+	if r.Type == hubapi.DatasourceDynatrace {
+		if r.AuthType != hubapi.AuthBearer {
+			p = append(p, "a dynatrace datasource needs auth.type bearer with a platform token (auth.token or auth.tokenSecret)")
+		}
+		if d := in.Dynatrace; d != nil && strings.TrimSpace(d.ActiveGateURL) != "" {
+			ag := strings.TrimSpace(d.ActiveGateURL)
+			if u, err := url.Parse(ag); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
+				p = append(p, "dynatrace.activeGateURL must be an absolute http(s) URL without credentials")
+			}
+			r.Auth.Dynatrace = &hubapi.DynatraceSettings{ActiveGateURL: strings.TrimRight(ag, "/")}
+		} else if d == nil && prev != nil && prev.Type == hubapi.DatasourceDynatrace {
+			r.Auth.Dynatrace = prev.Auth.Dynatrace // omitted on update: keep it
+		}
+	} else if in.Dynatrace != nil && in.Dynatrace.ActiveGateURL != "" {
+		p = append(p, "dynatrace settings are only for a dynatrace datasource")
+	}
 	if auth.TLS != nil {
 		r.Auth.CACert, r.Auth.ClientCert, r.Auth.InsecureSkipVerify = auth.TLS.CACert, auth.TLS.ClientCert, auth.TLS.InsecureSkipVerify
 	}
@@ -189,8 +264,13 @@ func apply(in hubapi.DatasourceInput, prev *Record, prevSecrets Secrets) (Record
 	switch r.AuthType {
 	case hubapi.AuthBearer:
 		sec = Secrets{Token: sec.Token}
-		if sec.Token == "" {
-			p = append(p, "auth.token is required for bearer auth")
+		switch {
+		case r.Auth.TokenSecret != "" && auth.Token != "":
+			p = append(p, "set auth.token or auth.tokenSecret, not both")
+		case r.Auth.TokenSecret != "":
+			sec = Secrets{} // the token is read from the mounted Secret
+		case sec.Token == "":
+			p = append(p, "auth.token (or auth.tokenSecret) is required for bearer auth")
 		}
 	case hubapi.AuthBasic:
 		sec = Secrets{Password: sec.Password}
@@ -223,6 +303,9 @@ func apply(in hubapi.DatasourceInput, prev *Record, prevSecrets Secrets) (Record
 	if r.AuthType != hubapi.AuthMTLS {
 		r.Auth.ClientCert = ""
 	}
+	if r.AuthType != hubapi.AuthBearer {
+		r.Auth.TokenSecret = ""
+	}
 	if len(p) > 0 {
 		return Record{}, Secrets{}, &ValidationError{Problems: p}
 	}
@@ -239,11 +322,12 @@ func ToAPI(r Record, usedBy []string) hubapi.Datasource {
 	d := hubapi.Datasource{
 		ID: r.ID, Name: r.Name, Type: r.Type, URL: r.URL, BuiltIn: r.BuiltIn,
 		Auth: hubapi.DatasourceAuthInfo{
-			Type: r.AuthType, Username: r.Auth.Username, SigV4: r.Auth.SigV4,
+			Type: r.AuthType, Username: r.Auth.Username, SigV4: r.Auth.SigV4, TokenSecret: r.Auth.TokenSecret,
 			SecretConfigured: len(r.Secret) > 0, CAConfigured: r.Auth.CACert != "",
 			ClientCertConfigured: r.Auth.ClientCert != "", InsecureSkipVerify: r.Auth.InsecureSkipVerify,
 		},
-		Headers: r.Headers, Timeout: r.Timeout, MaxPoints: r.MaxPoints, UsedBy: usedBy, Version: r.Version,
+		Dynatrace: r.Auth.Dynatrace,
+		Headers:   r.Headers, Timeout: r.Timeout, MaxPoints: r.MaxPoints, UsedBy: usedBy, Version: r.Version,
 		CreatedBy: r.CreatedBy, UpdatedBy: r.UpdatedBy,
 	}
 	if d.Headers == nil {
@@ -307,6 +391,11 @@ func (r *Registry) Create(ctx context.Context, in hubapi.DatasourceInput, actor 
 	if err != nil {
 		return hubapi.Datasource{}, err
 	}
+	if rec.Auth.TokenSecret != "" {
+		if _, err := r.mountedToken(rec.Auth.TokenSecret); err != nil {
+			return hubapi.Datasource{}, err
+		}
+	}
 	rec.ID = uuid.NewString()
 	rec.Secret, err = r.seal(rec.ID, sec)
 	if err != nil {
@@ -340,6 +429,11 @@ func (r *Registry) Update(ctx context.Context, id string, ifMatch int, in hubapi
 	rec, sec, err := apply(in, &prev, prevSec)
 	if err != nil {
 		return before, after, err
+	}
+	if rec.Auth.TokenSecret != "" {
+		if _, err := r.mountedToken(rec.Auth.TokenSecret); err != nil {
+			return before, after, err
+		}
 	}
 	rec.ID, rec.Version, rec.CreatedAt, rec.CreatedBy = id, prev.Version+1, prev.CreatedAt, prev.CreatedBy
 	rec.UpdatedAt, rec.UpdatedBy = r.now(), &actor
@@ -397,6 +491,11 @@ func (r *Registry) config(rec Record) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	if rec.Auth.TokenSecret != "" {
+		if sec.Token, err = r.mountedToken(rec.Auth.TokenSecret); err != nil {
+			return Config{}, err
+		}
+	}
 	cfg := Config{ID: rec.ID, Name: rec.Name, Type: rec.Type, URL: strings.TrimRight(rec.URL, "/"), AuthType: rec.AuthType,
 		Auth: rec.Auth, Secrets: sec, Headers: rec.Headers, MaxPoints: rec.MaxPoints}
 	if rec.Timeout != "" {
@@ -418,7 +517,16 @@ func (r *Registry) Client(ctx context.Context, id string) (Config, *http.Client,
 	c, ok := r.cache[id]
 	r.mu.Unlock()
 	if ok && c.version == rec.Version && c.cfg.URL == strings.TrimRight(rec.URL, "/") {
-		return c.cfg, c.hc, nil
+		// a rotated mounted Secret rebuilds the client
+		tok := ""
+		if rec.Auth.TokenSecret != "" {
+			if tok, err = r.mountedToken(rec.Auth.TokenSecret); err != nil {
+				return Config{}, nil, err
+			}
+		}
+		if tok == c.token {
+			return c.cfg, c.hc, nil
+		}
 	}
 	cfg, err := r.config(rec)
 	if err != nil {
@@ -432,7 +540,11 @@ func (r *Registry) Client(ctx context.Context, id string) (Config, *http.Client,
 	if r.cache == nil {
 		r.cache = map[string]cachedClient{}
 	}
-	r.cache[id] = cachedClient{version: rec.Version, cfg: cfg, hc: hc}
+	cc := cachedClient{version: rec.Version, cfg: cfg, hc: hc}
+	if rec.Auth.TokenSecret != "" {
+		cc.token = cfg.Secrets.Token
+	}
+	r.cache[id] = cc
 	r.mu.Unlock()
 	return cfg, hc, nil
 }

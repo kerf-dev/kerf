@@ -414,6 +414,10 @@ export interface CheckResult {
   status: ReadinessStatus
   message: string
   details?: Record<string, string>
+  /** replaces the catalog remediation of this check (datasource-specific wording) */
+  remediation?: { remediation: string; remediationType: 'command' | 'yaml' | 'text' }
+  /** the check has no remediation at all (not even the catalog one) */
+  noRemediation?: boolean
 }
 
 export interface ReadinessModel {
@@ -670,7 +674,8 @@ export function buildReadiness(
 export function toChecks(m: ReadinessModel): ReadinessCheck[] {
   return CATALOG.map((c) => {
     const r = m.results[c.id] ?? { status: 'unknown' as const, message: 'No result yet.' }
-    const rem = r.status === 'pass' ? undefined : remediationFor(c.id, m.cluster)
+    const rem =
+      r.status === 'pass' || r.noRemediation ? undefined : (r.remediation ?? remediationFor(c.id, m.cluster))
     const check: ReadinessCheck = {
       id: c.id,
       category: c.category,
@@ -891,15 +896,192 @@ export function installSnippet(
   }
 }
 
+/** The environment a mock Dynatrace datasource reads. */
+export const DYNATRACE_ENV_URL = 'https://abc12345.apps.dynatrace.com'
+
+const TEXT = (remediation: string) => ({ remediation, remediationType: 'text' as const })
+
+/**
+ * Hub-side checks of a cluster bound to a Dynatrace datasource: Dynatrace wording and
+ * remediation, no Prometheus, kube-state-metrics or scrape-config steps.
+ */
+export function dynatraceResults(cluster: string): Record<string, CheckResult> {
+  return {
+    'datasource.reachable': PASS('Dynatrace query API answered in 63 ms', { httpStatus: '200' }),
+    'metrics.cluster-label': PASS(`3899 container series match k8s.cluster.name="${cluster}"`),
+    'metrics.cadvisor': PASS(
+      '1912 dt.kubernetes.container.cpu_usage and 1987 dt.kubernetes.container.memory_working_set series',
+    ),
+    'metrics.ksm-owners': PASS(
+      'Dynatrace resolves the workload (k8s.workload.kind, k8s.workload.name) of 412 pods',
+    ),
+    'metrics.ksm-resources': PASS('3974 request and 3680 limit series'),
+    'metrics.freshness': PASS('last sample 42s ago'),
+    'metrics.owner-join': PASS('99.1 % of pods resolve to a workload'),
+    'metrics.scrape-interval': PASS('one point about every 60 s (Dynatrace resolution)'),
+    'metrics.history': PASS('history covers the 28d profile window'),
+    'metrics.throttling': PASS(
+      'derived throttling ratio (dt.containers.cpu.throttling_ratio) for 412 containers: Dynatrace has no CFS period counters, so recommendations mark throttling as derived',
+    ),
+    'metrics.restarts-oom': PASS(
+      '38 restart and 0 OOM-kill series in the last day (series exist only while containers restart or are OOM-killed)',
+    ),
+    'metrics.hpa': {
+      status: 'unknown',
+      message:
+        'HPA coupling not available: Dynatrace records no HorizontalPodAutoscaler metrics, so Kerf cannot tell which workloads an HPA scales',
+      remediation: TEXT(
+        'Review the recommendations of HPA-scaled workloads before you automate them, or exclude those workloads with a policy. Kerf does not guess HPA coupling for a Dynatrace datasource.',
+      ),
+    },
+    'metrics.node-labels': {
+      status: 'warn',
+      message: 'node labels lack capacity type on 2 of 24 nodes: pricing falls back to default rates',
+      details: { nodes: '24', capacitytypeMissing: '2' },
+      remediation: TEXT(
+        'Dynatrace reads node labels from Kubernetes: set the missing labels on the nodes. EKS sets node.kubernetes.io/instance-type and the topology.kubernetes.io labels; Karpenter sets karpenter.sh/capacity-type and managed node groups eks.amazonaws.com/capacityType.',
+      ),
+    },
+    'metrics.node-allocatable': PASS('allocatable for 24 nodes', { nodes: '24' }),
+    'metrics.dcgm': {
+      status: 'unknown',
+      message: 'GPU metrics are not read from a Dynatrace datasource',
+      noRemediation: true,
+    },
+    'pricing.coverage': {
+      status: 'warn',
+      message: '22 of 24 nodes priced: the others use the default rates',
+      details: { priced: '22', nodes: '24' },
+      remediation: TEXT(
+        'See kerf_pricing_nodes{status="skipped"} and the pricing service log for the skip reason (usually missing node labels, see metrics.node-labels).',
+      ),
+    },
+    'metrics.recommendations': PASS('recommendations for 410 of 412 workloads'),
+  }
+}
+
+type MetricStatus = S['DatasourceMetricStatus']
+
+type MappingRow = {
+  input: string
+  source?: string
+  usedFor: string
+  note?: string
+  series?: number
+}
+
+/** The mapping table of the Dynatrace datasource, in the order of the hub's Test result. */
+const DYNATRACE_INPUTS: MappingRow[] = [
+  {
+    input: 'container_cpu_usage_seconds_total',
+    source: 'dt.kubernetes.container.cpu_usage',
+    usedFor: 'CPU usage',
+    note: 'a gauge (no rate needed); converted from the unit the API reports (millicores) to cores',
+    series: 1912,
+  },
+  {
+    input: 'container_memory_working_set_bytes',
+    source: 'dt.kubernetes.container.memory_working_set',
+    usedFor: 'memory usage and running pods',
+    series: 1987,
+  },
+  {
+    input: 'kube_pod_container_resource_requests',
+    source: 'dt.kubernetes.container.requests_cpu, dt.kubernetes.container.requests_memory',
+    usedFor: 'current requests and savings',
+    series: 3974,
+  },
+  {
+    input: 'kube_pod_container_resource_limits',
+    source: 'dt.kubernetes.container.limits_cpu, dt.kubernetes.container.limits_memory',
+    usedFor: 'current limits',
+    note: 'no series when no container sets a limit',
+    series: 3680,
+  },
+  {
+    input: 'kube_pod_owner, kube_replicaset_owner, kube_job_owner',
+    source: 'k8s.workload.kind, k8s.workload.name dimensions',
+    usedFor: 'the workload of each container',
+    note: 'Dynatrace resolves the workload itself (deployment, statefulset, daemonset, cronjob)',
+    series: 412,
+  },
+  {
+    input: 'container_cpu_cfs_throttled_periods_total, container_cpu_cfs_periods_total',
+    source: 'dt.containers.cpu.throttling_ratio',
+    usedFor: 'throttling guardrail',
+    note: 'a derived ratio: Dynatrace has no CFS period counters; recommendations say so',
+    series: 1840,
+  },
+  {
+    input: 'kube_pod_container_status_restarts_total',
+    source: 'dt.kubernetes.container.restarts',
+    usedFor: 'restart guardrail',
+    series: 38,
+  },
+  {
+    input: 'container_oom_events_total',
+    source: 'dt.kubernetes.container.oom_kills',
+    usedFor: 'OOM guardrail',
+    note: 'may have no series while no container was OOM-killed',
+    series: 0,
+  },
+  {
+    input: 'kube_node_labels',
+    source: 'smartscapeNodes K8S_NODE labels',
+    usedFor: 'node pricing (instance type, capacity type, zone, region)',
+    note: 'read from Smartscape, not a metric; karpenter.sh/capacity-type and eks.amazonaws.com/capacityType are both read',
+    series: 24,
+  },
+  {
+    input: 'kube_node_status_allocatable',
+    source: 'dt.kubernetes.node.cpu_allocatable, dt.kubernetes.node.memory_allocatable',
+    usedFor: 'cost split per vCPU and GiB',
+    series: 48,
+  },
+  {
+    input: 'kube_horizontalpodautoscaler_*',
+    usedFor: 'HPA coupling',
+    note: 'Dynatrace has no HPA metrics: HPA coupling is not detected',
+  },
+  {
+    input: 'kube_pod_init_container_*',
+    usedFor: 'init and native sidecar containers',
+    note: 'init containers are not told apart from app containers',
+  },
+  {
+    input: 'kube_pod_container_info',
+    usedFor: 'container images (JVM heap detection)',
+    note: 'images are not read: JVM heap flags are not detected',
+  },
+  { input: 'DCGM_FI_DEV_*', usedFor: 'GPU usage', note: 'GPU metrics are not read from Dynatrace' },
+]
+
+/** The Kerf inputs of a Dynatrace datasource, the source they are read from and what was found. */
+export function dynatraceMetrics(found: boolean): MetricStatus[] {
+  return DYNATRACE_INPUTS.map((r): MetricStatus => {
+    const base = { input: r.input, usedFor: r.usedFor, ...(r.note ? { note: r.note } : {}) }
+    if (!r.source) return { ...base, status: 'notAvailable' }
+    const ok = found && r.series !== 0
+    return {
+      ...base,
+      sourceMetric: r.source,
+      status: ok ? 'found' : 'missing',
+      series: ok ? r.series : 0,
+    }
+  })
+}
+
 /** Metrics checks the hub runs from `POST /v1/admin/datasources/{id}/test`. */
 export function metricsCheckResults(
   cluster: string,
   binding: MetricsBinding | undefined,
   knownValues: string[],
   now: number,
+  dynatrace = false,
 ): {
   ok: boolean
   found?: { containerSeries: number; pods: number; nodes: number }
+  metrics?: MetricStatus[]
   checks: ReadinessCheck[]
 } {
   const m: ReadinessModel = {
@@ -931,12 +1113,16 @@ export function metricsCheckResults(
           : { status: 'unknown', message: 'Not checked: the cluster label matches no series.' }
     else m.results[id] = healthy(id, Math.round(pods / 3))
   }
-  if (matches && binding && h % 2 === 0)
+  if (dynatrace && matches) {
+    const dt = dynatraceResults(value || cluster)
+    for (const id of ids) if (dt[id] && id !== 'pricing.coverage') m.results[id] = dt[id]
+  }
+  if (!dynatrace && matches && binding && h % 2 === 0)
     m.results['metrics.node-labels'] = {
       status: 'warn',
       message: 'kube_node_labels has no label_node_kubernetes_io_instance_type',
     }
-  if (matches && binding)
+  if (!dynatrace && matches && binding)
     m.results['metrics.history'] = {
       status: 'warn',
       message: 'History 6 d of 14 d (production window).',
@@ -945,7 +1131,10 @@ export function metricsCheckResults(
   const checks = toChecks(m).filter((c) => ids.includes(c.id))
   return {
     ok: checks.every((c) => c.severity !== 'blocking' || c.status === 'pass'),
-    ...(binding ? { found: { containerSeries: pods * 6, pods, nodes: matches ? 3 + (h % 21) : 0 } } : {}),
+    ...(dynatrace ? { metrics: dynatraceMetrics(matches) } : {}),
+    ...(binding && !dynatrace
+      ? { found: { containerSeries: pods * 6, pods, nodes: matches ? 3 + (h % 21) : 0 } }
+      : {}),
     checks,
   }
 }

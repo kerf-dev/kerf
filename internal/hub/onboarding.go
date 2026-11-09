@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 
 	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
 	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/datasource/dynatrace"
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 	"github.com/kerf-dev/kerf/internal/hub/install"
 	"github.com/kerf-dev/kerf/internal/hub/readiness"
@@ -29,7 +31,7 @@ type Onboarding struct {
 // datasource secrets possible). It upserts datasource local from prometheusURL.
 func (s *Server) InitOnboarding(ctx context.Context, cipher *datasource.Cipher) error {
 	pg := &datasource.PG{DB: s.Store.Pool}
-	reg := &datasource.Registry{Repo: pg, Cipher: cipher, Now: s.Now}
+	reg := &datasource.Registry{Repo: pg, Cipher: cipher, Now: s.Now, SecretsDir: s.Cfg.Onboarding.DatasourceSecretsDir}
 	if err := reg.EnsureLocal(ctx, s.Cfg.PrometheusURL); err != nil {
 		return err
 	}
@@ -344,6 +346,8 @@ func (s *Server) dsError(w http.ResponseWriter, r *http.Request, err error) {
 		writeProblem(w, r, http.StatusPreconditionFailed, hubapi.CodeVersionConflict, "The datasource was changed by someone else; reload it.")
 	case errors.Is(err, datasource.ErrInUse):
 		writeProblem(w, r, http.StatusConflict, hubapi.CodeDatasourceInUse, "The datasource is "+err.Error()+".")
+	case errors.Is(err, ErrNotPromQL):
+		writeProblem(w, r, http.StatusConflict, hubapi.CodeNotSupported, "The datasource is a dynatrace datasource: it is read with DQL, not PromQL.")
 	case errors.Is(err, datasource.ErrBuiltin):
 		writeProblem(w, r, http.StatusConflict, hubapi.CodeBuiltin, "The built-in datasource local is configured by the hub (prometheusURL).")
 	default:
@@ -481,9 +485,13 @@ func (s *Server) testDatasource(w http.ResponseWriter, r *http.Request) {
 	}
 	now := s.now()
 	if in.Binding == nil {
-		_, api, err := s.Onb.Bind.Datasource(r.Context(), id)
+		q, api, err := s.Onb.Bind.Datasource(r.Context(), id)
 		if err != nil {
 			s.dsError(w, r, err)
+			return
+		}
+		if src, ok := q.(*dynatrace.Source); ok {
+			writeJSON(w, s.testDynatrace(r.Context(), src, now))
 			return
 		}
 		p := api.Probe(r.Context())
@@ -518,12 +526,36 @@ func (s *Server) testDatasource(w http.ResponseWriter, r *http.Request) {
 	mc := &readiness.MetricsChecker{Q: res.Q, API: res.API, M: res.Matcher, Jobs: b.JobNames, Local: s.Prom,
 		HistoryWindow: s.historyWindow(), DocsBase: s.docsBase(), Preview: true, Now: s.now}
 	rep := mc.Run(r.Context())
-	out := hubapi.DatasourceTestResult{OK: rep.OK(), LatencyMs: int(rep.Latency.Milliseconds()), LabelValues: rep.LabelValues, Checks: rep.Checks}
+	out := hubapi.DatasourceTestResult{OK: rep.OK(), LatencyMs: int(rep.Latency.Milliseconds()), LabelValues: rep.LabelValues, Metrics: rep.Metrics, Checks: rep.Checks}
 	if rep.Found != (hubapi.DatasourceTestFound{}) {
 		found := rep.Found
 		out.Found = &found // absent = nothing found
 	}
 	writeJSON(w, out)
+}
+
+// testDynatrace is the Test of a dynatrace datasource without a binding: reachability and the
+// metric mapping over the whole environment, with the cluster names it has.
+func (s *Server) testDynatrace(ctx context.Context, src *dynatrace.Source, now time.Time) hubapi.DatasourceTestResult {
+	lat, err := src.Probe(ctx)
+	d := map[string]string{"latencyMs": strconv.FormatInt(lat.Milliseconds(), 10)}
+	out := hubapi.DatasourceTestResult{LatencyMs: int(lat.Milliseconds())}
+	if err != nil {
+		d["error"] = err.Error()
+		out.Checks = []hubapi.ReadinessCheck{readiness.NewCheck(rd.CheckDatasourceReachable, rd.StatusFail, err.Error(), dynatrace.Hint(err), hubapi.RemediationText, s.docsBase(), now, d)}
+		return out
+	}
+	out.OK = true
+	out.Checks = []hubapi.ReadinessCheck{readiness.NewCheck(rd.CheckDatasourceReachable, rd.StatusPass,
+		fmt.Sprintf("Dynatrace query API answered in %d ms", lat.Milliseconds()), "", "", s.docsBase(), now, d)}
+	if counts, err := src.Count(ctx, "", now); err == nil {
+		out.Metrics = counts.Statuses()
+	}
+	out.LabelValues, _ = src.ClusterNames(ctx, now)
+	if len(out.LabelValues) > 50 {
+		out.LabelValues = out.LabelValues[:50]
+	}
+	return out
 }
 
 // ---- readiness ----

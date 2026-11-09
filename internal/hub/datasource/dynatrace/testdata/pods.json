@@ -1,0 +1,34 @@
+[
+ {
+  "timeframe": {
+   "start": "2026-11-09T11:00:00.000000000Z",
+   "end": "2026-11-09T11:20:00.000000000Z"
+  },
+  "interval": "300000000000",
+  "k8s.namespace.name": "shop",
+  "k8s.workload.kind": "deployment",
+  "k8s.workload.name": "web",
+  "pods": [
+   "2",
+   "2",
+   null,
+   "2"
+  ]
+ },
+ {
+  "timeframe": {
+   "start": "2026-11-09T11:00:00.000000000Z",
+   "end": "2026-11-09T11:20:00.000000000Z"
+  },
+  "interval": "300000000000",
+  "k8s.namespace.name": "shop",
+  "k8s.workload.kind": "statefulset",
+  "k8s.workload.name": "db",
+  "pods": [
+   1,
+   1,
+   1,
+   1
+  ]
+ }
+]

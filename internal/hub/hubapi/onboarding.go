@@ -20,6 +20,8 @@ const (
 	DatasourceThanos          = "thanos"
 	DatasourceMimir           = "mimir"
 	DatasourceAMP             = "amp"
+	// DatasourceDynatrace reads Kubernetes metrics from a Dynatrace environment with DQL, not PromQL.
+	DatasourceDynatrace = "dynatrace"
 
 	AuthNone   = "none"
 	AuthBearer = "bearer"
@@ -43,6 +45,7 @@ const (
 	CodeClusterNotAutomationReady = "cluster_not_automation_ready"
 	CodeDatasourceInUse           = "datasource_in_use"
 	CodeBuiltin                   = "builtin"
+	CodeNotSupported              = "not_supported"
 )
 
 // Config actions and target types of onboarding (ConfigAction, ConfigTargetType).
@@ -73,12 +76,14 @@ type DatasourceTLSInput struct {
 
 // DatasourceAuthInput is auth as written; Token, Password and TLS.ClientKey are write-only.
 type DatasourceAuthInput struct {
-	Type     string              `json:"type"`
-	Token    string              `json:"token,omitempty"`
-	Username string              `json:"username,omitempty"`
-	Password string              `json:"password,omitempty"`
-	SigV4    *DatasourceSigV4    `json:"sigv4,omitempty"`
-	TLS      *DatasourceTLSInput `json:"tls,omitempty"`
+	Type  string `json:"type"`
+	Token string `json:"token,omitempty"`
+	// TokenSecret names a datasource Secret mounted into the hub that holds the bearer token.
+	TokenSecret string              `json:"tokenSecret,omitempty"`
+	Username    string              `json:"username,omitempty"`
+	Password    string              `json:"password,omitempty"`
+	SigV4       *DatasourceSigV4    `json:"sigv4,omitempty"`
+	TLS         *DatasourceTLSInput `json:"tls,omitempty"`
 }
 
 // DatasourceAuthInfo is the stored auth without secrets.
@@ -86,6 +91,7 @@ type DatasourceAuthInfo struct {
 	Type                 string           `json:"type"`
 	Username             string           `json:"username,omitempty"`
 	SigV4                *DatasourceSigV4 `json:"sigv4,omitempty"`
+	TokenSecret          string           `json:"tokenSecret,omitempty"`
 	SecretConfigured     bool             `json:"secretConfigured"`
 	CAConfigured         bool             `json:"caConfigured,omitempty"`
 	ClientCertConfigured bool             `json:"clientCertConfigured,omitempty"`
@@ -98,6 +104,7 @@ type DatasourceInput struct {
 	Type         string               `json:"type"`
 	URL          string               `json:"url"`
 	Auth         *DatasourceAuthInput `json:"auth,omitempty"`
+	Dynatrace    *DynatraceSettings   `json:"dynatrace,omitempty"`
 	ClearSecrets bool                 `json:"clearSecrets,omitempty"`
 	Headers      map[string]string    `json:"headers,omitempty"`
 	Timeout      string               `json:"timeout,omitempty"`
@@ -113,6 +120,7 @@ type Datasource struct {
 	URL       string             `json:"url"`
 	BuiltIn   bool               `json:"builtIn"`
 	Auth      DatasourceAuthInfo `json:"auth"`
+	Dynatrace *DynatraceSettings `json:"dynatrace,omitempty"`
 	Headers   map[string]string  `json:"headers"`
 	Timeout   string             `json:"timeout,omitempty"`
 	MaxPoints int                `json:"maxPoints,omitempty"`
@@ -122,6 +130,12 @@ type Datasource struct {
 	CreatedBy *Actor             `json:"createdBy,omitempty"`
 	UpdatedAt *time.Time         `json:"updatedAt,omitempty"`
 	UpdatedBy *Actor             `json:"updatedBy,omitempty"`
+}
+
+// DynatraceSettings are the settings of a dynatrace datasource (schema DatasourceDynatrace).
+type DynatraceSettings struct {
+	// ActiveGateURL, when set, receives the queries instead of the environment URL.
+	ActiveGateURL string `json:"activeGateURL,omitempty"`
 }
 
 // DatasourceList is the response of GET /v1/admin/datasources.
@@ -167,7 +181,26 @@ type DatasourceTestResult struct {
 	LatencyMs   int                  `json:"latencyMs,omitempty"`
 	Found       *DatasourceTestFound `json:"found,omitempty"`
 	LabelValues []string             `json:"labelValues,omitempty"`
-	Checks      []ReadinessCheck     `json:"checks"`
+	// Metrics maps Kerf's inputs to the datasource's own metrics (dynatrace).
+	Metrics []DatasourceMetricStatus `json:"metrics,omitempty"`
+	Checks  []ReadinessCheck         `json:"checks"`
+}
+
+// Metric statuses (DatasourceMetricStatus.status).
+const (
+	MetricFound        = "found"
+	MetricMissing      = "missing"
+	MetricNotAvailable = "notAvailable"
+)
+
+// DatasourceMetricStatus says whether one Kerf input was found in the datasource.
+type DatasourceMetricStatus struct {
+	Input        string `json:"input"`
+	SourceMetric string `json:"sourceMetric,omitempty"`
+	UsedFor      string `json:"usedFor,omitempty"`
+	Status       string `json:"status"`
+	Series       int    `json:"series,omitempty"`
+	Note         string `json:"note,omitempty"`
 }
 
 // Remediation types (ReadinessCheck.remediationType).
@@ -271,6 +304,25 @@ type ClusterMetricsBinding struct {
 	Cluster string         `json:"cluster"`
 	Binding MetricsBinding `json:"binding"`
 	Bound   bool           `json:"bound"`
+	// DatasourceType is the bound datasource's type (dynatrace clusters are read through the
+	// node inventory endpoint, not the query proxy).
+	DatasourceType string `json:"datasourceType,omitempty"`
+}
+
+// NodeInventoryItem is one node of GET /v1/internal/clusters/{cluster}/nodes.
+type NodeInventoryItem struct {
+	Node                   string  `json:"node"`
+	InstanceType           string  `json:"instanceType,omitempty"`
+	CapacityType           string  `json:"capacityType,omitempty"`
+	Zone                   string  `json:"zone,omitempty"`
+	Region                 string  `json:"region,omitempty"`
+	AllocatableCores       float64 `json:"allocatableCores,omitempty"`
+	AllocatableMemoryBytes float64 `json:"allocatableMemoryBytes,omitempty"`
+}
+
+// NodeInventory is the response of GET /v1/internal/clusters/{cluster}/nodes.
+type NodeInventory struct {
+	Items []NodeInventoryItem `json:"items"`
 }
 
 // MetricsBindingList is the response of GET /v1/internal/metrics-bindings.

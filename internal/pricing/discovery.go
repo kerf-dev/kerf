@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 )
 
 // Node is a node discovered from kube-state-metrics series in VictoriaMetrics.
@@ -58,6 +59,9 @@ type Target struct {
 	BaseURL string
 	HTTP    *http.Client
 	Matcher datasource.Matcher
+	// NodesURL, when set, is the hub's node inventory of the cluster (a datasource that is not
+	// queried with PromQL, e.g. Dynatrace); BaseURL is then not used.
+	NodesURL string
 }
 
 // TargetLister lists the bound clusters.
@@ -155,7 +159,13 @@ func (d *Discovery) Nodes(ctx context.Context) ([]Node, error) {
 				}
 			}
 			found := map[nodeID]*Node{}
-			if err := d.discover(ctx, t.BaseURL, t.HTTP, t.Matcher.Selectors(), t.Matcher.Relabel, found); err != nil {
+			read := func() error {
+				if t.NodesURL != "" {
+					return d.inventory(ctx, t, found)
+				}
+				return d.discover(ctx, t.BaseURL, t.HTTP, t.Matcher.Selectors(), t.Matcher.Relabel, found)
+			}
+			if err := read(); err != nil {
 				d.log().WarnContext(ctx, "node discovery failed for a bound cluster", "cluster", t.Cluster, "err", err)
 				continue
 			}
@@ -255,6 +265,50 @@ func (d *Discovery) discover(ctx context.Context, base string, hc *http.Client, 
 		case "memory":
 			n.AllocatableGiB = r.Value / gib
 		}
+	}
+	return nil
+}
+
+// inventory reads a cluster's nodes from the hub's node inventory (GET
+// /v1/internal/clusters/{cluster}/nodes).
+func (d *Discovery) inventory(ctx context.Context, t Target, nodes map[nodeID]*Node) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.NodesURL, nil)
+	if err != nil {
+		return err
+	}
+	hc := t.HTTP
+	if hc == nil {
+		hc = d.HTTP
+	}
+	res, err := hc.Do(req)
+	if err != nil {
+		return fmt.Errorf("node inventory: %w", err)
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(res.Body, 64<<20))
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("node inventory: HTTP %d: %s", res.StatusCode, truncate(string(body), 300))
+	}
+	var inv hubapi.NodeInventory
+	if err := json.Unmarshal(body, &inv); err != nil {
+		return fmt.Errorf("node inventory: %w", err)
+	}
+	for _, it := range inv.Items {
+		n := &Node{Cluster: t.Cluster, Name: it.Node, InstanceType: it.InstanceType, Region: it.Region, Zone: it.Zone,
+			AllocatableCores: it.AllocatableCores, AllocatableGiB: it.AllocatableMemoryBytes / gib}
+		if c, err := ParseCapacityType(it.CapacityType); err == nil {
+			n.CapacityType = c
+		}
+		if n.Region == "" && len(n.Zone) > 1 {
+			n.Region = strings.TrimRight(n.Zone, "abcdefghijklmnopqrstuvwxyz")
+		}
+		if n.Region == "" {
+			n.Region = d.DefaultRegion
+		}
+		nodes[nodeID{n.Cluster, n.Name}] = n
 	}
 	return nil
 }
