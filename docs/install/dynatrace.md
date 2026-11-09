@@ -1,5 +1,9 @@
 # Use Dynatrace as the metrics source
 
+> **Preview.** The native `dynatrace` datasource is new in 0.2.0 and has not yet been run against many Dynatrace
+> environments. The dual-write path is the proven one. If the native datasource misreads your data, please
+> [open an issue on GitHub](https://github.com/kerf-dev/kerf/issues) with the Test result.
+
 Kerf recommends requests and limits from each container's CPU and memory usage, its current requests and limits,
 the workload that owns it, and node labels for prices. With Prometheus these come from cAdvisor and
 kube-state-metrics. If your clusters are monitored by Dynatrace, you have two ways to give Kerf the same data:

@@ -12,9 +12,11 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-09
+
 ### Added
 
-- **Dynatrace as a metrics source** ([#66](https://github.com/kerf-dev/kerf/issues/66)). A new datasource type
+- **Dynatrace datasource (preview)** ([#66](https://github.com/kerf-dev/kerf/issues/66)). A new datasource type
   `dynatrace` reads a cluster's Kubernetes metrics from a Dynatrace environment with DQL: container CPU and memory,
   requests and limits, the workload of each container, restarts and OOM kills, node allocatable and the Smartscape
   node labels (both capacity-type labels). The recommender, the readiness checks, pricing, the usage charts and
