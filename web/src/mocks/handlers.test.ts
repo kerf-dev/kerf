@@ -168,7 +168,7 @@ describe('mock responses match hub.yaml', () => {
       api.GET('/v1/savings/trend', { params: { query: { groupBy: 'cluster', from, to } } }),
     )
     expectValid('SavingsTrend', byCluster)
-    expect(byCluster.series.length).toBe(3)
+    expect(byCluster.series.length).toBe(4)
   })
   it('GET /v1/savings/realized (fleet, by month and by day) adds up', async () => {
     const db = getDb()

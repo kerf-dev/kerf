@@ -1390,6 +1390,33 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/internal/clusters/{cluster}/nodes': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /**
+     * Node inventory of a cluster bound to a Dynatrace datasource (pricing service)
+     * @description The cluster's current nodes with the labels pricing needs and their allocatable capacity,
+     *     read by the hub from the cluster's datasource. Only for clusters bound to a datasource that
+     *     is not queried with PromQL (`dynatrace`, see `ClusterMetricsBinding.datasourceType`):
+     *     `409` with code `not_supported` for the others, which the pricing service queries through
+     *     the query proxy. An `admin` token may call it too.
+     */
+    get: operations['getClusterNodeInventory']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/clusters/{cluster}/readiness': {
     parameters: {
       query?: never
@@ -3689,8 +3716,12 @@ export interface components {
       items: components['schemas']['ConfigChange'][]
       continue?: string
     }
-    /** @enum {string} */
-    DatasourceType: 'prometheus' | 'victoriametrics' | 'thanos' | 'mimir' | 'amp'
+    /**
+     * @description `dynatrace` reads Kubernetes metrics from a Dynatrace environment with DQL (Grail) instead
+     *     of PromQL; see docs/install/dynatrace.md for the metric mapping and its limits.
+     * @enum {string}
+     */
+    DatasourceType: 'prometheus' | 'victoriametrics' | 'thanos' | 'mimir' | 'amp' | 'dynatrace'
     /** @enum {string} */
     DatasourceAuthType: 'none' | 'bearer' | 'basic' | 'sigv4' | 'mtls'
     /** @description AWS SigV4 (Amazon Managed Prometheus); credentials come from IRSA / Pod Identity. */
@@ -3718,6 +3749,12 @@ export interface components {
       type: components['schemas']['DatasourceAuthType']
       /** @description For `bearer`. */
       token?: string
+      /**
+       * @description For `bearer`, instead of `token`: the name of a datasource Secret mounted into the hub
+       *     (hub chart `onboarding.datasourceSecrets`). The hub reads the token from that Secret
+       *     and re-reads it when it changes; nothing is stored in the database.
+       */
+      tokenSecret?: string
       /** @description For `basic`. */
       username?: string
       /** @description For `basic`. */
@@ -3730,6 +3767,8 @@ export interface components {
       type: components['schemas']['DatasourceAuthType']
       username?: string
       sigv4?: components['schemas']['DatasourceSigV4']
+      /** @description The mounted datasource Secret the bearer token is read from. */
+      tokenSecret?: string
       /** @description A token, password or client key is stored. */
       secretConfigured: boolean
       caConfigured?: boolean
@@ -3741,10 +3780,12 @@ export interface components {
       type: components['schemas']['DatasourceType']
       /**
        * Format: uri
-       * @description Query base URL (`/api/v1/query` is appended).
+       * @description Query base URL (`/api/v1/query` is appended). For `dynatrace`: the environment URL,
+       *     e.g. `https://<environment-id>.apps.dynatrace.com`.
        */
       url: string
       auth?: components['schemas']['DatasourceAuthInput']
+      dynatrace?: components['schemas']['DatasourceDynatrace']
       /** @description On update, remove the stored secrets. */
       clearSecrets?: boolean
       /** @description Extra request headers, e.g. `X-Scope-OrgID`. Not secret. */
@@ -3764,6 +3805,7 @@ export interface components {
       url: string
       builtIn: boolean
       auth: components['schemas']['DatasourceAuthInfo']
+      dynatrace?: components['schemas']['DatasourceDynatrace']
       headers: {
         [key: string]: string
       }
@@ -3779,6 +3821,16 @@ export interface components {
       updatedAt?: string
       updatedBy?: components['schemas']['Actor']
     }
+    /** @description Settings of a `dynatrace` datasource (auth is `bearer` with a platform token). */
+    DatasourceDynatrace: {
+      /**
+       * Format: uri
+       * @description Optional. The hub sends its queries here instead of to the environment URL, for a hub
+       *     that reaches Dynatrace only through an ActiveGate or an egress proxy. It must forward
+       *     the platform query API (`/platform/storage/query/v1/`) to the environment.
+       */
+      activeGateURL?: string
+    }
     DatasourceList: {
       items: components['schemas']['Datasource'][]
     }
@@ -3793,9 +3845,24 @@ export interface components {
       binding: components['schemas']['MetricsBinding']
       /** @description false = no stored binding (datasource local, label cluster = the name). */
       bound: boolean
+      datasourceType?: components['schemas']['DatasourceType']
     }
     MetricsBindingList: {
       items: components['schemas']['ClusterMetricsBinding'][]
+    }
+    NodeInventoryItem: {
+      node: string
+      /** @description Label node.kubernetes.io/instance-type. */
+      instanceType?: string
+      /** @description Label karpenter.sh/capacity-type, else eks.amazonaws.com/capacityType, as set on the node. */
+      capacityType?: string
+      zone?: string
+      region?: string
+      allocatableCores?: number
+      allocatableMemoryBytes?: number
+    }
+    NodeInventory: {
+      items: components['schemas']['NodeInventoryItem'][]
     }
     PromQueryForm: {
       query: string
@@ -3821,7 +3888,9 @@ export interface components {
      * @description Where a cluster's metrics are. Every query uses
      *     `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the
      *     registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster
-     *     Prometheus). Defaults: `local`, `cluster`, the cluster name.
+     *     Prometheus). Defaults: `local`, `cluster`, the cluster name. For a `dynatrace` datasource,
+     *     `clusterLabelValue` is the Dynatrace `k8s.cluster.name` (default the cluster name),
+     *     `clusterLabel` is not used and `extraMatchers` must be empty.
      */
     MetricsBinding: {
       datasourceId: string
@@ -3846,7 +3915,28 @@ export interface components {
       }
       /** @description Existing values of the cluster label (suggestions when it does not match). */
       labelValues?: string[]
+      /**
+       * @description For datasources that map their own metrics to Kerf's inputs (`dynatrace`): each input,
+       *     the source metric it is read from and whether it was found. Without a binding the whole
+       *     environment is searched.
+       */
+      metrics?: components['schemas']['DatasourceMetricStatus'][]
       checks: components['schemas']['ReadinessCheck'][]
+    }
+    DatasourceMetricStatus: {
+      /** @description The series Kerf needs, by its Prometheus name (e.g. container_memory_working_set_bytes). */
+      input: string
+      /** @description Where the datasource holds it (a Dynatrace metric key or Smartscape field); absent when it has none. */
+      sourceMetric?: string
+      usedFor?: string
+      /**
+       * @description `found`: series exist in the last hour; `missing`: the source metric exists in the
+       *     mapping but has no series; `notAvailable`: the datasource has no equivalent.
+       * @enum {string}
+       */
+      status: 'found' | 'missing' | 'notAvailable'
+      series?: number
+      note?: string
     }
     /**
      * @description Each state includes the ones before it (docs/contracts/readiness.md).
@@ -7095,6 +7185,34 @@ export interface operations {
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
       404: components['responses']['DatasourceNotFound']
+      502: components['responses']['BadGateway']
+    }
+  }
+  getClusterNodeInventory: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Nodes, ordered by name. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['NodeInventory']
+        }
+      }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+      409: components['responses']['Conflict']
       502: components['responses']['BadGateway']
     }
   }

@@ -162,3 +162,36 @@ describe('CheckAge', () => {
     expect(container).toBeEmptyDOMElement()
   })
 })
+
+describe('Readiness of a cluster read from Dynatrace', () => {
+  it('words the remediation for Dynatrace and mentions no Prometheus setup', async () => {
+    await signIn('operator')
+    const res = await fetch(`${window.location.origin}/v1/clusters/dt-prod-eu1/readiness`)
+    const body = (await res.json()) as ClusterReadiness
+    const remediations = body.checks.filter((c) => c.remediation && c.id.startsWith('metrics.'))
+    expect(remediations.map((c) => c.id).sort()).toEqual([
+      'metrics.dcgm',
+      'metrics.hpa',
+      'metrics.restarts-oom',
+    ])
+    for (const c of body.checks.filter((x) => x.id.startsWith('metrics.') || x.id === 'datasource.reachable'))
+      expect(`${c.message} ${c.remediation ?? ''}`).not.toMatch(
+        /kube-state-metrics|scrape|vmagent|Prometheus|cAdvisor|helm upgrade/i,
+      )
+
+    renderTab('dt-prod-eu1')
+    const oom = await screen.findByTestId('check-metrics.restarts-oom')
+    expect(oom).toHaveTextContent('dt.kubernetes.container.oom_kills missing: the OOM guardrail is blind')
+    expect(oom).toHaveTextContent('Dynatrace Operator with a DynaKube')
+    const hpa = screen.getByTestId('check-metrics.hpa')
+    expect(hpa).toHaveTextContent('Dynatrace records no HorizontalPodAutoscaler metrics')
+    fireEvent.click(within(hpa).getByRole('button'))
+    expect(hpa).toHaveTextContent('Kerf does not guess HPA coupling for a Dynatrace datasource.')
+    expect(screen.getByTestId('check-metrics.throttling')).toHaveTextContent(
+      'derived throttling ratio (dt.containers.cpu.throttling_ratio) for 412 containers',
+    )
+    expect(screen.getByTestId('check-metrics.dcgm')).toHaveTextContent(
+      'GPU metrics are not read from a Dynatrace datasource',
+    )
+  })
+})

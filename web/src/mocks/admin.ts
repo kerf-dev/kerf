@@ -686,6 +686,8 @@ function validateBinding(st: AdminState, b: S['MetricsBinding'] | undefined, err
   if (!b) return
   if (!st.datasources.some((d) => d.id === b.datasourceId && !d.deletedAt))
     errs.push(`metrics.datasourceId: Not found: ${JSON.stringify(b.datasourceId)}`)
+  if (b.extraMatchers?.length && st.datasources.find((d) => d.id === b.datasourceId)?.type === 'dynatrace')
+    errs.push('metrics.extraMatchers: Forbidden: a dynatrace datasource takes no extra matchers')
   if (b.clusterLabel == null || !/^([a-zA-Z_][a-zA-Z0-9_]*)?$/.test(b.clusterLabel))
     errs.push(
       `metrics.clusterLabel: Invalid value: ${JSON.stringify(b.clusterLabel)}: a Prometheus label name or ""`,
@@ -716,7 +718,7 @@ function validateDatasource(st: AdminState, d: S['DatasourceInput'], existing?: 
   const errs: string[] = []
   if (!d.name || !DNS1123.test(d.name))
     errs.push(`name: Invalid value: ${JSON.stringify(d.name ?? '')}: lower-case DNS label`)
-  if (!['prometheus', 'victoriametrics', 'thanos', 'mimir', 'amp'].includes(d.type))
+  if (!['prometheus', 'victoriametrics', 'thanos', 'mimir', 'amp', 'dynatrace'].includes(d.type))
     errs.push(`type: Unsupported value: ${JSON.stringify(d.type)}`)
   try {
     const u = new URL(d.url)
@@ -727,7 +729,9 @@ function validateDatasource(st: AdminState, d: S['DatasourceInput'], existing?: 
   const a = d.auth
   if (a) {
     const has = (k: 'token' | 'password') =>
-      !!a[k] || (!!existing?.auth.secretConfigured && !d.clearSecrets && existing.auth.type === a.type)
+      !!a[k] ||
+      (k === 'token' && !!a.tokenSecret) ||
+      (!!existing?.auth.secretConfigured && !d.clearSecrets && existing.auth.type === a.type)
     if (a.type === 'bearer' && !has('token')) errs.push('auth.token: Required value for bearer auth')
     if (a.type === 'basic' && (!a.username || !has('password')))
       errs.push('auth.username, auth.password: Required value for basic auth')
@@ -735,6 +739,20 @@ function validateDatasource(st: AdminState, d: S['DatasourceInput'], existing?: 
     if (a.type === 'mtls' && (!a.tls?.clientCert || (!a.tls.clientKey && !existing?.auth.secretConfigured)))
       errs.push('auth.tls.clientCert, auth.tls.clientKey: Required value for mTLS')
   }
+  if (a?.tokenSecret && !DNS1123.test(a.tokenSecret))
+    errs.push(`auth.tokenSecret: Invalid value: ${JSON.stringify(a.tokenSecret)}: lower-case DNS label`)
+  if (d.type === 'dynatrace') {
+    if (a?.type !== 'bearer') errs.push('auth.type: Invalid value: Dynatrace needs bearer (a platform token)')
+    const ag = d.dynatrace?.activeGateURL
+    if (ag) {
+      try {
+        const u = new URL(ag)
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error()
+      } catch {
+        errs.push(`dynatrace.activeGateURL: Invalid value: ${JSON.stringify(ag)}: an http(s) URL`)
+      }
+    }
+  } else if (d.dynatrace) errs.push('dynatrace: Forbidden: only for a dynatrace datasource')
   if (d.type === 'amp' && a?.type !== 'sigv4')
     errs.push('auth.type: Invalid value: Amazon Managed Prometheus needs sigv4')
   if (d.timeout && !DURATION.test(d.timeout))
@@ -757,7 +775,8 @@ function datasourceAuthInfo(
     type,
     ...(a?.username ? { username: a.username } : {}),
     ...(a?.sigv4 ? { sigv4: { ...a.sigv4, service: a.sigv4.service ?? 'aps' } } : {}),
-    secretConfigured: !!(a?.token || a?.password || a?.tls?.clientKey) || !!kept,
+    ...(a?.tokenSecret ? { tokenSecret: a.tokenSecret } : {}),
+    secretConfigured: !!(a?.token || a?.password || a?.tls?.clientKey) || (!a?.tokenSecret && !!kept),
     ...(a?.tls?.caCert ? { caConfigured: true } : {}),
     ...(a?.tls?.clientCert ? { clientCertConfigured: true } : {}),
     ...(a?.tls?.insecureSkipVerify ? { insecureSkipVerify: true } : {}),
@@ -1809,6 +1828,7 @@ export const adminHandlers = [
           c.metrics,
           g.st.datasources.find((d) => d.id === c.metrics.datasourceId)?.knownLabelValues ?? [],
           Date.now(),
+          g.st.datasources.find((d) => d.id === c.metrics.datasourceId)?.type === 'dynatrace',
         )
         for (const ch of res.checks)
           rm.results[ch.id] = {
@@ -2229,6 +2249,7 @@ export const adminHandlers = [
       url: b.url,
       builtIn: false,
       auth: datasourceAuthInfo(b.auth),
+      ...(b.dynatrace?.activeGateURL ? { dynatrace: b.dynatrace } : {}),
       headers: b.headers ?? {},
       ...(b.timeout ? { timeout: b.timeout } : {}),
       ...(b.maxPoints ? { maxPoints: b.maxPoints } : {}),
@@ -2266,8 +2287,15 @@ export const adminHandlers = [
       if (errs.length) return invalid('invalid_datasource', errs)
     }
     const cluster = b?.binding?.clusterLabelValue || 'new-cluster'
-    const res = metricsCheckResults(cluster, b?.binding, d.knownLabelValues, Date.now())
+    const res = metricsCheckResults(
+      cluster,
+      b?.binding,
+      d.knownLabelValues,
+      Date.now(),
+      d.type === 'dynatrace',
+    )
     const out: S['DatasourceTestResult'] = {
+      ...(res.metrics ? { metrics: res.metrics } : {}),
       ok: res.ok,
       latencyMs: 38 + Math.floor(Math.random() * 60),
       ...(res.found ? { found: res.found } : {}),
@@ -2309,6 +2337,8 @@ export const adminHandlers = [
     d.type = b.type
     d.url = b.url
     d.auth = datasourceAuthInfo(b.auth ?? { type: d.auth.type }, d.auth, b.clearSecrets)
+    if (b.dynatrace?.activeGateURL) d.dynatrace = b.dynatrace
+    else delete d.dynatrace
     d.headers = b.headers ?? {}
     if (b.timeout) d.timeout = b.timeout
     if (b.maxPoints) d.maxPoints = b.maxPoints

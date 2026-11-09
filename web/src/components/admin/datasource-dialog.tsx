@@ -12,6 +12,7 @@ export const DS_TYPE_LABEL: Record<DatasourceType, string> = {
   thanos: 'Thanos',
   mimir: 'Grafana Mimir',
   amp: 'Amazon Managed Prometheus',
+  dynatrace: 'Dynatrace',
 }
 export const AUTH_LABEL: Record<DatasourceAuthType, string> = {
   none: 'None',
@@ -21,11 +22,16 @@ export const AUTH_LABEL: Record<DatasourceAuthType, string> = {
   mtls: 'Client certificate (mTLS)',
 }
 
+type TokenSource = 'secret' | 'paste'
+const DNS_LABEL = /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/
+
 interface Form {
   name: string
   type: DatasourceType
   url: string
   auth: DatasourceAuthType
+  tokenSource: TokenSource
+  tokenSecret: string
   token: string
   username: string
   password: string
@@ -39,6 +45,23 @@ interface Form {
   timeout: string
   maxPoints: string
   clearSecrets: boolean
+  activeGateURL: string
+}
+
+/** Where a bearer token comes from: a Secret mounted into the hub, or pasted and stored encrypted. */
+function tokenSourceOf(d?: Datasource): TokenSource {
+  if (!d) return 'paste'
+  if (d.auth.tokenSecret) return 'secret'
+  return d.type === 'dynatrace' && !d.auth.secretConfigured ? 'secret' : 'paste'
+}
+
+function isHttpURL(v: string) {
+  try {
+    const u = new URL(v)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 function toForm(d?: Datasource): Form {
@@ -47,6 +70,8 @@ function toForm(d?: Datasource): Form {
     type: d?.type ?? 'prometheus',
     url: d?.url ?? '',
     auth: d?.auth.type ?? 'none',
+    tokenSource: tokenSourceOf(d),
+    tokenSecret: d?.auth.tokenSecret ?? '',
     token: '',
     username: d?.auth.username ?? '',
     password: '',
@@ -62,6 +87,7 @@ function toForm(d?: Datasource): Form {
     timeout: d?.timeout ?? '',
     maxPoints: d?.maxPoints ? String(d.maxPoints) : '',
     clearSecrets: false,
+    activeGateURL: d?.dynatrace?.activeGateURL ?? '',
   }
 }
 
@@ -97,7 +123,10 @@ export function DatasourceDialog({
   }, [open, datasource])
   const set = (patch: Partial<Form>) => setF((x) => ({ ...x, ...patch }))
   const headers = parseHeaders(f.headers)
-  const secret = datasource?.auth.secretConfigured && datasource.auth.type === f.auth
+  const isDt = f.type === 'dynatrace'
+  // A Dynatrace datasource is always read with a platform token.
+  const auth: DatasourceAuthType = isDt ? 'bearer' : f.auth
+  const secret = datasource?.auth.secretConfigured && datasource.auth.type === auth
   const errors: Record<string, string | undefined> = {
     name: !/^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/.test(f.name)
       ? 'Lowercase letters, digits and "-", up to 63 characters.'
@@ -107,18 +136,29 @@ export function DatasourceDialog({
         const u = new URL(f.url)
         return u.protocol === 'http:' || u.protocol === 'https:' ? undefined : 'Use an http(s) URL.'
       } catch {
-        return 'A full URL, e.g. https://prometheus.monitoring:9090'
+        return isDt
+          ? 'A full URL, e.g. https://abc12345.apps.dynatrace.com'
+          : 'A full URL, e.g. https://prometheus.monitoring:9090'
       }
     })(),
-    token: f.auth === 'bearer' && !f.token && !secret ? 'Required.' : undefined,
-    username: f.auth === 'basic' && !f.username ? 'Required.' : undefined,
-    password: f.auth === 'basic' && !f.password && !secret ? 'Required.' : undefined,
-    region: f.auth === 'sigv4' && !f.region ? 'Required.' : undefined,
+    tokenSecret:
+      auth === 'bearer' && f.tokenSource === 'secret'
+        ? !f.tokenSecret
+          ? 'Required.'
+          : !DNS_LABEL.test(f.tokenSecret)
+            ? 'Lowercase letters, digits and "-", up to 63 characters.'
+            : undefined
+        : undefined,
+    token: auth === 'bearer' && f.tokenSource === 'paste' && !f.token && !secret ? 'Required.' : undefined,
+    activeGateURL: isDt && f.activeGateURL && !isHttpURL(f.activeGateURL) ? 'An http(s) URL.' : undefined,
+    username: auth === 'basic' && !f.username ? 'Required.' : undefined,
+    password: auth === 'basic' && !f.password && !secret ? 'Required.' : undefined,
+    region: auth === 'sigv4' && !f.region ? 'Required.' : undefined,
     clientCert:
-      f.auth === 'mtls' && !f.clientCert && !datasource?.auth.clientCertConfigured ? 'Required.' : undefined,
-    headers: typeof headers === 'string' ? headers : undefined,
+      auth === 'mtls' && !f.clientCert && !datasource?.auth.clientCertConfigured ? 'Required.' : undefined,
+    headers: !isDt && typeof headers === 'string' ? headers : undefined,
     timeout: f.timeout && !isDuration(f.timeout) ? 'A duration like 30s.' : undefined,
-    maxPoints: f.maxPoints && !(Number(f.maxPoints) >= 100) ? 'At least 100.' : undefined,
+    maxPoints: !isDt && f.maxPoints && !(Number(f.maxPoints) >= 100) ? 'At least 100.' : undefined,
   }
   const invalid = Object.values(errors).some(Boolean)
   const [touched, setTouched] = useState(false)
@@ -129,15 +169,19 @@ export function DatasourceDialog({
     type: f.type,
     url: f.url,
     auth: {
-      type: f.auth,
-      ...(f.auth === 'bearer' && f.token ? { token: f.token } : {}),
-      ...(f.auth === 'basic'
-        ? { username: f.username, ...(f.password ? { password: f.password } : {}) }
+      type: auth,
+      ...(auth === 'bearer'
+        ? f.tokenSource === 'secret'
+          ? { tokenSecret: f.tokenSecret }
+          : f.token
+            ? { token: f.token }
+            : {}
         : {}),
-      ...(f.auth === 'sigv4'
+      ...(auth === 'basic' ? { username: f.username, ...(f.password ? { password: f.password } : {}) } : {}),
+      ...(auth === 'sigv4'
         ? { sigv4: { region: f.region, service: 'aps', ...(f.roleARN ? { roleARN: f.roleARN } : {}) } }
         : {}),
-      ...(f.auth === 'mtls' || f.caCert || f.insecure
+      ...(auth === 'mtls' || f.caCert || f.insecure
         ? {
             tls: {
               ...(f.caCert ? { caCert: f.caCert } : {}),
@@ -148,9 +192,10 @@ export function DatasourceDialog({
           }
         : {}),
     },
-    ...(typeof headers === 'object' && Object.keys(headers).length ? { headers } : {}),
+    ...(isDt && f.activeGateURL ? { dynatrace: { activeGateURL: f.activeGateURL } } : {}),
+    ...(!isDt && typeof headers === 'object' && Object.keys(headers).length ? { headers } : {}),
     ...(f.timeout ? { timeout: f.timeout } : {}),
-    ...(f.maxPoints ? { maxPoints: Number(f.maxPoints) } : {}),
+    ...(!isDt && f.maxPoints ? { maxPoints: Number(f.maxPoints) } : {}),
     ...(f.clearSecrets ? { clearSecrets: true } : {}),
     reason,
   })
@@ -168,7 +213,11 @@ export function DatasourceDialog({
       wide
       testId="datasource-dialog"
       title={datasource ? `Edit ${datasource.name}` : 'New metrics datasource'}
-      description="A Prometheus-compatible query endpoint that one or more clusters' metrics come from."
+      description={
+        isDt
+          ? "A Dynatrace environment that one or more clusters' metrics are read from."
+          : "A Prometheus-compatible query endpoint that one or more clusters' metrics come from."
+      }
       confirmLabel={datasource ? 'Save datasource' : 'Create datasource'}
       onConfirm={async (o) => {
         setTouched(true)
@@ -198,6 +247,9 @@ export function DatasourceDialog({
               set({
                 type: e.target.value as DatasourceType,
                 ...(e.target.value === 'amp' ? { auth: 'sigv4' } : {}),
+                ...(e.target.value === 'dynatrace'
+                  ? { auth: 'bearer', tokenSource: datasource?.auth.secretConfigured ? 'paste' : 'secret' }
+                  : {}),
               })
             }
           >
@@ -209,10 +261,14 @@ export function DatasourceDialog({
           </NativeSelect>
         </Field>
         <Field
-          label="Query URL"
+          label={isDt ? 'Environment URL' : 'Query URL'}
           htmlFor={`${id}-u`}
           className="sm:col-span-2"
-          hint="/api/v1/query is appended."
+          hint={
+            isDt
+              ? 'https://<environment-id>.apps.dynatrace.com, the environment the platform token belongs to.'
+              : '/api/v1/query is appended.'
+          }
           error={err('url')}
         >
           <Input
@@ -221,42 +277,104 @@ export function DatasourceDialog({
             onChange={(e) => set({ url: e.target.value })}
             className="font-mono text-[13px]"
             placeholder={
-              f.type === 'amp'
-                ? 'https://aps-workspaces.eu-west-1.amazonaws.com/workspaces/ws-…/'
-                : 'http://prometheus.monitoring:9090'
+              isDt
+                ? 'https://abc12345.apps.dynatrace.com'
+                : f.type === 'amp'
+                  ? 'https://aps-workspaces.eu-west-1.amazonaws.com/workspaces/ws-…/'
+                  : 'http://prometheus.monitoring:9090'
             }
           />
         </Field>
-        <Field label="Authentication" htmlFor={`${id}-a`} className="sm:col-span-2">
-          <NativeSelect
-            id={`${id}-a`}
-            value={f.auth}
-            onChange={(e) => set({ auth: e.target.value as DatasourceAuthType })}
-          >
-            {Object.entries(AUTH_LABEL).map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </NativeSelect>
-        </Field>
-        {f.auth === 'bearer' ? (
+        {isDt ? (
           <Field
-            label="Token"
+            label="Authentication"
             className="sm:col-span-2"
-            hint={secretHint ?? 'Stored encrypted; never shown again.'}
-            error={err('token')}
+            hint="Needs the scopes storage:metrics:read, storage:smartscape:read and storage:buckets:read."
+          >
+            <div className="flex h-8 items-center text-sm">Platform token</div>
+          </Field>
+        ) : (
+          <Field label="Authentication" htmlFor={`${id}-a`} className="sm:col-span-2">
+            <NativeSelect
+              id={`${id}-a`}
+              value={f.auth}
+              onChange={(e) => set({ auth: e.target.value as DatasourceAuthType })}
+            >
+              {Object.entries(AUTH_LABEL).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        )}
+        {auth === 'bearer' ? (
+          <>
+            <Field label="Token source" htmlFor={`${id}-ts`} className="sm:col-span-2">
+              <NativeSelect
+                id={`${id}-ts`}
+                value={f.tokenSource}
+                onChange={(e) => set({ tokenSource: e.target.value as TokenSource })}
+              >
+                <option value="secret">Kubernetes Secret (recommended)</option>
+                <option value="paste">Paste token</option>
+              </NativeSelect>
+            </Field>
+            {f.tokenSource === 'secret' ? (
+              <Field
+                label="Secret name"
+                htmlFor={`${id}-sn`}
+                className="sm:col-span-2"
+                hint="A Secret mounted into the hub with the hub chart's onboarding.datasourceSecrets; the token is its key token."
+                error={err('tokenSecret')}
+              >
+                <Input
+                  id={`${id}-sn`}
+                  value={f.tokenSecret}
+                  onChange={(e) => set({ tokenSecret: e.target.value.trim() })}
+                  className="font-mono"
+                  placeholder="dynatrace"
+                />
+              </Field>
+            ) : (
+              <Field
+                label={isDt ? 'Platform token' : 'Token'}
+                htmlFor={`${id}-tk`}
+                className="sm:col-span-2"
+                hint={secretHint ?? 'Stored encrypted; never shown again.'}
+                error={err('token')}
+              >
+                <Input
+                  id={`${id}-tk`}
+                  type="password"
+                  autoComplete="off"
+                  value={f.token}
+                  onChange={(e) => set({ token: e.target.value })}
+                  placeholder={secret ? '••••••••' : ''}
+                />
+              </Field>
+            )}
+          </>
+        ) : null}
+        {isDt ? (
+          <Field
+            label="ActiveGate URL"
+            htmlFor={`${id}-ag`}
+            optional
+            className="sm:col-span-2"
+            hint="Queries go here instead of to the environment URL, for a hub that reaches Dynatrace only through an ActiveGate or proxy."
+            error={err('activeGateURL')}
           >
             <Input
-              type="password"
-              autoComplete="off"
-              value={f.token}
-              onChange={(e) => set({ token: e.target.value })}
-              placeholder={secret ? '••••••••' : ''}
+              id={`${id}-ag`}
+              value={f.activeGateURL}
+              onChange={(e) => set({ activeGateURL: e.target.value })}
+              className="font-mono text-[13px]"
+              placeholder="https://activegate.example.internal:9999"
             />
           </Field>
         ) : null}
-        {f.auth === 'basic' ? (
+        {auth === 'basic' ? (
           <>
             <Field label="Username" error={err('username')}>
               <Input
@@ -276,7 +394,7 @@ export function DatasourceDialog({
             </Field>
           </>
         ) : null}
-        {f.auth === 'sigv4' ? (
+        {auth === 'sigv4' ? (
           <>
             <Field label="AWS region" error={err('region')}>
               <Input
@@ -295,7 +413,7 @@ export function DatasourceDialog({
             </Field>
           </>
         ) : null}
-        {f.auth === 'mtls' ? (
+        {auth === 'mtls' ? (
           <>
             <Field
               label="Client certificate (PEM)"
@@ -319,20 +437,22 @@ export function DatasourceDialog({
             </Field>
           </>
         ) : null}
-        <Field
-          label="Extra headers"
-          optional
-          className="sm:col-span-2"
-          hint="One per line, e.g. X-Scope-OrgID: tenant-a (Mimir/Cortex). Not secret."
-          error={err('headers')}
-        >
-          <Textarea
-            rows={2}
-            value={f.headers}
-            onChange={(e) => set({ headers: e.target.value })}
-            className="font-mono text-xs"
-          />
-        </Field>
+        {isDt ? null : (
+          <Field
+            label="Extra headers"
+            optional
+            className="sm:col-span-2"
+            hint="One per line, e.g. X-Scope-OrgID: tenant-a (Mimir/Cortex). Not secret."
+            error={err('headers')}
+          >
+            <Textarea
+              rows={2}
+              value={f.headers}
+              onChange={(e) => set({ headers: e.target.value })}
+              className="font-mono text-xs"
+            />
+          </Field>
+        )}
         <Field label="Timeout" optional error={err('timeout')}>
           <Input
             value={f.timeout}
@@ -341,20 +461,22 @@ export function DatasourceDialog({
             className="font-mono"
           />
         </Field>
-        <Field
-          label="Max points per query"
-          optional
-          error={err('maxPoints')}
-          hint="The recommender chunks queries to fit."
-        >
-          <Input
-            inputMode="numeric"
-            value={f.maxPoints}
-            onChange={(e) => set({ maxPoints: e.target.value })}
-            placeholder="11000"
-            className="font-mono"
-          />
-        </Field>
+        {isDt ? null : (
+          <Field
+            label="Max points per query"
+            optional
+            error={err('maxPoints')}
+            hint="The recommender chunks queries to fit."
+          >
+            <Input
+              inputMode="numeric"
+              value={f.maxPoints}
+              onChange={(e) => set({ maxPoints: e.target.value })}
+              placeholder="11000"
+              className="font-mono"
+            />
+          </Field>
+        )}
         <label className="flex items-center gap-2 text-[13px] sm:col-span-2">
           <Checkbox checked={f.insecure} onCheckedChange={(v) => set({ insecure: v === true })} /> Skip TLS
           verification (testing only)

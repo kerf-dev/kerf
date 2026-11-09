@@ -2999,6 +2999,38 @@ paths:
           $ref: '#/components/responses/DatasourceNotFound'
         '502':
           $ref: '#/components/responses/BadGateway'
+  /v1/internal/clusters/{cluster}/nodes:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [internal]
+      operationId: getClusterNodeInventory
+      security:
+        - bearerAuth: [pricing]
+      summary: Node inventory of a cluster bound to a Dynatrace datasource (pricing service)
+      description: |
+        The cluster's current nodes with the labels pricing needs and their allocatable capacity,
+        read by the hub from the cluster's datasource. Only for clusters bound to a datasource that
+        is not queried with PromQL (`dynatrace`, see `ClusterMetricsBinding.datasourceType`):
+        `409` with code `not_supported` for the others, which the pricing service queries through
+        the query proxy. An `admin` token may call it too.
+      responses:
+        '200':
+          description: Nodes, ordered by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeInventory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/BadGateway'
   /v1/clusters/{cluster}/readiness:
     parameters:
       - $ref: '#/components/parameters/Cluster'
@@ -7127,7 +7159,10 @@ components:
           type: string
     DatasourceType:
       type: string
-      enum: [prometheus, victoriametrics, thanos, mimir, amp]
+      description: |
+        `dynatrace` reads Kubernetes metrics from a Dynatrace environment with DQL (Grail) instead
+        of PromQL; see docs/install/dynatrace.md for the metric mapping and its limits.
+      enum: [prometheus, victoriametrics, thanos, mimir, amp, dynatrace]
     DatasourceAuthType:
       type: string
       enum: [none, bearer, basic, sigv4, mtls]
@@ -7172,6 +7207,13 @@ components:
           type: string
           writeOnly: true
           description: For `bearer`.
+        tokenSecret:
+          type: string
+          pattern: '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$'
+          description: |
+            For `bearer`, instead of `token`: the name of a datasource Secret mounted into the hub
+            (hub chart `onboarding.datasourceSecrets`). The hub reads the token from that Secret
+            and re-reads it when it changes; nothing is stored in the database.
         username:
           type: string
           description: For `basic`.
@@ -7194,6 +7236,9 @@ components:
           type: string
         sigv4:
           $ref: '#/components/schemas/DatasourceSigV4'
+        tokenSecret:
+          type: string
+          description: The mounted datasource Secret the bearer token is read from.
         secretConfigured:
           type: boolean
           description: A token, password or client key is stored.
@@ -7215,9 +7260,13 @@ components:
         url:
           type: string
           format: uri
-          description: Query base URL (`/api/v1/query` is appended).
+          description: |
+            Query base URL (`/api/v1/query` is appended). For `dynatrace`: the environment URL,
+            e.g. `https://<environment-id>.apps.dynatrace.com`.
         auth:
           $ref: '#/components/schemas/DatasourceAuthInput'
+        dynatrace:
+          $ref: '#/components/schemas/DatasourceDynatrace'
         clearSecrets:
           type: boolean
           description: On update, remove the stored secrets.
@@ -7251,6 +7300,8 @@ components:
           type: boolean
         auth:
           $ref: '#/components/schemas/DatasourceAuthInfo'
+        dynatrace:
+          $ref: '#/components/schemas/DatasourceDynatrace'
         headers:
           type: object
           additionalProperties:
@@ -7277,6 +7328,17 @@ components:
           format: date-time
         updatedBy:
           $ref: '#/components/schemas/Actor'
+    DatasourceDynatrace:
+      type: object
+      description: Settings of a `dynatrace` datasource (auth is `bearer` with a platform token).
+      properties:
+        activeGateURL:
+          type: string
+          format: uri
+          description: |
+            Optional. The hub sends its queries here instead of to the environment URL, for a hub
+            that reaches Dynatrace only through an ActiveGate or an egress proxy. It must forward
+            the platform query API (`/platform/storage/query/v1/`) to the environment.
     DatasourceList:
       type: object
       required: [items]
@@ -7309,6 +7371,8 @@ components:
         bound:
           type: boolean
           description: false = no stored binding (datasource local, label cluster = the name).
+        datasourceType:
+          $ref: '#/components/schemas/DatasourceType'
     MetricsBindingList:
       type: object
       required: [items]
@@ -7317,6 +7381,36 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ClusterMetricsBinding'
+    NodeInventoryItem:
+      type: object
+      required: [node]
+      properties:
+        node:
+          type: string
+        instanceType:
+          type: string
+          description: Label node.kubernetes.io/instance-type.
+        capacityType:
+          type: string
+          description: Label karpenter.sh/capacity-type, else eks.amazonaws.com/capacityType, as set on the node.
+        zone:
+          type: string
+        region:
+          type: string
+        allocatableCores:
+          type: number
+          minimum: 0
+        allocatableMemoryBytes:
+          type: number
+          minimum: 0
+    NodeInventory:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeInventoryItem'
     PromQueryForm:
       type: object
       required: [query]
@@ -7355,7 +7449,9 @@ components:
         Where a cluster's metrics are. Every query uses
         `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>}`; results are re-labelled to the
         registered cluster name. `clusterLabel` `""` means no cluster matcher (a per-cluster
-        Prometheus). Defaults: `local`, `cluster`, the cluster name.
+        Prometheus). Defaults: `local`, `cluster`, the cluster name. For a `dynatrace` datasource,
+        `clusterLabelValue` is the Dynatrace `k8s.cluster.name` (default the cluster name),
+        `clusterLabel` is not used and `extraMatchers` must be empty.
       required: [datasourceId, clusterLabel]
       properties:
         datasourceId:
@@ -7408,10 +7504,41 @@ components:
           description: Existing values of the cluster label (suggestions when it does not match).
           items:
             type: string
+        metrics:
+          type: array
+          description: |
+            For datasources that map their own metrics to Kerf's inputs (`dynatrace`): each input,
+            the source metric it is read from and whether it was found. Without a binding the whole
+            environment is searched.
+          items:
+            $ref: '#/components/schemas/DatasourceMetricStatus'
         checks:
           type: array
           items:
             $ref: '#/components/schemas/ReadinessCheck'
+    DatasourceMetricStatus:
+      type: object
+      required: [input, status]
+      properties:
+        input:
+          type: string
+          description: The series Kerf needs, by its Prometheus name (e.g. container_memory_working_set_bytes).
+        sourceMetric:
+          type: string
+          description: Where the datasource holds it (a Dynatrace metric key or Smartscape field); absent when it has none.
+        usedFor:
+          type: string
+        status:
+          type: string
+          description: |
+            `found`: series exist in the last hour; `missing`: the source metric exists in the
+            mapping but has no series; `notAvailable`: the datasource has no equivalent.
+          enum: [found, missing, notAvailable]
+        series:
+          type: integer
+          minimum: 0
+        note:
+          type: string
     ReadinessState:
       type: string
       description: Each state includes the ones before it (docs/contracts/readiness.md).

@@ -22,6 +22,7 @@ import type {
 import { POLICY_SOURCE_LABEL, SecretOnce } from '@/components/admin/common'
 import { DatasourceDialog, DS_TYPE_LABEL } from '@/components/admin/datasource-dialog'
 import { InstallSnippets } from '@/components/admin/install'
+import { MetricMapping } from '@/components/admin/metric-mapping'
 import {
   isProblem,
   ReadinessChecklist,
@@ -85,15 +86,21 @@ function TestResult({ r, onPick }: { r: DatasourceTestResult; onPick: (v: string
         icon={r.ok ? CheckIcon : XIcon}
         title={r.ok ? 'The datasource has what recommendations need' : 'Blocking problems found'}
       >
-        {r.found
-          ? `Found ${formatNumber(r.found.containerSeries)} cAdvisor container series, kube-state-metrics for ${formatNumber(r.found.pods)} pods and ${formatNumber(r.found.nodes)} nodes`
-          : 'No series found for these matchers'}
+        {r.metrics
+          ? `${r.metrics.filter((m) => m.status === 'found').length} of ${r.metrics.length} inputs have series`
+          : r.found
+            ? `Found ${formatNumber(r.found.containerSeries)} cAdvisor container series, kube-state-metrics for ${formatNumber(r.found.pods)} pods and ${formatNumber(r.found.nodes)} nodes`
+            : 'No series found for these matchers'}
         {r.latencyMs != null ? ` · ${r.latencyMs} ms` : ''}
         {problems.length ? `; ${problems.length} check(s) need attention.` : '.'}
       </Callout>
       {r.labelValues?.length ? (
         <div className="text-[13px]">
-          <span className="text-muted-foreground">Values of the cluster label in this datasource: </span>
+          <span className="text-muted-foreground">
+            {r.metrics
+              ? 'Cluster names in this environment: '
+              : 'Values of the cluster label in this datasource: '}
+          </span>
           <span className="inline-flex flex-wrap gap-1">
             {r.labelValues.map((v) => (
               <button
@@ -108,6 +115,7 @@ function TestResult({ r, onPick }: { r: DatasourceTestResult; onPick: (v: string
           </span>
         </div>
       ) : null}
+      {r.metrics?.length ? <MetricMapping metrics={r.metrics} /> : null}
       {r.checks.length ? <ReadinessChecklist checks={r.checks} onlyProblems={problems.length > 0} /> : null}
     </div>
   )
@@ -180,12 +188,16 @@ export default function ClusterWizardPage() {
   const [dsOpen, setDsOpen] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [created, setCreated] = useState<ClusterCreated>()
-  const testing = useWrite(() =>
-    writes.testDatasource({
-      id: binding.datasourceId,
-      binding: { ...binding, clusterLabelValue: binding.clusterLabelValue || id.name },
-    }),
-  )
+  const ds = datasources.data?.items.find((d) => d.id === binding.datasourceId)
+  const isDt = ds?.type === 'dynatrace'
+  // Dynatrace reads one cluster by its k8s.cluster.name; the label and the matchers do not apply.
+  const sentBinding = (): MetricsBinding => ({
+    datasourceId: binding.datasourceId,
+    clusterLabel: isDt ? 'cluster' : binding.clusterLabel,
+    clusterLabelValue: binding.clusterLabelValue || id.name,
+    ...(isDt ? {} : { extraMatchers: binding.extraMatchers, jobNames: binding.jobNames }),
+  })
+  const testing = useWrite(() => writes.testDatasource({ id: binding.datasourceId, binding: sentBinding() }))
   const create = useWrite(({ reason }: { reason: string }) =>
     writes.createCluster({
       ...id,
@@ -193,7 +205,7 @@ export default function ClusterWizardPage() {
       provider: id.provider || undefined,
       region: id.region || undefined,
       description: id.description || undefined,
-      metrics: { ...binding, clusterLabelValue: binding.clusterLabelValue || id.name },
+      metrics: sentBinding(),
       createAgentToken: true,
       reason,
     }),
@@ -206,12 +218,12 @@ export default function ClusterWizardPage() {
       : taken
         ? 'A cluster with this name exists.'
         : undefined
-  const labelErr = !LABEL.test(binding.clusterLabel)
-    ? 'A Prometheus label name, or empty for no cluster matcher.'
-    : undefined
+  const labelErr =
+    !isDt && !LABEL.test(binding.clusterLabel)
+      ? 'A Prometheus label name, or empty for no cluster matcher.'
+      : undefined
   const matcherErr =
     matcher && !MATCHER.test(matcher) ? 'Like env="prod" or namespace!~"kube-.*".' : undefined
-  const ds = datasources.data?.items.find((d) => d.id === binding.datasourceId)
 
   const next = () => {
     setTouched(true)
@@ -337,19 +349,14 @@ export default function ClusterWizardPage() {
                     </Button>
                   </div>
                 </Field>
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Cluster label" error={labelErr} hint="Empty = no matcher.">
+                {isDt ? (
+                  <Field
+                    label="Dynatrace cluster name"
+                    htmlFor="wz-dt-cluster"
+                    hint="The k8s.cluster.name of this cluster in Dynatrace. Default: the cluster name."
+                  >
                     <Input
-                      value={binding.clusterLabel}
-                      onChange={(e) => (
-                        setBinding({ ...binding, clusterLabel: e.target.value.trim() }),
-                        setTest(undefined)
-                      )}
-                      className="font-mono"
-                    />
-                  </Field>
-                  <Field label="Label value">
-                    <Input
+                      id="wz-dt-cluster"
                       value={binding.clusterLabelValue}
                       placeholder={id.name}
                       onChange={(e) => (
@@ -357,65 +364,96 @@ export default function ClusterWizardPage() {
                         setTest(undefined)
                       )}
                       className="font-mono"
-                      disabled={!binding.clusterLabel}
                     />
                   </Field>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Cluster label" error={labelErr} hint="Empty = no matcher.">
+                      <Input
+                        value={binding.clusterLabel}
+                        onChange={(e) => (
+                          setBinding({ ...binding, clusterLabel: e.target.value.trim() }),
+                          setTest(undefined)
+                        )}
+                        className="font-mono"
+                      />
+                    </Field>
+                    <Field label="Label value">
+                      <Input
+                        value={binding.clusterLabelValue}
+                        placeholder={id.name}
+                        onChange={(e) => (
+                          setBinding({ ...binding, clusterLabelValue: e.target.value.trim() }),
+                          setTest(undefined)
+                        )}
+                        className="font-mono"
+                        disabled={!binding.clusterLabel}
+                      />
+                    </Field>
+                  </div>
+                )}
               </div>
-              <Field
-                label="Extra matchers"
-                optional
-                hint='Added to every selector, e.g. env="prod".'
-                error={matcherErr}
-              >
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {binding.extraMatchers?.map((m) => (
-                    <span
-                      key={m}
-                      className="inline-flex h-7 items-center gap-1 rounded bg-secondary px-2 font-mono text-xs"
-                    >
-                      {m}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${m}`}
-                        onClick={() =>
+              {isDt ? null : (
+                <Field
+                  label="Extra matchers"
+                  optional
+                  hint='Added to every selector, e.g. env="prod".'
+                  error={matcherErr}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {binding.extraMatchers?.map((m) => (
+                      <span
+                        key={m}
+                        className="inline-flex h-7 items-center gap-1 rounded bg-secondary px-2 font-mono text-xs"
+                      >
+                        {m}
+                        <button
+                          type="button"
+                          aria-label={`Remove ${m}`}
+                          onClick={() =>
+                            setBinding({
+                              ...binding,
+                              extraMatchers: binding.extraMatchers?.filter((x) => x !== m),
+                            })
+                          }
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <Input
+                      value={matcher}
+                      onChange={(e) => setMatcher(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && matcher && !matcherErr) {
+                          e.preventDefault()
                           setBinding({
                             ...binding,
-                            extraMatchers: binding.extraMatchers?.filter((x) => x !== m),
+                            extraMatchers: [...(binding.extraMatchers ?? []), matcher],
                           })
+                          setMatcher('')
                         }
-                      >
-                        <XIcon className="size-3" />
-                      </button>
-                    </span>
-                  ))}
-                  <Input
-                    value={matcher}
-                    onChange={(e) => setMatcher(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && matcher && !matcherErr) {
-                        e.preventDefault()
-                        setBinding({ ...binding, extraMatchers: [...(binding.extraMatchers ?? []), matcher] })
-                        setMatcher('')
-                      }
-                    }}
-                    placeholder='env="prod"  ⏎'
-                    className="w-56 font-mono text-[13px]"
-                    aria-label="Extra matcher"
-                  />
-                </div>
-              </Field>
+                      }}
+                      placeholder='env="prod"  ⏎'
+                      className="w-56 font-mono text-[13px]"
+                      aria-label="Extra matcher"
+                    />
+                  </div>
+                </Field>
+              )}
               <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
                 <code className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
                   {'{'}
-                  {[
-                    binding.clusterLabel
-                      ? `${binding.clusterLabel}="${binding.clusterLabelValue || id.name}"`
-                      : '',
-                    ...(binding.extraMatchers ?? []),
-                  ]
-                    .filter(Boolean)
-                    .join(', ')}
+                  {isDt
+                    ? `k8s.cluster.name="${binding.clusterLabelValue || id.name}"`
+                    : [
+                        binding.clusterLabel
+                          ? `${binding.clusterLabel}="${binding.clusterLabelValue || id.name}"`
+                          : '',
+                        ...(binding.extraMatchers ?? []),
+                      ]
+                        .filter(Boolean)
+                        .join(', ')}
                   {'}'}
                 </code>
                 <Button

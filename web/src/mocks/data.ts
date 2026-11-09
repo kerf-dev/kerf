@@ -93,6 +93,18 @@ export const CLUSTERS: ClusterSpec[] = [
     defaultModeSource: 'global-default',
     nodes: 3,
   },
+  {
+    name: 'dt-prod-eu1',
+    description: 'Production · Ireland · metrics from Dynatrace',
+    cpuPrice: 0.0316,
+    memPrice: 0.00424,
+    workloads: 0,
+    status: 'connected',
+    agentVersion: 'v0.4.2',
+    heartbeatAgoSec: 30,
+    defaultModeSource: 'global-default',
+    nodes: 6,
+  },
 ]
 
 type Tpl = readonly [name: string, kind?: WorkloadKind]
