@@ -3930,8 +3930,9 @@ export interface components {
       sourceMetric?: string
       usedFor?: string
       /**
-       * @description `found`: series exist in the last hour; `missing`: the source metric exists in the
-       *     mapping but has no series; `notAvailable`: the datasource has no equivalent.
+       * @description `found`: series exist in the last hour (the last day for restarts and OOM kills);
+       *     `missing`: the mapping names a source metric but it has no series; `notAvailable`: the
+       *     datasource has no equivalent.
        * @enum {string}
        */
       status: 'found' | 'missing' | 'notAvailable'

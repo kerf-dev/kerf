@@ -48,6 +48,39 @@ type RawWorkload struct {
 	Live bool
 	// GPU is set when the workload's pods request GPUs.
 	GPU *RawGPU
+	// ThrottleDerived: Throttle is a ratio the metrics source derives itself (no CFS period
+	// counters, e.g. Dynatrace); recommendations say so.
+	ThrottleDerived bool
+	// HPAUnknown: the metrics source has no HPA data, so HPA coupling is unknown (not absent).
+	HPAUnknown bool
+}
+
+// WorkloadSource loads the workload inputs of a cluster from a datasource that is not queried
+// with PromQL (Dynatrace). Load uses it when the cluster's bound querier implements it, instead
+// of the PromQL queries; pricing still comes from the hub's own store.
+type WorkloadSource interface {
+	LoadWorkloads(ctx context.Context, req WorkloadRequest) (map[hubapi.WorkloadKey]*RawWorkload, error)
+}
+
+// WorkloadRequest is what a WorkloadSource loads: the same windows the PromQL queries read.
+type WorkloadRequest struct {
+	// Cluster is the registered cluster name (the workload keys' cluster).
+	Cluster string
+	// Match is the cluster's binding; its Value is the cluster's name in the source. nil = Cluster.
+	Match *datasource.Matcher
+	// Start and End bound the usage series; End is aligned to Step.
+	Start, End time.Time
+	Step       time.Duration
+	// RiskWindow bounds throttling, OOM kills and restarts; InventoryLookback the requests and limits.
+	RiskWindow, InventoryLookback time.Duration
+}
+
+// SourceCluster is the cluster's name in the source: the binding's value, else the registered name.
+func (r WorkloadRequest) SourceCluster() string {
+	if r.Match != nil && r.Match.Value != "" {
+		return r.Match.Value
+	}
+	return r.Cluster
 }
 
 // ClusterData is the raw data of one cluster as of End.
@@ -111,6 +144,18 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	}
 	q := Queries{Cluster: cluster, RateWindow: cfg.RateWindow, Binding: binding}
 	d := &ClusterData{Cluster: cluster, End: end, Window: window, Workloads: map[hubapi.WorkloadKey]*RawWorkload{}}
+	if ws, ok := data.(WorkloadSource); ok {
+		w, err := ws.LoadWorkloads(ctx, WorkloadRequest{Cluster: cluster, Match: binding, Start: start, End: end, Step: step,
+			RiskWindow: cfg.RiskWindow, InventoryLookback: cfg.InventoryLookback})
+		if err != nil {
+			return nil, err
+		}
+		d.Workloads = w
+		if d.Pricing, err = s.loadPricing(ctx, q, end); err != nil {
+			return nil, err
+		}
+		return d, nil
+	}
 
 	var mu sync.Mutex
 	workload := func(l Labels) *RawWorkload {
@@ -318,6 +363,59 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	hpaNum("hpaMin", q.HPAReplicaBounds("min", cfg.InventoryLookback), hpaMin)
 	hpaNum("hpaMax", q.HPAReplicaBounds("max", cfg.InventoryLookback), hpaMax)
 	hpaNum("hpaPeak", q.HPAPeakReplicas(window), hpaPeak)
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	// Live values first so they win.
+	for _, f := range inv {
+		f()
+	}
+	for k, names := range initNames {
+		if w := d.Workloads[k]; w != nil {
+			for n := range names {
+				if c := w.Containers[n]; c != nil {
+					c.Init = true
+				}
+			}
+		}
+	}
+	images.apply(d)
+	for k, l := range hpaTargets {
+		wk := hubapi.WorkloadKey{Cluster: cluster, Namespace: k.ns, Kind: l["scaletargetref_kind"], Name: l["scaletargetref_name"]}
+		if w := d.Workloads[wk]; w != nil {
+			ms := hpaMetrics[k]
+			sort.Strings(ms)
+			w.HPA = &HPA{Name: k.name, Metrics: ms, Targets: hpaUtil[k], MinReplicas: hpaMin[k], MaxReplicas: hpaMax[k], PeakReplicas: hpaPeak[k]}
+		}
+	}
+	s.loadGPU(ctx, d, data, q, start, end)
+	if d.Pricing, err = s.loadPricing(ctx, q, end); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+// loadPricing reads the cluster's pricing rates from the hub's own store (default rates when it
+// has none).
+func (s *Source) loadPricing(ctx context.Context, q Queries, end time.Time) (Pricing, error) {
+	cfg := s.Cfg
+	var mu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(max(s.Concurrency, 2))
+	instantOn := func(src Querier, name, query string, apply func(VectorSample)) {
+		g.Go(func() error {
+			res, err := src.Instant(gctx, query, end)
+			if err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			for _, r := range res {
+				apply(r)
+			}
+			return nil
+		})
+	}
 	var cpuRate, memRate, nodes float64
 	cpuAvg, cpuCount := q.Pricing("kerf_cpu_core_hourly_cost_usd", time.Hour)
 	memAvg, _ := q.Pricing("kerf_memory_gib_hourly_cost_usd", time.Hour)
@@ -352,37 +450,14 @@ func (s *Source) Load(ctx context.Context, cluster string, end time.Time, window
 	optional("pricingCUREnd", PricingCURPeriod("end"), func(r VectorSample) { curEnd = r.Sample.V })
 
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return Pricing{}, err
 	}
-	// Live values first so they win.
-	for _, f := range inv {
-		f()
-	}
-	for k, names := range initNames {
-		if w := d.Workloads[k]; w != nil {
-			for n := range names {
-				if c := w.Containers[n]; c != nil {
-					c.Init = true
-				}
-			}
-		}
-	}
-	images.apply(d)
-	for k, l := range hpaTargets {
-		wk := hubapi.WorkloadKey{Cluster: cluster, Namespace: k.ns, Kind: l["scaletargetref_kind"], Name: l["scaletargetref_name"]}
-		if w := d.Workloads[wk]; w != nil {
-			ms := hpaMetrics[k]
-			sort.Strings(ms)
-			w.HPA = &HPA{Name: k.name, Metrics: ms, Targets: hpaUtil[k], MinReplicas: hpaMin[k], MaxReplicas: hpaMax[k], PeakReplicas: hpaPeak[k]}
-		}
-	}
-	s.loadGPU(ctx, d, data, q, start, end)
-	d.Pricing = Pricing{CPUCoreHour: cfg.DefaultCPUCoreHourUSD, MemoryGiBHour: cfg.DefaultMemoryGiBHourUSD, Source: PricingSourceDefault}
+	p := Pricing{CPUCoreHour: cfg.DefaultCPUCoreHourUSD, MemoryGiBHour: cfg.DefaultMemoryGiBHourUSD, Source: PricingSourceDefault}
 	if cpuRate > 0 && memRate > 0 {
-		d.Pricing = Pricing{CPUCoreHour: cpuRate, MemoryGiBHour: memRate, Source: PricingSourceMetrics, Nodes: int(nodes)}
-		d.Pricing.Sources, d.Pricing.CURPeriod = pricingSources(sources, curStart, curEnd)
+		p = Pricing{CPUCoreHour: cpuRate, MemoryGiBHour: memRate, Source: PricingSourceMetrics, Nodes: int(nodes)}
+		p.Sources, p.CURPeriod = pricingSources(sources, curStart, curEnd)
 	}
-	return d, nil
+	return p, nil
 }
 
 // pricingSources sorts the source counts and keeps the period only when a node uses a cur rate.
@@ -422,7 +497,7 @@ func (w *RawWorkload) Data(p Profile, end time.Time, cfg Config) WorkloadData {
 	from := end.Add(-p.Window)
 	peakFrom := end.Add(-p.PeakWindow())
 	qs := Quantiles(p)
-	out := WorkloadData{Key: w.Key, HPA: w.HPA}
+	out := WorkloadData{Key: w.Key, HPA: w.HPA, ThrottleDerived: w.ThrottleDerived, HPAUnknown: w.HPAUnknown}
 	mainSamples := 0
 	for _, c := range w.Containers {
 		if !c.Init {

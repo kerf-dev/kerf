@@ -1,0 +1,48 @@
+[
+ {
+  "timeframe": {
+   "start": "2026-11-09T11:00:00.000000000Z",
+   "end": "2026-11-09T11:20:00.000000000Z"
+  },
+  "interval": "300000000000",
+  "k8s.namespace.name": "shop",
+  "k8s.workload.kind": "deployment",
+  "k8s.workload.name": "web",
+  "k8s.container.name": "app",
+  "vmax": [
+   104857600,
+   115343360,
+   null,
+   125829120
+  ],
+  "vsum": [
+   209715200,
+   230686720,
+   null,
+   251658240
+  ]
+ },
+ {
+  "timeframe": {
+   "start": "2026-11-09T11:00:00.000000000Z",
+   "end": "2026-11-09T11:20:00.000000000Z"
+  },
+  "interval": "300000000000",
+  "k8s.namespace.name": "shop",
+  "k8s.workload.kind": "statefulset",
+  "k8s.workload.name": "db",
+  "k8s.container.name": "postgres",
+  "vmax": [
+   536870912,
+   536870912,
+   536870912,
+   536870912
+  ],
+  "vsum": [
+   536870912,
+   536870912,
+   536870912,
+   536870912
+  ]
+ }
+]

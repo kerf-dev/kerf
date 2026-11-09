@@ -73,6 +73,7 @@ exclude_docs: |
   branding/hero-*.png
   screenshots/*
   !screenshots/overview-*.png
+  !screenshots/dynatrace-*.png
 
 extra:
   homepage: https://getkerf.dev/
@@ -99,6 +100,7 @@ nav:
       - quickstart.md
       - install/eks.md
       - install/any-cluster.md
+      - install/dynatrace.md
   - Concepts:
       - concepts/README.md
       - concepts/modes.md

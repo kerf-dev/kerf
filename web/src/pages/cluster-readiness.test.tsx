@@ -169,20 +169,21 @@ describe('Readiness of a cluster read from Dynatrace', () => {
     const res = await fetch(`${window.location.origin}/v1/clusters/dt-prod-eu1/readiness`)
     const body = (await res.json()) as ClusterReadiness
     const remediations = body.checks.filter((c) => c.remediation && c.id.startsWith('metrics.'))
-    expect(remediations.map((c) => c.id).sort()).toEqual([
-      'metrics.dcgm',
-      'metrics.hpa',
-      'metrics.restarts-oom',
-    ])
-    for (const c of body.checks.filter((x) => x.id.startsWith('metrics.') || x.id === 'datasource.reachable'))
+    expect(remediations.map((c) => c.id).sort()).toEqual(['metrics.hpa', 'metrics.node-labels'])
+    for (const c of body.checks.filter(
+      (x) => x.id.startsWith('metrics.') || x.id === 'datasource.reachable' || x.id === 'pricing.coverage',
+    ))
       expect(`${c.message} ${c.remediation ?? ''}`).not.toMatch(
         /kube-state-metrics|scrape|vmagent|Prometheus|cAdvisor|helm upgrade/i,
       )
 
     renderTab('dt-prod-eu1')
-    const oom = await screen.findByTestId('check-metrics.restarts-oom')
-    expect(oom).toHaveTextContent('dt.kubernetes.container.oom_kills missing: the OOM guardrail is blind')
-    expect(oom).toHaveTextContent('Dynatrace Operator with a DynaKube')
+    const labels = await screen.findByTestId('check-metrics.node-labels')
+    expect(labels).toHaveTextContent('node labels lack capacity type on 2 of 24 nodes')
+    expect(labels).toHaveTextContent('Karpenter sets karpenter.sh/capacity-type')
+    expect(screen.getByTestId('check-metrics.recommendations')).toHaveTextContent(
+      'recommendations for 410 of 412 workloads',
+    )
     const hpa = screen.getByTestId('check-metrics.hpa')
     expect(hpa).toHaveTextContent('Dynatrace records no HorizontalPodAutoscaler metrics')
     fireEvent.click(within(hpa).getByRole('button'))

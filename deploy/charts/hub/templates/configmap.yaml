@@ -30,6 +30,13 @@ data:
     {{- if include "hub.datasourceKeyEnabled" . }}
     {{- $_ := set $onb "secretsKeyFile" "/etc/hub/datasource-key/key" }}
     {{- end }}
+    {{- range $i, $d := .Values.onboarding.datasourceSecrets }}
+    {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$" (toString $d.name)) }}{{ fail (printf "onboarding.datasourceSecrets[%d].name must be a DNS label" $i) }}{{ end }}
+    {{- if not $d.existingSecret }}{{ fail (printf "onboarding.datasourceSecrets[%d].existingSecret is required" $i) }}{{ end }}
+    {{- end }}
+    {{- if .Values.onboarding.datasourceSecrets }}
+    {{- $_ := set $onb "datasourceSecretsDir" "/etc/hub/datasource-secrets" }}
+    {{- end }}
     {{- if .Chart.AppVersion }}
     {{- if not (hasKey $onb "hubVersion") }}{{- $_ := set $onb "hubVersion" .Chart.AppVersion }}{{- end }}
     {{- end }}

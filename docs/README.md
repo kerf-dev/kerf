@@ -13,6 +13,7 @@ with search and a version switch, at [getkerf.dev/docs](https://getkerf.dev/docs
 | [Install on an existing cluster](install/single-cluster.md) | One namespace, in-cluster PostgreSQL, `global.mode: all`: an evaluation install on EKS or any cluster, without RDS, an ALB or External Secrets |
 | [Install on Amazon EKS](install/eks.md) | Prerequisites, AWS resources, the hub and workload clusters, readiness, turning on `auto-patch`, Argo CD, upgrade, uninstall, troubleshooting |
 | [Install on any cluster](install/any-cluster.md) | The same chart on a conformant cluster, with a static price table instead of the AWS price list, and the kube-state-metrics collectors Kerf needs |
+| [Use Dynatrace as the metrics source](install/dynatrace.md) | Dual-write through the OpenTelemetry Collector or Grafana Alloy, or the native `dynatrace` datasource: the platform token in a Secret, the metric mapping and its gaps, readiness, query load and limits |
 | [Concepts](concepts/README.md) | Modes, policies and precedence, apply strategies, guardrails, rollback, HPA coordination, JVM, approve once, GitOps and Argo CD |
 | [Operate](operate/README.md) | Upgrade, backup, alerts and dashboards, readiness checks and their fixes, troubleshooting |
 | [Reference](reference/README.md) | Generated pages: chart values, custom resources, hub API; plus metrics and events |

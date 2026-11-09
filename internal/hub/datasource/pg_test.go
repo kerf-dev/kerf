@@ -168,3 +168,54 @@ func TestPG(t *testing.T) {
 		t.Errorf("reuse name: %v", err)
 	}
 }
+
+// TestPGDynatrace: a dynatrace datasource round-trips through Postgres (type check of the
+// migration, ActiveGate URL and token Secret name in auth_config, a pasted token encrypted).
+func TestPGDynatrace(t *testing.T) {
+	st := testDB(t)
+	ctx := context.Background()
+	pg := &datasource.PG{DB: st.Pool}
+	k := make([]byte, datasource.KeySize)
+	_, _ = rand.Read(k)
+	c, _ := datasource.NewCipher(k)
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir+"/dynatrace", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir+"/dynatrace/token", []byte("dt0s16.MOUNTED.secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reg := &datasource.Registry{Repo: pg, Cipher: c, SecretsDir: dir}
+	actor := hubapi.Actor{Type: "user", Name: "alice", Role: "admin"}
+	if err := reg.EnsureLocal(ctx, "http://vm:8428"); err != nil {
+		t.Fatal(err)
+	}
+	d, err := reg.Create(ctx, hubapi.DatasourceInput{Name: "dynatrace-prod", Type: hubapi.DatasourceDynatrace, URL: "https://abc12345.apps.dynatrace.com",
+		Auth:      &hubapi.DatasourceAuthInput{Type: hubapi.AuthBearer, TokenSecret: "dynatrace"},
+		Dynatrace: &hubapi.DynatraceSettings{ActiveGateURL: "https://activegate.example.internal:9999"}}, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := reg.Get(ctx, d.ID)
+	if err != nil || got.Type != hubapi.DatasourceDynatrace || got.Auth.TokenSecret != "dynatrace" || got.Auth.SecretConfigured ||
+		got.Dynatrace == nil || got.Dynatrace.ActiveGateURL != "https://activegate.example.internal:9999" {
+		t.Fatalf("get %v %+v", err, got)
+	}
+	cfg, err := reg.Config(ctx, d.ID)
+	if err != nil || cfg.Secrets.Token != "dt0s16.MOUNTED.secret" {
+		t.Fatalf("config %v", err)
+	}
+	// switch to a pasted token: stored encrypted, the Secret name is dropped
+	_, after, err := reg.Update(ctx, d.ID, 1, hubapi.DatasourceInput{Name: "dynatrace-prod", Type: hubapi.DatasourceDynatrace, URL: "https://abc12345.apps.dynatrace.com",
+		Auth: &hubapi.DatasourceAuthInput{Type: hubapi.AuthBearer, Token: "dt0s16.PASTED.secret"}}, actor)
+	if err != nil || after.Auth.TokenSecret != "" || !after.Auth.SecretConfigured || after.Dynatrace == nil {
+		t.Fatalf("update %v %+v", err, after)
+	}
+	var raw []byte
+	if err := st.Pool.QueryRow(ctx, `SELECT auth_secret FROM datasources WHERE id = $1`, d.ID).Scan(&raw); err != nil || strings.Contains(string(raw), "PASTED") {
+		t.Fatalf("stored secret %v", err)
+	}
+	if _, err := reg.Delete(ctx, d.ID, 2, actor); err != nil {
+		t.Fatal(err)
+	}
+}

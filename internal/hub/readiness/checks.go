@@ -16,6 +16,7 @@ import (
 
 	rd "github.com/kerf-dev/kerf/api/v1alpha1/readiness"
 	"github.com/kerf-dev/kerf/internal/hub/datasource"
+	"github.com/kerf-dev/kerf/internal/hub/datasource/dynatrace"
 	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
@@ -63,6 +64,8 @@ type Report struct {
 	Latency     time.Duration
 	// Reachable is false when the datasource could not be queried at all.
 	Reachable bool
+	// Metrics is the mapping of Kerf's inputs to the datasource's own metrics (dynatrace).
+	Metrics []hubapi.DatasourceMetricStatus
 }
 
 // OK reports whether every blocking check passed.
@@ -90,6 +93,10 @@ func (c *MetricsChecker) Run(ctx context.Context) Report {
 	}
 	rep := &Report{}
 	r := &run{c: c, ctx: ctx, now: now, out: rep}
+	if src, ok := c.Q.(*dynatrace.Source); ok {
+		r.runDynatrace(src)
+		return *rep
+	}
 	if !r.reachable() {
 		for _, id := range metricsCheckIDs[1:] {
 			r.add(id, rd.StatusUnknown, "not checked: the datasource is not reachable", "", "", nil)

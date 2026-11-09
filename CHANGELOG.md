@@ -12,6 +12,25 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+### Added
+
+- **Dynatrace as a metrics source** ([#66](https://github.com/kerf-dev/kerf/issues/66)). A new datasource type
+  `dynatrace` reads a cluster's Kubernetes metrics from a Dynatrace environment with DQL: container CPU and memory,
+  requests and limits, the workload of each container, restarts and OOM kills, node allocatable and the Smartscape
+  node labels (both capacity-type labels). The recommender, the readiness checks, pricing, the usage charts and
+  realized savings use it. The **Test** button shows the metric mapping and names each missing metric. Readiness gives
+  Dynatrace remediations; HPA coupling is reported as unknown, and recommendations say when the throttling input is
+  Dynatrace's derived ratio. Queries run as one batch per cluster per recompute and back off on HTTP 429.
+- **Datasource tokens from a Kubernetes Secret.** A bearer datasource can name `auth.tokenSecret` instead of storing a
+  token: the hub chart mounts the Secrets listed in `onboarding.datasourceSecrets`, and a rotated Secret is picked up
+  without a restart.
+
+### Documentation
+
+- **Use Dynatrace as the metrics source** (`docs/install/dynatrace.md`): dual-write with the OpenTelemetry Collector
+  or Grafana Alloy, or the native datasource, with the mapping from Kerf's series to Dynatrace metric keys, the gaps
+  and the limits.
+
 ## [0.1.1] - 2026-11-08
 
 This release fixes what a first install on EKS showed ([#59](https://github.com/kerf-dev/kerf/issues/59)): Graviton

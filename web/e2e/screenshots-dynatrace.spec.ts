@@ -51,6 +51,8 @@ for (const theme of ['light', 'dark'] as const) {
     })
 
     test(`dynatrace test result (${theme})`, async ({ page }) => {
+      // Tall enough to hold the card without scrolling past the sticky header.
+      await page.setViewportSize({ width: 1280, height: 2400 })
       await page.goto('/admin/datasources')
       await settle(page)
       const card = page.getByTestId('datasource-dynatrace-prod')
@@ -65,11 +67,10 @@ for (const theme of ['light', 'dark'] as const) {
       await page.setViewportSize({ width: 1280, height: 3200 })
       await page.goto('/clusters/dt-prod-eu1?tab=readiness')
       await settle(page)
-      for (const id of ['metrics.hpa', 'metrics.dcgm'])
-        await page.getByTestId(`check-${id}`).getByRole('button').click()
+      for (const id of ['metrics.hpa']) await page.getByTestId(`check-${id}`).getByRole('button').click()
       await page.waitForTimeout(600)
       // The Metrics group of the checklist: the part that differs for a Dynatrace datasource.
-      const metrics = page.locator('section', { has: page.getByTestId('check-metrics.restarts-oom') })
+      const metrics = page.locator('section', { has: page.getByTestId('check-metrics.node-labels') })
       await metrics.screenshot({ path: `${dir}/dynatrace-readiness-${theme}.png` })
     })
   })

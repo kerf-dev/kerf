@@ -2,6 +2,7 @@ package recommender
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -65,5 +66,76 @@ func TestSourceBinder(t *testing.T) {
 		if strings.Contains(q, `"cluster", "c1", "", ""`) {
 			t.Errorf("default binder relabels: %.80s", q)
 		}
+	}
+}
+
+// fakeWorkloadSource is a datasource that is not queried with PromQL.
+type fakeWorkloadSource struct {
+	req WorkloadRequest
+	out map[hubapi.WorkloadKey]*RawWorkload
+}
+
+func (f *fakeWorkloadSource) Instant(context.Context, string, time.Time) ([]VectorSample, error) {
+	return nil, errors.New("PromQL sent to a workload source")
+}
+
+func (f *fakeWorkloadSource) Range(context.Context, string, time.Time, time.Time, time.Duration) ([]Series, error) {
+	return nil, errors.New("PromQL sent to a workload source")
+}
+
+func (f *fakeWorkloadSource) LoadWorkloads(_ context.Context, req WorkloadRequest) (map[hubapi.WorkloadKey]*RawWorkload, error) {
+	f.req = req
+	return f.out, nil
+}
+
+// TestSourceWorkloadSource: a bound datasource that loads workloads itself replaces the PromQL
+// queries; pricing stays on the hub's own store; its recommendations say the throttling input
+// is derived and HPA coupling is unknown.
+func TestSourceWorkloadSource(t *testing.T) {
+	cfg := DefaultConfig()
+	local := newFakeQuerier()
+	key := hubapi.WorkloadKey{Cluster: "c1", Namespace: "shop", Kind: hubapi.KindDeployment, Name: "web"}
+	var cpu, mem, pods []Sample
+	for i := 0; i < 2016; i++ {
+		ts := testEnd.Add(-time.Duration(2016-i) * 5 * time.Minute)
+		cpu = append(cpu, Sample{T: ts, V: 0.2})
+		mem = append(mem, Sample{T: ts, V: 200 * MiB})
+		pods = append(pods, Sample{T: ts, V: 2})
+	}
+	ws := &fakeWorkloadSource{out: map[hubapi.WorkloadKey]*RawWorkload{key: {
+		Key: key, Pods: pods, HasRequests: true, Live: true, ThrottleDerived: true, HPAUnknown: true,
+		Containers: map[string]*RawContainer{"app": {Name: "app", CPU: cpu, Memory: mem, Throttle: []Sample{{T: testEnd, V: 0.01}},
+			Current: Current{CPURequest: 1, MemoryRequest: 1 << 30}}},
+	}}}
+	m := datasource.Matcher{Cluster: "c1", Label: "cluster", Value: "prod-eu1"}
+	src := &Source{Q: local, Cfg: cfg, Binder: func(context.Context, string) (Querier, *datasource.Matcher, error) { return ws, &m, nil }}
+	d, err := src.Load(context.Background(), "c1", testEnd, 7*24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.req.Cluster != "c1" || ws.req.SourceCluster() != "prod-eu1" || ws.req.Step != cfg.Step || ws.req.RiskWindow != cfg.RiskWindow ||
+		!ws.req.End.Equal(cfg.Align(testEnd)) || !ws.req.Start.Equal(ws.req.End.Add(-7*24*time.Hour)) {
+		t.Errorf("request = %+v", ws.req)
+	}
+	for q := range local.called {
+		if !strings.Contains(q, "hourly_cost_usd") && !strings.Contains(q, "kerf_pricing_cur_") {
+			t.Errorf("data query on the local store: %.80s", q)
+		}
+	}
+	if len(local.called) != 6 {
+		t.Errorf("%d pricing queries, want 6 (no GPU prices)", len(local.called))
+	}
+	w := d.Workloads[key]
+	if w == nil {
+		t.Fatal("workload missing")
+	}
+	p := cfg.Profiles[hubapi.ProfileDev]
+	res, ok := Recommend(Request{Workload: w.Data(p, d.End, cfg), Settings: cfg.EffectiveSettings(nil), Profile: p, Pricing: d.Pricing, End: d.End}, PercentileStrategy{}, cfg)
+	if !ok {
+		t.Fatal("no recommendation")
+	}
+	notes := strings.Join(res.Recommendation.Containers[0].Explanation.CPU.Notes, "; ")
+	if !strings.Contains(notes, NoteThrottleDerived) || !strings.Contains(notes, NoteHPAUnknown) {
+		t.Errorf("cpu notes = %q", notes)
 	}
 }

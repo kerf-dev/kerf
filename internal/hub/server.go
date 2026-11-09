@@ -212,6 +212,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST /v1/internal/datasources/{datasourceId}/api/v1/query", &accessPricing, s.proxyQuery},
 		{"GET /v1/internal/datasources/{datasourceId}/api/v1/query_range", &accessPricing, s.proxyQuery},
 		{"POST /v1/internal/datasources/{datasourceId}/api/v1/query_range", &accessPricing, s.proxyQuery},
+		{"GET /v1/internal/clusters/{cluster}/nodes", &accessPricing, s.clusterNodeInventory},
 	}
 }
 

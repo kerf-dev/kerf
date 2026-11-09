@@ -9,7 +9,9 @@ below and the catalog in sync). Storage: `db/migrations/0010_onboarding_readines
 ## 1. Datasources and the cluster metrics binding
 
 A **datasource** is a Prometheus-compatible query endpoint (`prometheus`, `victoriametrics`, `thanos`,
-`mimir`, `amp`).
+`mimir`, `amp`), or a Dynatrace environment (`dynatrace`). A `dynatrace` datasource is read with DQL, not PromQL:
+`url` is the environment URL, `dynatrace.activeGateURL` optionally receives the queries instead, and auth is
+`bearer` with a platform token. Its metric mapping and gaps: [docs/install/dynatrace.md](../install/dynatrace.md).
 
 **Auth** is one of `none`, `bearer`, `basic`, `sigv4` (AMP; credentials from IRSA / Pod Identity, so only
 region, service and an optional role ARN), or `mtls`. Secret material is **write-only**:
@@ -17,6 +19,9 @@ region, service and an optional role ARN), or `mtls`. Secret material is **write
 - It is stored encrypted by the hub, with a key from a Secret.
 - It is never returned. `Datasource.auth` (`DatasourceAuthInfo`) only says `secretConfigured: true`.
 - On update, omitting a secret field keeps the stored one. `clearSecrets: true` removes them.
+- Instead of `token`, a bearer datasource may name `tokenSecret`: a Secret mounted into the hub (hub chart
+  `onboarding.datasourceSecrets`, file `<datasourceSecretsDir>/<name>/token`). Nothing is stored; the hub re-reads
+  the file and rebuilds its client when the token changes. `DatasourceAuthInfo.tokenSecret` returns the name.
 
 **Headers** (e.g. `X-Scope-OrgID`) are not secret and are returned.
 
@@ -36,7 +41,9 @@ A cluster's **metrics binding** (`ClusterAdmin.metrics`, set by `POST /v1/admin/
 | `jobNames.cadvisor` / `.kubeStateMetrics` | `[kubelet, cadvisor]` / `[kube-state-metrics]` | only to make diagnoses precise |
 
 Every query the hub builds uses `{<clusterLabel>="<clusterLabelValue>", <extraMatchers>…}`. Results are
-re-labelled to the registered cluster name, so nothing downstream changes.
+re-labelled to the registered cluster name, so nothing downstream changes. For a `dynatrace` datasource,
+`clusterLabelValue` is the Dynatrace `k8s.cluster.name`, `clusterLabel` is not used and `extraMatchers` must be
+empty (`400 invalid_metrics`).
 
 ## 2. Readiness states
 
@@ -150,6 +157,15 @@ datasource_in_use` while a cluster is bound to it, and `409 builtin` for `local`
                "remediationType": "yaml", "docsURL": "…/readiness#metrics.node-labels", "checkedAt": "…"}]}
 ```
 Without `binding`, only `datasource.reachable` runs, plus `labelValues` for `clusterLabel` `cluster`.
+
+For a `dynatrace` datasource the result also has `metrics`: one `DatasourceMetricStatus` per Kerf input (its
+Prometheus name, the Dynatrace source, `found` / `missing` / `notAvailable`, the series count). Without `binding` it
+searches the whole environment and `labelValues` are the `k8s.cluster.name` values. The checks keep their ids;
+their messages and remediations are Dynatrace steps (Kubernetes monitoring, token scopes, node labels), never
+scrape jobs or kube-state-metrics. `metrics.hpa` is `unknown` (Dynatrace has no HPA metrics) and `metrics.dcgm`
+`unknown`. Pricing reads such a cluster's nodes from `GET /v1/internal/clusters/{cluster}/nodes`
+(`ClusterMetricsBinding.datasourceType` says which clusters); the query proxy answers PromQL for it with a
+Prometheus-format `400` error.
 
 `GET /v1/clusters/{c}/readiness` (viewer)
 ```json

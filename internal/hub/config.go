@@ -122,6 +122,10 @@ type OnboardingConfig struct {
 	// encrypts (a mounted Secret; env HUB_DATASOURCE_KEY_FILE). Empty: datasources with a secret
 	// (bearer, basic, mTLS) cannot be created.
 	SecretsKeyFile string `json:"secretsKeyFile"`
+	// DatasourceSecretsDir holds mounted datasource Secrets, one directory per Secret with a file
+	// token (<dir>/<name>/token): a datasource with auth.tokenSecret <name> uses that token. The
+	// hub chart mounts onboarding.datasourceSecrets here.
+	DatasourceSecretsDir string `json:"datasourceSecretsDir"`
 	// DocsBaseURL is the base of the readiness docs links (docsURL = <base>/readiness#<check>).
 	DocsBaseURL string `json:"docsBaseURL"`
 	// CheckInterval: how often the metrics checks run per cluster (default 1h).

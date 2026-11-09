@@ -101,6 +101,8 @@ type WorkloadData struct {
 	// after the first sample).
 	AverageReplicas float64
 	HPA             *HPA
+	// ThrottleDerived and HPAUnknown describe the metrics source (RawWorkload).
+	ThrottleDerived, HPAUnknown bool
 }
 
 // ContainerNames returns the sorted container names.

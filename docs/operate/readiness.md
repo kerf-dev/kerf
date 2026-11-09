@@ -17,6 +17,8 @@ curl -sS -b cookies https://<ui-host>/v1/clusters/<cluster>/readiness \
 ```
 
 Each failing check carries its `message` and a `remediation`: a command, a values snippet or a sentence.
+The fixes on this page are for Prometheus-compatible datasources. A cluster read from Dynatrace runs the same checks
+with Dynatrace remediations instead: [Use Dynatrace as the metrics source](../install/dynatrace.md#readiness).
 Each check also shows when it ran (`checkedAt`, "checked 23 minutes ago" in the UI).
 
 **After a fix, re-check.** The hub runs its metrics checks at registration, on a re-check, on a recompute, and
