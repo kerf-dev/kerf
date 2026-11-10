@@ -136,6 +136,23 @@ class VersionTest(unittest.TestCase):
         self.assertEqual(build_site.pick_versions([], 3), ([], None))
 
 
+class UnpublishedTest(unittest.TestCase):
+    def test_page_and_links_dropped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs = Path(tmp)
+            (docs / "branding").mkdir()
+            (docs / "branding" / "brand.md").write_text("# Brand\n")
+            (docs / "branding" / "comparison.md").write_text("# Comparison\n")
+            (docs / "README.md").write_text("| a | b |\n| [Brand](branding/brand.md) | x |\n| [C](branding/comparison.md) | y |\n")
+            (docs / "guides").mkdir()
+            (docs / "guides" / "g.md").write_text("See [voice](../branding/brand.md#voice).\nKeep me.\n")
+            build_site.drop_unpublished(docs)
+            self.assertFalse((docs / "branding" / "brand.md").exists())
+            self.assertTrue((docs / "branding" / "comparison.md").exists())
+            self.assertEqual((docs / "README.md").read_text(), "| a | b |\n| [C](branding/comparison.md) | y |\n")
+            self.assertEqual((docs / "guides" / "g.md").read_text(), "Keep me.\n")
+
+
 class ValuesCommentsTest(unittest.TestCase):
     TEXT = """\
 # Banner of the file

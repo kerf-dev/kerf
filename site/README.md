@@ -2,7 +2,7 @@
 
 The Kerf website: one static page, plain HTML and CSS, no JavaScript and no build step. Published to GitHub
 Pages by [.github/workflows/pages.yaml](../.github/workflows/pages.yaml) on every push to `main` that touches
-`site/` (or by hand: Actions → pages → Run workflow). Brand rules: [docs/branding/brand.md](../docs/branding/brand.md#website).
+`site/` (or by hand: Actions → pages → Run workflow).
 
 | Path | What |
 |---|---|

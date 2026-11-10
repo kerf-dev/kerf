@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 
-// The Kerf mark (docs/branding/brand.md): a tile with one corner trimmed off along a saw cut, the
+// The Kerf mark: a tile with one corner trimmed off along a saw cut, the
 // trimmed piece set apart by the width of the cut. Same geometry as docs/branding/kerf-mark-*.svg.
 const BODY = 'M12 4H29L60 35V52A12 12 0 0 1 48 64H12A12 12 0 0 1 0 52V16A12 12 0 0 1 12 4Z'
 const TRIM = 'M33 0H52A12 12 0 0 1 64 12V31Z'
