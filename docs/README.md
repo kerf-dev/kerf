@@ -71,5 +71,5 @@ The interfaces between components. Changes to them need a design note (see [CONT
 |---|---|
 | [Architecture](architecture.md) | How the hub, agent, webhook and pricing fit together, and the main design choices |
 | [Roadmap](../README.md#roadmap) | What comes next |
-| [Brand guide](branding/brand.md) | Name, positioning, voice, logo, colours; the [comparison sources](branding/comparison.md) |
+| [Comparison sources](branding/comparison.md) | Every cell of the comparison table, with its source |
 | [Screenshots](screenshots) | Every UI page in light, dark and tablet layouts (`make web-screenshots`) |

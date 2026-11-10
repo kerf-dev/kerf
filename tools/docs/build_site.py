@@ -28,6 +28,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SEMVER = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$")
+# Pages that older release tags still contain but that are no longer published (paths under docs/).
+UNPUBLISHED = ["branding/brand.md"]
 
 
 @dataclass(frozen=True)
@@ -83,6 +85,18 @@ def git(*args: str, cwd: Path = ROOT) -> str:
     return subprocess.run(["git", *args], cwd=cwd, check=True, text=True, capture_output=True).stdout
 
 
+def drop_unpublished(docs: Path) -> None:
+    """Delete the UNPUBLISHED pages from a tag's docs/ and every line that links to one of them."""
+    # ponytail: drops the whole line (a table row or a bullet); fine for the links that exist today.
+    for rel in UNPUBLISHED:
+        (docs / rel).unlink(missing_ok=True)
+        for md in docs.rglob("*.md"):
+            text = md.read_text()
+            kept = "".join(line for line in text.splitlines(keepends=True) if f"{rel})" not in line and f"{rel}#" not in line)
+            if kept != text:
+                md.write_text(kept)
+
+
 def release_tags() -> list[Tag]:
     out = []
     for name in git("tag", "--list", "v*").split():
@@ -130,6 +144,7 @@ def main() -> int:
             src = tmp / "src" / t.name
             git("worktree", "add", "--detach", "-q", str(src), t.name)
             try:
+                drop_unpublished(src / "docs")
                 aliases = ["latest"] if latest and t.name == latest.name else []
                 mike("deploy", "--alias-type", "redirect", "--update-aliases", "--title", t.name.lstrip("v"),
                      t.minor_id, *aliases,

@@ -116,7 +116,8 @@ Fix a title by editing it on the pull request; the check runs again. Try one loc
   fails the pull request until the title fits.
 - User-visible changes get a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
 - Go: `log/slog` for logging, controller-runtime for Kubernetes code.
-- Writing docs or UI text? [docs/branding/brand.md](docs/branding/brand.md) has the voice and the words we use.
+- Writing docs or UI text? Write **Kerf** with a capital K. Use lower case `kerf` only where the system needs it
+  (the chart, the namespace, image names, CLI commands).
 
 If a pull request waits for review longer than a week, a friendly ping on it is welcome.
 
