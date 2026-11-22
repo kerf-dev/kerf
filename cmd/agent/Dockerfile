@@ -11,6 +11,7 @@ COPY api/ api/
 COPY cmd/agent/ cmd/agent/
 COPY internal/agent/ internal/agent/
 COPY internal/health/ internal/health/
+COPY internal/tunnel/ internal/tunnel/
 ARG VERSION=dev
 ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \

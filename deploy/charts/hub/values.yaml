@@ -351,6 +351,15 @@ updateCheck:
   # The releases API (a mirror or a test server).
   url: https://api.github.com/repos/kerf-dev/kerf/releases
 
+# Agents in listen mode (agent chart hub.connect: listen), for workload clusters that cannot reach the hub: the hub
+# opens the connections the agent uses to call it (docs/install/eks.md#when-workload-clusters-cannot-reach-the-hub).
+# Each entry: cluster (registered name), url (the agent's tunnel endpoint as the hub reaches it), existingSecret
+# with the tunnel token under key (default token, the same value as the agent's hub.listen.tokenSecret) and
+# connections kept open (default 4). Every hub replica keeps its own connections.
+#   agentTunnels:
+#     - {cluster: prod-eu-1, url: "https://kerf-agent.prod-eu-1.example.internal", existingSecret: kerf-tunnel-prod-eu-1}
+agentTunnels: []
+
 # Notifications (Admin -> Notifications, docs/notifications.md): Slack, Microsoft Teams and signed
 # webhooks, rules, the weekly digest. Rules and the digest are set in the UI; channels can come from
 # here too (read-only in the UI). A channel's URL (a credential) and a webhook channel's signing

@@ -87,7 +87,15 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --cluster-name={{ .Values.clusterName }}
+            {{- if eq .Values.hub.connect "listen" }}
+            - --hub-connect=listen
+            - --hub-listen-address=:{{ .Values.hub.listen.port }}
+            - --hub-listen-token-file=/var/run/secrets/kerf/hub-tunnel/{{ .Values.hub.listen.tokenSecret.key }}
+            {{- else if eq .Values.hub.connect "pull" }}
             - --hub-url={{ include "agent.hubURL" . }}
+            {{- else }}
+            {{- fail (printf "hub.connect %q: want pull or listen" .Values.hub.connect) }}
+            {{- end }}
             - --hub-token-file=/var/run/secrets/kerf/hub/{{ $tok.key }}
             {{- if .Values.stubHub.enabled }}
             - --hub-token-optional
@@ -164,6 +172,10 @@ spec:
               containerPort: {{ .Values.metrics.port }}
             - name: probes
               containerPort: 8081
+            {{- if eq .Values.hub.connect "listen" }}
+            - name: tunnel
+              containerPort: {{ .Values.hub.listen.port }}
+            {{- end }}
           livenessProbe:
             httpGet: {path: /healthz, port: probes}
             initialDelaySeconds: 10
@@ -178,6 +190,11 @@ spec:
             - name: hub-token
               mountPath: /var/run/secrets/kerf/hub
               readOnly: true
+            {{- if eq .Values.hub.connect "listen" }}
+            - name: hub-tunnel-token
+              mountPath: /var/run/secrets/kerf/hub-tunnel
+              readOnly: true
+            {{- end }}
             {{- if $ca }}
             - name: hub-ca
               mountPath: /etc/kerf/hub-ca
@@ -195,6 +212,13 @@ spec:
           secret:
             secretName: {{ $tok.name }}
             optional: true
+        {{- if eq .Values.hub.connect "listen" }}
+        # Optional like hub-token: without it the agent refuses the hub's connections and is not Ready.
+        - name: hub-tunnel-token
+          secret:
+            secretName: {{ .Values.hub.listen.tokenSecret.name }}
+            optional: true
+        {{- end }}
         {{- if $ca }}
         {{- $c := .Values.hub.caBundle }}
         - name: hub-ca

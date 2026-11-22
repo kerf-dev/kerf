@@ -1,0 +1,18 @@
+{{- if include "agent.c.enabled" . -}}
+{{- if eq .Values.hub.connect "listen" }}
+# The tunnel endpoint the hub connects to (hub.connect listen). Expose it with an ingress or load balancer that
+# passes WebSocket upgrades. Only the leader replica accepts connections; the others answer 503 and the hub retries.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agent.fullname" . }}-tunnel
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "agent.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "agent.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: tunnel
+      port: {{ .Values.hub.listen.port }}
+      targetPort: tunnel
+{{- end }}
+{{ end -}}

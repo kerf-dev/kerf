@@ -68,6 +68,14 @@ data:
     {{- $nch = append $nch $ch }}
     {{- end }}
     {{- $_ := set $cfg "notifications" (dict "baseURL" $n.baseURL "rateLimitPerMinute" $n.rateLimitPerMinute "allowInsecureHTTP" $n.allowInsecureHTTP "channels" $nch) }}
+    {{- $tun := list }}
+    {{- range $i, $t := .Values.agentTunnels }}
+    {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$" (toString $t.cluster)) }}{{ fail (printf "agentTunnels[%d].cluster must be a registered cluster name" $i) }}{{ end }}
+    {{- if not (regexMatch "^https?://" (toString $t.url)) }}{{ fail (printf "agentTunnels[%d].url must start with https:// or http://" $i) }}{{ end }}
+    {{- if not $t.existingSecret }}{{ fail (printf "agentTunnels[%d].existingSecret is required: the agent refuses connections without its tunnel token" $i) }}{{ end }}
+    {{- $tun = append $tun (dict "cluster" $t.cluster "url" $t.url "tokenFile" (printf "/etc/hub/agent-tunnels/%d/token" $i) "connections" (int ($t.connections | default 0))) }}
+    {{- end }}
+    {{- if $tun }}{{ $_ := set $cfg "agentTunnels" $tun }}{{ end }}
     {{- $_ := set $cfg "maintenance" (dict "chartVersion" .Chart.Version "releaseName" .Release.Name "releaseNamespace" .Release.Namespace) }}
     {{- toYaml $cfg | nindent 4 }}
 {{ end -}}

@@ -216,7 +216,7 @@
       }
     },
     {
-      "description": "mode spoke: agent.hub.url is required (unless agent.enabled is false).",
+      "description": "mode spoke: agent.hub.url is required (unless agent.enabled is false, or agent.hub.connect is listen: the hub connects to the agent).",
       "if": {
         "properties": {
           "global": {
@@ -231,13 +231,34 @@
           },
           "agent": {
             "not": {
-              "properties": {
-                "enabled": {
-                  "const": false
+              "anyOf": [
+                {
+                  "properties": {
+                    "enabled": {
+                      "const": false
+                    }
+                  },
+                  "required": [
+                    "enabled"
+                  ]
+                },
+                {
+                  "properties": {
+                    "hub": {
+                      "properties": {
+                        "connect": {
+                          "const": "listen"
+                        }
+                      },
+                      "required": [
+                        "connect"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "hub"
+                  ]
                 }
-              },
-              "required": [
-                "enabled"
               ]
             }
           }

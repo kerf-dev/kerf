@@ -17,6 +17,14 @@ spec:
       {{- with $np.ingress.metricsFrom }}
       from: {{- toYaml . | nindent 8 }}
       {{- end }}
+    {{- if eq .Values.hub.connect "listen" }}
+    # The hub's connections, through your ingress or load balancer.
+    - ports:
+        - {protocol: TCP, port: tunnel}
+      {{- with $np.ingress.tunnelFrom }}
+      from: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
   {{- if $np.egress.enabled }}
   egress:
     {{- include "agent.c.egressRules" (dict "ctx" . "ports" $np.egress.ports) }}

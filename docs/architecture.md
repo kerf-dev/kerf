@@ -20,7 +20,9 @@ cluster.
 
 **Hub and spoke, the agent pulls.** The hub produces recommendations for every workload; the agent in each
 cluster pulls them and does the writing. The hub never holds write credentials to a workload cluster. Agents
-authenticate to the hub with a per-cluster bearer token over HTTPS.
+authenticate to the hub with a per-cluster bearer token over HTTPS. Where workload clusters cannot reach the hub, the agent can run in
+listen mode: the hub opens the connections and the agent sends the same requests back over them
+([install guide](install/eks.md#when-workload-clusters-cannot-reach-the-hub)).
 
 **PromQL only.** Usage comes from Prometheus or VictoriaMetrics (Thanos, Mimir and Amazon Managed Service for
 Prometheus also work). Every query is plain PromQL, so no other monitoring product is a dependency. Each cluster
