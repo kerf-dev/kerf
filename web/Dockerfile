@@ -20,7 +20,7 @@ COPY . .
 ARG VERSION=dev
 RUN KERF_VERSION=${VERSION} npm run build
 
-FROM nginx:1.30-alpine-slim@sha256:8c950211a641ec5b23f265450517001f6bcca533666120ebe36cb4cff3d00a55
+FROM nginx:1.31-alpine-slim@sha256:5bfced78d24d644270bedb0a9968697042e38d5c03fb6354603df025279c1cbe
 # Pick up resolvers from /etc/resolv.conf for the runtime `resolver` directive. Templates render into
 # /tmp/conf.d (writable), which nginx.conf includes; the stock /etc/nginx/conf.d is not read.
 ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1 \
