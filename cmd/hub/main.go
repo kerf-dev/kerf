@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/hub/notify"
 	"github.com/kerf-dev/kerf/internal/hub/store"
 	"github.com/kerf-dev/kerf/internal/recommender"
+	"github.com/kerf-dev/kerf/internal/tunnel"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
@@ -156,7 +158,8 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	// Ready once migrations are done; /readyz also pings Postgres. Leadership plays no part.
 	srv.SetReady()
 
-	httpSrv := &http.Server{Addr: cfg.Listen, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	handler := srv.Handler()
+	httpSrv := &http.Server{Addr: cfg.Listen, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	errc := make(chan error, 1)
 	go func() {
 		log.Info("listening", "version", version, "addr", cfg.Listen, "prometheus", cfg.PrometheusURL, "interval", cfg.Recommender.Interval.D(), "pod", identity)
@@ -165,6 +168,20 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	electorCtx, stopElector := context.WithCancel(ctx)
 	electorDone := make(chan struct{})
 	go func() { defer close(electorDone); elector.Run(electorCtx) }()
+	// Agents in listen mode: every replica keeps its own connections to them and serves the same API on them.
+	tunnelCtx, stopTunnels := context.WithCancel(ctx)
+	var tunnels sync.WaitGroup
+	for _, t := range cfg.AgentTunnels {
+		d := &tunnel.Dialer{Cluster: t.Cluster, URL: t.URL, Token: tunnel.FileToken(t.TokenFile), Connections: t.Connections,
+			Handler: handler, Log: log.With("component", "agent-tunnel")}
+		tunnels.Add(1)
+		go func() {
+			defer tunnels.Done()
+			if err := d.Run(tunnelCtx); err != nil {
+				log.ErrorContext(tunnelCtx, "agent tunnel", "cluster", d.Cluster, "err", err)
+			}
+		}()
+	}
 	// This replica's version for the Maintenance page; its row is removed on shutdown.
 	beatCtx, stopBeat := context.WithCancel(ctx)
 	beatDone := make(chan struct{})
@@ -188,6 +205,8 @@ func run(configPath string, devSeed bool, log *slog.Logger) error {
 	}
 	stopBeat()
 	<-beatDone
+	stopTunnels()
+	tunnels.Wait()
 	if serveErr != nil {
 		return serveErr
 	}

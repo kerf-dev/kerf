@@ -37,6 +37,12 @@ The values of the `agent` component chart. In the `kerf` chart they sit under `a
 | `hub.tokenSecret.externalSecret.remoteRef.version` | string | `""` |  |
 | `hub.tokenSecret.externalSecret.refreshInterval` | string | `""` |  |
 | `hub.tokenSecret.externalSecret.secretStoreRef` | object | `{}` |  |
+| `hub.connect` | string | `pull` | How the agent reaches the hub.<br>`pull   the agent connects to hub.url (default).`<br>`listen the hub connects to the agent's tunnel endpoint (Service <fullname>-tunnel) and the agent calls the`<br>`hub over those connections, for clusters that cannot reach the hub. Expose the Service with your`<br>`ingress or load balancer (it must pass WebSocket upgrades) and list its URL in the hub's agentTunnels`<br>`(docs/install/eks.md#when-workload-clusters-cannot-reach-the-hub). hub.url is not used.` |
+| `hub.listen` | object | see the keys below |  |
+| `hub.listen.port` | integer | `8443` |  |
+| `hub.listen.tokenSecret` | object | see the keys below | The tunnel token the hub must present, read from a Secret key on every connection (the same value as the hub's agentTunnels[].existingSecret). Without it the agent refuses the hub and is not Ready. |
+| `hub.listen.tokenSecret.name` | string | `kerf-agent-tunnel-token` |  |
+| `hub.listen.tokenSecret.key` | string | `token` |  |
 | `hub.caBundle` | object | see the keys below | CA that signed the hub's HTTPS certificate, when it is not publicly trusted (a private CA; an ACM public certificate needs nothing). Added to the system roots (SSL_CERT_DIR), mounted at /etc/kerf/hub-ca. One of existingConfigMap, existingSecret or pem (inline, rendered into ConfigMap <fullname>-hub-ca). |
 | `hub.caBundle.existingConfigMap` | string | `""` |  |
 | `hub.caBundle.existingSecret` | string | `""` |  |
@@ -148,6 +154,7 @@ The values of the `agent` component chart. In the `kerf` chart they sit under `a
 | `networkPolicy.enabled` | boolean | `false` |  |
 | `networkPolicy.ingress` | object | see the keys below |  |
 | `networkPolicy.ingress.metricsFrom` | array | `[]` |  |
+| `networkPolicy.ingress.tunnelFrom` | array | `[]` | hub.connect listen: sources allowed to the tunnel port (your ingress controller; [] = any source). |
 | `networkPolicy.egress` | object | see the keys below |  |
 | `networkPolicy.egress.enabled` | boolean | `true` |  |
 | `networkPolicy.egress.ports` | array | `[443, 6443, 8080, 8428]` |  |

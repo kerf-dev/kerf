@@ -51,6 +51,20 @@ hub:
         version: ""
       refreshInterval: ""
       secretStoreRef: {}
+  # How the agent reaches the hub.
+  #   pull   the agent connects to hub.url (default).
+  #   listen the hub connects to the agent's tunnel endpoint (Service <fullname>-tunnel) and the agent calls the
+  #          hub over those connections, for clusters that cannot reach the hub. Expose the Service with your
+  #          ingress or load balancer (it must pass WebSocket upgrades) and list its URL in the hub's agentTunnels
+  #          (docs/install/eks.md#when-workload-clusters-cannot-reach-the-hub). hub.url is not used.
+  connect: pull
+  listen:
+    port: 8443
+    # The tunnel token the hub must present, read from a Secret key on every connection (the same value as the
+    # hub's agentTunnels[].existingSecret). Without it the agent refuses the hub and is not Ready.
+    tokenSecret:
+      name: kerf-agent-tunnel-token
+      key: token
   # CA that signed the hub's HTTPS certificate, when it is not publicly trusted (a private CA; an
   # ACM public certificate needs nothing). Added to the system roots (SSL_CERT_DIR), mounted at
   # /etc/kerf/hub-ca. One of existingConfigMap, existingSecret or pem (inline,
@@ -273,6 +287,8 @@ networkPolicy:
   enabled: false
   ingress:
     metricsFrom: []
+    # hub.connect listen: sources allowed to the tunnel port (your ingress controller; [] = any source).
+    tunnelFrom: []
   egress:
     enabled: true
     ports: [443, 6443, 8080, 8428]

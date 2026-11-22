@@ -44,6 +44,7 @@ import (
 	"github.com/kerf-dev/kerf/internal/agent/selfcheck"
 	"github.com/kerf-dev/kerf/internal/agent/windows"
 	"github.com/kerf-dev/kerf/internal/health"
+	"github.com/kerf-dev/kerf/internal/tunnel"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
@@ -180,6 +181,9 @@ func run(args []string) error {
 	var (
 		cluster        = fs.String("cluster-name", os.Getenv("CLUSTER_NAME"), "cluster name, as known to the hub (required)")
 		hubURL         = fs.String("hub-url", "http://hub-api.hub.svc:8080", "hub base URL")
+		hubConnect     = fs.String("hub-connect", "pull", "pull: the agent connects to --hub-url; listen: the hub connects to this agent's tunnel endpoint (--hub-listen-address) and the agent calls the hub over those connections, for clusters that cannot reach the hub")
+		listenAddr     = fs.String("hub-listen-address", ":8443", "listen mode: address of the tunnel endpoint the hub connects to")
+		listenToken    = fs.String("hub-listen-token-file", "/var/run/secrets/kerf/hub-tunnel/token", "listen mode: file with the tunnel token the hub must present (re-read on every connection)")
 		tokenFile      = fs.String("hub-token-file", "/var/run/secrets/kerf/hub/token", "file with the hub bearer token (re-read on every request)")
 		tokenSource    = fs.String("hub-token-source", "", "where the token file comes from, for the error when it is missing, e.g. \"Secret kerf/kerf-agent-token key token\"")
 		tokenOptional  = fs.Bool("hub-token-optional", false, "run without a hub token (a hub without auth, e.g. the development stub); otherwise a missing token is logged as an error and fails readiness")
@@ -306,7 +310,32 @@ func run(args []string) error {
 			log.Info("hub token found", "source", src)
 		}
 	}
-	hub, err := hubclient.New(*hubURL, *cluster, token, nil)
+	hubBase, hubHTTP := *hubURL, (*http.Client)(nil)
+	switch *hubConnect {
+	case "pull":
+	case "listen":
+		// Only the leader calls the hub, so only the leader takes the hub's connections.
+		elected := mgr.Elected()
+		isLeader := func() bool {
+			select {
+			case <-elected:
+				return true
+			default:
+				return false
+			}
+		}
+		tl := tunnel.NewListener(*listenAddr, tunnel.FileToken(*listenToken), isLeader, log.With("component", "hub-tunnel"))
+		if err := mgr.Add(tl); err != nil {
+			return err
+		}
+		if err := mgr.AddReadyzCheck("hub-tunnel-token", tl.CheckToken); err != nil {
+			return err
+		}
+		hubBase, hubHTTP = tunnel.BaseURL, tl.Client()
+	default:
+		return fmt.Errorf("--hub-connect %q: want pull or listen", *hubConnect)
+	}
+	hub, err := hubclient.New(hubBase, *cluster, token, hubHTTP)
 	if err != nil {
 		return err
 	}
@@ -383,7 +412,7 @@ func run(args []string) error {
 	if err := mgr.Add(puller); err != nil {
 		return err
 	}
-	log.Info("starting agent", "version", version, "cluster", *cluster, "hub", *hubURL, "readOnly", *readOnly,
+	log.Info("starting agent", "version", version, "cluster", *cluster, "hub", hubBase, "hubConnect", *hubConnect, "readOnly", *readOnly,
 		"clusterDefaults", *defaultsFile != "")
 	return mgr.Start(ctx)
 }

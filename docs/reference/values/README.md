@@ -85,6 +85,6 @@ Component sections are the component charts' values; this schema checks what the
 ## Rules the schema enforces
 
 - mode spoke and all: global.clusterName is required.
-- mode spoke: agent.hub.url is required (unless agent.enabled is false).
+- mode spoke: agent.hub.url is required (unless agent.enabled is false, or agent.hub.connect is listen: the hub connects to the agent).
 - mode hub and all: the hub needs a database Secret (hub.database.existingSecret or hub.database.externalSecret.enabled; hub.database.url only with dev: true).
 - Production (dev is not true): no inline secrets, secure cookies, a registry.

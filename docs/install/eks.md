@@ -331,6 +331,7 @@ The two DNS records that point the names at the ALBs follow in step 4.4, once th
 | hub pods | RDS | 5432 | database | step 3.2 |
 | ALB | hub and web pods | 8080 | `target-type: ip` | the Load Balancer Controller (it manages these rules) |
 | workload clusters (their VPC CIDRs) | hub internal ALB | 443 | agents → hub API | `alb.ingress.kubernetes.io/inbound-cidrs` in `values-hub.yaml` (default `10.0.0.0/8`; narrow it to your workload VPCs) |
+| hub cluster (its VPC CIDR), instead of the row above | agent tunnel endpoint of each workload cluster | 443 | hub → agent connections in listen mode ([5.5](#when-workload-clusters-cannot-reach-the-hub)) | your load balancer or ingress in the workload cluster |
 | EKS control plane (cluster security group) | workload cluster nodes | **9443** | API server → webhook | below, per workload cluster |
 
 The admission webhook listens on **9443**. The EKS cluster security group allows all traffic between
@@ -640,6 +641,79 @@ after five minutes. The state then moves to **`AutomationReady`** once every wri
 names its fix (`remediation`). The catalog is `docs/contracts/readiness.md`. The readiness states:
 `Registered → AgentConnected → MetricsOK → ReadyAudit → AutomationReady`. A session expires after
 12 hours. If `curl` returns `401`, sign in again (4.5).
+
+### 5.5 When workload clusters cannot reach the hub { #when-workload-clusters-cannot-reach-the-hub }
+
+Some networks allow traffic from the hub's VPC to the workload clusters but not back: stateful firewalls between
+accounts, transit gateway inspection, or no DNS for the hub's zone in the workload VPCs. The agent then logs
+`pull hub config failed` and the cluster stays **Never connected**. Instead of opening that path, let the hub open
+the connections: the agent runs in **listen mode**, the hub connects to the agent's tunnel endpoint, and the agent
+calls the hub over those connections. The hub API, the agent token and the readiness checks are the same; only the
+direction of the TCP connection changes.
+
+```
+pull (default)   agent ──── HTTPS 443 ────► hub
+listen           hub   ──── HTTPS 443 ────► agent tunnel endpoint   (the agent's requests then flow back over it)
+```
+
+1. **A tunnel token per cluster**, in a Secret on both sides (the hub presents it, the agent checks it). Create it
+   once and keep it in your secret store, as for the agent token:
+   ```bash
+   TUNNEL_TOKEN=$(openssl rand -hex 32)
+   kubectl --context $SPOKE_CTX -n $NS create secret generic kerf-agent-tunnel-token --from-literal=token=$TUNNEL_TOKEN
+   kubectl --context $HUB_CTX -n $NS create secret generic kerf-tunnel-$CLUSTER --from-literal=token=$TUNNEL_TOKEN
+   unset TUNNEL_TOKEN
+   ```
+2. **The agent in listen mode**, in the workload cluster's values file:
+   ```yaml
+   agent:
+     hub:
+       connect: listen          # hub.url is not used
+       listen:
+         port: 8443
+         tokenSecret: {name: kerf-agent-tunnel-token, key: token}
+   ```
+   The chart adds the Service `kerf-agent-tunnel` (port 8443). Only the leader replica accepts connections; the
+   other answers 503 and the hub tries again.
+3. **Expose the tunnel endpoint to the hub** with an internal load balancer or your ingress controller. It must
+   pass WebSocket upgrades (the ALB, NLB, Contour/Envoy and ingress-nginx do by default) and should terminate TLS.
+   For example with the AWS Load Balancer Controller:
+   ```yaml
+   apiVersion: networking.k8s.io/v1
+   kind: Ingress
+   metadata:
+     name: kerf-agent-tunnel
+     annotations:
+       alb.ingress.kubernetes.io/scheme: internal
+       alb.ingress.kubernetes.io/target-type: ip
+       alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+       alb.ingress.kubernetes.io/inbound-cidrs: <hub VPC CIDR>
+       alb.ingress.kubernetes.io/healthcheck-path: /v1/tunnel   # answers 400 to a plain GET
+       alb.ingress.kubernetes.io/success-codes: "400"
+   spec:
+     ingressClassName: alb
+     rules:
+       - host: kerf-agent.<cluster domain>
+         http:
+           paths:
+             - {path: /v1/tunnel, pathType: Exact, backend: {service: {name: kerf-agent-tunnel, port: {number: 8443}}}}
+   ```
+4. **The hub connects to it**, in the hub's values file (one entry per cluster):
+   ```yaml
+   hub:
+     agentTunnels:
+       - cluster: <cluster>
+         url: https://kerf-agent.<cluster domain>
+         existingSecret: kerf-tunnel-<cluster>
+   ```
+   The hub must trust the endpoint's certificate: a private CA goes into the hub's `extraEnv` (`SSL_CERT_DIR`) and
+   `extraVolumes`, as for datasources.
+
+**Check:** the hub logs `"msg":"agent tunnel connected","cluster":"<cluster>"` and the agent logs
+`"msg":"listening for hub connections"`; within a minute the cluster shows a heartbeat and reaches
+`AgentConnected`. `agent tunnel: connect failed` with `HTTP 401` means the two tokens differ; `HTTP 503` that the
+agent has no token (or the hub reached a replica that is not the leader, which retries on its own); a timeout
+means the hub cannot reach the endpoint.
 
 ## 6. Turning on auto-patch
 

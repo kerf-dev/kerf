@@ -321,7 +321,7 @@ prefix (`kerf-agent`): it owns cluster-scoped RBAC, where a bare `agent` could c
 {{- else if eq .Chart.Name "pricing" -}}
 {{- if not .Values.hub.url }}{{ $_ := set .Values.hub "url" (printf "http://%s:8080" $hub) }}{{ end -}}
 {{- else if eq .Chart.Name "agent" -}}
-{{- if and (not .Values.hub.url) (not .Values.stubHub.enabled) -}}
+{{- if and (not .Values.hub.url) (not .Values.stubHub.enabled) (ne (toString .Values.hub.connect) "listen") -}}
 {{- if eq $g.mode "all" }}{{ $_ := set .Values.hub "url" (printf "http://%s:8080" $hub) }}
 {{- else }}{{ fail "agent.hub.url is required in mode spoke: the hub URL as this cluster reaches it, e.g. https://hub.example.internal" }}
 {{- end -}}

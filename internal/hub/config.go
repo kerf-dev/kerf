@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/kerf-dev/kerf/internal/hub/auth"
+	"github.com/kerf-dev/kerf/internal/hub/hubapi"
 	"github.com/kerf-dev/kerf/internal/hub/install"
 	"github.com/kerf-dev/kerf/internal/recommender"
 )
@@ -68,6 +69,9 @@ type Config struct {
 	Maintenance MaintenanceConfig `json:"maintenance"`
 	// Notifications: Slack, Teams and webhook channels, rules and the weekly digest.
 	Notifications NotificationsConfig `json:"notifications"`
+	// AgentTunnels are agents in listen mode: the hub opens the connections they use to call it, for clusters
+	// that cannot reach the hub (docs/install/eks.md#when-workload-clusters-cannot-reach-the-hub).
+	AgentTunnels []AgentTunnel `json:"agentTunnels"`
 	// Teams: team ownership of workloads (docs/teams.md).
 	Teams TeamsConfig `json:"teams"`
 }
@@ -188,6 +192,38 @@ func (o OnboardingConfig) InstallChartVersion() string {
 		return o.HubVersion
 	}
 	return o.ChartVersion
+}
+
+// AgentTunnel is one agent the hub connects to (agent --hub-connect=listen).
+type AgentTunnel struct {
+	// Cluster is the registered cluster name (for the logs; the agent still authenticates with its own token).
+	Cluster string `json:"cluster"`
+	// URL is the agent's tunnel endpoint as the hub reaches it, e.g. https://kerf-agent.prod.example.internal.
+	URL string `json:"url"`
+	// TokenFile holds the tunnel token the agent expects (a mounted Secret, re-read on every connection).
+	TokenFile string `json:"tokenFile"`
+	// Connections kept open to the agent (default 4).
+	Connections int `json:"connections"`
+}
+
+func validateAgentTunnels(ts []AgentTunnel) error {
+	seen := map[string]bool{}
+	for i, t := range ts {
+		switch {
+		case !hubapi.ClusterNameRE.MatchString(t.Cluster):
+			return fmt.Errorf("agentTunnels[%d].cluster %q is not a cluster name", i, t.Cluster)
+		case seen[t.Cluster]:
+			return fmt.Errorf("agentTunnels: cluster %q is listed twice", t.Cluster)
+		case !strings.HasPrefix(t.URL, "https://") && !strings.HasPrefix(t.URL, "http://"):
+			return fmt.Errorf("agentTunnels[%d].url %q must start with https:// or http://", i, t.URL)
+		case t.TokenFile == "":
+			return fmt.Errorf("agentTunnels[%d].tokenFile is required: the agent refuses connections without its tunnel token", i)
+		case t.Connections < 0:
+			return fmt.Errorf("agentTunnels[%d].connections must not be negative", i)
+		}
+		seen[t.Cluster] = true
+	}
+	return nil
 }
 
 // LocalTokens are the tokens the Helm chart generates for the services of its own release: the
@@ -448,6 +484,9 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if l := cfg.Teams.OwnerLabel; l != "" && !labelKeyRE.MatchString(l) {
 		return cfg, fmt.Errorf("teams.ownerLabel %q is not a Kubernetes label key", l)
+	}
+	if err := validateAgentTunnels(cfg.AgentTunnels); err != nil {
+		return cfg, err
 	}
 	if cfg.UpdateCheck.Interval.D() < 10*time.Minute {
 		return cfg, fmt.Errorf("updateCheck.interval must be at least 10m (got %s)", cfg.UpdateCheck.Interval.D())
