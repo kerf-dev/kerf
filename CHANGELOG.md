@@ -12,6 +12,29 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-22
+
+### Added
+
+- **Agent listen mode, for workload clusters that cannot reach the hub** ([#80](https://github.com/kerf-dev/kerf/issues/80)).
+  Until now the agent always opened the connection to the hub. With `agent.hub.connect: listen` the hub opens the
+  connections instead: it connects to the agent's tunnel endpoint (Service `kerf-agent-tunnel`, exposed with your
+  load balancer or ingress), and the agent sends its normal requests back over those connections. The hub API, the
+  agent token, the readiness checks and auto-patch work as in pull mode; only the direction of the TCP connection
+  changes, so a network that allows only hub → workload cluster traffic is enough. The handshake is a WebSocket
+  upgrade, so load balancers and ingresses that pass WebSockets pass it. Both sides authenticate: the hub presents a
+  per-cluster tunnel token (Secret `agent.hub.listen.tokenSecret` on the agent, `hub.agentTunnels[].existingSecret`
+  on the hub), and the agent presents its agent token on every request as before. Only the agent's leader replica
+  accepts connections. New values: `agent.hub.connect`, `agent.hub.listen`, `agent.networkPolicy.ingress.tunnelFrom`
+  and `hub.agentTunnels`; new agent flags `--hub-connect`, `--hub-listen-address` and `--hub-listen-token-file`. No
+  database migration; pull mode stays the default.
+
+### Documentation
+
+- **When workload clusters cannot reach the hub** in
+  [docs/install/eks.md](docs/install/eks.md#when-workload-clusters-cannot-reach-the-hub): the tokens, the agent and
+  hub values, an internal ALB for the tunnel endpoint, and how to read the logs.
+
 ## [0.3.0] - 2026-11-09
 
 ### Added
