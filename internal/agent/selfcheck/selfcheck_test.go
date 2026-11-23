@@ -5,6 +5,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -461,6 +462,59 @@ func TestRunner(t *testing.T) {
 	case <-got:
 	case <-time.After(5 * time.Second):
 		t.Fatal("recheck did not run")
+	}
+}
+
+// TestRunnerHubInputs: in listen mode the first run comes before the hub connects, so the
+// hub-derived checks are unknown. When such an input arrives, a run follows without waiting
+// for the interval.
+func TestRunnerHubInputs(t *testing.T) {
+	clock := func(in *Inputs) { in.HubDate, in.LocalAt = now.Add(-time.Second), now }
+	coverage := func(in *Inputs) { in.Excluded, in.Namespaces = []string{}, 3 }
+	for _, tc := range []struct {
+		name               string
+		arrive             []func(*Inputs)
+		wantClock, wantCov rd.Status
+	}{
+		{"clock", []func(*Inputs){clock}, rd.StatusPass, rd.StatusUnknown},
+		{"coverage", []func(*Inputs){coverage}, rd.StatusUnknown, rd.StatusPass},
+		{"both", []func(*Inputs){clock, coverage}, rd.StatusPass, rd.StatusPass},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := healthyEnv(t).checker(t)
+			var mu sync.Mutex
+			in := Inputs{HubVersion: "0.3.1", MinAgentVersion: "0.2.0"}
+			c.Inputs = func() Inputs { mu.Lock(); defer mu.Unlock(); return in }
+			got := make(chan Result, 4)
+			r := &Runner{Checker: c, Interval: time.Hour, InputPoll: 10 * time.Millisecond, OnResult: func(res Result) { got <- res }}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go r.Run(ctx)
+			first := byID(<-got)
+			if first[rd.CheckClockSkew].Status != string(rd.StatusUnknown) || first[rd.CheckPolicyNamespaceCovers].Status != string(rd.StatusUnknown) {
+				t.Fatalf("first run: clock %+v, coverage %+v", first[rd.CheckClockSkew], first[rd.CheckPolicyNamespaceCovers])
+			}
+			mu.Lock()
+			for _, f := range tc.arrive {
+				f(&in)
+			}
+			mu.Unlock()
+			select {
+			case res := <-got:
+				m := byID(res)
+				if m[rd.CheckClockSkew].Status != string(tc.wantClock) || m[rd.CheckPolicyNamespaceCovers].Status != string(tc.wantCov) {
+					t.Errorf("after hub inputs: clock %+v, coverage %+v", m[rd.CheckClockSkew], m[rd.CheckPolicyNamespaceCovers])
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("no run after the hub inputs arrived")
+			}
+			// nothing new arrives: no further run before the interval
+			select {
+			case <-got:
+				t.Error("extra run without new inputs")
+			case <-time.After(100 * time.Millisecond):
+			}
+		})
 	}
 }
 

@@ -22,10 +22,10 @@ with Dynatrace remediations instead: [Use Dynatrace as the metrics source](../in
 Each check also shows when it ran (`checkedAt`, "checked 23 minutes ago" in the UI).
 
 **After a fix, re-check.** The hub runs its metrics checks at registration, on a re-check, on a recompute, and
-otherwise only every `hub.config.onboarding.checkInterval` (default `1h`). The agent runs its checks at start and
-every 10 minutes. A check that needs a hub response (`agent.clock-skew`) or the first policy sync
-(`policy.namespace-coverage`) shows `unknown` when the agent started before it could reach the hub, until its next
-run. So a fixed scrape job can still show the old result for up to an hour. To run the checks now,
+otherwise only every `hub.config.onboarding.checkInterval` (default `1h`). The agent runs its checks at start, every 10 minutes,
+and again when the first hub response (`agent.clock-skew`) or the first policy sync (`policy.namespace-coverage`)
+arrives. Agent 0.4.0 does not do the last: these checks show `unknown` until its next run when it started before it
+could reach the hub. So a fixed scrape job can still show the old result for up to an hour. To run the checks now,
 click **Re-check now** on the cluster's page (Overview or Readiness tab), or call:
 
 ```bash
