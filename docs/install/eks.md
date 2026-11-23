@@ -676,8 +676,9 @@ listen           hub   ──── HTTPS 443 ────► agent tunnel endpo
    The chart adds the Service `kerf-agent-tunnel` (port 8443). Only the leader replica accepts connections; the
    other answers 503 and the hub tries again.
 3. **Expose the tunnel endpoint to the hub** with an internal load balancer or your ingress controller. It must
-   pass WebSocket upgrades (the ALB, NLB, Contour/Envoy and ingress-nginx do by default) and should terminate TLS.
-   For example with the AWS Load Balancer Controller:
+   pass WebSocket upgrades and should terminate TLS. The ALB, the NLB and ingress-nginx pass them by default;
+   Contour passes them only on routes with `enableWebsockets: true`. For example with the AWS Load Balancer
+   Controller:
    ```yaml
    apiVersion: networking.k8s.io/v1
    kind: Ingress
@@ -698,6 +699,23 @@ listen           hub   ──── HTTPS 443 ────► agent tunnel endpo
            paths:
              - {path: /v1/tunnel, pathType: Exact, backend: {service: {name: kerf-agent-tunnel, port: {number: 8443}}}}
    ```
+   Or with Contour, in the agent's namespace (the TLS Secret is yours; for a Secret in another namespace, use
+   Contour's TLS certificate delegation):
+   ```yaml
+   apiVersion: projectcontour.io/v1
+   kind: HTTPProxy
+   metadata:
+     name: kerf-agent-tunnel
+   spec:
+     virtualhost:
+       fqdn: kerf-agent.<cluster domain>
+       tls: {secretName: <TLS Secret>}
+     routes:
+       - conditions: [{prefix: /v1/tunnel}]
+         enableWebsockets: true                       # without it, the upgrade fails
+         timeoutPolicy: {response: infinity, idle: 5m}  # the tested setting; the tunnel is a long-lived stream
+         services: [{name: kerf-agent-tunnel, port: 8443}]
+   ```
 4. **The hub connects to it**, in the hub's values file (one entry per cluster):
    ```yaml
    hub:
@@ -714,6 +732,10 @@ listen           hub   ──── HTTPS 443 ────► agent tunnel endpo
 `AgentConnected`. `agent tunnel: connect failed` with `HTTP 401` means the two tokens differ; `HTTP 503` that the
 agent has no token (or the hub reached a replica that is not the leader, which retries on its own); a timeout
 means the hub cannot reach the endpoint.
+
+The agent runs its self-checks when it starts, which in listen mode is usually before the hub connects. Until the
+next run (10 minutes), `agent.clock-skew` and `policy.namespace-coverage` show `unknown`. Click **Re-check now** on
+the cluster's Readiness tab to run them at once.
 
 ## 6. Turning on auto-patch
 
