@@ -452,6 +452,13 @@ func TestPoliciesAndConfig(t *testing.T) {
 	if len(pl.Items) != 1 || pl.Items[0].DeletedAt == nil {
 		t.Errorf("deleted policies: %+v", pl.Items)
 	}
+	// A repeated type matches any of the values (the web UI sends two).
+	pl = hubapi.AdminPolicyList{}
+	e.getJSON("/v1/admin/policies?includeDeleted=true&type=global-default&type=policy", tokUI, &pl)
+	if len(pl.Items) != 2 || pl.Items[0].Type != v1alpha1.HubPolicyTypeGlobalDefault || pl.Items[1].Type != v1alpha1.HubPolicyTypePolicy {
+		t.Errorf("two types: %+v", pl.Items)
+	}
+	e.problem(e.do("GET", "/v1/admin/policies?type=policy&type=bogus", tokUI, nil), 400, "invalid_type")
 	e.problem(e.sdo(admin, http.MethodPut, "/v1/admin/policies/"+p.ID, upd, ifMatchHdr(3)...), 409, "policy_deleted")
 	e.problem(e.sdo(admin, http.MethodPost, "/v1/admin/policies/"+p.ID+"/revert", hubapi.PolicyRevert{Version: 3, Reason: "x"}, ifMatchHdr(3)...), 400, "invalid_version")
 	r = e.sdo(admin, http.MethodPost, "/v1/admin/policies/"+p.ID+"/revert", hubapi.PolicyRevert{Version: 1, Reason: "rollback"}, ifMatchHdr(3)...)
