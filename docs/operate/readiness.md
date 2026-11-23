@@ -23,7 +23,9 @@ Each check also shows when it ran (`checkedAt`, "checked 23 minutes ago" in the 
 
 **After a fix, re-check.** The hub runs its metrics checks at registration, on a re-check, on a recompute, and
 otherwise only every `hub.config.onboarding.checkInterval` (default `1h`). The agent runs its checks at start and
-every 10 minutes. So a fixed scrape job can still show the old result for up to an hour. To run the checks now,
+every 10 minutes. A check that needs a hub response (`agent.clock-skew`) or the first policy sync
+(`policy.namespace-coverage`) shows `unknown` when the agent started before it could reach the hub, until its next
+run. So a fixed scrape job can still show the old result for up to an hour. To run the checks now,
 click **Re-check now** on the cluster's page (Overview or Readiness tab), or call:
 
 ```bash

@@ -12,6 +12,15 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+### Documentation
+
+- **Listen mode with Contour:** Contour passes the tunnel's WebSocket upgrade only on routes with
+  `enableWebsockets: true`; the EKS guide had it as a default. The guide now has an `HTTPProxy` example.
+- **GPU metrics with the VictoriaMetrics operator:** a `VMServiceScrape` for the DCGM exporter when the operator's
+  Prometheus converter is off.
+- **Readiness right after an agent starts:** why `agent.clock-skew` and `policy.namespace-coverage` can show
+  `unknown` until the next self-check.
+
 ## [0.4.0] - 2026-11-22
 
 ### Added

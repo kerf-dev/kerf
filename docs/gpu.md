@@ -31,6 +31,28 @@ NVIDIA GPUs only. AMD and Intel GPUs are not read.
 
    A scrape without `honorLabels` renames the exporter's `pod` and `namespace` to `exported_pod` and
    `exported_namespace`. Kerf handles both spellings.
+
+   The `dcgm-exporter` chart creates a Prometheus `ServiceMonitor`. The VictoriaMetrics operator ignores it when its
+   Prometheus converter is off (`VM_ENABLEDPROMETHEUSCONVERTER_SERVICESCRAPE=false`), and `metrics.dcgm` then reports
+   the series as missing although the exporter runs. Add a `VMServiceScrape`; this one keeps only the three series
+   Kerf reads:
+   ```yaml
+   apiVersion: operator.victoriametrics.com/v1beta1
+   kind: VMServiceScrape
+   metadata:
+     name: dcgm-exporter
+   spec:
+     namespaceSelector: {matchNames: [<exporter namespace>]}
+     selector:
+       matchLabels: {app.kubernetes.io/name: dcgm-exporter, app.kubernetes.io/instance: dcgm-exporter}
+     endpoints:
+       - port: metrics
+         interval: 30s
+         metricRelabelConfigs:
+           - action: keep
+             source_labels: [__name__]
+             regex: DCGM_FI_DEV_GPU_UTIL|DCGM_FI_DEV_FB_USED|DCGM_FI_DEV_FB_FREE
+   ```
 2. **kube-state-metrics** with the usual series, and `kube_pod_container_resource_requests` (it reports GPU requests as
    `resource="nvidia_com_gpu"`) and `kube_node_status_allocatable`.
 3. **GPU prices:** the pricing service prices GPU nodes from the AWS price list, which includes the GPU count of every
