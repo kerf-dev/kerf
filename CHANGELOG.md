@@ -12,6 +12,10 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-23
+
+A patch release: no chart value, CRD or database change. Upgrade the hub and the agents with your current values.
+
 ### Fixed
 
 - **Agent readiness right after start:** `agent.clock-skew` and `policy.namespace-coverage` no longer stay
