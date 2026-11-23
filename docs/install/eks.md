@@ -733,9 +733,10 @@ listen           hub   ──── HTTPS 443 ────► agent tunnel endpo
 agent has no token (or the hub reached a replica that is not the leader, which retries on its own); a timeout
 means the hub cannot reach the endpoint.
 
-The agent runs its self-checks when it starts, which in listen mode is usually before the hub connects. Until the
-next run (10 minutes), `agent.clock-skew` and `policy.namespace-coverage` show `unknown`. Click **Re-check now** on
-the cluster's Readiness tab to run them at once.
+The agent runs its self-checks when it starts, which in listen mode is usually before the hub connects. It runs them
+again as soon as the hub responds, so `agent.clock-skew` and `policy.namespace-coverage` show `unknown` only for a
+short time. Agent 0.4.0 waits for its next run (10 minutes) instead: click **Re-check now** on the cluster's Readiness
+tab to run them at once.
 
 ## 6. Turning on auto-patch
 

@@ -12,6 +12,12 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+### Fixed
+
+- **Agent readiness right after start:** `agent.clock-skew` and `policy.namespace-coverage` no longer stay
+  `unknown` for up to 10 minutes when the agent starts before the hub responds (usual in listen mode). The agent
+  runs its self-checks again as soon as the first hub response and the first namespace coverage arrive.
+
 ### Documentation
 
 - **Listen mode with Contour:** Contour passes the tunnel's WebSocket upgrade only on routes with

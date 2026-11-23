@@ -216,7 +216,7 @@ func run(args []string) error {
 		metricsExtra      stringList
 
 		selfCheck         = fs.Bool("self-check", true, "run the readiness self-checks and report them to the hub")
-		selfCheckInterval = fs.Duration("self-check-interval", selfcheck.DefaultInterval, "how often the self-checks run (also at start and on the hub's recheck flag)")
+		selfCheckInterval = fs.Duration("self-check-interval", selfcheck.DefaultInterval, "how often the self-checks run (also at start, on the hub's recheck flag, and when the first hub response arrives)")
 		webhookConfig     = fs.String("webhook-config-name", "", "MutatingWebhookConfiguration of the webhook (default: found by webhook name)")
 		webhookDryRun     = fs.Bool("self-check-webhook-dry-run", false, "dry-run create a pod to see the webhook mutate it (needs create pods)")
 		argocdNamespaces  stringList

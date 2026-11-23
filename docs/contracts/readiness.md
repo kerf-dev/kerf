@@ -81,8 +81,10 @@ When they run:
 - **Hub checks** run at registration, on `POST .../readiness/recheck`, every hour, and from
   `POST /v1/admin/datasources/{id}/test`.
 - **Agent checks** run at agent start, every 10 minutes, and when the config pull carries
-  `flags.recheck` (`recheckRequestedAt` newer than the agent's last run). Their results go in the
-  status batch (`checks[]`, `capabilities[]`).
+  `flags.recheck` (`recheckRequestedAt` newer than the agent's last run). They also run when a hub
+  input that the last run did not have arrives: the first hub `Date` header (`agent.clock-skew`) or
+  the first namespace coverage (`policy.namespace-coverage`). The agent looks for these every 5 s
+  until it has both. Their results go in the status batch (`checks[]`, `capabilities[]`).
 
 | Check id | Source | Severity | Gates | Detects / remediation |
 |---|---|---|---|---|
