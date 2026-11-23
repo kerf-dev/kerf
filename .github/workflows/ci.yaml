@@ -119,7 +119,7 @@ jobs:
         if: env.RUN == 'true'
       - run: make lint
         if: env.RUN == 'true'
-      - run: make test
+      - run: make test GOFLAGS=-v   # temporary: shows in the log that the DB tests run
         if: env.RUN == 'true'
         env:
           KERF_TEST_DATABASE_URL: postgres://kerf:kerf-ci@localhost:5432/kerf?sslmode=disable
