@@ -69,8 +69,9 @@ func collectPolicies(rows pgx.Rows, err error) ([]hubapi.AdminPolicy, error) {
 type PolicyFilter struct {
 	// Cluster: policies sent to this cluster (global defaults, its cluster default, policies for
 	// all clusters or listing it, its workloads' overrides).
-	Cluster        string
-	Type           string
+	Cluster string
+	// Types: any of these types (empty: all).
+	Types          []string
 	IncludeDeleted bool
 }
 
@@ -81,9 +82,9 @@ const policyOrder = ` ORDER BY CASE type WHEN 'global-default' THEN 0 WHEN 'clus
 // ListPolicies lists hub policies.
 func (s *Store) ListPolicies(ctx context.Context, f PolicyFilter) ([]hubapi.AdminPolicy, error) {
 	return collectPolicies(s.Pool.Query(ctx, `SELECT `+policyColumns+` FROM policies
-		WHERE ($1 OR deleted_at IS NULL) AND ($2 = '' OR type = $2)
+		WHERE ($1 OR deleted_at IS NULL) AND (cardinality($2::text[]) = 0 OR type = ANY($2::text[]))
 		AND ($3 = '' OR type = 'global-default' OR cardinality(clusters) = 0 OR $3 = ANY(clusters))`+policyOrder,
-		f.IncludeDeleted, f.Type, f.Cluster))
+		f.IncludeDeleted, append([]string{}, f.Types...), f.Cluster)) // never nil: cardinality(NULL) is NULL
 }
 
 // GetPolicy returns a policy, deleted ones included.

@@ -17,6 +17,9 @@ section here. The GitHub Release lists the same section as its highlights, follo
 - **Agent readiness right after start:** `agent.clock-skew` and `policy.namespace-coverage` no longer stay
   `unknown` for up to 10 minutes when the agent starts before the hub responds (usual in listen mode). The agent
   runs its self-checks again as soon as the first hub response and the first namespace coverage arrive.
+- **Saving cluster defaults a second time failed with `already_exists`:** `GET /v1/admin/policies` used only the
+  first `type` of a repeated `?type=a&type=b`, so the cluster Settings tab never found the existing cluster default
+  and tried to create it again. The hub now matches any of the given types.
 
 ### Documentation
 

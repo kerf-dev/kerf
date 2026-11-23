@@ -85,10 +85,13 @@ func (s *Server) knownClusters(w http.ResponseWriter, r *http.Request, names []s
 // listPolicies serves GET /v1/admin/policies.
 func (s *Server) listPolicies(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := store.PolicyFilter{Cluster: q.Get("cluster"), Type: q.Get("type"), IncludeDeleted: q.Get("includeDeleted") == "true"}
-	if f.Type != "" && !slices.Contains(policyTypes, f.Type) {
-		badRequest(w, r, "invalid_type", "Unknown policy type "+f.Type+".")
-		return
+	// type is repeated (?type=a&type=b, the API's form/explode style): every value counts.
+	f := store.PolicyFilter{Cluster: q.Get("cluster"), Types: q["type"], IncludeDeleted: q.Get("includeDeleted") == "true"}
+	for _, t := range f.Types {
+		if !slices.Contains(policyTypes, t) {
+			badRequest(w, r, "invalid_type", "Unknown policy type "+t+".")
+			return
+		}
 	}
 	items, err := s.Store.ListPolicies(r.Context(), f)
 	if err != nil {
