@@ -12,6 +12,16 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+### Added
+
+- **Capacity trend per cluster and node pool.** The cluster Capacity tab gains a Trend section: node count, requested
+  and allocatable CPU, and requested and allocatable memory over 7 days, 30 days, 90 days or 1 year, on one time axis
+  with zoom. A node pool filter shows one pool, and markers show the days Kerf applied, rolled back or released
+  changes and the days a node pool was added or removed. The hub leader samples the agent's capacity report once per
+  hour and keeps 400 days; history starts when the upgraded hub first runs. New endpoint
+  `GET /v1/clusters/{cluster}/capacity/history` (viewer). Database migration `0025_capacity_hourly` (additive). See
+  [Node savings](docs/node-savings.md#trend).
+
 ## [0.4.1] - 2026-11-23
 
 A patch release: no chart value, CRD or database change. Upgrade the hub and the agents with your current values.
