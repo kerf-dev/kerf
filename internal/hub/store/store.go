@@ -158,6 +158,13 @@ func (s *Store) ClusterExists(ctx context.Context, name string) (bool, error) {
 	return ok, err
 }
 
+// ClusterLive reports whether a cluster is registered and not deleted.
+func (s *Store) ClusterLive(ctx context.Context, name string) (bool, error) {
+	var ok bool
+	err := s.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM clusters WHERE name = $1 AND deleted_at IS NULL)`, name).Scan(&ok)
+	return ok, err
+}
+
 // Heartbeat records an authenticated agent request.
 func (s *Store) Heartbeat(ctx context.Context, cluster, agentVersion string) error {
 	return s.HeartbeatAt(ctx, cluster, agentVersion, time.Time{})
