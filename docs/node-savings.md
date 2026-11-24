@@ -11,6 +11,29 @@ cluster page shows:
 Kerf never creates, deletes, cordons or drains nodes. Karpenter or the Cluster Autoscaler do that; Kerf only
 reads their state and runs alongside them.
 
+## Trend
+
+The top of the **Capacity** tab has a **Trend** section: three charts on one time axis, with the number of nodes,
+CPU (requested and allocatable, in cores) and memory (requested and allocatable, in GiB). Requests are counted
+the same way as in the snapshot, without the open recommendations. Allocatable includes cordoned nodes, because
+they still cost money.
+
+- **Range and node pool.** Pick 7d, 30d, 90d or 1y. The node pool filter shows one pool instead of the whole
+  cluster. Both are kept in the page URL, so a link shows the same view. Node pools with zero nodes stay on the
+  chart at 0.
+- **History.** Once an hour the hub leader stores the node count and the requested and allocatable CPU and
+  memory of the cluster and of each node pool, taken from the agent's latest capacity report. History starts
+  when a hub with this feature first runs; nothing is backfilled. Rows are kept for 400 days.
+- **One sample per hour.** A peak inside an hour is not recorded. 7d and 30d show the hourly samples; 90d and
+  1y show the daily average of the stored hours.
+- **Gaps.** An hour is skipped when the hub has no capacity report newer than 1 hour: the agent is offline,
+  runs with `--capacity=false`, or its capacity collector fails. The chart shows a gap, not a flat line.
+- **Markers.** Above the charts, one marker per UTC day and type shows Kerf changes (applied, rolled back,
+  released) and node pools added or removed. Hover shows the count and up to 5 workloads. With a node pool
+  filter, Kerf changes are limited to workloads that run in that pool now, not where they ran at the time.
+  Clicking a change marker opens Activity for that cluster and type; Activity has no day filter, so it lists
+  all days.
+
 ## What the agent reads
 
 Every 5 minutes (`capacity.interval`) the agent builds a report and sends it to the hub when it changed (and at
@@ -94,6 +117,10 @@ and are not listed. The list shows at most 200 blockers; the rest are counted.
 arrived), `totals`, `estimate` (with `method` and `methodURL` pointing here), `pools` with their instance types,
 and `blockers`. The agent sends the report as `capacity` in its workload status batch. Both are in the
 [hub API](../api/openapi/hub.yaml).
+
+`GET /v1/clusters/{cluster}/capacity/history` (viewer) returns the trend: `range` (`7d`, `30d`, `90d` or `1y`,
+default `30d`) and `nodePool` select the data. The response has `points`, `events` and the `nodePools` for the
+filter.
 
 ## Not done yet
 

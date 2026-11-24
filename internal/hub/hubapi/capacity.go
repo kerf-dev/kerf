@@ -228,3 +228,38 @@ type ConsolidationBlocker struct {
 	Message    string            `json:"message"`
 	Fix        string            `json:"fix"`
 }
+
+// CapacityHistory is the response of GET /v1/clusters/{cluster}/capacity/history.
+type CapacityHistory struct {
+	Range     string                 `json:"range"`
+	Since     *time.Time             `json:"since,omitempty"`
+	NodePools []string               `json:"nodePools"`
+	Truncated bool                   `json:"truncated,omitempty"`
+	Points    []CapacityHistoryPoint `json:"points"`
+	Events    []CapacityHistoryEvent `json:"events"`
+}
+
+// CapacityHistoryPoint is one hour (or UTC day) of capacity: CPU in cores, memory in bytes.
+type CapacityHistoryPoint struct {
+	Hour           time.Time `json:"hour"`
+	Nodes          float64   `json:"nodes"`
+	CPURequested   float64   `json:"cpuRequested"`
+	CPUAllocatable float64   `json:"cpuAllocatable"`
+	MemRequested   float64   `json:"memRequested"`
+	MemAllocatable float64   `json:"memAllocatable"`
+}
+
+// Node pool event types of CapacityHistoryEvent.type; the others are the audit event types.
+const (
+	HistoryEventPoolAdded   = "pool_added"
+	HistoryEventPoolRemoved = "pool_removed"
+)
+
+// CapacityHistoryEvent is Count events of one type on one UTC day. Day is a YYYY-MM-DD date.
+type CapacityHistoryEvent struct {
+	Day          string        `json:"day"`
+	Type         string        `json:"type"`
+	Count        int           `json:"count"`
+	NodePool     string        `json:"nodePool,omitempty"`
+	TopWorkloads []WorkloadRef `json:"topWorkloads,omitempty"`
+}

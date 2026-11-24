@@ -3270,6 +3270,51 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /v1/clusters/{cluster}/capacity/history:
+    parameters:
+      - $ref: '#/components/parameters/Cluster'
+    get:
+      tags: [ui]
+      operationId: getClusterCapacityHistory
+      security:
+        - sessionAuth: [viewer]
+        - bearerAuth: [ui]
+      summary: Node count, CPU and memory of a cluster or node pool over time
+      description: |
+        Nodes, allocatable and requested CPU and memory, recorded once an hour from the agent's
+        capacity report, with markers for the changes Kerf made and for node pools that were
+        added or removed. `7d` and `30d` return hourly points; `90d` and `1y` return one point per
+        UTC day, the average of the hours stored for that day. Hours without a stored sample are
+        absent from `points`. Requests are the requests of the pods as reported, without any open
+        recommendation applied.
+      parameters:
+        - name: range
+          in: query
+          description: How far back to read. Defaults to `30d`.
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, 1y]
+            default: 30d
+        - name: nodePool
+          in: query
+          description: Read one node pool instead of the cluster total.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Capacity history.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapacityHistory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /v1/admin/clusters/{cluster}/install:
     parameters:
       - $ref: '#/components/parameters/Cluster'
@@ -8251,6 +8296,83 @@ components:
     CapacityPodReason:
       type: string
       enum: [do-not-disrupt, safe-to-evict-false, local-storage]
+    CapacityHistory:
+      type: object
+      description: |
+        Capacity history of a cluster or node pool, response of
+        `GET /v1/clusters/{cluster}/capacity/history`.
+      required: [range, points, events, nodePools]
+      properties:
+        range:
+          type: string
+          enum: [7d, 30d, 90d, 1y]
+        since:
+          type: string
+          format: date-time
+          description: First hour stored for the cluster. Absent when nothing is stored yet.
+        nodePools:
+          type: array
+          description: Node pools stored in the range, for the node pool filter.
+          items:
+            type: string
+        truncated:
+          type: boolean
+          description: At least one stored hour in the range came from a truncated capacity report.
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapacityHistoryPoint'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapacityHistoryEvent'
+    CapacityHistoryPoint:
+      type: object
+      required: [hour, nodes, cpuRequested, cpuAllocatable, memRequested, memAllocatable]
+      properties:
+        hour:
+          type: string
+          format: date-time
+          description: Start of the hour, or of the UTC day for daily points.
+        nodes:
+          type: number
+          description: Node count. Fractional for daily points.
+        cpuRequested:
+          type: number
+          description: Requested CPU in cores.
+        cpuAllocatable:
+          type: number
+          description: Allocatable CPU in cores.
+        memRequested:
+          type: number
+          description: Requested memory in bytes.
+        memAllocatable:
+          type: number
+          description: Allocatable memory in bytes.
+    CapacityHistoryEvent:
+      type: object
+      description: |
+        A marker on the history: `count` events of one type on one UTC day. `applied`,
+        `rolled_back` and `released` are changes Kerf made; `pool_added` and `pool_removed` mean
+        a node pool appeared in or disappeared from the capacity report.
+      required: [day, type, count]
+      properties:
+        day:
+          type: string
+          format: date
+        type:
+          type: string
+          enum: [applied, rolled_back, released, pool_added, pool_removed]
+        count:
+          type: integer
+        nodePool:
+          type: string
+          description: Set for `pool_added` and `pool_removed`.
+        topWorkloads:
+          type: array
+          description: Up to 5 workloads with the most events. Set for changes Kerf made.
+          items:
+            $ref: '#/components/schemas/WorkloadRef'
     ClusterCapacity:
       type: object
       required: [cluster, autoscalers, totals, pools, blockers]

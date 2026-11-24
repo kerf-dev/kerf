@@ -1620,6 +1620,34 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/clusters/{cluster}/capacity/history': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    /**
+     * Node count, CPU and memory of a cluster or node pool over time
+     * @description Nodes, allocatable and requested CPU and memory, recorded once an hour from the agent's
+     *     capacity report, with markers for the changes Kerf made and for node pools that were
+     *     added or removed. `7d` and `30d` return hourly points; `90d` and `1y` return one point per
+     *     UTC day, the average of the hours stored for that day. Hours without a stored sample are
+     *     absent from `points`. Requests are the requests of the pods as reported, without any open
+     *     recommendation applied.
+     */
+    get: operations['getClusterCapacityHistory']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/admin/clusters/{cluster}/install': {
     parameters: {
       query?: never
@@ -4406,6 +4434,58 @@ export interface components {
     }
     /** @enum {string} */
     CapacityPodReason: 'do-not-disrupt' | 'safe-to-evict-false' | 'local-storage'
+    /**
+     * @description Capacity history of a cluster or node pool, response of
+     *     `GET /v1/clusters/{cluster}/capacity/history`.
+     */
+    CapacityHistory: {
+      /** @enum {string} */
+      range: '7d' | '30d' | '90d' | '1y'
+      /**
+       * Format: date-time
+       * @description First hour stored for the cluster. Absent when nothing is stored yet.
+       */
+      since?: string
+      /** @description Node pools stored in the range, for the node pool filter. */
+      nodePools: string[]
+      /** @description At least one stored hour in the range came from a truncated capacity report. */
+      truncated?: boolean
+      points: components['schemas']['CapacityHistoryPoint'][]
+      events: components['schemas']['CapacityHistoryEvent'][]
+    }
+    CapacityHistoryPoint: {
+      /**
+       * Format: date-time
+       * @description Start of the hour, or of the UTC day for daily points.
+       */
+      hour: string
+      /** @description Node count. Fractional for daily points. */
+      nodes: number
+      /** @description Requested CPU in cores. */
+      cpuRequested: number
+      /** @description Allocatable CPU in cores. */
+      cpuAllocatable: number
+      /** @description Requested memory in bytes. */
+      memRequested: number
+      /** @description Allocatable memory in bytes. */
+      memAllocatable: number
+    }
+    /**
+     * @description A marker on the history: `count` events of one type on one UTC day. `applied`,
+     *     `rolled_back` and `released` are changes Kerf made; `pool_added` and `pool_removed` mean
+     *     a node pool appeared in or disappeared from the capacity report.
+     */
+    CapacityHistoryEvent: {
+      /** Format: date */
+      day: string
+      /** @enum {string} */
+      type: 'applied' | 'rolled_back' | 'released' | 'pool_added' | 'pool_removed'
+      count: number
+      /** @description Set for `pool_added` and `pool_removed`. */
+      nodePool?: string
+      /** @description Up to 5 workloads with the most events. Set for changes Kerf made. */
+      topWorkloads?: components['schemas']['WorkloadRef'][]
+    }
     ClusterCapacity: {
       cluster: string
       /**
@@ -7548,6 +7628,38 @@ export interface operations {
           'application/json': components['schemas']['ClusterCapacity']
         }
       }
+      401: components['responses']['Unauthorized']
+      403: components['responses']['Forbidden']
+      404: components['responses']['NotFound']
+    }
+  }
+  getClusterCapacityHistory: {
+    parameters: {
+      query?: {
+        /** @description How far back to read. Defaults to `30d`. */
+        range?: '7d' | '30d' | '90d' | '1y'
+        /** @description Read one node pool instead of the cluster total. */
+        nodePool?: string
+      }
+      header?: never
+      path: {
+        /** @description Cluster name. */
+        cluster: components['parameters']['Cluster']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Capacity history. */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CapacityHistory']
+        }
+      }
+      400: components['responses']['BadRequest']
       401: components['responses']['Unauthorized']
       403: components['responses']['Forbidden']
       404: components['responses']['NotFound']

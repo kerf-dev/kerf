@@ -85,6 +85,7 @@ func (s *Server) RunLeader(ctx context.Context) {
 		start(s.Notify.Run)
 	}
 	start(s.runRealized)
+	start(s.runCapacityHistory)
 	if s.Metrics != nil {
 		start(func(ctx context.Context) { s.Metrics.RefreshLoop(ctx, s.Store, time.Minute, s.Log) })
 	}

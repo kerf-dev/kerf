@@ -12,6 +12,7 @@ import type {
   NodeEstimate,
 } from '@/api/types'
 import { CopyButton } from '@/components/admin/common'
+import { CapacityTrend } from '@/components/capacity/trend'
 import { EmptyState, ErrorState } from '@/components/states'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -469,6 +470,7 @@ export function CapacityTab({ cluster }: { cluster: string }) {
           </span>
         </Callout>
       ) : null}
+      <CapacityTrend cluster={cluster} />
       <CapacityCard data={data} />
       <EstimateCard estimate={data.estimate} />
       <PoolsCard pools={data.pools} />
