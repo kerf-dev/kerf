@@ -12,6 +12,11 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-24
+
+A patch release with one additive database migration (`0025_capacity_hourly`, applied when the hub starts) and no
+chart value or CRD change. Upgrade the hub with your current values; the agents need no upgrade.
+
 ### Added
 
 - **Capacity trend per cluster and node pool.** The cluster Capacity tab gains a Trend section: node count, requested
