@@ -2418,6 +2418,45 @@ A Karpenter disruption budget.
 
 Type: string. one of `do-not-disrupt`, `safe-to-evict-false`, `local-storage`.
 
+## CapacityHistory { #capacityhistory }
+
+Capacity history of a cluster or node pool, response of
+`GET /v1/clusters/{cluster}/capacity/history`.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `range` | string, required | one of `7d`, `30d`, `90d`, `1y` |  |
+| `since` | string (date-time) |  | First hour stored for the cluster. Absent when nothing is stored yet. |
+| `nodePools` | array of string, required |  | Node pools stored in the range, for the node pool filter. |
+| `truncated` | boolean |  | At least one stored hour in the range came from a truncated capacity report. |
+| `points` | array of [CapacityHistoryPoint](schemas.md#capacityhistorypoint), required |  |  |
+| `events` | array of [CapacityHistoryEvent](schemas.md#capacityhistoryevent), required |  |  |
+
+## CapacityHistoryPoint { #capacityhistorypoint }
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `hour` | string (date-time), required |  | Start of the hour, or of the UTC day for daily points. |
+| `nodes` | number, required |  | Node count. Fractional for daily points. |
+| `cpuRequested` | number, required |  | Requested CPU in cores. |
+| `cpuAllocatable` | number, required |  | Allocatable CPU in cores. |
+| `memRequested` | number, required |  | Requested memory in bytes. |
+| `memAllocatable` | number, required |  | Allocatable memory in bytes. |
+
+## CapacityHistoryEvent { #capacityhistoryevent }
+
+A marker on the history: `count` events of one type on one UTC day. `applied`,
+`rolled_back` and `released` are changes Kerf made; `pool_added` and `pool_removed` mean
+a node pool appeared in or disappeared from the capacity report.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `day` | string (date), required |  |  |
+| `type` | string, required | one of `applied`, `rolled_back`, `released`, `pool_added`, `pool_removed` |  |
+| `count` | integer, required |  |  |
+| `nodePool` | string |  | Set for `pool_added` and `pool_removed`. |
+| `topWorkloads` | array of [WorkloadRef](schemas.md#workloadref) |  | Up to 5 workloads with the most events. Set for changes Kerf made. |
+
 ## ClusterCapacity { #clustercapacity }
 
 | Field | Type | Constraints | Description |

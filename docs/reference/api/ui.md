@@ -26,6 +26,7 @@ Read-only endpoints for the web UI.
 | [`POST /v1/clusters/{cluster}/readiness/recheck`](#recheckClusterReadiness) | Re-run the readiness checks now |
 | [`GET /v1/clusters/{cluster}/readiness/history`](#getClusterReadinessHistory) | State transitions and check status changes |
 | [`GET /v1/clusters/{cluster}/capacity`](#getClusterCapacity) | Node capacity, the node estimate after the open recommendations, and consolidation blockers |
+| [`GET /v1/clusters/{cluster}/capacity/history`](#getClusterCapacityHistory) | Hourly node count, CPU and memory of a cluster or node pool over time |
 
 ### Fleet and per-cluster totals { #getSummary }
 
@@ -602,6 +603,37 @@ feature, or `--capacity=false`); the other fields are then empty.
 | Status | Description | Body |
 |---|---|---|
 | `200` | Capacity. | [ClusterCapacity](schemas.md#clustercapacity) |
+| `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
+| `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
+| `404` | Unknown cluster. | [Problem](schemas.md#problem) |
+
+### Hourly node count, CPU and memory of a cluster or node pool over time { #getClusterCapacityHistory }
+
+`GET /v1/clusters/{cluster}/capacity/history`
+
+Accepts: session of a user with role `viewer` or higher or bearer token with role `ui`.
+
+Nodes, allocatable and requested CPU and memory, recorded once an hour from the agent's
+capacity report, with markers for the changes Kerf made and for node pools that were
+added or removed. `7d` and `30d` return hourly points; `90d` and `1y` return one point per
+UTC day, the average of the hours stored for that day. Hours without a stored sample are
+absent from `points`. Requests are the requests of the pods as reported, without any open
+recommendation applied.
+
+**Parameters**
+
+| Name | In | Type | Description |
+|---|---|---|---|
+| `cluster` | path | string, required | Cluster name. pattern `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`; example `ro-spoke-1` |
+| `range` | query | string | How far back to read. Defaults to `30d`. one of `7d`, `30d`, `90d`, `1y`; default `30d` |
+| `nodePool` | query | string | Read one node pool instead of the cluster total. |
+
+**Responses**
+
+| Status | Description | Body |
+|---|---|---|
+| `200` | Capacity history. | [CapacityHistory](schemas.md#capacityhistory) |
+| `400` | The request is malformed or fails validation. | [Problem](schemas.md#problem) |
 | `401` | Missing or invalid bearer token. | [Problem](schemas.md#problem) |
 | `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
