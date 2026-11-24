@@ -186,7 +186,7 @@ func TestPruneHistory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	n, err := d.PruneHistory(ctx, now.Add(-400*24*time.Hour))
+	n, err := d.PruneHistory(ctx, "c1", now.Add(-400*24*time.Hour))
 	if err != nil || n != 1 {
 		t.Fatalf("pruned = %d, %v", n, err)
 	}
@@ -218,8 +218,8 @@ func TestSnapshots(t *testing.T) {
 	if err := d.Save(ctx, "c1", &rep, at); err != nil {
 		t.Fatal(err)
 	}
-	got, err := d.Snapshots(ctx)
-	if err != nil || len(got) != 1 || got[0].Cluster != "c1" || !got[0].ReportedAt.Equal(at) {
+	got, bad, err := d.Snapshots(ctx)
+	if err != nil || len(bad) != 0 || len(got) != 1 || got[0].Cluster != "c1" || !got[0].ReportedAt.Equal(at) {
 		t.Fatalf("snapshots = %+v, %v", got, err)
 	}
 }

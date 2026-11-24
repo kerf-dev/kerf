@@ -3279,7 +3279,7 @@ paths:
       security:
         - sessionAuth: [viewer]
         - bearerAuth: [ui]
-      summary: Hourly node count, CPU and memory of a cluster or node pool over time
+      summary: Node count, CPU and memory of a cluster or node pool over time
       description: |
         Nodes, allocatable and requested CPU and memory, recorded once an hour from the agent's
         capacity report, with markers for the changes Kerf made and for node pools that were

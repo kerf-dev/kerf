@@ -54,6 +54,46 @@ func TestTickFreshAndStale(t *testing.T) {
 	}
 }
 
+func TestTickPrunesOldRowsPerCluster(t *testing.T) {
+	w, now := tickFixture(t)
+	ctx := context.Background()
+	// x is fresh, y is stale: both are pruned.
+	for _, c := range []string{"x", "y"} {
+		for _, ago := range []time.Duration{401 * 24 * time.Hour, 24 * time.Hour} {
+			if err := w.DB.SaveHour(ctx, c, now.Add(-ago), []HourRow{totalRow(1)}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := w.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []string{"x", "y"} {
+		var old, recent int
+		if err := w.DB.Pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE hour < $2), count(*) FILTER (WHERE hour >= $2) FROM capacity_hourly WHERE cluster = $1`,
+			c, now.Add(-400*24*time.Hour)).Scan(&old, &recent); err != nil {
+			t.Fatal(err)
+		}
+		if old != 0 || recent == 0 {
+			t.Fatalf("cluster %s: old = %d, recent = %d", c, old, recent)
+		}
+	}
+}
+
+func TestTickSkipsUnreadableReport(t *testing.T) {
+	w, _ := tickFixture(t)
+	ctx := context.Background()
+	if _, err := w.DB.Pool.Exec(ctx, `UPDATE cluster_capacity SET report = '{"nodePools": 7}'::jsonb WHERE cluster = 'y'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRows(t, w.DB, "x"); n == 0 {
+		t.Fatal("no rows for the valid cluster")
+	}
+}
+
 func TestTickTwiceSameHour(t *testing.T) {
 	w, _ := tickFixture(t)
 	ctx := context.Background()

@@ -36,24 +36,42 @@ func (w *Worker) log() *slog.Logger {
 // deletes history past the retention. A failing cluster is logged and does not stop the others.
 func (w *Worker) Tick(ctx context.Context) error {
 	now := w.now()
-	snaps, err := w.DB.Snapshots(ctx)
+	snaps, unreadable, err := w.DB.Snapshots(ctx)
 	if err != nil {
 		return err
 	}
 	hour := now.Truncate(time.Hour)
-	for _, s := range snaps {
-		if now.Sub(s.ReportedAt) > time.Hour {
-			continue
-		}
-		if err := w.DB.SaveHour(ctx, s.Cluster, hour, Rollup(s.Report)); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			w.log().WarnContext(ctx, "capacity history: cluster", "cluster", s.Cluster, "err", err)
+	cutoff := now.Add(-historyRetention)
+	for _, c := range unreadable {
+		w.log().WarnContext(ctx, "capacity history: unreadable report", "cluster", c)
+		if err := w.prune(ctx, c, cutoff); err != nil {
+			return err
 		}
 	}
-	_, err = w.DB.PruneHistory(ctx, now.Add(-historyRetention))
-	return err
+	for _, s := range snaps {
+		if now.Sub(s.ReportedAt) <= time.Hour {
+			if err := w.DB.SaveHour(ctx, s.Cluster, hour, Rollup(s.Report)); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				w.log().WarnContext(ctx, "capacity history: cluster", "cluster", s.Cluster, "err", err)
+			}
+		}
+		if err := w.prune(ctx, s.Cluster, cutoff); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *Worker) prune(ctx context.Context, cluster string, before time.Time) error {
+	if _, err := w.DB.PruneHistory(ctx, cluster, before); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		w.log().WarnContext(ctx, "capacity history: prune", "cluster", cluster, "err", err)
+	}
+	return nil
 }
 
 // nextRun is the first minute past an hour boundary (hh:01:00 UTC) after now.

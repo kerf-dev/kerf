@@ -26,7 +26,7 @@ Read-only endpoints for the web UI.
 | [`POST /v1/clusters/{cluster}/readiness/recheck`](#recheckClusterReadiness) | Re-run the readiness checks now |
 | [`GET /v1/clusters/{cluster}/readiness/history`](#getClusterReadinessHistory) | State transitions and check status changes |
 | [`GET /v1/clusters/{cluster}/capacity`](#getClusterCapacity) | Node capacity, the node estimate after the open recommendations, and consolidation blockers |
-| [`GET /v1/clusters/{cluster}/capacity/history`](#getClusterCapacityHistory) | Hourly node count, CPU and memory of a cluster or node pool over time |
+| [`GET /v1/clusters/{cluster}/capacity/history`](#getClusterCapacityHistory) | Node count, CPU and memory of a cluster or node pool over time |
 
 ### Fleet and per-cluster totals { #getSummary }
 
@@ -607,7 +607,7 @@ feature, or `--capacity=false`); the other fields are then empty.
 | `403` | The token is not allowed to access this cluster, the role is too low (`role_forbidden`), or the caller's team bindings do not cover the endpoint or the workload (`scope_forbidden`, docs/teams.md). | [Problem](schemas.md#problem) |
 | `404` | Unknown cluster. | [Problem](schemas.md#problem) |
 
-### Hourly node count, CPU and memory of a cluster or node pool over time { #getClusterCapacityHistory }
+### Node count, CPU and memory of a cluster or node pool over time { #getClusterCapacityHistory }
 
 `GET /v1/clusters/{cluster}/capacity/history`
 

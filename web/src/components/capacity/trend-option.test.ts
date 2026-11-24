@@ -4,6 +4,7 @@ import { capacityHistoryFor } from '@/mocks/capacity-history'
 import { trendOption } from './trend-option'
 
 type Opt = {
+  useUTC?: boolean
   grid: unknown[]
   xAxis: { type: string }[]
   dataZoom: { xAxisIndex: number[] }[]
@@ -52,6 +53,10 @@ describe('trendOption', () => {
     }
     const data = find(build(one), 'nodes').data as [number, number | null][]
     expect(data.map(([, v]) => v === null)).toEqual([false, true, false])
+  })
+
+  it('renders axes and tooltips in UTC', () => {
+    expect(o.useUTC).toBe(true)
   })
 
   it('shows memory in GiB', () => {

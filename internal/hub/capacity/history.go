@@ -150,33 +150,34 @@ func (d *DB) Since(ctx context.Context, cluster string) (time.Time, bool, error)
 	return t.UTC(), true, nil
 }
 
-// PruneHistory deletes rows older than before and returns how many.
-func (d *DB) PruneHistory(ctx context.Context, before time.Time) (int64, error) {
-	tag, err := d.Pool.Exec(ctx, `DELETE FROM capacity_hourly WHERE hour < $1`, before.UTC())
+// PruneHistory deletes a cluster's rows older than before and returns how many.
+func (d *DB) PruneHistory(ctx context.Context, cluster string, before time.Time) (int64, error) {
+	tag, err := d.Pool.Exec(ctx, `DELETE FROM capacity_hourly WHERE cluster = $1 AND hour < $2`, cluster, before.UTC())
 	if err != nil {
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
 }
 
-// Snapshots returns the stored report of every cluster.
-func (d *DB) Snapshots(ctx context.Context) ([]SnapshotRef, error) {
+// Snapshots returns the stored report of every cluster. Clusters whose stored report cannot be
+// decoded are left out and listed in unreadable.
+func (d *DB) Snapshots(ctx context.Context) (snaps []SnapshotRef, unreadable []string, err error) {
 	rows, err := d.Pool.Query(ctx, `SELECT cluster, reported_at, report FROM cluster_capacity ORDER BY cluster`)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
-	var out []SnapshotRef
 	for rows.Next() {
 		var s SnapshotRef
 		var b []byte
 		if err := rows.Scan(&s.Cluster, &s.ReportedAt, &b); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := json.Unmarshal(b, &s.Report); err != nil {
-			return nil, err
+			unreadable = append(unreadable, s.Cluster)
+			continue
 		}
-		out = append(out, s)
+		snaps = append(snaps, s)
 	}
-	return out, rows.Err()
+	return snaps, unreadable, rows.Err()
 }

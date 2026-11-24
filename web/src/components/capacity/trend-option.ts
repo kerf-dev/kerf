@@ -125,7 +125,8 @@ export function trendOption(h: CapacityHistory, colors?: ChartColors): EChartsOp
     symbolSize: 10 + Math.min(10, Math.log2(e.count + 1) * 2),
   }))
 
-  const fmtDay = (v: number) => (daily ? tooltipTime.format(v).split(',')[0] : tooltipTime.format(v))
+  const dayOnly = (v: number) => tooltipTime.format(v).split(',')[0]
+  const fmtDay = (v: number) => (daily ? dayOnly(v) : tooltipTime.format(v))
   const val = (params: { seriesId?: string; value?: unknown }[], id: string) => {
     const p = params.find((x) => x.seriesId === id)
     const v = Array.isArray(p?.value) ? (p.value[1] as number | null) : null
@@ -134,6 +135,7 @@ export function trendOption(h: CapacityHistory, colors?: ChartColors): EChartsOp
 
   return {
     ...base,
+    useUTC: true,
     grid,
     xAxis,
     yAxis,
@@ -166,7 +168,9 @@ export function trendOption(h: CapacityHistory, colors?: ChartColors): EChartsOp
         ]
         const todays = h.events.filter((e) => e.day === day)
         if (todays.length) {
-          lines.push(`<div style="margin-top:6px;font-weight:600">Changes on ${day}</div>`)
+          lines.push(
+            `<div style="margin-top:6px;font-weight:600">Changes on ${dayOnly(Date.parse(day))}</div>`,
+          )
           for (const e of todays) {
             lines.push(
               `${EVENT_LABEL[e.type]}: ${e.count}${e.nodePool ? ` (${esc(e.nodePool)})` : ''}`,

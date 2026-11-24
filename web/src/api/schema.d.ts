@@ -1631,7 +1631,7 @@ export interface paths {
       cookie?: never
     }
     /**
-     * Hourly node count, CPU and memory of a cluster or node pool over time
+     * Node count, CPU and memory of a cluster or node pool over time
      * @description Nodes, allocatable and requested CPU and memory, recorded once an hour from the agent's
      *     capacity report, with markers for the changes Kerf made and for node pools that were
      *     added or removed. `7d` and `30d` return hourly points; `90d` and `1y` return one point per
