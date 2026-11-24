@@ -49,6 +49,16 @@ describe('mock responses match hub.yaml', () => {
       expectValid('ClusterCapacity', data)
     }
   })
+  it('GET /v1/clusters/{cluster}/capacity/history', async () => {
+    for (const range of ['7d', '30d', '90d', '1y'] as const) {
+      const data = await unwrap(
+        api.GET('/v1/clusters/{cluster}/capacity/history', {
+          params: { path: { cluster: 'prod-eu-west-1' }, query: { range } },
+        }),
+      )
+      expectValid('CapacityHistory', data)
+    }
+  })
   it('GET /v1/summary', async () => {
     expectValid('FleetSummary', await unwrap(api.GET('/v1/summary')))
   })

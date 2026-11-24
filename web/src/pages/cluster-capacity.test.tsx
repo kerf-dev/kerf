@@ -3,17 +3,40 @@
  * links and kubectl text, and the empty states.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
-import { MemoryRouter } from 'react-router'
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import type { ClusterCapacity } from '@/api/types'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { CapacityHistory, ClusterCapacity } from '@/api/types'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { getDb, handlers, resetDb } from '@/mocks/handlers'
 import { capacityFor } from '@/mocks/capacity'
+import { capacityHistoryFor } from '@/mocks/capacity-history'
 import { kubectlGet } from '@/lib/capacity'
 import { CapacityTab } from './cluster-capacity'
+
+// ECharts needs a canvas. The stand-in lets a test click an event marker.
+vi.mock('@/components/charts/theme', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@/components/charts/theme')>()
+  const rgb = 'rgb(128, 128, 128)'
+  const colors = new Proxy(
+    { series: [rgb, rgb, rgb, rgb, rgb, rgb] },
+    { get: (t, k) => (k in t ? t[k as 'series'] : rgb) },
+  )
+  return { ...orig, useChartColors: () => colors }
+})
+vi.mock('@/components/charts/chart', () => ({
+  Chart: ({ ariaLabel, onClick }: { ariaLabel: string; onClick?: (p: { data: unknown }) => void }) => (
+    <div role="img" aria-label={ariaLabel}>
+      {['applied', 'rolled_back', 'pool_added'].map((type) => (
+        <button key={type} type="button" onClick={() => onClick?.({ data: { type } })}>
+          marker {type}
+        </button>
+      ))}
+    </div>
+  ),
+}))
 
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
@@ -33,13 +56,21 @@ async function signIn() {
   expect(r.status).toBe(200)
 }
 
-function renderTab(cluster: string) {
+function Where() {
+  const l = useLocation()
+  return <div data-testid="where">{l.pathname + l.search}</div>
+}
+
+function renderTab(cluster: string, at = '/') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
       <TooltipProvider>
-        <MemoryRouter>
-          <CapacityTab cluster={cluster} />
+        <MemoryRouter initialEntries={[at]}>
+          <Routes>
+            <Route path="*" element={<CapacityTab cluster={cluster} />} />
+          </Routes>
+          <Where />
         </MemoryRouter>
       </TooltipProvider>
     </QueryClientProvider>,
@@ -145,5 +176,74 @@ describe('Capacity tab', () => {
     expect(within(item).getByTestId('blocker-object')).toHaveTextContent('Node group sample-group')
     expect(within(item).queryByRole('button', { name: /Copy kubectl/ })).toBeNull()
     expect(within(item).queryByRole('link')).toBeNull()
+  })
+
+  describe('Trend', () => {
+    const history = (over: Partial<CapacityHistory> = {}) =>
+      server.use(
+        http.get('*/v1/clusters/:cluster/capacity/history', ({ request }) => {
+          const u = new URL(request.url)
+          const base = capacityHistoryFor('30d', u.searchParams.get('nodePool') || undefined)
+          return HttpResponse.json({ ...base, ...over })
+        }),
+      )
+
+    it('shows the section with its footer and keeps other query params', async () => {
+      await signIn()
+      renderTab('prod-eu-west-1', '/?tab=capacity')
+      const card = await screen.findByTestId('capacity-trend')
+      expect(within(card).getByText('Trend')).toBeInTheDocument()
+      expect(await within(card).findByTestId('trend-since')).toHaveTextContent(/^History starts .+\.$/)
+      fireEvent.click(within(card).getByRole('radio', { name: '7d' }))
+      await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/?tab=capacity&trend=7d'))
+    })
+
+    it('explains an empty history', async () => {
+      await signIn()
+      history({ points: [], events: [], since: undefined, nodePools: [] })
+      renderTab('prod-eu-west-1')
+      expect(
+        await screen.findByText('Kerf records capacity every hour. The first point appears within an hour.'),
+      ).toBeInTheDocument()
+    })
+
+    it('warns when the totals may be low', async () => {
+      await signIn()
+      history({ truncated: true })
+      renderTab('prod-eu-west-1')
+      expect(await screen.findByTestId('trend-truncated')).toHaveTextContent(
+        'Some capacity reports were truncated, so the totals may be low.',
+      )
+    })
+
+    it('puts the chosen pool in the URL and refetches', async () => {
+      await signIn()
+      const pools: (string | null)[] = []
+      server.use(
+        http.get('*/v1/clusters/:cluster/capacity/history', ({ request }) => {
+          const p = new URL(request.url).searchParams.get('nodePool')
+          pools.push(p)
+          return HttpResponse.json(capacityHistoryFor('30d', p || undefined))
+        }),
+      )
+      renderTab('prod-eu-west-1')
+      const select = await screen.findByRole('combobox', { name: 'Node pool' })
+      fireEvent.change(select, { target: { value: 'general' } })
+      await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/?pool=general'))
+      await waitFor(() => expect(pools).toEqual([null, 'general']))
+    })
+
+    it('opens the Activity page from an event marker, except for pool changes', async () => {
+      await signIn()
+      renderTab('prod-eu-west-1', '/?trend=90d')
+      fireEvent.click(await screen.findByText('marker pool_added'))
+      expect(screen.getByTestId('where')).toHaveTextContent('/?trend=90d')
+      fireEvent.click(screen.getByText('marker rolled_back'))
+      await waitFor(() =>
+        expect(screen.getByTestId('where')).toHaveTextContent(
+          '/activity?cluster=prod-eu-west-1&type=rolled_back&range=30d',
+        ),
+      )
+    })
   })
 })

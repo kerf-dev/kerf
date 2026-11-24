@@ -4,6 +4,7 @@ import { api, ifMatch, unwrap } from './client'
 import { teamLabel } from '@/lib/teams'
 import type {
   AutomationUpdate,
+  CapacityHistoryRange,
   ClusterCreate,
   ClusterUpdate,
   ConfigAuditQuery,
@@ -569,4 +570,22 @@ export const useClusterCapacity = (cluster: string | undefined) =>
     enabled: useFleetScope(!!cluster),
     retry: notFoundIsFinal,
     refetchInterval: 60_000,
+  })
+
+export const useClusterCapacityHistory = (
+  cluster: string | undefined,
+  range: CapacityHistoryRange,
+  nodePool: string | undefined,
+) =>
+  useQuery({
+    queryKey: ['capacity-history', cluster, range, nodePool],
+    queryFn: () =>
+      unwrap(
+        api.GET('/v1/clusters/{cluster}/capacity/history', {
+          params: { path: { cluster: cluster! }, query: { range, ...(nodePool ? { nodePool } : {}) } },
+        }),
+      ),
+    enabled: useFleetScope(!!cluster),
+    retry: notFoundIsFinal,
+    refetchInterval: 300_000,
   })

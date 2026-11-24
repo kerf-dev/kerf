@@ -28,6 +28,7 @@ import {
 } from './data'
 import { adminHandlers, decorateClusters, decorateDetail, decorateHistory } from './admin'
 import { capacityHandlers } from './capacity'
+import { capacityHistoryHandlers } from './capacity-history'
 import { nodeCostTrend, realizedSavings } from './realized'
 import { dec, enc, gate, problem, type Ctx } from './core'
 import {
@@ -122,6 +123,7 @@ export const handlers = [
   ...adminHandlers,
   ...teamHandlers,
   ...capacityHandlers,
+  ...capacityHistoryHandlers,
 
   http.get('*/v1/summary', async () => {
     const g = await gate()

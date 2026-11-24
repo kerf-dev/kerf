@@ -208,7 +208,8 @@ export function fleetOnly(method: string, pathname: string): boolean {
     return !/^\/v1\/admin\/(teams(\/[^/]+)?|settings(\/.*)?|automation)$/.test(p)
   }
   return (
-    p === '/v1/savings/realized/node-cost' || /^\/v1\/clusters\/[^/]+\/(capacity|readiness(\/.*)?)$/.test(p)
+    p === '/v1/savings/realized/node-cost' ||
+    /^\/v1\/clusters\/[^/]+\/(capacity(\/history)?|readiness(\/.*)?)$/.test(p)
   )
 }
 
