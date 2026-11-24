@@ -185,3 +185,8 @@ func (s *Server) instancePrices(ctx context.Context, cluster string) map[capacit
 	}
 	return out
 }
+
+// runCapacityHistory samples capacity history hourly while this replica leads.
+func (s *Server) runCapacityHistory(ctx context.Context) {
+	(&capacity.Worker{DB: s.capacityDB(), Log: s.Log, Now: s.Now}).Run(ctx)
+}
