@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Callout, NativeSelect } from '@/components/ui/form'
 import { Segmented } from '@/components/ui/segmented'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatDateTime } from '@/lib/format'
 import { trendOption } from './trend-option'
 
 const RANGES: { value: CapacityHistoryRange; label: string }[] = [
@@ -19,6 +18,12 @@ const RANGES: { value: CapacityHistoryRange; label: string }[] = [
   { value: '90d', label: '90d' },
   { value: '1y', label: '1y' },
 ]
+const sinceDate = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+})
 const DEFAULT_RANGE: CapacityHistoryRange = '30d'
 
 /** The Activity page offers 24h, 7d, 14d and 30d: the smallest that covers the trend range, else the largest. */
@@ -54,6 +59,7 @@ export function CapacityTrend({ cluster }: { cluster: string }) {
   const onMarker = (p: { data?: unknown }) => {
     const e = p.data as Partial<CapacityHistoryEvent> | undefined
     if (!e?.type || e.type === 'pool_added' || e.type === 'pool_removed') return
+    // ponytail: the Activity page has no day filter. Add one if users need the exact day.
     navigate(
       `/activity?${new URLSearchParams({ cluster, type: e.type, range: ACTIVITY_RANGE[range] }).toString()}`,
     )
@@ -97,7 +103,7 @@ export function CapacityTrend({ cluster }: { cluster: string }) {
         {q.isError ? (
           <ErrorState error={q.error} onRetry={() => q.refetch()} />
         ) : !data ? (
-          <Skeleton className="h-[540px] w-full" />
+          <Skeleton className="h-[580px] w-full" />
         ) : (
           <>
             {data.truncated ? (
@@ -119,12 +125,12 @@ export function CapacityTrend({ cluster }: { cluster: string }) {
                 option={option!}
                 onClick={onMarker}
                 ariaLabel={`Nodes, CPU and memory over the last ${range}, with the changes Kerf made marked`}
-                className="h-[540px]"
+                className="h-[580px]"
               />
             )}
             {data.since ? (
               <p className="text-xs text-muted-foreground" data-testid="trend-since">
-                History starts {formatDateTime(data.since)}.
+                History starts {sinceDate.format(Date.parse(data.since))}.
               </p>
             ) : null}
           </>

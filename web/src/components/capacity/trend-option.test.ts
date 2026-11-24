@@ -7,7 +7,7 @@ type Opt = {
   grid: unknown[]
   xAxis: { type: string }[]
   dataZoom: { xAxisIndex: number[] }[]
-  tooltip: { axisPointer: { link: unknown[] } }
+  axisPointer: { link: unknown[] }
   series: { id: string; data: unknown[]; connectNulls?: boolean; lineStyle?: { type?: string } }[]
 }
 const build = (h: CapacityHistory) => trendOption(h) as unknown as Opt
@@ -21,7 +21,7 @@ describe('trendOption', () => {
     expect(o.grid).toHaveLength(3)
     expect(o.xAxis.map((a) => a.type)).toEqual(['time', 'time', 'time'])
     expect(o.dataZoom[0]!.xAxisIndex).toEqual([0, 1, 2])
-    expect(o.tooltip.axisPointer.link).toEqual([{ xAxisIndex: 'all' }])
+    expect(o.axisPointer.link).toEqual([{ xAxisIndex: 'all' }])
   })
 
   it('draws allocatable solid and requested dashed', () => {

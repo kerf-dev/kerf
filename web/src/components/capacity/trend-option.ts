@@ -26,6 +26,8 @@ export const EVENT_LABEL: Record<CapacityHistoryEvent['type'], string> = {
   pool_removed: 'Pool removed',
 }
 
+const esc = (v: string) => v.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)
+
 const FALLBACK = '#888888'
 
 /**
@@ -68,7 +70,7 @@ export function trendOption(h: CapacityHistory, colors?: ChartColors): EChartsOp
   const maxNodes = h.points.reduce((m, p) => Math.max(m, p.nodes), 0)
   const [colNodes, colCPU, colMem] = [c['chart-1'], c['chart-2'], c['chart-3']]
 
-  const heights = { top: [12, 178, 344], height: 130 }
+  const heights = { top: [48, 214, 380], height: 130 }
   const grid = heights.top.map((top) => ({
     left: 8,
     right: 16,
@@ -118,6 +120,7 @@ export function trendOption(h: CapacityHistory, colors?: ChartColors): EChartsOp
     day: e.day,
     count: e.count,
     nodePool: e.nodePool,
+    topWorkloads: e.topWorkloads,
     ...SYMBOL[e.type],
     symbolSize: 10 + Math.min(10, Math.log2(e.count + 1) * 2),
   }))
@@ -134,10 +137,18 @@ export function trendOption(h: CapacityHistory, colors?: ChartColors): EChartsOp
     grid,
     xAxis,
     yAxis,
+    axisPointer: { link: [{ xAxisIndex: 'all' }] },
+    legend: {
+      data: ['Allocatable (solid)', 'Requested (dashed)'],
+      top: 4,
+      right: 16,
+      itemWidth: 24,
+      itemHeight: 12,
+      textStyle: { color: c['muted-foreground'], fontSize: 12 },
+    },
     tooltip: {
       ...base.tooltip,
       trigger: 'axis',
-      axisPointer: { ...base.tooltip.axisPointer, link: [{ xAxisIndex: 'all' }] },
       formatter: (raw: unknown) => {
         const params = (Array.isArray(raw) ? raw : [raw]) as {
           seriesId?: string
@@ -146,12 +157,26 @@ export function trendOption(h: CapacityHistory, colors?: ChartColors): EChartsOp
         }[]
         const t = params.find((p) => p.axisValue != null)?.axisValue
         if (t == null) return ''
-        return [
+        const day = new Date(t).toISOString().slice(0, 10)
+        const lines = [
           `<div style="font-weight:600;margin-bottom:4px">${fmtDay(t)}${daily ? '' : ' UTC'}</div>`,
           `Nodes: ${val(params, 'nodes')}`,
           `CPU requested: ${val(params, 'cpuRequested')} of ${val(params, 'cpuAllocatable')} cores`,
           `Memory requested: ${val(params, 'memRequested')} of ${val(params, 'memAllocatable')} GiB`,
-        ].join('<br/>')
+        ]
+        const todays = h.events.filter((e) => e.day === day)
+        if (todays.length) {
+          lines.push(`<div style="margin-top:6px;font-weight:600">Changes on ${day}</div>`)
+          for (const e of todays) {
+            lines.push(
+              `${EVENT_LABEL[e.type]}: ${e.count}${e.nodePool ? ` (${esc(e.nodePool)})` : ''}`,
+              ...(e.topWorkloads ?? [])
+                .slice(0, 5)
+                .map((w) => `&nbsp;&nbsp;${esc(w.namespace)}/${esc(w.name)}`),
+            )
+          }
+        }
+        return lines.join('<br/>')
       },
     },
     dataZoom: [
@@ -162,14 +187,14 @@ export function trendOption(h: CapacityHistory, colors?: ChartColors): EChartsOp
       line('nodes', 'Nodes', 0, colNodes, nodes),
       line(
         'cpuAllocatable',
-        'CPU allocatable',
+        'Allocatable (solid)',
         1,
         colCPU,
         series(h, (p) => p.cpuAllocatable),
       ),
       line(
         'cpuRequested',
-        'CPU requested',
+        'Requested (dashed)',
         1,
         colCPU,
         series(h, (p) => p.cpuRequested),
@@ -177,14 +202,14 @@ export function trendOption(h: CapacityHistory, colors?: ChartColors): EChartsOp
       ),
       line(
         'memAllocatable',
-        'Memory allocatable',
+        'Allocatable (solid)',
         2,
         colMem,
         series(h, (p) => p.memAllocatable / GiB),
       ),
       line(
         'memRequested',
-        'Memory requested',
+        'Requested (dashed)',
         2,
         colMem,
         series(h, (p) => p.memRequested / GiB),
@@ -206,16 +231,6 @@ export function trendOption(h: CapacityHistory, colors?: ChartColors): EChartsOp
           fontSize: 10,
           formatter: (p: { data?: { count?: number } }) =>
             (p.data?.count ?? 0) > 1 ? String(p.data?.count) : '',
-        },
-        tooltip: {
-          trigger: 'item' as const,
-          formatter: (p: {
-            data?: { type: CapacityHistoryEvent['type']; day: string; count: number; nodePool?: string }
-          }) => {
-            const d = p.data
-            if (!d) return ''
-            return `${EVENT_LABEL[d.type]}: ${d.count}${d.nodePool ? ` (${d.nodePool})` : ''}<br/>${d.day}`
-          },
         },
       },
     ],
