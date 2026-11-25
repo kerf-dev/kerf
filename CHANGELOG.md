@@ -12,6 +12,11 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-25
+
+A patch release that changes only the web UI. No database migration, chart value or CRD change. Upgrade the hub
+with your current values; the agents need no upgrade.
+
 ### Changed
 
 - Policy editor: the **Exclude namespaces** field now says that the policy does not apply to these namespaces. The
