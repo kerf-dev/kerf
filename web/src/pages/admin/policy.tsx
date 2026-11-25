@@ -1,4 +1,11 @@
-import { ArrowLeftIcon, DownloadIcon, RotateCcwIcon, Trash2Icon, UsersIcon } from 'lucide-react'
+import {
+  ArrowLeftIcon,
+  DownloadIcon,
+  RotateCcwIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+  UsersIcon,
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
@@ -25,7 +32,7 @@ import { GitOnlyNotice } from '@/components/admin/git-notice'
 import { ImpactPreview } from '@/components/admin/impact-preview'
 import { PolicySpecForm } from '@/components/admin/policy-form'
 import { SaveBar, usePreview } from '@/components/admin/save-bar'
-import { matchesSelector, SelectorBuilder } from '@/components/admin/selector-builder'
+import { broadOff, matchesSelector, SelectorBuilder } from '@/components/admin/selector-builder'
 import { WriteDialog } from '@/components/admin/write-dialog'
 import { KindBadge } from '@/components/domain'
 import { EmptyState, ErrorState, PageHeader } from '@/components/states'
@@ -79,7 +86,15 @@ function draftSpec(d: Draft, type: HubPolicyType): RightsizingPolicySpec {
 }
 
 /** Live list of the workloads the selector matches (client-side over the workload list). */
-function MatchPanel({ selector, clusters }: { selector: PolicySelector; clusters: string[] }) {
+function MatchPanel({
+  selector,
+  clusters,
+  spec,
+}: {
+  selector: PolicySelector
+  clusters: string[]
+  spec: RightsizingPolicySpec
+}) {
   const idx = useWorkloadIndex()
   const matched = useMemo(
     () => (idx.data?.rows ?? []).filter((w) => matchesSelector(w, selector, clusters)),
@@ -109,6 +124,20 @@ function MatchPanel({ selector, clusters }: { selector: PolicySelector; clusters
         </div>
       </CardHeader>
       <CardContent className="pt-0">
+        {broadOff(selector, spec) ? (
+          <p
+            role="alert"
+            data-testid="broad-off-warning"
+            className="mb-2 flex gap-2 rounded-md bg-warning/15 px-2.5 py-1.5 text-xs text-[color-mix(in_oklch,var(--warning)_70%,var(--foreground))]"
+          >
+            <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              This policy turns Kerf off for every workload in its clusters
+              {selector.excludeNamespaces?.length ? ', except the excluded namespaces' : ''}. To turn Kerf off
+              only in some namespaces, add them to Namespaces, not to Exclude namespaces.
+            </span>
+          </p>
+        ) : null}
         {hasLabels ? (
           <p className="mb-2 rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground">
             Label selectors are evaluated by the agent; this list ignores them.
@@ -418,7 +447,7 @@ function Editor({ policy, readOnly }: { policy?: AdminPolicy; readOnly: boolean 
             </div>
           ) : null}
         </div>
-        {type === 'policy' ? <MatchPanel selector={d.selector} clusters={d.clusters} /> : null}
+        {type === 'policy' ? <MatchPanel selector={d.selector} clusters={d.clusters} spec={d.spec} /> : null}
       </div>
       {!readOnly ? (
         <SaveBar
