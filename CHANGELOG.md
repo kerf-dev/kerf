@@ -12,6 +12,12 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+### Changed
+
+- Policy editor: the **Exclude namespaces** field now says that the policy does not apply to these namespaces. The
+  workload list warns when a policy turns a mode off with a selector that names no namespaces, workloads or labels,
+  because such a policy turns Kerf off for every other workload.
+
 ## [0.4.2] - 2026-11-24
 
 A patch release with one additive database migration (`0025_capacity_hourly`, applied when the hub starts) and no

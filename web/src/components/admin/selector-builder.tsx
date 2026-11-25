@@ -30,6 +30,16 @@ export function matchesSelector(
   return true
 }
 
+/**
+ * True when a policy turns a mode off with a selector that names no namespaces, workloads or labels,
+ * so it matches every workload except the excluded namespaces. Usually an inverted exclusion.
+ */
+export function broadOff(s: PolicySelector, spec: { cpu?: { mode?: string }; memory?: { mode?: string } }) {
+  const off = spec.cpu?.mode === 'off' || spec.memory?.mode === 'off'
+  const broad = !s.namespaces?.length && !s.workloads?.length && !Object.keys(s.matchLabels ?? {}).length
+  return off && broad
+}
+
 function ChipInput({
   values,
   onChange,
@@ -231,7 +241,12 @@ export function SelectorBuilder({
             testId="selector-namespaces"
           />
         </Field>
-        <Field label="Exclude namespaces" optional error={errors['selector.excludeNamespaces']}>
+        <Field
+          label="Exclude namespaces"
+          optional
+          hint="This policy does not apply to these namespaces. To turn Kerf off in a namespace, add it to Namespaces and set the modes to Off."
+          error={errors['selector.excludeNamespaces']}
+        >
           <ChipInput
             label="Exclude namespaces"
             values={value.excludeNamespaces ?? []}
