@@ -270,6 +270,7 @@ function clusterAutoscaler(db: MockDb, cluster: string): ClusterCapacity {
     ],
     blockers: [],
     truncated: true,
+    truncatedLists: ['pods'],
   }
 }
 

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -195,17 +196,26 @@ func FitSize(rep *hubclient.CapacityReport, limit int) bool {
 	if n <= limit {
 		return false
 	}
-	rep.Truncated = true
 	for n > limit && len(rep.PodGroups) > 0 {
+		Cut(rep, "podGroups")
 		keep := len(rep.PodGroups) * limit / n * 9 / 10
 		rep.PodGroups = rep.PodGroups[:keep]
 		n = size()
 	}
 	for n > limit && len(rep.Nodes) > 0 {
+		Cut(rep, "nodes")
 		rep.Nodes = rep.Nodes[:len(rep.Nodes)*limit/n*9/10]
 		n = size()
 	}
 	return true
+}
+
+// Cut marks the report truncated and records list (nodes, podGroups, pdbs, pods) once.
+func Cut(rep *hubclient.CapacityReport, list string) {
+	rep.Truncated = true
+	if !slices.Contains(rep.TruncatedLists, list) {
+		rep.TruncatedLists = append(rep.TruncatedLists, list)
+	}
 }
 
 func hashReport(rep *hubclient.CapacityReport) [32]byte {

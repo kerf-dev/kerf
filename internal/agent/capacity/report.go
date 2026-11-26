@@ -133,7 +133,7 @@ func Build(in Inputs) *hubclient.CapacityReport {
 			addPool(hubclient.CapacityNodePool{Name: pool, Autoscaler: kind})
 		}
 		if len(rep.Nodes) >= MaxNodes {
-			rep.Truncated = true
+			Cut(rep, "nodes")
 			continue
 		}
 		rep.Nodes = append(rep.Nodes, hubclient.CapacityNode{
@@ -202,13 +202,14 @@ func Build(in Inputs) *hubclient.CapacityReport {
 	}
 	for _, k := range order {
 		if len(rep.PodGroups) >= MaxPodGroups {
-			rep.Truncated = true
+			Cut(rep, "podGroups")
 			break
 		}
 		rep.PodGroups = append(rep.PodGroups, groups[k].g)
 	}
 	if len(blocking) > MaxPods {
-		blocking, rep.Truncated = blocking[:MaxPods], true
+		blocking = blocking[:MaxPods]
+		Cut(rep, "pods")
 	}
 	rep.Pods = blocking
 
@@ -225,7 +226,7 @@ func Build(in Inputs) *hubclient.CapacityReport {
 			continue
 		}
 		if len(rep.PDBs) >= MaxPDBs {
-			rep.Truncated = true
+			Cut(rep, "pdbs")
 			break
 		}
 		rep.PDBs = append(rep.PDBs, hubclient.CapacityPDB{

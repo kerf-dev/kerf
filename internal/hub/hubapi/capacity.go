@@ -52,6 +52,9 @@ type CapacityReport struct {
 	PDBs        []CapacityPDB        `json:"pdbs,omitempty"`
 	Pods        []CapacityPod        `json:"pods,omitempty"`
 	Truncated   bool                 `json:"truncated,omitempty"`
+	// TruncatedLists names the lists that hit a limit (nodes, podGroups, pdbs, pods). Agents
+	// before 0.4.4 send only Truncated.
+	TruncatedLists []string `json:"truncatedLists,omitempty"`
 }
 
 // CapacityObjectRef is a Kubernetes object; Namespace is empty for cluster-scoped objects.
@@ -151,6 +154,8 @@ type ClusterCapacity struct {
 	Blockers        []ConsolidationBlocker `json:"blockers"`
 	BlockersOmitted int                    `json:"blockersOmitted,omitempty"`
 	Truncated       bool                   `json:"truncated,omitempty"`
+	// TruncatedLists are the report lists that hit a limit (capacity.CutLists).
+	TruncatedLists []string `json:"truncatedLists,omitempty"`
 }
 
 // CapacityAmounts are CPU cores and memory bytes.

@@ -8121,6 +8121,15 @@ components:
             $ref: '#/components/schemas/CapacityPod'
         truncated:
           type: boolean
+        truncatedLists:
+          type: array
+          description: The lists that hit their limit. Agents before 0.4.4 send only `truncated`.
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/CapacityReportList'
+    CapacityReportList:
+      type: string
+      enum: [nodes, podGroups, pdbs, pods]
     CapacityObjectRef:
       type: object
       description: A Kubernetes object. `namespace` is absent for cluster-scoped objects.
@@ -8317,7 +8326,9 @@ components:
             type: string
         truncated:
           type: boolean
-          description: At least one stored hour in the range came from a truncated capacity report.
+          description: |
+            At least one stored hour in the range came from a capacity report that cut nodes or pod
+            groups, so the totals of that hour may be low.
         points:
           type: array
           items:
@@ -8407,7 +8418,15 @@ components:
           description: Blockers not listed (the list is capped at 200).
         truncated:
           type: boolean
-          description: The agent's report hit a list limit; numbers may be incomplete.
+          description: The agent's report hit a list limit. See `truncatedLists` for which one.
+        truncatedLists:
+          type: array
+          description: |
+            The report lists that hit their limit. `nodes` or `podGroups` mean the totals may be
+            low; `pods` and `pdbs` cut only the blocker lists. For agents before 0.4.4 the hub
+            infers the lists from their lengths.
+          items:
+            $ref: '#/components/schemas/CapacityReportList'
     CapacityAmounts:
       type: object
       required: [cpuCores, memoryBytes]
