@@ -436,6 +436,18 @@ function BlockersCard({ data }: { data: ClusterCapacity }) {
 
 // ---------------------------------------------------------------- tab
 
+/** The banner for a report that hit a list limit; only nodes and pod groups make the totals low. */
+function truncatedText(lists: string[]) {
+  if (lists.includes('nodes') || lists.includes('podGroups'))
+    return 'The agent report hit a list limit, so the node and request totals may be low.'
+  const cut = [
+    lists.includes('pods') ? 'the first 500 pods that block scale-down' : '',
+    lists.includes('pdbs') ? 'the first 500 PodDisruptionBudgets that allow no disruption' : '',
+  ].filter(Boolean)
+  if (!cut.length) return 'The agent report hit a list limit, so some numbers may be incomplete.'
+  return `The agent report lists only ${cut.join(' and ')}. Node and request totals are complete.`
+}
+
 export function CapacityTab({ cluster }: { cluster: string }) {
   const q = useClusterCapacity(cluster)
   const data = q.data
@@ -465,9 +477,7 @@ export function CapacityTab({ cluster }: { cluster: string }) {
       </div>
       {data.truncated ? (
         <Callout tone="warning" icon={TriangleAlertIcon}>
-          <span data-testid="truncated">
-            The agent report hit a list limit, so some numbers may be incomplete.
-          </span>
+          <span data-testid="truncated">{truncatedText(data.truncatedLists ?? [])}</span>
         </Callout>
       ) : null}
       <CapacityTrend cluster={cluster} />

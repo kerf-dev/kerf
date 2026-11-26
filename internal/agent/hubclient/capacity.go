@@ -29,6 +29,8 @@ type CapacityReport struct {
 	PDBs        []CapacityPDB        `json:"pdbs,omitempty"`
 	Pods        []CapacityPod        `json:"pods,omitempty"`
 	Truncated   bool                 `json:"truncated,omitempty"`
+	// TruncatedLists names the lists that hit a limit: nodes, podGroups, pdbs, pods.
+	TruncatedLists []string `json:"truncatedLists,omitempty"`
 }
 
 // CapacityObjectRef is a Kubernetes object; Namespace is empty for cluster-scoped objects.

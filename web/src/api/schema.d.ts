@@ -4343,7 +4343,11 @@ export interface components {
       /** @description Pods that block the removal of their node (do-not-disrupt, safe-to-evict false, local storage). */
       pods?: components['schemas']['CapacityPod'][]
       truncated?: boolean
+      /** @description The lists that hit their limit. Agents before 0.4.4 send only `truncated`. */
+      truncatedLists?: components['schemas']['CapacityReportList'][]
     }
+    /** @enum {string} */
+    CapacityReportList: 'nodes' | 'podGroups' | 'pdbs' | 'pods'
     /** @description A Kubernetes object. `namespace` is absent for cluster-scoped objects. */
     CapacityObjectRef: {
       apiVersion?: string
@@ -4448,7 +4452,10 @@ export interface components {
       since?: string
       /** @description Node pools stored in the range, for the node pool filter. */
       nodePools: string[]
-      /** @description At least one stored hour in the range came from a truncated capacity report. */
+      /**
+       * @description At least one stored hour in the range came from a capacity report that cut nodes or pod
+       *     groups, so the totals of that hour may be low.
+       */
       truncated?: boolean
       points: components['schemas']['CapacityHistoryPoint'][]
       events: components['schemas']['CapacityHistoryEvent'][]
@@ -4502,8 +4509,14 @@ export interface components {
       blockers: components['schemas']['ConsolidationBlocker'][]
       /** @description Blockers not listed (the list is capped at 200). */
       blockersOmitted?: number
-      /** @description The agent's report hit a list limit; numbers may be incomplete. */
+      /** @description The agent's report hit a list limit. See `truncatedLists` for which one. */
       truncated?: boolean
+      /**
+       * @description The report lists that hit their limit. `nodes` or `podGroups` mean the totals may be
+       *     low; `pods` and `pdbs` cut only the blocker lists. For agents before 0.4.4 the hub
+       *     infers the lists from their lengths.
+       */
+      truncatedLists?: components['schemas']['CapacityReportList'][]
     }
     CapacityAmounts: {
       cpuCores: number

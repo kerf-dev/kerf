@@ -12,6 +12,13 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+### Fixed
+
+- Capacity: a report that hit only the 500-item limit of blocking pods or PDBs no longer says that the totals may
+  be low. The agent now reports which lists it cut (`truncatedLists`). The capacity page names the cut list, and
+  the Trend banner and the `truncated` hours count only cuts of nodes or pod groups. For agents before 0.4.4 the
+  hub infers the cut lists from their lengths, so the fix works with a hub upgrade alone.
+
 ## [0.4.3] - 2026-11-25
 
 A patch release that changes only the web UI. No database migration, chart value or CRD change. Upgrade the hub

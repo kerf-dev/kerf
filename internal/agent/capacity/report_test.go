@@ -2,6 +2,7 @@ package capacity
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -415,5 +416,20 @@ func TestFitSize(t *testing.T) {
 	}
 	if b, _ := json.Marshal(rep); len(b) > 20000 {
 		t.Errorf("still %d bytes", len(b))
+	}
+	if !reflect.DeepEqual(rep.TruncatedLists, []string{"podGroups"}) {
+		t.Errorf("truncatedLists %v, want [podGroups]", rep.TruncatedLists)
+	}
+}
+
+// More blocking pods than MaxPods cut only the pods list; nodes and pod groups stay complete.
+func TestBuildBlockingPodsLimit(t *testing.T) {
+	in := Inputs{Now: time.Now(), Nodes: []corev1.Node{node("k1", map[string]string{LabelKarpenterNodePool: "general"}, nil)}}
+	for i := range MaxPods + 1 {
+		in.Pods = append(in.Pods, pod("shop", fmt.Sprintf("p-%d", i), "k1", func(p *corev1.Pod) { p.Annotations[AnnotationDoNotDisrupt] = "true" }))
+	}
+	rep := Build(in)
+	if len(rep.Pods) != MaxPods || !rep.Truncated || !reflect.DeepEqual(rep.TruncatedLists, []string{"pods"}) {
+		t.Fatalf("pods %d truncated %v lists %v, want %d true [pods]", len(rep.Pods), rep.Truncated, rep.TruncatedLists, MaxPods)
 	}
 }

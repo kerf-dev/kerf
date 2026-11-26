@@ -144,8 +144,19 @@ describe('Capacity tab', () => {
     expect(await screen.findByTestId('no-blockers')).toHaveTextContent(
       'Nothing found that blocks consolidation',
     )
-    expect(screen.getByTestId('truncated')).toBeInTheDocument()
+    expect(screen.getByTestId('truncated')).toHaveTextContent(
+      'The agent report lists only the first 500 pods that block scale-down. Node and request totals are complete.',
+    )
     expect(screen.getByTestId('estimate-card')).toHaveTextContent('More nodes would be needed')
+  })
+
+  it('warns that the totals may be low when the report cut pod groups', async () => {
+    await signIn()
+    respondWith({ ...capacityFor(getDb(), 'prod-us-east-1')!, truncatedLists: ['podGroups', 'pods'] })
+    renderTab('prod-us-east-1')
+    expect(await screen.findByTestId('truncated')).toHaveTextContent(
+      'The agent report hit a list limit, so the node and request totals may be low.',
+    )
   })
 
   it('explains a missing estimate', async () => {

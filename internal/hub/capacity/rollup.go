@@ -13,7 +13,7 @@ type HourRow struct {
 	Nodes                        int
 	CPURequested, CPUAllocatable float64
 	MemRequested, MemAllocatable float64
-	// Truncated is true when the report the row comes from was truncated.
+	// Truncated is true when the report the row comes from cut nodes or pod groups (TotalsCut).
 	Truncated bool
 }
 
@@ -22,11 +22,12 @@ type HourRow struct {
 // and pods outside any pool count only in the total. Requests are the current ones, with no
 // recommendation applied.
 func Rollup(rep hubapi.CapacityReport) []HourRow {
-	byPool := map[string]*HourRow{"": {Truncated: rep.Truncated}}
+	cut := TotalsCut(rep)
+	byPool := map[string]*HourRow{"": {Truncated: cut}}
 	get := func(name string) *HourRow {
 		r, ok := byPool[name]
 		if !ok {
-			r = &HourRow{NodePool: name, Truncated: rep.Truncated}
+			r = &HourRow{NodePool: name, Truncated: cut}
 			byPool[name] = r
 		}
 		return r

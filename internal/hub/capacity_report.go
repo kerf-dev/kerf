@@ -120,6 +120,7 @@ func (s *Server) getClusterCapacity(w http.ResponseWriter, r *http.Request) {
 	}
 	out.Totals, out.Estimate, out.Pools = res.Totals, res.Estimate, res.Pools
 	out.Blockers, out.BlockersOmitted, out.Truncated = blockers, omitted, st.Report.Truncated
+	out.TruncatedLists = capacity.CutLists(st.Report)
 	writeJSON(w, out)
 }
 

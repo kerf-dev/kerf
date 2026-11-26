@@ -2309,6 +2309,11 @@ when a list hit its limit.
 | `pdbs` | array of [CapacityPDB](schemas.md#capacitypdb) | max items 500 | PodDisruptionBudgets that allow no disruption now (`disruptionsAllowed` 0). |
 | `pods` | array of [CapacityPod](schemas.md#capacitypod) | max items 500 | Pods that block the removal of their node (do-not-disrupt, safe-to-evict false, local storage). |
 | `truncated` | boolean |  |  |
+| `truncatedLists` | array of CapacityReportList (enum) | max items 4 | The lists that hit their limit. Agents before 0.4.4 send only `truncated`. |
+
+## CapacityReportList { #capacityreportlist }
+
+Type: string. one of `nodes`, `podGroups`, `pdbs`, `pods`.
 
 ## CapacityObjectRef { #capacityobjectref }
 
@@ -2428,7 +2433,7 @@ Capacity history of a cluster or node pool, response of
 | `range` | string, required | one of `7d`, `30d`, `90d`, `1y` |  |
 | `since` | string (date-time) |  | First hour stored for the cluster. Absent when nothing is stored yet. |
 | `nodePools` | array of string, required |  | Node pools stored in the range, for the node pool filter. |
-| `truncated` | boolean |  | At least one stored hour in the range came from a truncated capacity report. |
+| `truncated` | boolean |  | At least one stored hour in the range came from a capacity report that cut nodes or pod groups, so the totals of that hour may be low. |
 | `points` | array of [CapacityHistoryPoint](schemas.md#capacityhistorypoint), required |  |  |
 | `events` | array of [CapacityHistoryEvent](schemas.md#capacityhistoryevent), required |  |  |
 
@@ -2470,7 +2475,8 @@ a node pool appeared in or disappeared from the capacity report.
 | `pools` | array of [CapacityPoolEstimate](schemas.md#capacitypoolestimate), required |  |  |
 | `blockers` | array of [ConsolidationBlocker](schemas.md#consolidationblocker), required |  |  |
 | `blockersOmitted` | integer |  | Blockers not listed (the list is capped at 200). |
-| `truncated` | boolean |  | The agent's report hit a list limit; numbers may be incomplete. |
+| `truncated` | boolean |  | The agent's report hit a list limit. See `truncatedLists` for which one. |
+| `truncatedLists` | array of CapacityReportList (enum) |  | The report lists that hit their limit. `nodes` or `podGroups` mean the totals may be low; `pods` and `pdbs` cut only the blocker lists. For agents before 0.4.4 the hub infers the lists from their lengths. |
 
 ## CapacityAmounts { #capacityamounts }
 
