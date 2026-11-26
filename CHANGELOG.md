@@ -12,6 +12,11 @@ section here. The GitHub Release lists the same section as its highlights, follo
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-26
+
+A patch release with no database migration, chart value or CRD change. Upgrade the hub with your current values to
+fix the capacity warnings at once. Upgrade the agents to report the cut lists directly.
+
 ### Fixed
 
 - Capacity: a report that hit only the 500-item limit of blocking pods or PDBs no longer says that the totals may
